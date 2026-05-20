@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm --version)",
+      "Bash(pnpm install *)",
+      "Bash(pnpm check:branding)",
+      "Bash(pnpm --filter @sanjid14/web build)",
+      "Bash(git --version)",
+      "Bash(gh --version)",
+      "Bash(gh auth *)",
+      "Bash(git init *)",
+      "Bash(git config *)",
+      "Bash(gh repo *)"
+    ]
+  }
+}

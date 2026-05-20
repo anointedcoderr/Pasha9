@@ -1,0 +1,246 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg-base: #06120c;
+    --bg-deep: #040b07;
+    --bg-panel: #0c1f15;
+    --bg-elev: #133024;
+    --bg-line: #1c3a2b;
+    --gold-1: #f5d061;
+    --gold-2: #c9952b;
+    --gold-3: #7a5810;
+    --neon: #36ff9a;
+    --neon-soft: rgba(54, 255, 154, 0.20);
+    --text-hi: #f4fff7;
+    --text-mid: #bcd9c6;
+    --text-lo: #6e8a7a;
+    --radius-card: 18px;
+  }
+
+  html,
+  body {
+    min-height: 100%;
+    background: var(--bg-base);
+    color: var(--text-hi);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    font-family: var(--font-bn), var(--font-en), system-ui, sans-serif;
+    background-image:
+      radial-gradient(1200px 600px at 50% -200px, rgba(54, 255, 154, 0.10), transparent 60%),
+      radial-gradient(900px 500px at 100% 10%, rgba(201, 149, 43, 0.08), transparent 60%),
+      linear-gradient(180deg, #04100a 0%, #06120c 40%, #040b07 100%);
+    background-attachment: fixed;
+  }
+
+  ::selection {
+    background: rgba(54, 255, 154, 0.35);
+    color: #04100a;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  button {
+    font: inherit;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--neon);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  /* Keep scrollbars styled on the dark theme */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(54, 255, 154, 0.15);
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(54, 255, 154, 0.30);
+  }
+}
+
+@layer components {
+  .surface {
+    background: linear-gradient(180deg, rgba(19, 48, 36, 0.92) 0%, rgba(6, 18, 12, 0.92) 100%);
+    border: 1px solid rgba(54, 255, 154, 0.08);
+    border-radius: var(--radius-card);
+  }
+
+  .surface-elev {
+    background: linear-gradient(180deg, rgba(28, 58, 43, 0.95) 0%, rgba(12, 31, 21, 0.95) 100%);
+    border: 1px solid rgba(54, 255, 154, 0.10);
+    border-radius: var(--radius-card);
+  }
+
+  .btn-gold {
+    background: linear-gradient(135deg, #f5d061 0%, #c9952b 60%, #7a5810 100%);
+    color: #0a1d12;
+    font-weight: 700;
+    box-shadow:
+      0 0 0 1px rgba(245, 208, 97, 0.45) inset,
+      0 8px 20px -10px rgba(201, 149, 43, 0.6),
+      0 0 24px rgba(245, 208, 97, 0.25);
+  }
+  .btn-gold:hover {
+    box-shadow:
+      0 0 0 1px rgba(245, 208, 97, 0.55) inset,
+      0 10px 26px -10px rgba(201, 149, 43, 0.8),
+      0 0 32px rgba(245, 208, 97, 0.45);
+  }
+
+  .btn-neon {
+    background: transparent;
+    border: 1px solid rgba(54, 255, 154, 0.45);
+    color: var(--neon);
+  }
+  .btn-neon:hover {
+    background: rgba(54, 255, 154, 0.10);
+    box-shadow: 0 0 18px rgba(54, 255, 154, 0.35);
+  }
+
+  .card-glow {
+    position: relative;
+    border-radius: var(--radius-card);
+    background:
+      linear-gradient(160deg, rgba(245, 208, 97, 0.06) 0%, rgba(54, 255, 154, 0.03) 60%, transparent 100%),
+      linear-gradient(180deg, rgba(19, 48, 36, 0.85) 0%, rgba(6, 18, 12, 0.85) 100%);
+    border: 1px solid rgba(54, 255, 154, 0.10);
+    overflow: hidden;
+  }
+  .card-glow::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: radial-gradient(120% 60% at 50% 0%, rgba(54, 255, 154, 0.10), transparent 60%);
+  }
+
+  .ring-gold-soft {
+    box-shadow: 0 0 0 1px rgba(245, 208, 97, 0.25), 0 0 20px rgba(245, 208, 97, 0.10);
+  }
+
+  .ring-neon-soft {
+    box-shadow: 0 0 0 1px rgba(54, 255, 154, 0.30), 0 0 22px rgba(54, 255, 154, 0.18);
+  }
+
+  .text-gradient-gold {
+    background: linear-gradient(135deg, #fff0bd 0%, #f5d061 40%, #c9952b 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .text-gradient-neon {
+    background: linear-gradient(135deg, #c8ffe5 0%, #36ff9a 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .divider-neon {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(54, 255, 154, 0.45), transparent);
+  }
+
+  .glow-coin {
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    border-radius: 999px;
+    background: radial-gradient(circle, #f5d061 0%, #c9952b 70%, transparent 80%);
+    filter: drop-shadow(0 0 6px rgba(245, 208, 97, 0.7));
+    opacity: 0.85;
+  }
+
+  .input-base {
+    background: rgba(6, 18, 12, 0.6);
+    border: 1px solid rgba(54, 255, 154, 0.18);
+    color: var(--text-hi);
+    border-radius: 10px;
+    padding: 10px 14px;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    width: 100%;
+  }
+  .input-base:focus {
+    border-color: rgba(54, 255, 154, 0.55);
+    box-shadow: 0 0 0 3px rgba(54, 255, 154, 0.12);
+    outline: none;
+  }
+  .input-base::placeholder {
+    color: var(--text-lo);
+  }
+
+  .table-row {
+    border-bottom: 1px solid rgba(54, 255, 154, 0.06);
+  }
+  .table-row:hover {
+    background: rgba(54, 255, 154, 0.04);
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 10px;
+    font-size: 12px;
+    line-height: 1;
+    border: 1px solid rgba(54, 255, 154, 0.18);
+    background: rgba(54, 255, 154, 0.06);
+    color: var(--text-hi);
+  }
+  .chip-warn {
+    border-color: rgba(255, 200, 87, 0.30);
+    background: rgba(255, 200, 87, 0.10);
+    color: #ffd97a;
+  }
+  .chip-danger {
+    border-color: rgba(255, 107, 107, 0.30);
+    background: rgba(255, 107, 107, 0.10);
+    color: #ff9a9a;
+  }
+  .chip-gold {
+    border-color: rgba(245, 208, 97, 0.40);
+    background: rgba(245, 208, 97, 0.10);
+    color: #fff0bd;
+  }
+  .chip-ok {
+    border-color: rgba(54, 255, 154, 0.40);
+    background: rgba(54, 255, 154, 0.10);
+    color: #c8ffe5;
+  }
+
+  .skeleton {
+    background: linear-gradient(90deg, rgba(54, 255, 154, 0.06) 0%, rgba(54, 255, 154, 0.14) 50%, rgba(54, 255, 154, 0.06) 100%);
+    background-size: 200% 100%;
+    animation: shimmer 2.2s linear infinite;
+    border-radius: 8px;
+  }
+}
+
+@layer utilities {
+  .mask-fade-r {
+    -webkit-mask-image: linear-gradient(to right, black 80%, transparent);
+    mask-image: linear-gradient(to right, black 80%, transparent);
+  }
+  .mask-fade-x {
+    -webkit-mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
+    mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
+  }
+}
