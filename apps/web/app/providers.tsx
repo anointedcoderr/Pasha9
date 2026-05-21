@@ -1,8 +1,8 @@
 'use client';
 
 import { type ReactNode } from 'react';
-import { LanguageProvider } from '@/lib/i18n/context';
+import { LanguageProvider, type Lang } from '@/lib/i18n/context';
 
-export function Providers({ children }: { children: ReactNode }) {
-  return <LanguageProvider initial="bn">{children}</LanguageProvider>;
+export function Providers({ children, initialLang }: { children: ReactNode; initialLang: Lang }) {
+  return <LanguageProvider initial={initialLang}>{children}</LanguageProvider>;
 }

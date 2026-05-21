@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { fontAdmin, fontBn, fontEn } from '@/styles/fonts';
 import { Providers } from './providers';
+import { resolveLang } from '@/lib/i18n/server';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -22,11 +23,19 @@ export const viewport: Viewport = {
   themeColor: '#06120c',
 };
 
+// Reading cookies + headers in the root layout opts the tree into dynamic rendering,
+// which is required for the language to be picked from the cookie on every request.
+// This is what guarantees no English-to-Bangla flash.
+export const dynamic = 'force-dynamic';
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const initialLang = resolveLang();
+  const bodyFont = initialLang === 'bn' ? 'font-bn' : 'font-en';
+
   return (
-    <html lang="bn" data-lang="bn" className={`${fontBn.variable} ${fontEn.variable} ${fontAdmin.variable}`}>
-      <body className="font-bn antialiased">
-        <Providers>{children}</Providers>
+    <html lang={initialLang} data-lang={initialLang} className={`${fontBn.variable} ${fontEn.variable} ${fontAdmin.variable}`}>
+      <body className={`${bodyFont} antialiased`}>
+        <Providers initialLang={initialLang}>{children}</Providers>
       </body>
     </html>
   );

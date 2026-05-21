@@ -15,3 +15,6 @@ Thumbs.db
 .idea
 coverage
 *.tsbuildinfo
+
+# Nested clones of this repo (in case the project is checked out into itself)
+/Sanjid14/

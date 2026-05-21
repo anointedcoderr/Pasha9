@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import bn from './dictionaries/bn.json';
 import en from './dictionaries/en.json';
 
@@ -8,7 +8,10 @@ export type Lang = 'bn' | 'en';
 type Dict = typeof bn;
 
 const DICTS: Record<Lang, Dict> = { bn: bn as Dict, en: en as Dict };
-const STORAGE_KEY = 'sanjid14:lang';
+
+export const LANG_COOKIE = 'sanjid14_lang';
+export const LANG_STORAGE_KEY = 'sanjid14:lang';
+const COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365; // 1 year
 
 type Ctx = {
   lang: Lang;
@@ -31,19 +34,23 @@ function resolve(dict: Dict, path: string): string {
   return typeof node === 'string' ? node : path;
 }
 
-export function LanguageProvider({ children, initial = 'bn' }: { children: ReactNode; initial?: Lang }) {
+/**
+ * The language is resolved on the server in `app/layout.tsx` and passed in via `initial`.
+ * No client-side useEffect reads storage, so there is never a render with the wrong language.
+ * When the user toggles, we persist to both cookie (for SSR) and localStorage (for offline reads).
+ */
+export function LanguageProvider({ children, initial }: { children: ReactNode; initial: Lang }) {
   const [lang, setLangState] = useState<Lang>(initial);
-
-  useEffect(() => {
-    const stored = typeof window !== 'undefined' ? (localStorage.getItem(STORAGE_KEY) as Lang | null) : null;
-    if (stored && stored !== lang) setLangState(stored);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const setLang = useCallback((next: Lang) => {
     setLangState(next);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(STORAGE_KEY, next);
+    if (typeof document !== 'undefined') {
+      document.cookie = `${LANG_COOKIE}=${next}; max-age=${COOKIE_MAX_AGE_SECONDS}; path=/; samesite=lax`;
+      try {
+        localStorage.setItem(LANG_STORAGE_KEY, next);
+      } catch {
+        // localStorage may be unavailable (private mode, embedded webview); cookie is enough.
+      }
       document.documentElement.setAttribute('lang', next);
       document.documentElement.dataset.lang = next;
     }
