@@ -1,5 +1,7 @@
 // Built by Anointed Coder.
 
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from 'next/server';
 import { clearAuthCookies, getSessionClaims, getClientIp, getUserAgent } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';

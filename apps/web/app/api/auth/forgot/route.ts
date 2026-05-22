@@ -1,5 +1,7 @@
 // Built by Anointed Coder.
 
+export const dynamic = 'force-dynamic';
+
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { randomBytes } from 'node:crypto';

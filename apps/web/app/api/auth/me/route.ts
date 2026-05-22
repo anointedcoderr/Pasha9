@@ -1,5 +1,7 @@
 // Built by Anointed Coder.
 
+export const dynamic = 'force-dynamic';
+
 import { db } from '@/lib/db/client';
 import { getSessionClaims } from '@/lib/auth/session';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
