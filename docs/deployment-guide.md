@@ -78,7 +78,7 @@ Expected:
 
 ```bash
 sudo -u postgres psql <<'SQL'
-CREATE USER pasha9 WITH PASSWORD 'REPLACE_WITH_STRONG_PASSWORD';
+CREATE USER pasha9 WITH PASSWORD 'Sanjid14';
 CREATE DATABASE pasha9_prod OWNER pasha9;
 GRANT ALL PRIVILEGES ON DATABASE pasha9_prod TO pasha9;
 SQL
