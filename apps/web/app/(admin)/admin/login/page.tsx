@@ -2,7 +2,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { Logo } from '@/components/site/Logo';
 import { FormField, Input } from '@/components/ui/Input';
@@ -14,7 +14,36 @@ import { Lock, ShieldCheck, User as UserIcon } from 'lucide-react';
 export default function AdminLoginPage() {
   const t = useT();
   const router = useRouter();
+  const params = useSearchParams();
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.message ?? data.code ?? 'Login failed');
+        return;
+      }
+      const next = params.get('next') ?? '/admin';
+      router.push(next);
+      router.refresh();
+    } catch {
+      setError('Could not reach server');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="font-admin relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-12">
@@ -34,22 +63,27 @@ export default function AdminLoginPage() {
           <h1 className="text-2xl font-bold text-gradient-gold">{t('admin.loginTitle')}</h1>
           <p className="mt-1 text-sm text-ink-mid">{t('admin.loginSub')}</p>
 
-          <form
-            className="mt-6 space-y-4"
-            onSubmit={async (e) => {
-              e.preventDefault();
-              setLoading(true);
-              await new Promise((r) => setTimeout(r, 600));
-              setLoading(false);
-              router.push('/admin');
-            }}
-          >
+          <form className="mt-6 space-y-4" onSubmit={onSubmit}>
             <FormField label={t('admin.username')} required>
-              <Input leftIcon={<UserIcon className="h-4 w-4" />} placeholder="admin.username" defaultValue="admin.rafiq" />
+              <Input
+                leftIcon={<UserIcon className="h-4 w-4" />}
+                placeholder="admin username"
+                autoComplete="username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+              />
             </FormField>
             <FormField label={t('admin.password')} required>
-              <Input type="password" leftIcon={<Lock className="h-4 w-4" />} placeholder="••••••••" defaultValue="demo-admin" />
+              <Input
+                type="password"
+                leftIcon={<Lock className="h-4 w-4" />}
+                placeholder="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
             </FormField>
+            {error ? <p className="text-sm text-signal-danger">{error}</p> : null}
             <Button full type="submit" size="lg" loading={loading}>
               {t('admin.loginBtn')}
             </Button>
@@ -61,7 +95,7 @@ export default function AdminLoginPage() {
               <a href={`mailto:${BRAND.builderEmail}`} className="hover:text-ink-hi">{BRAND.builderEmail}</a>
             </p>
             <p className="mt-3">
-              <Link href="/" className="text-ink-mid hover:text-ink-hi">← Back to site</Link>
+              <Link href="/" className="text-ink-mid hover:text-ink-hi">Back to site</Link>
             </p>
           </div>
         </div>

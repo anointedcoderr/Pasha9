@@ -1,13 +1,15 @@
+// Built by Anointed Coder.
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Modal } from '@/components/ui/Modal';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { Button } from '@/components/ui/Button';
 import { FormField, Input } from '@/components/ui/Input';
-import { Phone, Lock, KeyRound, UserPlus } from 'lucide-react';
+import { Phone, Lock, KeyRound, UserPlus, User as UserIcon, Gift } from 'lucide-react';
 import { loginSchema, signupSchema, type LoginInput, type SignupInput } from '@/lib/utils/validation';
 import { useT } from '@/lib/i18n/context';
 
@@ -15,6 +17,11 @@ interface Props {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   initialTab?: 'login' | 'signup';
+}
+
+interface ApiError {
+  code: string;
+  message?: string;
 }
 
 export function AuthModal({ open, onOpenChange, initialTab = 'login' }: Props) {
@@ -56,36 +63,59 @@ export function AuthModal({ open, onOpenChange, initialTab = 'login' }: Props) {
 
 function LoginForm({ onSuccess }: { onSuccess: () => void }) {
   const t = useT();
+  const router = useRouter();
+  const params = useSearchParams();
   const [loading, setLoading] = useState(false);
+  const [apiError, setApiError] = useState<ApiError | null>(null);
+
   const {
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm<LoginInput>({ resolver: zodResolver(loginSchema), defaultValues: { phone: '', password: '' } });
+  } = useForm<LoginInput>({ resolver: zodResolver(loginSchema), defaultValues: { identifier: '', password: '' } });
+
+  const onSubmit = async (values: LoginInput) => {
+    setApiError(null);
+    setLoading(true);
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(values),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setApiError({ code: data.code ?? 'ERROR', message: data.message });
+        return;
+      }
+      onSuccess();
+      const next = params.get('next') ?? '/dashboard';
+      router.push(next);
+      router.refresh();
+    } catch {
+      setApiError({ code: 'NETWORK_ERROR', message: 'Could not reach server' });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <form
-      onSubmit={handleSubmit(async () => {
-        setLoading(true);
-        await new Promise((r) => setTimeout(r, 600));
-        setLoading(false);
-        onSuccess();
-      })}
-      className="space-y-4"
-    >
-      <FormField label={t('auth.phone')} required error={errors.phone ? t(`auth.${errors.phone.message}`) : undefined}>
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      <FormField label={t('auth.phone')} required error={errors.identifier?.message}>
         <Input
           leftIcon={<Phone className="h-4 w-4" />}
-          placeholder="01XXXXXXXXX"
-          inputMode="tel"
-          {...register('phone')}
-          invalid={!!errors.phone}
+          placeholder="01XXXXXXXXX or username"
+          inputMode="text"
+          autoComplete="username"
+          {...register('identifier')}
+          invalid={!!errors.identifier}
         />
       </FormField>
       <FormField label={t('auth.password')} required error={errors.password ? t(`auth.${errors.password.message}`) : undefined}>
         <Input
           leftIcon={<Lock className="h-4 w-4" />}
           type="password"
+          autoComplete="current-password"
           placeholder="••••••••"
           {...register('password')}
           invalid={!!errors.password}
@@ -94,6 +124,9 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
       <div className="flex items-center justify-between text-sm">
         <a href="#" className="text-ink-mid hover:text-ink-hi">{t('auth.forgot')}</a>
       </div>
+      {apiError ? (
+        <p className="text-sm text-signal-danger">{apiError.message ?? apiError.code}</p>
+      ) : null}
       <Button full type="submit" size="lg" loading={loading} leftIcon={<KeyRound className="h-4 w-4" />}>
         {t('common.login')}
       </Button>
@@ -103,45 +136,76 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
 
 function SignupForm({ onSuccess, onSwitch }: { onSuccess: () => void; onSwitch: () => void }) {
   const t = useT();
+  const router = useRouter();
+  const params = useSearchParams();
   const [loading, setLoading] = useState(false);
+  const [apiError, setApiError] = useState<ApiError | null>(null);
+
+  const referralFromUrl = params.get('r') ?? '';
+
   const {
     register,
     handleSubmit,
     formState: { errors },
   } = useForm<SignupInput>({
     resolver: zodResolver(signupSchema),
-    defaultValues: { phone: '', password: '', confirm: '', referral: '', agree: false },
+    defaultValues: { username: '', phone: '', password: '', confirm: '', referral: referralFromUrl, agree: false },
   });
 
+  const onSubmit = async (values: SignupInput) => {
+    setApiError(null);
+    setLoading(true);
+    try {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          username: values.username,
+          phone: values.phone,
+          password: values.password,
+          referral: values.referral || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setApiError({ code: data.code ?? 'ERROR', message: data.message });
+        return;
+      }
+      onSuccess();
+      router.push('/dashboard');
+      router.refresh();
+    } catch {
+      setApiError({ code: 'NETWORK_ERROR', message: 'Could not reach server' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <form
-      onSubmit={handleSubmit(async () => {
-        setLoading(true);
-        await new Promise((r) => setTimeout(r, 700));
-        setLoading(false);
-        onSuccess();
-      })}
-      className="space-y-4"
-    >
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      <FormField label="Username" required error={errors.username?.message}>
+        <Input leftIcon={<UserIcon className="h-4 w-4" />} placeholder="3 to 24 characters" autoComplete="username" {...register('username')} invalid={!!errors.username} />
+      </FormField>
       <FormField label={t('auth.phone')} required error={errors.phone ? t(`auth.${errors.phone.message}`) : undefined}>
-        <Input leftIcon={<Phone className="h-4 w-4" />} placeholder="01XXXXXXXXX" inputMode="tel" {...register('phone')} invalid={!!errors.phone} />
+        <Input leftIcon={<Phone className="h-4 w-4" />} placeholder="01XXXXXXXXX" inputMode="tel" autoComplete="tel" {...register('phone')} invalid={!!errors.phone} />
       </FormField>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <FormField label={t('auth.password')} required error={errors.password ? t(`auth.${errors.password.message}`) : undefined}>
-          <Input leftIcon={<Lock className="h-4 w-4" />} type="password" placeholder="••••••••" {...register('password')} invalid={!!errors.password} />
+          <Input leftIcon={<Lock className="h-4 w-4" />} type="password" autoComplete="new-password" placeholder="••••••••" {...register('password')} invalid={!!errors.password} />
         </FormField>
         <FormField label={t('auth.confirm')} required error={errors.confirm ? t(`auth.${errors.confirm.message}`) : undefined}>
-          <Input leftIcon={<Lock className="h-4 w-4" />} type="password" placeholder="••••••••" {...register('confirm')} invalid={!!errors.confirm} />
+          <Input leftIcon={<Lock className="h-4 w-4" />} type="password" autoComplete="new-password" placeholder="••••••••" {...register('confirm')} invalid={!!errors.confirm} />
         </FormField>
       </div>
       <FormField label={t('auth.referral')}>
-        <Input placeholder="ABCDE12" {...register('referral')} />
+        <Input leftIcon={<Gift className="h-4 w-4" />} placeholder="ABCDE12" {...register('referral')} />
       </FormField>
       <label className="flex cursor-pointer items-start gap-2 text-sm text-ink-mid">
         <input type="checkbox" {...register('agree')} className="mt-1 h-4 w-4 accent-neon" />
         <span>{t('auth.agree')}</span>
       </label>
       {errors.agree ? <p className="-mt-2 text-xs text-signal-danger">{t(`auth.${errors.agree.message}`)}</p> : null}
+      {apiError ? <p className="text-sm text-signal-danger">{apiError.message ?? apiError.code}</p> : null}
       <Button full type="submit" size="lg" loading={loading} leftIcon={<UserPlus className="h-4 w-4" />}>
         {t('common.signup')}
       </Button>

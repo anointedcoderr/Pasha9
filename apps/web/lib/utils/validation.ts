@@ -10,12 +10,18 @@ export const phoneSchema = z
 export const passwordSchema = z.string().min(6, { message: 'errorPassword' });
 
 export const loginSchema = z.object({
-  phone: phoneSchema,
+  identifier: z.string().trim().min(3).max(64),
   password: passwordSchema,
 });
 
 export const signupSchema = z
   .object({
+    username: z
+      .string()
+      .trim()
+      .min(3)
+      .max(24)
+      .regex(/^[a-zA-Z0-9_.]+$/, { message: 'errorUsername' }),
     phone: phoneSchema,
     password: passwordSchema,
     confirm: passwordSchema,
