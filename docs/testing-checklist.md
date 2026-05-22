@@ -1,91 +1,89 @@
 # Pasha9 Milestone 1 Testing Checklist
 
-Run `pnpm install` then `pnpm dev` from the repo root. The web app opens at `http://localhost:3000`. Walk through this list before sending the demo link to the client.
+Run end to end on the live VPS (`https://pasha9.com`) before requesting M1 approval. Built by Anointed Coder.
 
-## Public site
+## A. Infrastructure
 
-- [ ] Homepage renders on desktop at 1440 width
-- [ ] Homepage renders on mobile at 375 width
-- [ ] Hero slider auto-advances and arrow buttons work
-- [ ] Slider dots reflect the active slide
-- [ ] Jackpot counter ticks upward
-- [ ] Promo marquee scrolls smoothly
-- [ ] Hot Games rail scrolls horizontally
-- [ ] Slots, Live Casino, Fishing rails render with mock games
-- [ ] Each game card shows provider, min/max bet, hover glow, favorite toggle, maintenance state
-- [ ] Sidebar navigation opens every public route
-- [ ] Header search and language toggle visible
-- [ ] Mobile menu opens, closes, and navigates
+- [ ] `https://pasha9.com` opens with a valid SSL certificate
+- [ ] `https://www.pasha9.com` resolves and redirects to the apex
+- [ ] `pm2 status` reports `pasha9-web` as `online`
+- [ ] `systemctl is-active nginx postgresql` both print `active`
+- [ ] `sudo ufw status` shows allow rules for 22, 80, 443
+- [ ] `/var/www/pasha9/uploads/` exists with subfolders `banners`, `games`, `payment-proofs`, `apk`
+- [ ] `/var/backups/pasha9/db/` writes a fresh `.sql.gz` after manual run of `backup-db.sh`
 
-## Authentication
+## B. Public site
 
-- [ ] Login modal opens from header
-- [ ] Signup tab switches inside the modal
-- [ ] Phone validation rejects non-Bangladeshi numbers
-- [ ] Password validation requires minimum length
-- [ ] Confirm password mismatch shows error
-- [ ] Agree to terms checkbox is required
+- [ ] Homepage loads in Bangla on a clean browser session (no flash to English)
+- [ ] Language toggle in the header switches between BN and EN and persists across reloads
+- [ ] HeroSlider shows banners from the database, animates between slides, and respects admin status toggles
+- [ ] Promo marquee shows live PromoText entries
+- [ ] Game catalogue, slots, fishing, lottery, live casino, sports pages load
+- [ ] Promotions, referral, wallet, deposit, withdraw, transactions, profile, support, terms, responsible gaming routes all return 200
+- [ ] 404 page renders for unknown paths
 
-## Public pages
+## C. Auth flow
 
-- [ ] /games shows full catalogue with category pills
-- [ ] /games/[category] route renders for slots, fishing, live-casino, lottery, etc.
-- [ ] /sports shows match cards with three-way odds buttons
-- [ ] /promotions shows six bonus rules with claim buttons
-- [ ] /referral shows code, link, copy buttons, chain visualization, table
-- [ ] /wallet shows balance, bonus, locked tiles and recent transactions
-- [ ] /deposit form: presets, method picker, TX ID, proof upload, instructions, success state
-- [ ] /withdraw form: balance reminder, method, account fields, success state with admin note
-- [ ] /transactions filter by type works
-- [ ] /profile shows mock user info and editable form
-- [ ] /support shows three channels, FAQ accordion, ticket form
-- [ ] /terms and /responsible-gaming render
+- [ ] Header `Register` opens the AuthModal and accepts new account creation
+- [ ] Username, phone, password, confirm, agree validators fire with friendly messages
+- [ ] After successful registration the session cookie is set, the user lands on `/dashboard`, and a User row exists in PostgreSQL with a bcrypt hash
+- [ ] `/api/auth/me` returns the user data
+- [ ] Sign out clears the cookies and `pasha9_session` no longer appears in DevTools
+- [ ] Login with the same username and password succeeds
+- [ ] Login with the wrong password returns `INVALID_CREDENTIALS`
+- [ ] Restart PM2 (`pm2 reload pasha9-web`), then log in again. The user persists across restart.
+- [ ] Signup with `?r=<existing referralCode>` stores `referredById` on the new user (check via `psql`).
+- [ ] `/dashboard/referral` and `/referral` both show the new user's referral code and an invite link.
 
-## User dashboard
+## D. Admin
 
-- [ ] /dashboard overview tiles, recent activity, bonus cards
-- [ ] /dashboard/wallet balances and history
-- [ ] /dashboard/deposit and /dashboard/withdraw reuse the public forms
-- [ ] /dashboard/bonus shows claimable rules and wagering progress
-- [ ] /dashboard/referral
-- [ ] /dashboard/transactions
-- [ ] /dashboard/profile
-- [ ] /dashboard/security toggles for 2FA, login alerts, SMS confirm
+- [ ] `/admin/login` rejects unknown credentials with a clear error
+- [ ] Super admin login succeeds and redirects to `/admin`
+- [ ] Overview shows the deposit/withdraw chart and the recent activity table populated from the audit log
+- [ ] `Homepage Content`: edit hero_primary title (BN and EN), save, refresh the public homepage, change appears
+- [ ] `Banners and Sliders`: create a banner with accent gold, reorder it, toggle status, edit, delete. Active banners appear in the homepage hero.
+- [ ] `Popups`: create with no time window, save, refresh public site, popup payload available via `/api/content/popups`
+- [ ] `Promo Text`: add a line, save, marquee updates after page refresh
+- [ ] `System Settings`: SMS, tracking, payment fields are present, empty by default, save action works
+- [ ] `Activity Log`: lists every admin write performed in this session
+- [ ] Logout from admin returns to `/admin/login`
 
-## Admin
+## E. Referral base
 
-- [ ] /admin/login layout renders, password field is masked
-- [ ] /admin overview: 8 stat tiles, deposit/withdraw chart, pending queue, recent activity
-- [ ] /admin/users: table search, sort, pagination, row open drawer, balance adjust modal
-- [ ] Balance adjust modal requires a reason and shows old to new balance
-- [ ] /admin/balance: credit and debit shortcuts
-- [ ] /admin/deposits: approve and reject confirmation modals with admin note
-- [ ] /admin/withdrawals: approve and reject confirmation modals with admin note
-- [ ] /admin/transactions log searchable
-- [ ] /admin/referrals overview cards, top referrers, table
-- [ ] /admin/bonuses cards + editor modal with type, percentage, amount, min, max
-- [ ] /admin/banners list with reorder, toggle, edit modal, preview thumbnail
-- [ ] /admin/popups list with start/end window, edit modal
-- [ ] /admin/categories CRUD
-- [ ] /admin/providers CRUD plus API keys modal
-- [ ] /admin/homepage section toggles and Bangla / English hero copy
-- [ ] /admin/promo-text marquee editor
-- [ ] /admin/support inbox + reply drawer
-- [ ] /admin/settings shows compliance notice and Built by Anointed Coder
-- [ ] /admin/activity audit log table
-- [ ] /admin/handover shows checklist, pending from client, contact buttons
+- [ ] `User.referralCode` for new users is 8 characters, A-Z and digits, not visually ambiguous
+- [ ] Two new users with the same referrer share the same `referredById`
+- [ ] `/referral` shows the logged-in user's code, not a placeholder
 
-## Branding gate
+## F. Branding
 
-- [ ] No badges anywhere in the UI
-- [ ] No em or long dash characters in any source file (run `pnpm check:branding`)
-- [ ] No mention of any AI assistant name in source or copy
-- [ ] Built by Anointed Coder visible in: footer, admin sidebar bottom, admin login card, /admin/settings, /admin/handover
-- [ ] Telegram link points to https://t.me/AnointedCoder
-- [ ] WhatsApp link points to https://wa.link/fi5z8a
-- [ ] Floating contact buttons open both channels from every page
+- [ ] `pnpm check:branding` exits 0 on the production code
+- [ ] Footer of every public page shows `Built by Anointed Coder`, `anointedcoder@gmail.com`
+- [ ] Admin sidebar bottom shows the same credit plus Telegram and WhatsApp buttons
+- [ ] Admin login card shows the credit
+- [ ] System Settings page shows the credit
+- [ ] Source Handover page shows the credit
+- [ ] `pnpm check:branding` succeeds; no retired-brand or toolchain references appear in `view-source:`
+- [ ] No em dash or en dash anywhere
 
-## Performance and console
+## G. Mobile
 
-- [ ] No browser console errors on Home, Wallet, Admin Overview, Admin Users
-- [ ] Lighthouse on Home shows no critical accessibility issues
+- [ ] At 375px width: header, hero, game rails, promo strip render without horizontal scroll
+- [ ] AuthModal opens and submits on a phone
+- [ ] Admin login renders without overflow
+- [ ] Floating Telegram and WhatsApp buttons reachable in the bottom-right corner
+
+## H. Logs and audit
+
+- [ ] After admin actions, `/admin/activity` shows entries with IP and user agent
+- [ ] `pm2 logs pasha9-web --lines 100` is free of unexpected errors
+
+## I. Document presence
+
+- [ ] `docs/deployment-guide.md`
+- [ ] `docs/admin-guide.md`
+- [ ] `docs/api-guide.md`
+- [ ] `docs/backup-guide.md`
+- [ ] `docs/migration-guide.md`
+- [ ] `docs/handover-checklist.md`
+- [ ] `docs/testing-checklist.md`
+- [ ] `README.md` with the live URL, deploy command, and credit

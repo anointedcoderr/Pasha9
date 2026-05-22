@@ -1,92 +1,64 @@
 # Pasha9 Milestones
 
-> Project: Bangla casino and betting platform. Owner is the client. Built by Anointed Coder. Contact: anointedcoder@gmail.com.
+Project: Bangla casino and betting platform. Owner is the client. Built by Anointed Coder. Contact: anointedcoder@gmail.com.
 
 The build is split into three priced milestones, each with a strict scope so the client always knows what has shipped and what is next.
 
-## Milestone 1: Frontend only
+## Milestone 1 (current) Core setup and live deployment
 
-Price: 150 USD
-Duration: 2 days
-Status: Delivered with this drop
+Status: Implementation complete on branch `m1-production`. Awaiting client approval before merging to `main` and starting Milestone 2.
 
-What is shipped
+What ships:
 
-- Next.js 14 App Router project at `apps/web` with TypeScript, Tailwind, custom design tokens
-- Royal Bangla Casino Glow theme (deep green, gold gradient, neon accents, premium glow)
-- Bangla first content with English fallback via a lightweight i18n context
-- Public site:
-  - Home with animated hero slider, jackpot ticker, marquee promo strip, four scrolling game rails, and promotion cards
-  - Games index + dynamic category page
-  - Slots, Live Casino, Fishing, Lottery, Sports placeholder
-  - Promotions (six bonus rules)
-  - Referral center with code, link, copy, three-level chain, commission tiers, totals, table
-  - Wallet, Deposit, Withdrawal, Transactions (40 mock entries, type filter)
-  - Profile, Support (channels + FAQ + ticket form), Terms, Responsible Gaming
-- User dashboard:
-  - Overview, Wallet, Deposit, Withdraw, Bonus, Referral, Transactions, Profile, Security
-- Admin dashboard:
-  - Login screen + Overview (8 stat cards, Recharts area chart, pending queue, recent activity)
-  - User management with detail drawer + balance adjust modal (reason required, old to new shown)
-  - Balance management list
-  - Deposit approval and withdrawal approval with confirmation modal
-  - Transaction logs, referral chain management, bonus rule editor
-  - Banner manager, popup manager, category manager, provider manager
-  - Homepage content editor, promo text marquee editor
-  - Support inbox with drawer, system settings (with compliance notice)
-  - Activity log, source handover page
-- Floating Telegram and WhatsApp buttons across the site
-- Built by Anointed Coder branding in: footer, admin sidebar, admin login, system settings, source handover
+- Ubuntu 24.04 VPS configured with Node 20, pnpm, PM2, PostgreSQL 16, Nginx, UFW, Let's Encrypt SSL
+- Live domain at `https://pasha9.com` with `www.pasha9.com` redirecting to apex
+- PostgreSQL with 25 Prisma models, real migration applied, idempotent seed
+- Auth: register, login, JWT cookies, bcrypt password hashing, OTP provider-ready adapter, password reset flow
+- Editable admin CMS: banners, popups, promo text, homepage content, system settings (live PostgreSQL backed)
+- User dashboard with real wallet view via `/api/auth/me`
+- Referral code generation per user; `?r=` capture on signup
+- Audit log written on every admin write with IP and user-agent
+- Local disk uploads via `/var/www/pasha9/uploads`, served by Nginx with caching
+- APK download field exposed in system settings for the future Milestone 3 build
+- Branding gate enforces every project rule on every build
 
-What is mock in Milestone 1
+What does not ship in M1 (deferred to later milestones):
 
-- All users, transactions, deposits, withdrawals, games, banners, popups, referrals, bonus rules, admin stats, support tickets, activity logs.
-- Login and registration modals validate inputs and simulate latency but do not persist.
-- Deposit and withdrawal forms validate and show a success screen but no API call.
+- Live SMS provider integration (waits on credentials)
+- Payment gateway integration (waits on credentials)
+- Game provider API integrations (waits on credentials)
+- Full staff management UI
+- Bonus and turnover/wager logic
+- Deposit and withdrawal real flows
+- Android APK build
 
-What Milestone 2 connects
+## Milestone 2 Main features and integrations
 
-- Real user registration and login (JWT, hashed passwords, three roles)
-- Wallet, deposit, withdraw, transaction APIs
-- Admin approval flows with audit logs
-- Referral commission engine
-- Bonus rule engine and claim flow
-- Banner, popup, promo text, category, provider, homepage content CRUD
-- Admin dashboard statistics endpoint
+Starts only after M1 approval.
 
-What Milestone 3 connects
+Scope summary:
 
-- Semi-automatic deposit flow plus manual payment proof fallback
-- Withdrawal approval with payment gateway hooks if client provides API docs
-- Game provider connection layer, demo launch flow
-- Android APK shell via Capacitor (icon, splash, package name) that points to the responsive site
+- Deposit request flow with manual proof and admin approval; gateway adapter when credentials arrive
+- Withdrawal request flow with admin approval, turnover gating, wallet balance checks
+- Bonus management (first deposit, reload, daily, weekly, referral, promo) with start and end windows
+- Turnover and wager system per user and per bonus
+- Referral chain visualization, commission rules, fraud check basics
+- Full user management (suspend, activate, reset password, balance edit by super admin only)
+- Staff/sub-admin roles, granular permissions, action logs
+- Tracking pixel settings (Facebook, TikTok, GA4, Google Ads, Snapchat, affiliate)
+- SMS/OTP provider integration when credentials arrive
+- Game management with house edge, RTP, payout table, maintenance, wager contribution
+- Daily transaction, deposit, withdrawal, bonus, referral, staff activity reports
 
-## Milestone 2: Backend and admin functionality
+## Milestone 3 APK, final testing, source handover
 
-Price: 300 USD
-Duration: 3 days
-Status: Scaffolded only, implementation begins after Milestone 1 sign off
+Starts only after M2 approval.
 
-Deliverables
+Scope summary:
 
-- NestJS API in `apps/api` with the modules listed in `apps/api/README.md`
-- Prisma schema in `packages/database/prisma/schema.prisma` (already drafted, 20 models)
-- PostgreSQL migrations and seed data that mirror the Milestone 1 mocks
-- Endpoint coverage per `docs/api-plan.md`
-- Admin and user test accounts in the seed
-- Activity log writes for every admin write action
-
-## Milestone 3: Payments, APK, handover
-
-Price: 150 USD
-Duration: 2 days
-
-Deliverables
-
-- Semi-automatic deposit flow
-- Manual payment proof upload with admin approval if no gateway docs are available
-- Game provider API ready structure
-- Capacitor based Android APK that loads the live responsive site and preserves login
-- App icon and splash screen
-- End-to-end smoke test
-- Source archive, deployment guide, backup guide, handover checklist
+- Capacitor or WebView Android APK loading `https://pasha9.com` with persistent session
+- App icon, splash screen, app name Pasha9
+- APK download link wired to the admin field
+- End to end testing across web and APK
+- Backup verified, off-site copy procedure documented
+- Source code package, documentation set, credentials handover, two weeks of post-delivery support

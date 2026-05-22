@@ -3,35 +3,82 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useT } from '@/lib/i18n/context';
+import { useT, useLang } from '@/lib/i18n/context';
 import { ChevronLeft, ChevronRight, Sparkles, Gift } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils/cn';
 
+type Accent = 'gold' | 'neon' | 'mixed' | 'royal' | 'red';
+
 interface Slide {
-  titleKey: string;
-  subKey: string;
+  title: string;
+  subtitle: string;
   primary: { label: string; href: string };
   secondary?: { label: string; href: string };
   art: 'royal' | 'live' | 'referral';
 }
 
-const SLIDES: Slide[] = [
-  { titleKey: 'home.heroTitle1', subKey: 'home.heroSub1', primary: { label: 'home.heroCtaPrimary', href: '/' }, secondary: { label: 'home.heroCtaSecondary', href: '/promotions' }, art: 'royal' },
-  { titleKey: 'home.heroTitle2', subKey: 'home.heroSub2', primary: { label: 'home.heroCtaPrimary', href: '/live-casino' }, art: 'live' },
-  { titleKey: 'home.heroTitle3', subKey: 'home.heroSub3', primary: { label: 'common.signup', href: '/referral' }, art: 'referral' },
-];
+interface LiveBanner {
+  id: string;
+  title: string;
+  titleEn?: string | null;
+  subtitle?: string | null;
+  subtitleEn?: string | null;
+  ctaLabel?: string | null;
+  link?: string | null;
+  accent: Accent;
+}
+
+function fallbackSlides(t: (k: string) => string): Slide[] {
+  return [
+    { title: t('home.heroTitle1'), subtitle: t('home.heroSub1'), primary: { label: t('home.heroCtaPrimary'), href: '/' }, secondary: { label: t('home.heroCtaSecondary'), href: '/promotions' }, art: 'royal' },
+    { title: t('home.heroTitle2'), subtitle: t('home.heroSub2'), primary: { label: t('home.heroCtaPrimary'), href: '/live-casino' }, art: 'live' },
+    { title: t('home.heroTitle3'), subtitle: t('home.heroSub3'), primary: { label: t('common.signup'), href: '/referral' }, art: 'referral' },
+  ];
+}
+
+function artForAccent(accent: Accent): Slide['art'] {
+  if (accent === 'neon') return 'live';
+  if (accent === 'royal' || accent === 'mixed') return 'referral';
+  return 'royal';
+}
 
 export function HeroSlider() {
   const t = useT();
-  const [i, setI] = useState(0);
+  const { lang } = useLang();
+  const [live, setLive] = useState<LiveBanner[] | null>(null);
 
   useEffect(() => {
-    const id = setInterval(() => setI((p) => (p + 1) % SLIDES.length), 6500);
-    return () => clearInterval(id);
+    let alive = true;
+    fetch('/api/content/banners')
+      .then((r) => r.json())
+      .then((data) => {
+        if (alive) setLive((data.banners ?? []) as LiveBanner[]);
+      })
+      .catch(() => { if (alive) setLive([]); });
+    return () => { alive = false; };
   }, []);
 
-  const slide = SLIDES[i];
+  const slides: Slide[] = useMemo(() => {
+    if (!live || live.length === 0) return fallbackSlides(t);
+    return live.map<Slide>((b) => ({
+      title: (lang === 'en' && b.titleEn) ? b.titleEn : b.title,
+      subtitle: ((lang === 'en' && b.subtitleEn) ? b.subtitleEn : b.subtitle) ?? '',
+      primary: { label: b.ctaLabel ?? t('home.heroCtaPrimary'), href: b.link ?? '/' },
+      art: artForAccent(b.accent),
+    }));
+  }, [live, lang, t]);
+
+  const [i, setI] = useState(0);
+  useEffect(() => { setI(0); }, [slides.length]);
+
+  useEffect(() => {
+    if (slides.length <= 1) return;
+    const id = setInterval(() => setI((p) => (p + 1) % slides.length), 6500);
+    return () => clearInterval(id);
+  }, [slides.length]);
+
+  const slide = slides[i] ?? slides[0];
   const coins = useMemo(() => Array.from({ length: 14 }).map(() => ({
     x: Math.random() * 100,
     y: 30 + Math.random() * 60,
@@ -75,16 +122,16 @@ export function HeroSlider() {
               <Sparkles className="h-3.5 w-3.5" /> {t('home.tickerLabel')}
             </div>
             <h1 className="mt-4 text-3xl font-extrabold leading-tight text-ink-hi md:text-5xl">
-              <span className="text-gradient-gold">{t(slide.titleKey)}</span>
+              <span className="text-gradient-gold">{slide.title}</span>
             </h1>
-            <p className="mt-4 max-w-md text-base text-ink-mid md:text-lg">{t(slide.subKey)}</p>
+            <p className="mt-4 max-w-md text-base text-ink-mid md:text-lg">{slide.subtitle}</p>
             <div className="mt-7 flex flex-wrap items-center gap-3">
               <Link href={slide.primary.href}>
-                <Button size="lg" leftIcon={<Sparkles className="h-4 w-4" />}>{t(slide.primary.label)}</Button>
+                <Button size="lg" leftIcon={<Sparkles className="h-4 w-4" />}>{slide.primary.label}</Button>
               </Link>
               {slide.secondary ? (
                 <Link href={slide.secondary.href}>
-                  <Button size="lg" variant="neon" leftIcon={<Gift className="h-4 w-4" />}>{t(slide.secondary.label)}</Button>
+                  <Button size="lg" variant="neon" leftIcon={<Gift className="h-4 w-4" />}>{slide.secondary.label}</Button>
                 </Link>
               ) : null}
             </div>
@@ -97,7 +144,7 @@ export function HeroSlider() {
       </div>
 
       <div className="absolute inset-x-0 bottom-3 flex items-center justify-center gap-2">
-        {SLIDES.map((_, idx) => (
+        {slides.map((_, idx) => (
           <button
             key={idx}
             onClick={() => setI(idx)}
@@ -113,7 +160,7 @@ export function HeroSlider() {
       <button
         type="button"
         aria-label="Previous"
-        onClick={() => setI((p) => (p - 1 + SLIDES.length) % SLIDES.length)}
+        onClick={() => setI((p) => (p - 1 + slides.length) % slides.length)}
         className="absolute left-3 top-1/2 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-neon/20 bg-base-deep/60 text-ink-mid hover:text-ink-hi md:inline-flex"
       >
         <ChevronLeft className="h-4 w-4" />
@@ -121,7 +168,7 @@ export function HeroSlider() {
       <button
         type="button"
         aria-label="Next"
-        onClick={() => setI((p) => (p + 1) % SLIDES.length)}
+        onClick={() => setI((p) => (p + 1) % slides.length)}
         className="absolute right-3 top-1/2 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-neon/20 bg-base-deep/60 text-ink-mid hover:text-ink-hi md:inline-flex"
       >
         <ChevronRight className="h-4 w-4" />

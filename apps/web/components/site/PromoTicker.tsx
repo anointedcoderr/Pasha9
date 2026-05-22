@@ -1,11 +1,31 @@
+// Built by Anointed Coder.
 'use client';
 
-import { mockPromoTexts } from '@/lib/mock/banners';
+import { useEffect, useState } from 'react';
 import { Megaphone } from 'lucide-react';
+import { mockPromoTexts } from '@/lib/mock/banners';
+
+interface PromoItem { message: string }
 
 export function PromoTicker() {
-  const active = mockPromoTexts.filter((p) => p.status === 'active').sort((a, b) => a.position - b.position);
-  const messages = [...active, ...active]; // duplicate for seamless loop
+  const [items, setItems] = useState<PromoItem[]>(
+    mockPromoTexts.filter((p) => p.status === 'active').map((p) => ({ message: p.message })),
+  );
+
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/content/promo-text')
+      .then((r) => r.json())
+      .then((data) => {
+        if (!alive) return;
+        const next: PromoItem[] = (data.items ?? []).map((i: { message: string }) => ({ message: i.message }));
+        if (next.length) setItems(next);
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  const messages = [...items, ...items];
 
   return (
     <div className="flex items-center gap-3 overflow-hidden rounded-card border border-neon/10 bg-base-panel/40 px-4 py-2.5">

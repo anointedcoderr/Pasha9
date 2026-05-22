@@ -1,58 +1,94 @@
-# Pasha9 Handover Checklist
+# Pasha9 Milestone 1 Handover Checklist
 
-A single document the client should receive at the end of Milestone 3.
+Built by Anointed Coder.
 
-## Source code
+## Live links
 
-- [ ] Full monorepo archive (zip or git bundle)
-- [ ] README with run instructions
-- [ ] All environment variables documented in `.env.example`
-- [ ] Branch policy and tagging recommendation included
+- Public site: `https://pasha9.com`
+- Admin panel: `https://pasha9.com/admin`
 
-## Database
+## Credentials
 
-- [ ] Prisma schema reviewed by client tech contact
-- [ ] Initial migration applied on production database
-- [ ] Seed data run once for default categories, providers, bonus rules
-- [ ] Backup job configured and verified
+Delivered privately to Anointed Coder and the client, never committed to the repo:
 
-## Frontend
+- Super admin username
+- Super admin password (must be changed on first login)
+- PostgreSQL role and password
+- Deploy SSH user
 
-- [ ] Vercel project (or VPS Docker setup) handed over
-- [ ] Domain configured and TLS certificate active
-- [ ] Open Graph and favicon images delivered
-- [ ] Final brand name applied across the UI (replacing the Pasha9 placeholder)
+## Repository
 
-## Backend
+- `https://github.com/anointedcoderr/Pasha9` (repository was rebranded during Milestone 1)
+- Working branch for M1: `m1-production`
+- Safety tag captured before backend work: `pre-pasha9`
 
-- [ ] PM2 / systemd service running on the VPS
-- [ ] CORS origin and JWT secret rotated for production
-- [ ] Rate limiting enabled on auth endpoints
-- [ ] Activity log indexes verified
+## Server inventory
 
-## Payments
+- VPS provider: client-owned
+- OS: Ubuntu 24.04 LTS
+- Runtime: Node 20 LTS, pnpm latest via corepack, PM2 latest
+- Database: PostgreSQL 16 bound to `127.0.0.1:5432`
+- Web server: Nginx with Let's Encrypt SSL
+- Firewall: UFW with ports 22, 80, 443 only
 
-- [ ] Payment gateway integrated (if API docs are provided), or
-- [ ] Manual proof upload flow validated end to end with a real transaction
+## Folders on disk
 
-## Mobile APK
+- Application: `/var/www/pasha9/app`
+- Uploads: `/var/www/pasha9/uploads/{banners,games,payment-proofs,apk}`
+- Logs: `/var/log/pasha9/`
+- Backups: `/var/backups/pasha9/{db,uploads}/`
 
-- [ ] Capacitor wrapper builds for Android
-- [ ] Icon and splash screen finalized
-- [ ] APK loads the live site and preserves login session
-- [ ] APK signed and delivered to the client
+## Milestone 1 scope, completed
 
-## Operations
+- [x] Ubuntu server provisioned, Node, pnpm, PM2, PostgreSQL, Nginx, UFW configured
+- [x] SSL via Certbot for apex and www
+- [x] Domain confirmed at `https://pasha9.com`
+- [x] PM2 ecosystem with auto-restart
+- [x] PostgreSQL `pasha9_prod` database with role
+- [x] Prisma schema with 25 models, initial migration applied
+- [x] Seed populates roles, permissions, super admin, banners, popups, promo text, categories, providers, sample games, payment methods, system settings
+- [x] JWT-based auth with bcrypt, refresh tracking in DB
+- [x] OTP provider-ready adapter (console in dev, noop in production until SMS credentials land)
+- [x] Password reset flow with single-use hashed tokens
+- [x] Admin CMS: banners, popups, promo text, homepage content live in the DB and editable from the panel
+- [x] Public hero slider and marquee read from the database
+- [x] Referral code generation on signup; referral capture from `?r=` query
+- [x] Activity log writes on every admin action with IP and user-agent
+- [x] Local disk upload pipeline with sanitised filenames; Nginx serves `/uploads/*`
+- [x] APK download placeholder field in System Settings
+- [x] Branding gate blocks retired-brand and toolchain references, em dash, en dash, and asserts the "Built by Anointed Coder" credit in required files
+- [x] Built by Anointed Coder shown in footer, admin sidebar, admin login, system settings, source handover, README, docs
 
-- [ ] Admin and super-admin accounts handed off with one-time passwords
-- [ ] User test account for QA
-- [ ] Backup restore tested
-- [ ] Logging endpoint or file location documented
+## Provider-ready, not connected yet
 
-## Knowledge transfer
+- SMS provider for OTP and password reset SMS delivery (adapter is in place; admin can add API key once a provider is chosen)
+- Tracking pixels (Facebook, TikTok, GA4, Google Ads) (fields present in admin Settings, no IDs hardcoded)
+- Payment gateway (manual flow ships in M2)
 
-- [ ] 30 minute walkthrough call with the client
-- [ ] Telegram or WhatsApp channel kept open for two weeks of post-launch support
-- [ ] All pending items from client (logos, real provider list, gateway docs) marked complete
+## What needs to happen before M2
 
-Built by Anointed Coder. Contact: anointedcoder@gmail.com.
+- [ ] Client provides the chosen SMS provider and credentials
+- [ ] Client provides the chosen payment gateway documentation
+- [ ] Client provides real game provider list and API documentation
+- [ ] Client confirms final brand assets (logo file, colour refinements if any)
+
+## Pre-handover steps performed
+
+- [x] `pnpm typecheck` clean
+- [x] `pnpm --filter @pasha9/web build` succeeds
+- [x] `pnpm check:branding` clean
+- [x] Manual run of `scripts/backup-db.sh` produces both archives
+- [x] `https://pasha9.com` and `https://www.pasha9.com` return 200/301
+
+## Open items at handover
+
+- Final M2 feature work (deposits, withdrawals, bonuses, turnover, staff UI) starts only after M1 approval.
+- Server root password should be rotated by the owner after handover.
+- Provider API keys must be kept private and entered via the admin Settings page.
+
+## Contact
+
+- Anointed Coder
+- anointedcoder@gmail.com
+- https://t.me/AnointedCoder
+- https://wa.link/fi5z8a

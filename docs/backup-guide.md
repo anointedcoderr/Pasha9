@@ -1,38 +1,61 @@
 # Pasha9 Backup Guide
 
-## Database
+Built by Anointed Coder.
 
-- Schedule `pg_dump` to run nightly at 03:00 platform local time.
-- Retain 14 daily snapshots, 8 weekly snapshots, and 12 monthly snapshots.
-- Encrypt the backup file with `age` or `gpg` before uploading.
-- Upload to an S3 compatible bucket with versioning enabled.
-- Test restore once per quarter to a staging instance.
+## What gets backed up
 
-```bash
-pg_dump --no-owner --format=custom \
-  --dbname="$DATABASE_URL" \
-  | age -r "age1xyz..." > "backup-$(date -u +%Y%m%dT%H%M%S).dump.age"
+- PostgreSQL database `pasha9_prod` via `pg_dump`, gzip compressed
+- Uploads directory `/var/www/pasha9/uploads/` via `tar -czf`
 
-aws s3 cp backup-*.dump.age s3://Pasha9-backups/
+## Where it lives
+
+```
+/var/backups/pasha9/db/pasha9-YYYYMMDD-HHMMSS.sql.gz
+/var/backups/pasha9/uploads/uploads-YYYYMMDD-HHMMSS.tar.gz
 ```
 
-## Object storage
+Both directories are outside `/var/www`, so they are not exposed by Nginx.
 
-- Enable versioning on the uploads bucket.
-- Add a replication rule to a second region if the client requires it.
+## Automatic schedule
 
-## Application configuration
+The deploy user crontab runs the backup nightly at 03:30 server time:
 
-- Store `.env` files in the client's password manager.
-- Never commit secrets to git.
+```
+30 3 * * *  /var/www/pasha9/app/scripts/backup-db.sh >> /var/log/pasha9/backup.log 2>&1
+```
 
-## Recovery runbook
+The script keeps 14 days of files and deletes anything older.
 
-1. Provision a fresh PostgreSQL instance.
-2. Download the latest backup from the storage bucket.
-3. Decrypt: `age -d -i private.key backup.dump.age > backup.dump`.
-4. Restore: `pg_restore --no-owner --dbname="$NEW_DB_URL" backup.dump`.
-5. Run migrations to align with current schema if needed.
-6. Verify with smoke tests.
+## Manual backup
 
-Built by Anointed Coder.
+```bash
+sudo -iu deploy /var/www/pasha9/app/scripts/backup-db.sh
+```
+
+## Restore
+
+```bash
+pm2 stop pasha9-web
+
+# Database (replace TIMESTAMP)
+gunzip -c /var/backups/pasha9/db/pasha9-TIMESTAMP.sql.gz | psql -U pasha9 pasha9_prod
+
+# Uploads
+sudo tar -xzf /var/backups/pasha9/uploads/uploads-TIMESTAMP.tar.gz -C /var/www/pasha9/
+
+pm2 start pasha9-web
+```
+
+## Off-server copy
+
+For a real disaster recovery story, mirror `/var/backups/pasha9/` to an off-server target:
+
+- Object storage: `rclone sync /var/backups/pasha9 remote:pasha9-backups`
+- Another VPS via rsync over SSH
+- Encrypted local drive copied weekly
+
+This is optional in Milestone 1. The client is responsible for picking an off-site destination before public launch.
+
+## Pre-handover backup
+
+Before final delivery, run a manual backup and copy the resulting two files to a safe location outside the VPS. Document the filenames in the handover checklist.

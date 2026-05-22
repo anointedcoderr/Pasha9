@@ -1,8 +1,9 @@
+// Built by Anointed Coder.
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { PageHeader } from '@/components/site/PageHeader';
-import { mockReferralChain, referralCode, referralLink, referralStats } from '@/lib/mock/referrals';
+import { mockReferralChain, referralCode as fallbackCode, referralLink as fallbackLink, referralStats } from '@/lib/mock/referrals';
 import { Users, Copy, Check, Share2, ArrowRight } from 'lucide-react';
 import { useT, useLang } from '@/lib/i18n/context';
 import { formatBDT, formatDate } from '@/lib/utils/format';
@@ -12,6 +13,22 @@ export default function ReferralPage() {
   const t = useT();
   const { lang } = useLang();
   const [copied, setCopied] = useState<string | null>(null);
+  const [referralCode, setReferralCode] = useState(fallbackCode);
+  const [referralLink, setReferralLink] = useState(fallbackLink);
+
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (data?.user?.referralCode) {
+          const code = data.user.referralCode as string;
+          setReferralCode(code);
+          const base = typeof window !== 'undefined' ? window.location.origin : 'https://pasha9.com';
+          setReferralLink(`${base}/?r=${code}`);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const copy = async (value: string, key: string) => {
     if (typeof navigator !== 'undefined') {
