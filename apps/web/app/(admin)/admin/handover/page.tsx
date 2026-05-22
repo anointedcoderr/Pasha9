@@ -1,3 +1,4 @@
+// Built by Anointed Coder.
 'use client';
 
 import { PageHeader } from '@/components/site/PageHeader';
@@ -25,8 +26,8 @@ const CHECKLIST = [
 ];
 
 const PENDING_FROM_CLIENT = [
-  'Final brand name to replace sanjid14',
-  'Approved logo and color refinements',
+  'Final logo lockup and brand assets',
+  'Approved color refinements if any are needed',
   'Real game provider API credentials',
   'Selected payment gateway documentation',
   'Approved KYC document list',

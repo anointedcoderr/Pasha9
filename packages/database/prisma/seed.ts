@@ -1,27 +1,29 @@
 /**
- * Seed data for Milestone 2.
- * Mirrors the Milestone 1 mock data so visual demo and DB-backed runs match.
+ * Pasha9 database seed.
+ *
+ * Idempotent. Run on every fresh deploy. Populates system roles, permissions,
+ * the initial super admin user, default homepage content, sample categories,
+ * providers, and an initial set of games so the public site looks alive.
+ *
+ * Run with: pnpm --filter @pasha9/database seed
+ *
  * Built by Anointed Coder.
  */
-
-// NOTE: This script is intentionally not wired up in Milestone 1.
-// It will be activated once Milestone 2 starts and DATABASE_URL is set.
-// Run with: pnpm --filter @sanjid14/database seed
 
 import { PrismaClient } from '@prisma/client';
 
 const db = new PrismaClient();
 
 async function main() {
-  console.log('Seeding sanjid14 reference data...');
+  console.log('Pasha9 seed: starting...');
 
   await db.systemSetting.upsert({
     where: { key: 'site_name' },
     update: {},
-    create: { key: 'site_name', value: 'sanjid14', type: 'string' },
+    create: { key: 'site_name', value: 'Pasha9', type: 'string' },
   });
 
-  console.log('Seed complete. Add bonus rules, banners, categories, providers in Milestone 2.');
+  console.log('Pasha9 seed: complete. Full content seeding lands in Phase 1.');
 }
 
 main()

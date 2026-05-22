@@ -1,4 +1,4 @@
-# sanjid14 API Plan
+# Pasha9 API Plan
 
 Reference for the endpoints implemented in Milestone 2. All routes use JSON, JWT bearer auth, and Zod validation.
 

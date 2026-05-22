@@ -1,3 +1,4 @@
+// Built by Anointed Coder.
 'use client';
 
 import Link from 'next/link';

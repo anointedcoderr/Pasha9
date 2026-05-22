@@ -1,4 +1,4 @@
-# sanjid14 Milestone 1 Testing Checklist
+# Pasha9 Milestone 1 Testing Checklist
 
 Run `pnpm install` then `pnpm dev` from the repo root. The web app opens at `http://localhost:3000`. Walk through this list before sending the demo link to the client.
 

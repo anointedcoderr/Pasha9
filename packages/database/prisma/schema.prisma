@@ -1,5 +1,5 @@
-// Database schema for the sanjid14 platform.
-// Used in Milestone 2 with Prisma + PostgreSQL.
+// Database schema for the Pasha9 platform.
+// Live PostgreSQL schema. Migrations live under prisma/migrations.
 // Built by Anointed Coder.
 
 generator client {

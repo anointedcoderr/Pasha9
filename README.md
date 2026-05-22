@@ -1,9 +1,9 @@
-# sanjid14 Platform
+# Pasha9 Platform
 
 > Royal Bangla Casino Glow theme. Bangla first, English fallback, mobile first, premium casino styling.
 > Built by Anointed Coder. Contact: anointedcoder@gmail.com
 
-This repository contains the full implementation plan for the sanjid14 betting and casino platform across three priced milestones. Milestone 1, the complete frontend, ships in this drop and is ready to demo to the client.
+This repository contains the full implementation plan for the Pasha9 betting and casino platform across three priced milestones. Milestone 1, the complete frontend, ships in this drop and is ready to demo to the client.
 
 ## Quick start (Milestone 1 demo)
 
@@ -28,7 +28,7 @@ pnpm check:branding      # fail on banned references or long-dash characters
 ## Repository layout
 
 ```
-sanjid14-platform/
+pasha9-platform/
   apps/
     web/                Next.js 14 App Router with public site, user dashboard, admin panel
     api/                Backend stub (implemented in Milestone 2)

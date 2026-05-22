@@ -1,12 +1,20 @@
+/**
+ * Brand constants for the live Pasha9 platform.
+ * Update here when the client confirms any final brand asset.
+ */
 export const BRAND = {
-  /** Temporary site brand name until the client finalizes the production brand */
-  name: 'sanjid14',
-  display: 'sanjid14',
+  /** Slug used for cookies, package names, paths. */
+  name: 'pasha9',
+  /** Display name shown in UI, page titles, og metadata. */
+  display: 'Pasha9',
+  /** Domain hosting the live website. */
+  domain: 'pasha9.com',
+  /** Primary marketing tagline, shown on landing pages and metadata. */
   tagline: {
     bn: 'রয়্যাল বাংলা ক্যাসিনো অভিজ্ঞতা',
     en: 'Royal Bangla Casino Experience',
   },
-  /** Build credit shown across the platform */
+  /** Build credit shown across the platform. */
   builtBy: 'Built by Anointed Coder',
   builderName: 'Anointed Coder',
   builderEmail: 'anointedcoder@gmail.com',

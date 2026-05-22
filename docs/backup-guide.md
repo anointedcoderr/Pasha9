@@ -1,4 +1,4 @@
-# sanjid14 Backup Guide
+# Pasha9 Backup Guide
 
 ## Database
 
@@ -13,7 +13,7 @@ pg_dump --no-owner --format=custom \
   --dbname="$DATABASE_URL" \
   | age -r "age1xyz..." > "backup-$(date -u +%Y%m%dT%H%M%S).dump.age"
 
-aws s3 cp backup-*.dump.age s3://sanjid14-backups/
+aws s3 cp backup-*.dump.age s3://Pasha9-backups/
 ```
 
 ## Object storage

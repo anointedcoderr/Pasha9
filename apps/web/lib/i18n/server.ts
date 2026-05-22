@@ -5,7 +5,7 @@ import { LANG_COOKIE, type Lang } from './context';
  * Resolves the visitor language on the server, before any React renders.
  *
  * Order:
- *  1. `sanjid14_lang` cookie if it holds 'bn' or 'en' (set by the LanguageToggle).
+ *  1. `pasha9_lang` cookie if it holds 'bn' or 'en' (set by the LanguageToggle).
  *  2. `Accept-Language` header, only honoured if it starts with 'bn'.
  *  3. Default to 'bn'. The target market is Bangladesh, so we never fall back to English
  *     for first-time visitors.

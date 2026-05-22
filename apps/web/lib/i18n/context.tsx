@@ -9,8 +9,8 @@ type Dict = typeof bn;
 
 const DICTS: Record<Lang, Dict> = { bn: bn as Dict, en: en as Dict };
 
-export const LANG_COOKIE = 'sanjid14_lang';
-export const LANG_STORAGE_KEY = 'sanjid14:lang';
+export const LANG_COOKIE = 'pasha9_lang';
+export const LANG_STORAGE_KEY = 'pasha9:lang';
 const COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365; // 1 year
 
 type Ctx = {

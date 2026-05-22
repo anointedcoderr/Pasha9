@@ -1,3 +1,4 @@
+// Built by Anointed Coder.
 'use client';
 
 import { PageHeader } from '@/components/site/PageHeader';
@@ -54,7 +55,7 @@ export default function AdminSettingsPage() {
         <Card padding="lg">
           <CardHeader title="Branding" />
           <div className="space-y-3">
-            <FormField label="Logo text"><Input defaultValue="sanjid14" /></FormField>
+            <FormField label="Logo text"><Input defaultValue="Pasha9" /></FormField>
             <FormField label="Footer note"><Textarea rows={3} defaultValue={`${BRAND.builtBy} · ${BRAND.builderEmail}`} /></FormField>
             <FormField label="Telegram link"><Input defaultValue={BRAND.telegram} /></FormField>
             <FormField label="WhatsApp link"><Input defaultValue={BRAND.whatsapp} /></FormField>

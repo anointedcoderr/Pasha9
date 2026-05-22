@@ -1,4 +1,4 @@
-# sanjid14 Milestones
+# Pasha9 Milestones
 
 > Project: Bangla casino and betting platform. Owner is the client. Built by Anointed Coder. Contact: anointedcoder@gmail.com.
 

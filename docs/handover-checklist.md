@@ -1,4 +1,4 @@
-# sanjid14 Handover Checklist
+# Pasha9 Handover Checklist
 
 A single document the client should receive at the end of Milestone 3.
 
@@ -21,7 +21,7 @@ A single document the client should receive at the end of Milestone 3.
 - [ ] Vercel project (or VPS Docker setup) handed over
 - [ ] Domain configured and TLS certificate active
 - [ ] Open Graph and favicon images delivered
-- [ ] Final brand name applied across the UI (replacing the sanjid14 placeholder)
+- [ ] Final brand name applied across the UI (replacing the Pasha9 placeholder)
 
 ## Backend
 

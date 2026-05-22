@@ -22,4 +22,4 @@ export const referralStats = {
 };
 
 export const referralCode = currentUser.referralCode;
-export const referralLink = `https://sanjid14.com/r/${referralCode}`;
+export const referralLink = `https://pasha9.com/r/${referralCode}`;

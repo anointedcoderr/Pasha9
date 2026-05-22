@@ -5,9 +5,13 @@ import { resolveLang } from '@/lib/i18n/server';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'sanjid14 | Royal Bangla Casino',
-  description: 'Premium Bangla casino and betting platform. Play smarter, win bigger.',
-  applicationName: 'sanjid14',
+  metadataBase: new URL('https://pasha9.com'),
+  title: {
+    default: 'Pasha9 | Royal Bangla Casino',
+    template: '%s | Pasha9',
+  },
+  description: 'Pasha9 brings a premium Bangla casino and betting experience. Play smarter, win bigger.',
+  applicationName: 'Pasha9',
   authors: [{ name: 'Anointed Coder', url: 'https://t.me/AnointedCoder' }],
   creator: 'Anointed Coder',
   publisher: 'Anointed Coder',

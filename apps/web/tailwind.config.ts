@@ -1,6 +1,6 @@
 import type { Config } from 'tailwindcss';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const preset = require('@sanjid14/config/tailwind-preset');
+const preset = require('@pasha9/config/tailwind-preset');
 
 const config: Config = {
   presets: [preset],
