@@ -11,11 +11,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum Role {
-  user
-  admin
-  super_admin
-}
+// ---------- Enums ----------
 
 enum UserStatus {
   active
@@ -57,11 +53,15 @@ enum BonusType {
   referral
   vip
   invite
+  reload
+  manual
+  promo
 }
 
-enum BannerStatus {
+enum ContentStatus {
   active
   hidden
+  paused
 }
 
 enum GameStatus {
@@ -74,272 +74,457 @@ enum ProviderStatus {
   maintenance
 }
 
-enum ContentStatus {
-  active
-  hidden
-  paused
-}
-
 enum TicketStatus {
   open
   pending
   closed
 }
 
+enum OtpPurpose {
+  signup
+  login
+  reset
+  verify_phone
+}
+
+enum SettingCategory {
+  general
+  branding
+  security
+  sms
+  payment
+  apk
+  tracking
+  content
+  referral
+}
+
+// ---------- Auth and RBAC ----------
+
+model Role {
+  id        String   @id @default(cuid())
+  key       String   @unique // super_admin, admin, staff, user
+  label     String
+  isSystem  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users       User[]
+  permissions RolePermission[]
+}
+
+model Permission {
+  id        String   @id @default(cuid())
+  key       String   @unique // banners.write, users.read, etc.
+  label     String
+  group     String   @default("general") // ui grouping
+  createdAt DateTime @default(now())
+
+  roles RolePermission[]
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+}
+
 model User {
-  id            String     @id @default(cuid())
-  username      String     @unique
-  email         String?    @unique
-  phone         String     @unique
-  passwordHash  String
-  referralCode  String     @unique
-  referredBy    String?
-  role          Role       @default(user)
-  status        UserStatus @default(active)
-  country       String     @default("BD")
-  language      Lang       @default(bn)
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  id                String     @id @default(cuid())
+  username          String     @unique
+  email             String?    @unique
+  phone             String     @unique
+  passwordHash      String
+  passwordChangedAt DateTime?
+  phoneVerifiedAt   DateTime?
+  emailVerifiedAt   DateTime?
+  lastLoginAt       DateTime?
+  lastLoginIp       String?
+  roleId            String
+  status            UserStatus @default(active)
+  country           String     @default("BD")
+  language          Lang       @default(bn)
+  referralCode      String     @unique
+  referredById      String?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
 
-  wallet        Wallet?
-  transactions  Transaction[]
-  deposits      Deposit[]
-  withdrawals   Withdrawal[]
-  referrerOf    Referral[]      @relation("Referrer")
-  referredAs    Referral[]      @relation("Referred")
-  userBonuses   UserBonus[]
-  supportTickets SupportTicket[]
+  role       Role   @relation(fields: [roleId], references: [id])
+  referredBy User?  @relation("Referrals", fields: [referredById], references: [id])
+  referrals  User[] @relation("Referrals")
+
+  wallet              Wallet?
+  transactions        Transaction[]
+  deposits            Deposit[]
+  withdrawals         Withdrawal[]
+  userBonuses         UserBonus[]
+  supportTickets      SupportTicket[]
+  sessions            Session[]
+  passwordResetTokens PasswordResetToken[]
+  activityLogs        ActivityLog[]        @relation("ActorLogs")
+
+  @@index([referredById])
+  @@index([roleId])
+  @@index([status])
 }
 
-model Admin {
-  id           String   @id @default(cuid())
-  username     String   @unique
-  email        String   @unique
-  passwordHash String
-  role         Role
-  status       UserStatus @default(active)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  activityLogs ActivityLog[]
+model Session {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  userAgent String?
+  ip        String?
+  createdAt DateTime  @default(now())
+  expiresAt DateTime
+  revokedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
 }
+
+model PasswordResetToken {
+  id         String    @id @default(cuid())
+  userId     String
+  tokenHash  String    @unique
+  ip         String?
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model OtpCode {
+  id         String     @id @default(cuid())
+  phone      String
+  codeHash   String
+  purpose    OtpPurpose
+  attempts   Int        @default(0)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  ip         String?
+  createdAt  DateTime   @default(now())
+
+  @@index([phone, purpose])
+  @@index([expiresAt])
+}
+
+// ---------- Wallet, transactions, deposits, withdrawals ----------
 
 model Wallet {
   id            String   @id @default(cuid())
   userId        String   @unique
-  balance       Decimal  @default(0)
-  bonusBalance  Decimal  @default(0)
-  lockedBalance Decimal  @default(0)
+  balance       Decimal  @default(0) @db.Decimal(14, 2)
+  bonusBalance  Decimal  @default(0) @db.Decimal(14, 2)
+  lockedBalance Decimal  @default(0) @db.Decimal(14, 2)
   currency      String   @default("BDT")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
-  user          User     @relation(fields: [userId], references: [id])
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Transaction {
   id          String   @id @default(cuid())
   userId      String
   type        TxType
-  amount      Decimal
+  amount      Decimal  @db.Decimal(14, 2)
   status      TxStatus @default(completed)
   reference   String?
   description String?
+  meta        Json?
   createdAt   DateTime @default(now())
 
-  user        User     @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+
   @@index([userId])
   @@index([type])
+  @@index([createdAt])
 }
 
 model Deposit {
   id            String        @id @default(cuid())
   userId        String
-  amount        Decimal
+  amount        Decimal       @db.Decimal(14, 2)
   method        String
   transactionId String
   proofUrl      String?
   status        RequestStatus @default(pending)
   adminNote     String?
+  reviewerId    String?
+  reviewedAt    DateTime?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
-  user          User          @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+
   @@index([status])
+  @@index([userId])
 }
 
 model Withdrawal {
   id            String        @id @default(cuid())
   userId        String
-  amount        Decimal
+  amount        Decimal       @db.Decimal(14, 2)
   method        String
   accountNumber String
   accountName   String
   status        RequestStatus @default(pending)
   adminNote     String?
+  reviewerId    String?
+  reviewedAt    DateTime?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
-  user          User          @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+
   @@index([status])
+  @@index([userId])
 }
 
-model Referral {
-  id              String   @id @default(cuid())
-  referrerId      String
-  referredUserId  String
-  level           Int      @default(1)
-  status          ContentStatus @default(active)
-  createdAt       DateTime @default(now())
-
-  referrer        User     @relation("Referrer", fields: [referrerId], references: [id])
-  referredUser    User     @relation("Referred", fields: [referredUserId], references: [id])
-  bonuses         ReferralBonus[]
-
-  @@unique([referrerId, referredUserId])
-}
-
-model ReferralBonus {
-  id          String   @id @default(cuid())
-  referralId  String
-  amount      Decimal
-  description String?
-  createdAt   DateTime @default(now())
-  referral    Referral @relation(fields: [referralId], references: [id])
-}
+// ---------- Bonuses ----------
 
 model BonusRule {
   id          String        @id @default(cuid())
   name        String
   type        BonusType
-  amount      Decimal       @default(0)
-  percentage  Decimal       @default(0)
-  minDeposit  Decimal       @default(0)
-  maxBonus    Decimal       @default(0)
+  amount      Decimal       @default(0) @db.Decimal(14, 2)
+  percentage  Decimal       @default(0) @db.Decimal(5, 2)
+  minDeposit  Decimal       @default(0) @db.Decimal(14, 2)
+  maxBonus    Decimal       @default(0) @db.Decimal(14, 2)
   status      ContentStatus @default(active)
   description String?
+  startsAt    DateTime?
+  endsAt      DateTime?
+  turnoverX   Decimal       @default(0) @db.Decimal(6, 2)
   createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
 
   userBonuses UserBonus[]
 }
 
 model UserBonus {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   userId      String
   bonusRuleId String
-  amount      Decimal
-  claimedAt   DateTime @default(now())
+  amount      Decimal   @db.Decimal(14, 2)
+  claimedAt   DateTime  @default(now())
   expiresAt   DateTime?
 
-  user        User      @relation(fields: [userId], references: [id])
-  bonusRule   BonusRule @relation(fields: [bonusRuleId], references: [id])
+  user      User      @relation(fields: [userId], references: [id])
+  bonusRule BonusRule @relation(fields: [bonusRuleId], references: [id])
+
+  @@index([userId])
 }
 
+// ---------- Editable content (CMS) ----------
+
 model Banner {
-  id        String        @id @default(cuid())
-  title     String
-  subtitle  String?
-  imageUrl  String?
-  link      String?
-  accent    String        @default("gold")
-  position  Int           @default(0)
-  status    BannerStatus  @default(active)
-  createdAt DateTime      @default(now())
+  id         String        @id @default(cuid())
+  title      String
+  subtitle   String?
+  titleEn    String?
+  subtitleEn String?
+  imageUrl   String?
+  link       String?
+  ctaLabel   String?
+  accent     String        @default("gold")
+  position   Int           @default(0)
+  status     ContentStatus @default(active)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  @@index([status, position])
 }
 
 model PopupAnnouncement {
   id        String        @id @default(cuid())
   title     String
-  body      String
+  body      String        @db.Text
   ctaLabel  String?
   ctaHref   String?
-  startAt   DateTime
-  endAt     DateTime
-  status    BannerStatus  @default(active)
+  startAt   DateTime?
+  endAt     DateTime?
+  status    ContentStatus @default(active)
   createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@index([status])
 }
 
 model PromoText {
-  id       String        @id @default(cuid())
-  message  String
-  position Int           @default(0)
-  status   BannerStatus  @default(active)
-  createdAt DateTime     @default(now())
+  id        String        @id @default(cuid())
+  message   String
+  position  Int           @default(0)
+  status    ContentStatus @default(active)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@index([status, position])
 }
 
+model HomepageContent {
+  id        String   @id @default(cuid())
+  section   String   @unique // hero, about, jackpot, footer, hero_secondary, etc.
+  titleBn   String?
+  titleEn   String?
+  bodyBn    String?  @db.Text
+  bodyEn    String?  @db.Text
+  imageUrl  String?
+  link      String?
+  meta      Json?
+  updatedAt DateTime @updatedAt
+}
+
+// ---------- Games ----------
+
 model GameCategory {
-  id      String        @id @default(cuid())
-  slug    String        @unique
-  nameBn  String
-  nameEn  String
-  iconKey String
-  status  BannerStatus  @default(active)
-  games   Game[]
+  id        String        @id @default(cuid())
+  slug      String        @unique
+  nameBn    String
+  nameEn    String
+  iconKey   String
+  position  Int           @default(0)
+  status    ContentStatus @default(active)
+  games     Game[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
 }
 
 model GameProvider {
-  id      String          @id @default(cuid())
-  name    String          @unique
-  apiBase String?
-  apiKey  String?
-  status  ProviderStatus  @default(active)
-  games   Game[]
+  id        String         @id @default(cuid())
+  name      String         @unique
+  apiBase   String?
+  apiKey    String?
+  status    ProviderStatus @default(active)
+  games     Game[]
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
 }
 
 model Game {
-  id         String       @id @default(cuid())
-  name       String
-  nameBn     String?
-  categoryId String
-  providerId String
-  imageUrl   String?
-  launchUrl  String?
-  accent     String       @default("gold")
-  isFeatured Boolean      @default(false)
-  status     GameStatus   @default(active)
-  minBet     Decimal      @default(10)
-  maxBet     Decimal      @default(5000)
-  houseEdge  Decimal      @default(3)
-  riskLevel  String       @default("medium")
-  createdAt  DateTime     @default(now())
+  id            String     @id @default(cuid())
+  name          String
+  nameBn        String?
+  categoryId    String
+  providerId    String
+  imageUrl      String?
+  launchUrl     String?
+  accent        String     @default("gold")
+  isFeatured    Boolean    @default(false)
+  status        GameStatus @default(active)
+  minBet        Decimal    @default(10) @db.Decimal(14, 2)
+  maxBet        Decimal    @default(5000) @db.Decimal(14, 2)
+  houseEdge     Decimal    @default(3) @db.Decimal(5, 2)
+  rtpTarget     Decimal    @default(95) @db.Decimal(5, 2)
+  riskLevel     String     @default("medium")
+  wagerContrib  Decimal    @default(100) @db.Decimal(5, 2)
+  bonusEligible Boolean    @default(true)
+  payoutTable   Json?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
 
-  category   GameCategory @relation(fields: [categoryId], references: [id])
-  provider   GameProvider @relation(fields: [providerId], references: [id])
+  category GameCategory @relation(fields: [categoryId], references: [id])
+  provider GameProvider @relation(fields: [providerId], references: [id])
+
+  @@index([categoryId])
+  @@index([providerId])
+  @@index([status])
 }
+
+// ---------- Referrals ----------
+//
+// Referral relationships are tracked on the User row via referredById.
+// This standalone table is reserved for explicit multi-level snapshots in M2.
+
+model ReferralLink {
+  id             String        @id @default(cuid())
+  referrerId     String
+  referredUserId String
+  level          Int           @default(1)
+  status         ContentStatus @default(active)
+  createdAt      DateTime      @default(now())
+
+  @@unique([referrerId, referredUserId])
+  @@index([referrerId])
+}
+
+model ReferralBonus {
+  id          String   @id @default(cuid())
+  referrerId  String
+  referredId  String
+  amount      Decimal  @db.Decimal(14, 2)
+  level       Int      @default(1)
+  description String?
+  createdAt   DateTime @default(now())
+
+  @@index([referrerId])
+}
+
+// ---------- Audit and system ----------
 
 model ActivityLog {
   id        String   @id @default(cuid())
-  adminId   String?
+  actorId   String?
+  actorRole String? // snapshot of role.key at action time
   action    String
-  target    String
+  target    String?
   detail    String?
+  ip        String?
+  userAgent String?
+  meta      Json?
   createdAt DateTime @default(now())
 
-  admin     Admin?   @relation(fields: [adminId], references: [id])
+  actor User? @relation("ActorLogs", fields: [actorId], references: [id])
+
+  @@index([actorId])
+  @@index([createdAt])
+  @@index([action])
 }
 
 model SupportTicket {
   id        String       @id @default(cuid())
   userId    String?
   subject   String
-  body      String
+  body      String       @db.Text
   status    TicketStatus @default(open)
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
 
-  user      User?        @relation(fields: [userId], references: [id])
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([status])
 }
 
 model SystemSetting {
-  id    String  @id @default(cuid())
-  key   String  @unique
-  value String
-  type  String  @default("string")
+  id        String          @id @default(cuid())
+  key       String          @unique
+  value     String          @db.Text
+  type      String          @default("string") // string, number, boolean, json
+  category  SettingCategory @default(general)
+  updatedAt DateTime        @updatedAt
 }
 
 model PaymentMethod {
   id          String        @id @default(cuid())
   name        String        @unique
-  type        String        @default("mobile")
-  status      BannerStatus  @default(active)
+  type        String        @default("mobile") // mobile, bank, crypto
+  status      ContentStatus @default(active)
   number      String
-  instruction String
+  instruction String        @db.Text
+  position    Int           @default(0)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([status, position])
 }
