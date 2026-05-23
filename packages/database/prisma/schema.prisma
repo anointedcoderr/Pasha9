@@ -171,6 +171,8 @@ model User {
   passwordResetTokens PasswordResetToken[]
   activityLogs        ActivityLog[]        @relation("ActorLogs")
   affiliateApplication AffiliateApplication?
+  lotteryTickets      LotteryTicket[]
+  lotteryWinnings     LotteryWinning[]
 
   @@index([referredById])
   @@index([roleId])
@@ -232,6 +234,9 @@ model Wallet {
   balance       Decimal  @default(0) @db.Decimal(14, 2)
   bonusBalance  Decimal  @default(0) @db.Decimal(14, 2)
   lockedBalance Decimal  @default(0) @db.Decimal(14, 2)
+  // Separate ledger for credited lottery winnings. Kept distinct from
+  // main balance so audit and (M2) lotto withdrawal flow stay clean.
+  lottoBalance  Decimal  @default(0) @db.Decimal(14, 2)
   currency      String   @default("BDT")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -540,7 +545,7 @@ model AffiliateCommission {
 model LottoDraw {
   id          String        @id @default(cuid())
   name        String
-  schedule    String?       // human readable: "Daily 21:00", "Friday 22:30"
+  schedule    String?       // human readable: "Daily 19:30", "Friday 22:30"
   drawsAt     DateTime?     // next draw timestamp
   digitsCount Int           @default(4)
   ticketPrice Decimal       @default(20) @db.Decimal(14, 2)
@@ -551,7 +556,81 @@ model LottoDraw {
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
+  tickets     LotteryTicket[]
+  result      LotteryDrawResult?
+
   @@index([status, position])
+}
+
+// 4D lottery ticket. Generated automatically when admin approves a
+// deposit ("source=deposit_accrual") - every accumulated BDT 1,200 of
+// approved deposits earns the user 2 tickets. Manual purchase is not
+// supported in M1.
+model LotteryTicket {
+  id              String   @id @default(cuid())
+  userId          String
+  drawId          String?
+  number          String   // 4 digits, e.g. "1234"
+  source          String   @default("deposit_accrual") // deposit_accrual | admin_grant
+  sourceDepositId String?
+  status          String   @default("issued") // issued | won | lost | void
+  generatedAt     DateTime @default(now())
+
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  draw            LottoDraw? @relation(fields: [drawId], references: [id])
+
+  @@index([userId])
+  @@index([drawId])
+  @@index([userId, generatedAt])
+}
+
+// Settlement record published by admin per draw. Holds the winning
+// number and the prize multipliers applied to that draw. Created
+// exactly once per LottoDraw (1:1).
+model LotteryDrawResult {
+  id              String   @id @default(cuid())
+  drawId          String   @unique
+  winningNumber   String   // 4 digits, e.g. "1234" or "1111"
+  ticketBaseValue Decimal  @default(20) @db.Decimal(14, 2)
+  // Prize multipliers per the published structure. Stored on the
+  // result so historical draws stay correct even if the live structure
+  // changes later.
+  prize1xMult       Decimal @default(2000) @db.Decimal(8, 2)
+  prize2xMult       Decimal @default(800)  @db.Decimal(8, 2)
+  prize3xMult       Decimal @default(300)  @db.Decimal(8, 2)
+  prizeSpecialMult  Decimal @default(150)  @db.Decimal(8, 2)
+  prizeConsoMult    Decimal @default(30)   @db.Decimal(8, 2)
+  publishedById     String?
+  publishedAt       DateTime @default(now())
+  // Quick aggregates so the public results card is cheap to render.
+  totalWinners      Int       @default(0)
+  totalPaid         Decimal   @default(0) @db.Decimal(14, 2)
+
+  draw      LottoDraw         @relation(fields: [drawId], references: [id])
+  winnings  LotteryWinning[]
+}
+
+// Per-ticket winning record. Created during settlement for every
+// ticket that matched (exact match or permutation/iBox). status moves
+// from pending_credit to credited when the user's Wallet.lottoBalance
+// is bumped.
+model LotteryWinning {
+  id           String   @id @default(cuid())
+  userId       String
+  resultId     String
+  ticketId     String?
+  ticketNumber String
+  prizeTier    String   // first_exact | first_ibox
+  amount       Decimal  @db.Decimal(14, 2)
+  status       String   @default("credited") // pending_credit | credited | cancelled
+  createdAt    DateTime @default(now())
+  creditedAt   DateTime?
+
+  user   User              @relation(fields: [userId], references: [id])
+  result LotteryDrawResult @relation(fields: [resultId], references: [id])
+
+  @@index([userId])
+  @@index([resultId])
 }
 
 model RewardItem {
