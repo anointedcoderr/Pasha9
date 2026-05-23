@@ -340,7 +340,14 @@ model Banner {
   subtitle   String?
   titleEn    String?
   subtitleEn String?
+  // Media type controls how the public slider renders the slide.
+  // "image" (default) renders <img> from imageUrl.
+  // "video" renders an autoplay-muted <video> from videoUrl with posterUrl
+  // as the still fallback while loading / when autoplay is blocked.
+  mediaType  String        @default("image")
   imageUrl   String?
+  videoUrl   String?
+  posterUrl  String?
   link       String?
   ctaLabel   String?
   accent     String        @default("gold")

@@ -4,6 +4,7 @@
 import { Flame, Cherry, Tv2, Fish, Zap, Ticket } from 'lucide-react';
 import { HeroSlider } from '@/components/site/HeroSlider';
 import { AnnouncementPopup } from '@/components/site/AnnouncementPopup';
+import { FirstVisitAuthPopup } from '@/components/site/FirstVisitAuthPopup';
 import { PromoTicker } from '@/components/site/PromoTicker';
 import { JackpotStrip } from '@/components/site/JackpotStrip';
 import { WalletStrip } from '@/components/site/WalletStrip';
@@ -101,6 +102,7 @@ export default function HomePage() {
       <AppDownloadSection />
 
       <AnnouncementPopup />
+      <FirstVisitAuthPopup />
     </div>
   );
 }

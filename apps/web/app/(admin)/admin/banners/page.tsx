@@ -15,6 +15,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 
 type Accent = 'gold' | 'neon' | 'mixed' | 'royal' | 'red';
 type Status = 'active' | 'hidden' | 'paused';
+type MediaType = 'image' | 'video';
 
 interface BannerRow {
   id: string;
@@ -24,7 +25,10 @@ interface BannerRow {
   subtitleEn?: string | null;
   ctaLabel?: string | null;
   link?: string | null;
+  mediaType: MediaType;
   imageUrl?: string | null;
+  videoUrl?: string | null;
+  posterUrl?: string | null;
   accent: Accent;
   position: number;
   status: Status;
@@ -38,7 +42,10 @@ const NEW_BANNER: BannerRow = {
   subtitleEn: '',
   ctaLabel: '',
   link: '',
+  mediaType: 'image',
   imageUrl: '',
+  videoUrl: '',
+  posterUrl: '',
   accent: 'gold',
   position: 0,
   status: 'active',
@@ -79,7 +86,10 @@ export default function AdminBannersPage() {
       subtitleEn: editor.subtitleEn || undefined,
       ctaLabel: editor.ctaLabel || undefined,
       link: editor.link || undefined,
+      mediaType: editor.mediaType,
       imageUrl: editor.imageUrl || undefined,
+      videoUrl: editor.videoUrl || undefined,
+      posterUrl: editor.posterUrl || undefined,
       accent: editor.accent,
       position: editor.position,
       status: editor.status,
@@ -148,13 +158,19 @@ export default function AdminBannersPage() {
             <Card key={b.id} padding="lg" className="flex flex-col gap-4 md:flex-row md:items-center">
               <BannerPreview accent={b.accent} title={b.title} subtitle={b.subtitle ?? ''} ctaLabel={b.ctaLabel ?? ''} />
               <div className="flex-1 space-y-2">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <p className="text-sm font-semibold text-ink-hi">{b.title}</p>
                   <Chip tone={b.status === 'active' ? 'ok' : 'neutral'}>{b.status}</Chip>
+                  <Chip tone={b.mediaType === 'video' ? 'warn' : 'neutral'}>{b.mediaType ?? 'image'}</Chip>
                   <span className="text-[11px] text-ink-lo">position {b.position}</span>
                 </div>
                 <p className="text-sm text-ink-mid">{b.subtitle}</p>
                 <p className="text-xs text-ink-lo">CTA: {b.ctaLabel} | {b.link}</p>
+                {b.mediaType === 'video' ? (
+                  <p className="text-[11px] text-ink-lo">Video: {b.videoUrl} | Poster: {b.posterUrl || '(none)'}</p>
+                ) : (
+                  <p className="text-[11px] text-ink-lo">Image: {b.imageUrl || '(none)'}</p>
+                )}
               </div>
               <div className="flex flex-row items-center gap-2 md:flex-col">
                 <Button size="icon" variant="ghost" onClick={() => move(b, -1)}><ArrowUp className="h-4 w-4" /></Button>
@@ -196,8 +212,11 @@ export default function AdminBannersPage() {
               <FormField label="CTA Href">
                 <Input value={editor.link ?? ''} onChange={(e) => setEditor({ ...editor, link: e.target.value })} placeholder="/promotions" />
               </FormField>
-              <FormField label="Image URL">
-                <Input value={editor.imageUrl ?? ''} onChange={(e) => setEditor({ ...editor, imageUrl: e.target.value })} placeholder="/uploads/banners/..." />
+              <FormField label="Media Type">
+                <Select value={editor.mediaType} onChange={(e) => setEditor({ ...editor, mediaType: e.target.value as MediaType })}>
+                  <option value="image">Image</option>
+                  <option value="video">Video</option>
+                </Select>
               </FormField>
               <FormField label="Accent">
                 <Select value={editor.accent} onChange={(e) => setEditor({ ...editor, accent: e.target.value as Accent })}>
@@ -208,6 +227,20 @@ export default function AdminBannersPage() {
                   <option value="red">Red</option>
                 </Select>
               </FormField>
+              {editor.mediaType === 'image' ? (
+                <FormField label="Image URL" hint="Recommended 1600x600 JPG or PNG.">
+                  <Input value={editor.imageUrl ?? ''} onChange={(e) => setEditor({ ...editor, imageUrl: e.target.value })} placeholder="/uploads/banners/..." />
+                </FormField>
+              ) : (
+                <>
+                  <FormField label="Video URL" hint="MP4 / WebM. Autoplay-muted on the public slider.">
+                    <Input value={editor.videoUrl ?? ''} onChange={(e) => setEditor({ ...editor, videoUrl: e.target.value })} placeholder="/uploads/banners/promo.mp4" />
+                  </FormField>
+                  <FormField label="Poster URL" hint="Still frame shown while the video loads.">
+                    <Input value={editor.posterUrl ?? ''} onChange={(e) => setEditor({ ...editor, posterUrl: e.target.value })} placeholder="/uploads/banners/promo-poster.jpg" />
+                  </FormField>
+                </>
+              )}
               <FormField label="Position">
                 <Input type="number" value={editor.position} onChange={(e) => setEditor({ ...editor, position: Number(e.target.value) })} />
               </FormField>

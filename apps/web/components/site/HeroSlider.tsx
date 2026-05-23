@@ -1,14 +1,25 @@
+// Built by Anointed Coder.
+//
+// Hero slider for the homepage. Supports image AND video banners as set
+// from /admin/banners. Video slides autoplay muted (browser policy
+// compliant), loop, show a poster while loading and expose a mute /
+// unmute button. Image slides render as a full-bleed picture. Multi-
+// slide auto-rotation is preserved; when a slide is a video the rotation
+// pauses until the video finishes or 12s elapses (whichever comes first)
+// so the user can actually watch it.
+
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useT, useLang } from '@/lib/i18n/context';
-import { ChevronLeft, ChevronRight, Sparkles, Gift } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Sparkles, Gift, Volume2, VolumeX } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils/cn';
 
 type Accent = 'gold' | 'neon' | 'mixed' | 'royal' | 'red';
+type MediaType = 'image' | 'video';
 
 interface Slide {
   title: string;
@@ -16,6 +27,11 @@ interface Slide {
   primary: { label: string; href: string };
   secondary?: { label: string; href: string };
   art: 'royal' | 'live' | 'referral';
+  mediaType?: MediaType;
+  imageUrl?: string | null;
+  videoUrl?: string | null;
+  posterUrl?: string | null;
+  accent?: Accent;
 }
 
 interface LiveBanner {
@@ -27,7 +43,14 @@ interface LiveBanner {
   ctaLabel?: string | null;
   link?: string | null;
   accent: Accent;
+  mediaType?: MediaType | null;
+  imageUrl?: string | null;
+  videoUrl?: string | null;
+  posterUrl?: string | null;
 }
+
+const IMAGE_ROTATE_MS = 6500;
+const VIDEO_MAX_DWELL_MS = 12_000;
 
 function fallbackSlides(t: (k: string) => string): Slide[] {
   return [
@@ -66,31 +89,92 @@ export function HeroSlider() {
       subtitle: ((lang === 'en' && b.subtitleEn) ? b.subtitleEn : b.subtitle) ?? '',
       primary: { label: b.ctaLabel ?? t('home.heroCtaPrimary'), href: b.link ?? '/' },
       art: artForAccent(b.accent),
+      mediaType: (b.mediaType ?? 'image') as MediaType,
+      imageUrl: b.imageUrl,
+      videoUrl: b.videoUrl,
+      posterUrl: b.posterUrl,
+      accent: b.accent,
     }));
   }, [live, lang, t]);
 
   const [i, setI] = useState(0);
+  const [muted, setMuted] = useState(true);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
   useEffect(() => { setI(0); }, [slides.length]);
 
+  // Auto-rotate. Use the longer dwell when the active slide is a video so
+  // the visitor can actually watch some of it before we move on.
   useEffect(() => {
     if (slides.length <= 1) return;
-    const id = setInterval(() => setI((p) => (p + 1) % slides.length), 6500);
-    return () => clearInterval(id);
-  }, [slides.length]);
+    const active = slides[i];
+    const dwell = active?.mediaType === 'video' && active.videoUrl ? VIDEO_MAX_DWELL_MS : IMAGE_ROTATE_MS;
+    const id = setTimeout(() => setI((p) => (p + 1) % slides.length), dwell);
+    return () => clearTimeout(id);
+  }, [slides, i]);
+
+  // Keep <video> in sync with the mute toggle.
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.muted = muted;
+  }, [muted, i]);
 
   const slide = slides[i] ?? slides[0];
-  const coins = useMemo(() => Array.from({ length: 14 }).map(() => ({
-    x: Math.random() * 100,
-    y: 30 + Math.random() * 60,
-    delay: Math.random() * 4,
-    size: 8 + Math.random() * 14,
-  })), []);
+  const hasVideo = slide.mediaType === 'video' && !!slide.videoUrl;
+  const hasImage = slide.mediaType === 'image' && !!slide.imageUrl;
 
   return (
     <section className="relative overflow-hidden rounded-2xl border border-brand-divider bg-brand-ink text-white shadow-sm">
-      <div aria-hidden className="pointer-events-none absolute inset-0">
-        <div className="absolute -top-32 left-1/2 h-72 w-[120%] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(255,204,0,0.20),transparent_60%)] blur-2xl" />
-        <div className="absolute inset-y-0 right-0 w-1/2 bg-gradient-to-l from-brand-blue-500/15 via-brand-blue-500/5 to-transparent" />
+      {/* Media layer */}
+      <div className="absolute inset-0">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={`bg-${i}`}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.4 }}
+            className="absolute inset-0"
+          >
+            {hasVideo ? (
+              <video
+                ref={videoRef}
+                src={slide.videoUrl ?? undefined}
+                poster={slide.posterUrl ?? undefined}
+                autoPlay
+                muted={muted}
+                loop
+                playsInline
+                preload="metadata"
+                className="absolute inset-0 h-full w-full object-cover"
+                onError={(e) => {
+                  // Fall back to poster if the browser cannot decode the source.
+                  (e.currentTarget as HTMLVideoElement).style.display = 'none';
+                }}
+              />
+            ) : hasImage ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={slide.imageUrl ?? ''}
+                alt=""
+                className="absolute inset-0 h-full w-full object-cover"
+                loading="eager"
+                decoding="async"
+              />
+            ) : null}
+            {/* dim overlay so text on image / video stays readable */}
+            {(hasVideo || hasImage) ? (
+              <span aria-hidden className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/35 to-black/10" />
+            ) : null}
+          </motion.div>
+        </AnimatePresence>
+
+        {/* Decorative glow when there is no media */}
+        {!hasVideo && !hasImage ? (
+          <div aria-hidden className="pointer-events-none absolute inset-0">
+            <div className="absolute -top-32 left-1/2 h-72 w-[120%] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(255,204,0,0.20),transparent_60%)] blur-2xl" />
+            <div className="absolute inset-y-0 right-0 w-1/2 bg-gradient-to-l from-brand-blue-500/15 via-brand-blue-500/5 to-transparent" />
+          </div>
+        ) : null}
       </div>
 
       <div className="relative grid min-h-[260px] grid-cols-1 items-center gap-6 px-5 py-8 md:min-h-[360px] md:grid-cols-2 md:px-10 md:py-12">
@@ -109,7 +193,7 @@ export function HeroSlider() {
             <h1 className="mt-3 text-2xl font-extrabold leading-tight md:text-4xl">
               {slide.title}
             </h1>
-            <p className="mt-3 max-w-md text-sm text-white/75 md:text-base">{slide.subtitle}</p>
+            <p className="mt-3 max-w-md text-sm text-white/80 md:text-base">{slide.subtitle}</p>
             <div className="mt-5 flex flex-wrap items-center gap-3">
               <Link href={slide.primary.href}>
                 <Button size="lg" variant="yellow" leftIcon={<Sparkles className="h-4 w-4" />}>{slide.primary.label}</Button>
@@ -123,12 +207,27 @@ export function HeroSlider() {
           </motion.div>
         </AnimatePresence>
 
-        <div className="relative hidden h-full min-h-[260px] md:block">
-          <HeroArt variant={slide.art} />
-        </div>
+        {!hasVideo && !hasImage ? (
+          <div className="relative hidden h-full min-h-[260px] md:block">
+            <HeroArt variant={slide.art} />
+          </div>
+        ) : null}
       </div>
 
-      <div className="absolute inset-x-0 bottom-3 flex items-center justify-center gap-2">
+      {/* Mute / unmute, only visible on video slides */}
+      {hasVideo ? (
+        <button
+          type="button"
+          aria-label={muted ? 'Unmute video' : 'Mute video'}
+          aria-pressed={!muted}
+          onClick={() => setMuted((m) => !m)}
+          className="absolute right-3 top-3 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur transition hover:bg-black/65 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-yellow-500/60"
+        >
+          {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+        </button>
+      ) : null}
+
+      <div className="absolute inset-x-0 bottom-3 z-10 flex items-center justify-center gap-2">
         {slides.map((_, idx) => (
           <button
             key={idx}
@@ -136,7 +235,7 @@ export function HeroSlider() {
             aria-label={`Slide ${idx + 1}`}
             className={cn(
               'h-1.5 rounded-full transition-all',
-              idx === i ? 'w-8 bg-brand-yellow-500' : 'w-4 bg-white/25',
+              idx === i ? 'w-8 bg-brand-yellow-500' : 'w-4 bg-white/30',
             )}
           />
         ))}
@@ -146,7 +245,7 @@ export function HeroSlider() {
         type="button"
         aria-label="Previous"
         onClick={() => setI((p) => (p - 1 + slides.length) % slides.length)}
-        className="absolute left-3 top-1/2 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25 md:inline-flex"
+        className="absolute left-3 top-1/2 z-10 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur transition hover:bg-white/30 md:inline-flex"
       >
         <ChevronLeft className="h-4 w-4" />
       </button>
@@ -154,7 +253,7 @@ export function HeroSlider() {
         type="button"
         aria-label="Next"
         onClick={() => setI((p) => (p + 1) % slides.length)}
-        className="absolute right-3 top-1/2 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25 md:inline-flex"
+        className="absolute right-3 top-1/2 z-10 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur transition hover:bg-white/30 md:inline-flex"
       >
         <ChevronRight className="h-4 w-4" />
       </button>
