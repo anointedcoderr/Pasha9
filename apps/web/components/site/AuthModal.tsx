@@ -8,7 +8,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Modal } from '@/components/ui/Modal';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { Button } from '@/components/ui/Button';
-import { FormField, Input } from '@/components/ui/Input';
+import { FormField, Input, PasswordInput } from '@/components/ui/Input';
 import { Phone, Lock, KeyRound, UserPlus, User as UserIcon, Gift } from 'lucide-react';
 import { loginSchema, signupSchema, type LoginInput, type SignupInput } from '@/lib/utils/validation';
 import { useT } from '@/lib/i18n/context';
@@ -112,9 +112,8 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
         />
       </FormField>
       <FormField label={t('auth.password')} required error={errors.password ? t(`auth.${errors.password.message}`) : undefined}>
-        <Input
+        <PasswordInput
           leftIcon={<Lock className="h-4 w-4" />}
-          type="password"
           autoComplete="current-password"
           placeholder="••••••••"
           {...register('password')}
@@ -191,10 +190,10 @@ function SignupForm({ onSuccess, onSwitch }: { onSuccess: () => void; onSwitch: 
       </FormField>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <FormField label={t('auth.password')} required error={errors.password ? t(`auth.${errors.password.message}`) : undefined}>
-          <Input leftIcon={<Lock className="h-4 w-4" />} type="password" autoComplete="new-password" placeholder="••••••••" {...register('password')} invalid={!!errors.password} />
+          <PasswordInput leftIcon={<Lock className="h-4 w-4" />} autoComplete="new-password" placeholder="••••••••" {...register('password')} invalid={!!errors.password} />
         </FormField>
         <FormField label={t('auth.confirm')} required error={errors.confirm ? t(`auth.${errors.confirm.message}`) : undefined}>
-          <Input leftIcon={<Lock className="h-4 w-4" />} type="password" autoComplete="new-password" placeholder="••••••••" {...register('confirm')} invalid={!!errors.confirm} />
+          <PasswordInput leftIcon={<Lock className="h-4 w-4" />} autoComplete="new-password" placeholder="••••••••" {...register('confirm')} invalid={!!errors.confirm} />
         </FormField>
       </div>
       <FormField label={t('auth.referral')}>

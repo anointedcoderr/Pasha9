@@ -1,4 +1,5 @@
-import { forwardRef, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from 'react';
+import { forwardRef, useState, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from 'react';
+import { Eye, EyeOff } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
@@ -27,6 +28,37 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
       />
       {rightSlot ? <span className="absolute right-2">{rightSlot}</span> : null}
     </div>
+  );
+});
+
+type PasswordInputProps = Omit<InputProps, 'type' | 'rightSlot'> & {
+  showLabel?: string;
+  hideLabel?: string;
+};
+
+export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(function PasswordInput(
+  { showLabel = 'Show password', hideLabel = 'Hide password', ...rest },
+  ref,
+) {
+  const [revealed, setRevealed] = useState(false);
+  return (
+    <Input
+      ref={ref}
+      type={revealed ? 'text' : 'password'}
+      {...rest}
+      rightSlot={
+        <button
+          type="button"
+          onClick={() => setRevealed((v) => !v)}
+          aria-label={revealed ? hideLabel : showLabel}
+          aria-pressed={revealed}
+          title={revealed ? hideLabel : showLabel}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-brand-inkSoft transition hover:bg-brand-surface hover:text-brand-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue-500/40"
+        >
+          {revealed ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+        </button>
+      }
+    />
   );
 });
 

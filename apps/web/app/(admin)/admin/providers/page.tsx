@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { PageHeader } from '@/components/site/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { FormField, Input, Textarea } from '@/components/ui/Input';
+import { FormField, Input, PasswordInput, Textarea } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { Switch } from '@/components/ui/Switch';
 import { Chip } from '@/components/ui/Chip';
@@ -70,7 +70,7 @@ export default function AdminProvidersPage() {
           <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); setSecrets(null); }}>
             <FormField label="Base URL"><Input placeholder="https://api.provider.com/v1" /></FormField>
             <FormField label="Public key"><Input placeholder="pk_xxxx" /></FormField>
-            <FormField label="Secret key"><Input type="password" placeholder="sk_xxxx" /></FormField>
+            <FormField label="Secret key"><PasswordInput placeholder="sk_xxxx" showLabel="Show secret" hideLabel="Hide secret" /></FormField>
             <FormField label="Notes"><Textarea rows={3} placeholder="Integration notes" /></FormField>
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="ghost" type="button" onClick={() => setSecrets(null)}>Cancel</Button>

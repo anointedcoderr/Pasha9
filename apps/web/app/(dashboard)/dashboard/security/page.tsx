@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { PageHeader } from '@/components/site/PageHeader';
 import { Card, CardHeader } from '@/components/ui/Card';
-import { FormField, Input } from '@/components/ui/Input';
+import { FormField, PasswordInput } from '@/components/ui/Input';
 import { Switch } from '@/components/ui/Switch';
 import { Button } from '@/components/ui/Button';
 import { ShieldCheck, Lock, Smartphone, History } from 'lucide-react';
@@ -25,13 +25,13 @@ export default function SecurityPage() {
           <CardHeader title="Password" subtitle="Change your account password" />
           <form className="space-y-3">
             <FormField label="Current password" required>
-              <Input type="password" leftIcon={<Lock className="h-4 w-4" />} placeholder="••••••••" />
+              <PasswordInput autoComplete="current-password" leftIcon={<Lock className="h-4 w-4" />} placeholder="••••••••" />
             </FormField>
             <FormField label="New password" required>
-              <Input type="password" leftIcon={<Lock className="h-4 w-4" />} placeholder="At least 8 characters" />
+              <PasswordInput autoComplete="new-password" leftIcon={<Lock className="h-4 w-4" />} placeholder="At least 8 characters" />
             </FormField>
             <FormField label="Confirm new password" required>
-              <Input type="password" leftIcon={<Lock className="h-4 w-4" />} placeholder="Repeat new password" />
+              <PasswordInput autoComplete="new-password" leftIcon={<Lock className="h-4 w-4" />} placeholder="Repeat new password" />
             </FormField>
             <Button type="button">Update password</Button>
           </form>

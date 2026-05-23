@@ -7,7 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { PageHeader } from '@/components/site/PageHeader';
 import { Card, CardHeader } from '@/components/ui/Card';
-import { FormField, Input } from '@/components/ui/Input';
+import { FormField, Input, PasswordInput } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
 import { ShieldCheck, Lock, AtSign, Phone, Save, CheckCircle2 } from 'lucide-react';
@@ -154,8 +154,7 @@ function PasswordSection() {
       />
       <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
         <FormField label="Current password" required error={errors.currentPassword?.message}>
-          <Input
-            type="password"
+          <PasswordInput
             autoComplete="current-password"
             leftIcon={<Lock className="h-4 w-4" />}
             {...register('currentPassword')}
@@ -164,8 +163,7 @@ function PasswordSection() {
         </FormField>
         <div className="grid gap-3 md:grid-cols-2">
           <FormField label="New password" required error={errors.newPassword?.message} hint="At least 8 characters.">
-            <Input
-              type="password"
+            <PasswordInput
               autoComplete="new-password"
               leftIcon={<Lock className="h-4 w-4" />}
               {...register('newPassword')}
@@ -173,8 +171,7 @@ function PasswordSection() {
             />
           </FormField>
           <FormField label="Confirm new password" required error={errors.confirm?.message}>
-            <Input
-              type="password"
+            <PasswordInput
               autoComplete="new-password"
               leftIcon={<Lock className="h-4 w-4" />}
               {...register('confirm')}

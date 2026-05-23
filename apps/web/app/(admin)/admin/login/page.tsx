@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { Logo } from '@/components/site/Logo';
-import { FormField, Input } from '@/components/ui/Input';
+import { FormField, Input, PasswordInput } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { BRAND } from '@/lib/constants/brand';
 import { useT } from '@/lib/i18n/context';
@@ -74,8 +74,7 @@ export default function AdminLoginPage() {
               />
             </FormField>
             <FormField label={t('admin.password')} required>
-              <Input
-                type="password"
+              <PasswordInput
                 leftIcon={<Lock className="h-4 w-4" />}
                 placeholder="password"
                 autoComplete="current-password"
