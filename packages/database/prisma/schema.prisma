@@ -151,12 +151,15 @@ model User {
   language          Lang       @default(bn)
   referralCode      String     @unique
   referredById      String?
+  isAffiliate       Boolean    @default(false)
+  affiliateTierId   String?
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 
   role       Role   @relation(fields: [roleId], references: [id])
   referredBy User?  @relation("Referrals", fields: [referredById], references: [id])
   referrals  User[] @relation("Referrals")
+  affiliateTier        CommissionTier?       @relation(fields: [affiliateTierId], references: [id])
 
   wallet              Wallet?
   transactions        Transaction[]
@@ -167,10 +170,12 @@ model User {
   sessions            Session[]
   passwordResetTokens PasswordResetToken[]
   activityLogs        ActivityLog[]        @relation("ActorLogs")
+  affiliateApplication AffiliateApplication?
 
   @@index([referredById])
   @@index([roleId])
   @@index([status])
+  @@index([isAffiliate])
 }
 
 model Session {
@@ -469,6 +474,58 @@ model ReferralBonus {
   createdAt   DateTime @default(now())
 
   @@index([referrerId])
+}
+
+// ---------- Affiliate program (Phase 4) ----------
+
+model AffiliateApplication {
+  id          String    @id @default(cuid())
+  userId      String    @unique
+  status      String    @default("pending") // pending, approved, rejected
+  channel     String?
+  audience    String?
+  notes       String?
+  reviewerId  String?
+  reviewedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+}
+
+model CommissionTier {
+  id                 String        @id @default(cuid())
+  name               String        @unique
+  description        String?
+  level1Pct          Decimal       @db.Decimal(5, 2)
+  level2Pct          Decimal       @db.Decimal(5, 2)
+  level3Pct          Decimal       @db.Decimal(5, 2)
+  minActiveReferrals Int           @default(0)
+  minMonthlyVolume   Decimal       @default(0) @db.Decimal(14, 2)
+  status             ContentStatus @default(active)
+  position           Int           @default(0)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  users              User[]
+}
+
+model AffiliateCommission {
+  id           String   @id @default(cuid())
+  affiliateId  String
+  sourceUserId String
+  level        Int
+  amount       Decimal  @db.Decimal(14, 2)
+  basis        String   // deposit_share, signup_bonus, manual
+  status       String   @default("pending") // pending, approved, paid, cancelled
+  meta         Json?
+  createdAt    DateTime @default(now())
+
+  @@index([affiliateId])
+  @@index([status])
+  @@index([createdAt])
 }
 
 // ---------- Audit and system ----------

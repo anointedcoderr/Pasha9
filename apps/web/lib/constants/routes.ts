@@ -32,6 +32,8 @@ export const ROUTES = {
     login: '/admin/login',
     home: '/admin',
     users: '/admin/users',
+    affiliate: '/admin/affiliate',
+    affiliateTiers: '/admin/affiliate/tiers',
     balance: '/admin/balance',
     deposits: '/admin/deposits',
     withdrawals: '/admin/withdrawals',

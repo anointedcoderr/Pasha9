@@ -24,6 +24,8 @@ import {
   FileKey2,
   Send,
   MessageCircle,
+  Briefcase,
+  Trophy,
 } from 'lucide-react';
 import { Logo } from '@/components/site/Logo';
 import { ROUTES } from '@/lib/constants/routes';
@@ -48,6 +50,8 @@ const GROUPS = [
       { key: 'transactions', href: ROUTES.admin.transactions, icon: ReceiptText },
       { key: 'referrals', href: ROUTES.admin.referrals, icon: Network },
       { key: 'bonuses', href: ROUTES.admin.bonuses, icon: Gift },
+      { key: 'affiliate', href: ROUTES.admin.affiliate, icon: Briefcase },
+      { key: 'affiliateTiers', href: ROUTES.admin.affiliateTiers, icon: Trophy },
     ],
   },
   {

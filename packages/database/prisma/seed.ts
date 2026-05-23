@@ -63,6 +63,9 @@ async function seedRolesAndPermissions() {
     { key: 'games.write', label: 'Manage games', group: 'games' },
     { key: 'bonus.write', label: 'Manage bonus rules', group: 'bonus' },
     { key: 'referrals.read', label: 'View referrals', group: 'referrals' },
+    { key: 'affiliate.read', label: 'View affiliate applications and members', group: 'affiliate' },
+    { key: 'affiliate.write', label: 'Approve, reject and manage affiliates', group: 'affiliate' },
+    { key: 'affiliate.tiers.write', label: 'Manage commission tier settings', group: 'affiliate' },
     { key: 'settings.write', label: 'Edit system settings', group: 'system' },
     { key: 'activity.read', label: 'View activity log', group: 'system' },
     { key: 'staff.manage', label: 'Manage staff accounts', group: 'system' },
@@ -106,6 +109,7 @@ async function seedRolesAndPermissions() {
       'withdrawals.review',
       'transactions.read',
       'referrals.read',
+      'affiliate.read',
     ].includes(p.key),
   );
   for (const p of staffScope) {
@@ -362,6 +366,58 @@ async function seedSystemSettings() {
   }
 }
 
+async function seedCommissionTiers() {
+  log('commission tiers');
+  const tiers = [
+    {
+      name: 'bronze',
+      description: 'Entry tier for new affiliates. Earn 8 / 4 / 2 percent across three downline levels.',
+      level1Pct: 8.0,
+      level2Pct: 4.0,
+      level3Pct: 2.0,
+      minActiveReferrals: 0,
+      minMonthlyVolume: 0,
+      position: 1,
+    },
+    {
+      name: 'silver',
+      description: 'Mid tier unlocked once 10 referrals are active and monthly volume hits 50,000 BDT.',
+      level1Pct: 10.0,
+      level2Pct: 5.0,
+      level3Pct: 2.0,
+      minActiveReferrals: 10,
+      minMonthlyVolume: 50000,
+      position: 2,
+    },
+    {
+      name: 'gold',
+      description: 'Top tier for high-performing affiliates with 30+ active referrals and 200,000+ BDT monthly volume.',
+      level1Pct: 12.0,
+      level2Pct: 6.0,
+      level3Pct: 3.0,
+      minActiveReferrals: 30,
+      minMonthlyVolume: 200000,
+      position: 3,
+    },
+  ];
+
+  for (const t of tiers) {
+    await db.commissionTier.upsert({
+      where: { name: t.name },
+      update: {
+        description: t.description,
+        level1Pct: t.level1Pct,
+        level2Pct: t.level2Pct,
+        level3Pct: t.level3Pct,
+        minActiveReferrals: t.minActiveReferrals,
+        minMonthlyVolume: t.minMonthlyVolume,
+        position: t.position,
+      },
+      create: t,
+    });
+  }
+}
+
 async function main() {
   log('starting');
   await seedRolesAndPermissions();
@@ -375,6 +431,7 @@ async function main() {
   await seedGames();
   await seedPaymentMethods();
   await seedSystemSettings();
+  await seedCommissionTiers();
 
   log(`super admin id: ${admin.id}`);
   log('done');

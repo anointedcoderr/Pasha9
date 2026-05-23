@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Wallet, ArrowDownToLine, ArrowUpToLine, Gift, Users, ReceiptText, User, ShieldCheck } from 'lucide-react';
+import { LayoutDashboard, Wallet, ArrowDownToLine, ArrowUpToLine, Gift, Users, ReceiptText, User, ShieldCheck, Briefcase } from 'lucide-react';
 import { ROUTES } from '@/lib/constants/routes';
 import { useT } from '@/lib/i18n/context';
 import { cn } from '@/lib/utils/cn';
@@ -14,6 +14,7 @@ const ITEMS = [
   { key: 'withdraw', href: ROUTES.dashboard.withdraw, icon: ArrowUpToLine },
   { key: 'bonus', href: ROUTES.dashboard.bonus, icon: Gift },
   { key: 'referral', href: ROUTES.dashboard.referral, icon: Users },
+  { key: 'affiliate', href: '/dashboard/affiliate', icon: Briefcase },
   { key: 'transactions', href: ROUTES.dashboard.transactions, icon: ReceiptText },
   { key: 'profile', href: ROUTES.dashboard.profile, icon: User },
   { key: 'security', href: ROUTES.dashboard.security, icon: ShieldCheck },
