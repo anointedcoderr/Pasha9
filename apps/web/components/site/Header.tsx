@@ -1,114 +1,167 @@
+// Built by Anointed Coder.
+// Public-site header. White desktop, mobile chrome with hamburger + language.
+// Guest desktop: clear Login (blue) + Register (yellow) buttons.
+// Logged-in desktop: username, notifications, balance chip, deposit (+) button,
+// language, logout.
+
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Menu, Wallet, X } from 'lucide-react';
+import { Bell, Lock, Menu as MenuIcon, Plus, User as UserIcon, Wallet as WalletIcon } from 'lucide-react';
 import { Logo } from './Logo';
 import { LanguageToggle } from './LanguageToggle';
-import { Button } from '@/components/ui/Button';
 import { AuthModal } from './AuthModal';
-import { MobileSidebar } from './Sidebar';
+import { MobileDrawer } from './MobileDrawer';
+import { MobileTopBar } from './MobileTopBar';
+import { StickyBottomNav } from './StickyBottomNav';
+import { CategoryNav } from './CategoryNav';
 import { useT } from '@/lib/i18n/context';
 import { useDisclosure } from '@/lib/utils/disclosure';
 import { ROUTES } from '@/lib/constants/routes';
 import { formatBDT } from '@/lib/utils/format';
-import { currentUser } from '@/lib/mock/users';
+
+interface Me {
+  id: string;
+  username: string;
+  role: { key: string; label: string };
+  wallet?: { balance: number | string; bonusBalance?: number | string };
+}
 
 export function Header() {
   const t = useT();
+  const router = useRouter();
+  const params = useSearchParams();
   const auth = useDisclosure();
   const [tab, setTab] = useState<'login' | 'signup'>('login');
-  const [mobileNav, setMobileNav] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [me, setMe] = useState<Me | null>(null);
+
+  // Open auth modal from query params (?login=1 or ?signup=1) used by drawer + bottom nav
+  useEffect(() => {
+    const l = params.get('login');
+    const s = params.get('signup');
+    if (l === '1') { setTab('login'); auth.onOpen(); }
+    else if (s === '1') { setTab('signup'); auth.onOpen(); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.get('login'), params.get('signup')]);
+
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/auth/me')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (alive && data?.user) setMe(data.user as Me); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  const logout = async () => {
+    try { await fetch('/api/auth/logout', { method: 'POST' }); } catch { /* ignore */ }
+    setMe(null);
+    router.refresh();
+  };
+
+  const openLogin = () => { setTab('login'); auth.onOpen(); };
+  const openSignup = () => { setTab('signup'); auth.onOpen(); };
 
   return (
     <>
-      <header className="sticky top-0 z-30 border-b border-neon/10 bg-base-deep/80 backdrop-blur">
-        <div className="mx-auto flex h-[72px] max-w-page items-center gap-3 px-4 md:px-6">
+      <MobileTopBar />
+
+      <header className="sticky top-0 z-30 border-b border-brand-divider bg-brand-paper">
+        <div className="mx-auto flex h-[64px] max-w-page items-center gap-3 px-3 md:px-6">
           <button
             type="button"
-            aria-label="Menu"
-            onClick={() => setMobileNav((v) => !v)}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-neon/15 text-ink-mid hover:text-ink-hi lg:hidden"
+            aria-label="Open menu"
+            onClick={() => setDrawerOpen(true)}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-brand-ink hover:bg-brand-surface lg:hidden"
           >
-            {mobileNav ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            <MenuIcon className="h-5 w-5" />
           </button>
 
-          <Logo />
-
-          <nav className="ml-6 hidden items-center gap-1 lg:flex">
-            {(
-              [
-                ['home', ROUTES.home],
-                ['liveCasino', ROUTES.liveCasino],
-                ['slots', ROUTES.slots],
-                ['fishing', ROUTES.fishing],
-                ['lottery', ROUTES.lottery],
-                ['promotions', ROUTES.promotions],
-              ] as const
-            ).map(([key, href]) => (
-              <Link
-                key={key}
-                href={href}
-                className="rounded-lg px-3 py-2 text-sm text-ink-mid transition hover:bg-white/5 hover:text-ink-hi"
-              >
-                {t(`nav.${key}`)}
-              </Link>
-            ))}
-          </nav>
+          <Logo tone="dark" />
 
           <div className="ml-auto flex items-center gap-2">
-            <div className="hidden md:block">
-              <LanguageToggle />
-            </div>
-            <Link
-              href={ROUTES.wallet}
-              className="hidden items-center gap-2 rounded-xl border border-neon/15 bg-base-panel/60 px-3 py-2 text-sm md:inline-flex"
-            >
-              <Wallet className="h-4 w-4 text-neon" />
-              <span className="text-ink-hi tabular-nums">{formatBDT(currentUser.balance)}</span>
-            </Link>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setTab('login');
-                auth.onOpen();
-              }}
-              className="hidden sm:inline-flex"
-            >
-              {t('common.login')}
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => {
-                setTab('signup');
-                auth.onOpen();
-              }}
-            >
-              {t('common.signup')}
-            </Button>
+            {me ? (
+              <>
+                <div className="hidden md:block">
+                  <LanguageToggle compact />
+                </div>
+                <button
+                  type="button"
+                  aria-label="Notifications"
+                  className="relative hidden h-10 w-10 items-center justify-center rounded-lg text-brand-ink hover:bg-brand-surface md:inline-flex"
+                >
+                  <Bell className="h-4 w-4" />
+                  <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-brand-blue-500" />
+                </button>
+                <Link href={ROUTES.wallet} className="pill-light tabular-nums">
+                  <WalletIcon className="h-4 w-4 text-brand-yellow-600" />
+                  <span className="hidden sm:inline">
+                    {formatBDT(Number(me.wallet?.balance ?? 0))}
+                  </span>
+                </Link>
+                <Link
+                  href={ROUTES.deposit}
+                  aria-label="Deposit"
+                  className="btn-yellow inline-flex h-10 w-10 items-center justify-center rounded-lg"
+                >
+                  <Plus className="h-4 w-4" />
+                </Link>
+                <Link
+                  href="/dashboard/profile"
+                  aria-label="My account"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-brand-divider bg-brand-paper text-brand-ink hover:border-brand-yellow-500"
+                >
+                  <UserIcon className="h-4 w-4" />
+                </Link>
+                <button
+                  type="button"
+                  onClick={logout}
+                  aria-label="Logout"
+                  className="hidden h-10 w-10 items-center justify-center rounded-lg text-brand-inkMute hover:text-brand-ink md:inline-flex"
+                >
+                  <Lock className="h-4 w-4" />
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="hidden md:block">
+                  <LanguageToggle compact />
+                </div>
+                <button
+                  type="button"
+                  onClick={openLogin}
+                  className="btn-blue hidden h-10 items-center justify-center rounded-lg px-4 text-sm md:inline-flex"
+                >
+                  {t('navx.login')}
+                </button>
+                <button
+                  type="button"
+                  onClick={openSignup}
+                  className="btn-yellow hidden h-10 items-center justify-center rounded-lg px-4 text-sm md:inline-flex"
+                >
+                  {t('navx.register')}
+                </button>
+              </>
+            )}
           </div>
         </div>
-
-        {mobileNav ? (
-          <div className="border-t border-neon/10 bg-base-panel/95 px-4 py-3 lg:hidden">
-            <div className="mb-3 flex items-center justify-between">
-              <LanguageToggle compact />
-              <Link
-                href={ROUTES.wallet}
-                onClick={() => setMobileNav(false)}
-                className="inline-flex items-center gap-2 rounded-xl border border-neon/15 bg-base-elev px-3 py-2 text-sm"
-              >
-                <Wallet className="h-4 w-4 text-neon" />
-                <span className="tabular-nums">{formatBDT(currentUser.balance)}</span>
-              </Link>
-            </div>
-            <MobileSidebar onSelect={() => setMobileNav(false)} />
-          </div>
-        ) : null}
       </header>
 
+      <CategoryNav />
+
       <AuthModal open={auth.open} onOpenChange={auth.setOpen} initialTab={tab} />
+
+      <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
+
+      <StickyBottomNav
+        isLoggedIn={!!me}
+        onOpenMenu={() => setDrawerOpen(true)}
+        onRequestLogin={openLogin}
+        onRequestSignup={openSignup}
+      />
     </>
   );
 }

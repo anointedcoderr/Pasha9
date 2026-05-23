@@ -36,7 +36,7 @@ export function FloatingContact() {
   if (!hasAny) return null;
 
   return (
-    <div className="fixed bottom-5 right-4 z-30 flex flex-col items-end gap-3 md:bottom-6 md:right-6">
+    <div className="fixed bottom-[92px] right-3 z-40 flex flex-col items-end gap-3 lg:bottom-6 lg:right-6">
       <div
         className={cn(
           'flex flex-col items-end gap-3 transition-all duration-300',

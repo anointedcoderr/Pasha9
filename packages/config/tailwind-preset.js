@@ -42,6 +42,33 @@ const preset = {
           info: '#4cc3ff',
           ok: '#36ff9a',
         },
+        // Brand light palette (Phase 1 redesign). Lives alongside the legacy
+        // dark tokens above so admin pages can migrate page by page.
+        brand: {
+          ink: '#0F1115',
+          inkSoft: '#3B4252',
+          inkMute: '#6B7280',
+          paper: '#FFFFFF',
+          surface: '#F6F7F9',
+          surfaceAlt: '#EDEFF3',
+          divider: '#E7EAEE',
+          navInk: '#15171C',
+          navInkSoft: '#2A2D34',
+          yellow: {
+            300: '#FFE066',
+            400: '#FFD633',
+            500: '#FFCC00',
+            600: '#F5B400',
+            700: '#D89E00',
+          },
+          blue: {
+            500: '#1E73E8',
+            600: '#1659C2',
+            700: '#10449A',
+          },
+          hot: '#FF4E3A',
+          new: '#23C26B',
+        },
       },
       fontFamily: {
         bn: ['var(--font-bn)', 'Hind Siliguri', 'system-ui', 'sans-serif'],
@@ -70,6 +97,10 @@ const preset = {
         'grad-panel': 'linear-gradient(180deg, rgba(19,48,36,0.95) 0%, rgba(6,18,12,0.95) 100%)',
         'grad-radial-glow': 'radial-gradient(circle at 50% 0%, rgba(54,255,154,0.18), transparent 60%)',
         'grad-card': 'linear-gradient(160deg, rgba(245,208,97,0.10) 0%, rgba(54,255,154,0.04) 60%, transparent 100%)',
+        // Brand light gradients
+        'grad-yellow': 'linear-gradient(135deg, #FFE066 0%, #FFCC00 55%, #F5B400 100%)',
+        'grad-hot': 'linear-gradient(135deg, #FFCC00 0%, #FF7A1A 60%, #FF4E3A 100%)',
+        'grad-brand-blue': 'linear-gradient(135deg, #1E73E8 0%, #1659C2 100%)',
       },
       keyframes: {
         sheen: {

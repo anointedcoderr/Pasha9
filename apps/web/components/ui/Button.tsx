@@ -1,7 +1,7 @@
 import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { cn } from '@/lib/utils/cn';
 
-type Variant = 'gold' | 'neon' | 'ghost' | 'danger' | 'solid' | 'glass';
+type Variant = 'gold' | 'neon' | 'ghost' | 'danger' | 'solid' | 'glass' | 'yellow' | 'blue' | 'outline-ink';
 type Size = 'sm' | 'md' | 'lg' | 'icon';
 
 interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -20,6 +20,10 @@ const variants: Record<Variant, string> = {
   danger: 'bg-signal-danger/10 border border-signal-danger/40 text-signal-danger hover:bg-signal-danger/15',
   solid: 'bg-base-elev border border-neon/15 text-ink-hi hover:border-neon/40',
   glass: 'bg-white/[0.04] border border-white/10 text-ink-hi hover:bg-white/[0.08] backdrop-blur',
+  // Brand light variants (Phase 1 redesign)
+  yellow: 'btn-yellow',
+  blue: 'btn-blue',
+  'outline-ink': 'btn-outline-ink',
 };
 
 const sizes: Record<Size, string> = {
