@@ -1,64 +1,70 @@
-# Pasha 9 Milestones
+## Pasha 9 Milestones
 
-Project: Bangla casino and betting platform. Owner is the client. Built by Anointed Coder. Contact: info@anointedcoder.com.
+Project: Bangla casino and betting platform. Owner is the client. Built by Anointed Coder. Contact info@anointedcoder.com.
 
-The build is split into three priced milestones, each with a strict scope so the client always knows what has shipped and what is next.
+Three priced milestones with strict scope. Milestone 2 starts only after Milestone 1 written approval, Milestone 3 only after Milestone 2 written approval.
 
-## Milestone 1 (current) Core setup and live deployment
+---
 
-Status: Implementation complete on branch `m1-production`. Awaiting client approval before merging to `main` and starting Milestone 2.
+### Milestone 1 (status: implementation complete on `m1-production`, tag `m1-redesign-complete`)
+
+Live at `https://pasha9.com`. Includes a full Babu88-inspired redesign on top of the original M1 production deployment, plus a real affiliate system end to end, plus full editable content management.
 
 What ships:
 
-- Ubuntu 24.04 VPS configured with Node 20, pnpm, PM2, PostgreSQL 16, Nginx, UFW, Let's Encrypt SSL
-- Live domain at `https://pasha9.com` with `www.pasha9.com` redirecting to apex
-- PostgreSQL with 25 Prisma models, real migration applied, idempotent seed
-- Auth: register, login, JWT cookies, bcrypt password hashing, OTP provider-ready adapter, password reset flow
-- Editable admin CMS: banners, popups, promo text, homepage content, system settings (live PostgreSQL backed)
-- User dashboard with real wallet view via `/api/auth/me`
-- Referral code generation per user; `?r=` capture on signup
-- Audit log written on every admin write with IP and user-agent
-- Local disk uploads via `/var/www/pasha9/uploads`, served by Nginx with caching
-- APK download field exposed in system settings for the future Milestone 3 build
-- Branding gate enforces every project rule on every build
+- Production server (Ubuntu 24.04, Node 20, pnpm, PM2, PostgreSQL 16, Nginx, UFW, SSL, nightly backup)
+- 30 Prisma models with applied migrations and idempotent seed
+- Auth (register, login, JWT cookies, bcrypt, rate limits, OTP provider-ready adapter, password reset + change)
+- Public site with white/yellow/black/blue Babu88-inspired theme, Bangla-first with no flash
+- Babu-style mobile bottom nav with 4 main slots and a raised yellow center CTA
+- Homepage: hero carousel, announcement popup, marquee, jackpot strip, quick action 3-step, 6 game rails, Ambassador and Video section, sports cards, Refer and Earn + Betting Pass promos, App Download
+- Category pages with provider filter, sort, search, dense grid, Load More
+- Promotion, Rewards (tabbed), Lotto, Betting Pass, IPL Betting Pass, VIP pages
+- Public Affiliate program page with live tier table and application form
+- User dashboard: overview, wallet, deposit, withdraw, bonus, referral, **affiliate center**, transactions, profile, security
+- Admin panel: full Babu88 white/yellow theme, all CMS surfaces editable (banners, popups, promo text, homepage, ambassador and video, lotto draws, reward catalog, categories, providers, games, bonuses, public support contacts, APK download URL)
+- Affiliate management: applications, approvals, status, tier assignment, commission tier CRUD
+- Activity log for every admin write
+- Branding gate enforced on every build
 
-What does not ship in M1 (deferred to later milestones):
+---
 
-- Live SMS provider integration (waits on credentials)
-- Payment gateway integration (waits on credentials)
-- Game provider API integrations (waits on credentials)
-- Full staff management UI
-- Bonus and turnover/wager logic
-- Deposit and withdrawal real flows
-- Android APK build
+### Milestone 2 (waiting on M1 approval)
 
-## Milestone 2 Main features and integrations
-
-Starts only after M1 approval.
+Goal: connect the operational features that move real money and real player activity.
 
 Scope summary:
 
-- Deposit request flow with manual proof and admin approval; gateway adapter when credentials arrive
-- Withdrawal request flow with admin approval, turnover gating, wallet balance checks
-- Bonus management (first deposit, reload, daily, weekly, referral, promo) with start and end windows
-- Turnover and wager system per user and per bonus
-- Referral chain visualization, commission rules, fraud check basics
-- Full user management (suspend, activate, reset password, balance edit by super admin only)
-- Staff/sub-admin roles, granular permissions, action logs
-- Tracking pixel settings (Facebook, TikTok, GA4, Google Ads, Snapchat, affiliate)
-- SMS/OTP provider integration when credentials arrive
-- Game management with house edge, RTP, payout table, maintenance, wager contribution
-- Daily transaction, deposit, withdrawal, bonus, referral, staff activity reports
+- Deposit money flow: gateway adapter, manual proof fallback, admin approval, automatic wallet credit, transaction log entry
+- Withdrawal money flow: admin approval, payout pipeline, balance checks, turnover gating
+- Bonus engine: automatic application of bonus rules (first deposit, reload, daily, weekly, VIP, referral, promo, invite, manual)
+- Turnover and wager system: per bonus and per deposit promotion, contribution rate by game category, withdrawal blocked until requirement met, progress visible to user and admin
+- Affiliate commission auto-accrual using the seeded commission tiers
+- Affiliate payout pipeline so Request Payout becomes live in the dashboard
+- Referral commission auto-calculation and payout
+- Real lottery draw engine (ticket purchase, draw run, prize distribution)
+- Real reward redemption (coin deduct, fulfilment)
+- SMS provider integration for OTP and password reset SMS delivery (provider chosen by client)
+- Tracking pixel event dispatcher (page view, signup, login, deposit, deposit approved, withdrawal, bonus claim, referral signup, game click, CTA click). Pixel IDs entered via admin Settings.
+- Staff and sub-admin management UI (super admin creates, suspends, deletes staff, assigns granular permissions). Schema already present.
+- Reports: daily transaction, deposit, withdrawal, bonus, referral, staff activity, login IP history
+- Live game provider integrations (where contracts are in place)
+- Optional: migrate the user dashboard route group to the new white/yellow theme
 
-## Milestone 3 APK, final testing, source handover
+---
 
-Starts only after M2 approval.
+### Milestone 3 (waiting on M2 approval)
+
+Goal: Android APK, final QA, full source handover.
 
 Scope summary:
 
-- Capacitor or WebView Android APK loading `https://pasha9.com` with persistent session
-- App icon, splash screen, app name Pasha9
-- APK download link wired to the admin field
+- Android APK via Capacitor or WebView wrapper, app name Pasha 9
+- App icon, splash screen
+- APK loads `https://pasha9.com` and preserves login session
+- APK download surfaced through the admin Mobile App (APK) settings already present
 - End to end testing across web and APK
 - Backup verified, off-site copy procedure documented
-- Source code package, documentation set, credentials handover, two weeks of post-delivery support
+- Source code package
+- Documentation set (deployment, admin, api, backup, migration, handover, testing)
+- Credentials handover, two weeks of post-delivery support

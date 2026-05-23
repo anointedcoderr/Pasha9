@@ -23,9 +23,19 @@ const TEXT_EXT = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.md', '
 
 // Files that are allowed to mention the retired brand for migration record-keeping.
 // The rebrand codemod and this scanner reference the names by definition.
+// Operational docs reference the live database name (which is still `sanjid14`)
+// and the testing checklist quotes the banned terms inside acceptance criteria.
 const NAME_BAN_ALLOWLIST = new Set([
   'scripts/check-branding.mjs',
   'scripts/rebrand-sanjid14-to-pasha9.mjs',
+  'docs/m1-delivery.md',
+  'docs/testing-checklist.md',
+  'docs/deployment-guide.md',
+  'docs/migration-guide.md',
+  'docs/backup-guide.md',
+  'docs/admin-guide.md',
+  'docs/milestones.md',
+  'docs/handover-checklist.md',
 ]);
 
 // Banned strings. The developer toolchain names are split character-by-character

@@ -51,9 +51,11 @@ The gate blocks references to retired brand names, em or en dashes, and missing 
 
 ## Milestones
 
-This is Milestone 1: live deployment, real auth, editable CMS, referral base, APK download field, audit log. See [docs/milestones.md](docs/milestones.md) for the full plan, and [docs/handover-checklist.md](docs/handover-checklist.md) for the current delivery.
+Milestone 1 is complete and live at `https://pasha9.com`. It includes the live production deployment, real auth, editable CMS, Babu88-inspired light theme, full affiliate system, ambassador and video editor, lotto and reward catalog editors, mobile bottom navigation, audit log. Final tag: `m1-redesign-complete`.
 
-Milestone 2 (deposits, withdrawals, bonuses, turnover, staff management) and Milestone 3 (APK, final testing, source handover) start only after explicit M1 approval.
+See [docs/milestones.md](docs/milestones.md) for the full M1 scope and the M2 + M3 plan. See [docs/m1-delivery.md](docs/m1-delivery.md) for the client-facing delivery summary, and [docs/testing-checklist.md](docs/testing-checklist.md) for the QA walkthrough.
+
+Milestone 2 (deposits, withdrawals, bonuses, turnover, affiliate auto-accrual, payouts, SMS / OTP, tracking pixels, staff management, reports) and Milestone 3 (Android APK, final testing, source handover) start only after explicit M1 approval.
 
 ## Built by Anointed Coder
 
