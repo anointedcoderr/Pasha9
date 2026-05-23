@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { PageHeader } from '@/components/site/PageHeader';
+import { BackBar } from '@/components/site/BackBar';
 import { mockReferralChain, referralCode as fallbackCode, referralLink as fallbackLink, referralStats } from '@/lib/mock/referrals';
 import { Users, Copy, Check, Share2, ArrowRight } from 'lucide-react';
 import { useT, useLang } from '@/lib/i18n/context';
@@ -40,6 +41,7 @@ export default function ReferralPage() {
 
   return (
     <>
+      <BackBar title={t('referral.title')} />
       <PageHeader title={t('referral.title')} subtitle={t('referral.subtitle')} icon={<Users className="h-5 w-5" />} />
 
       <div className="grid gap-5 lg:grid-cols-3">

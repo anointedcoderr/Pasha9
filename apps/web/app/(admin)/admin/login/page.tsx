@@ -55,7 +55,7 @@ export default function AdminLoginPage() {
       <div className="relative w-full max-w-md">
         <div className="card-glow p-8 ring-gold-soft">
           <div className="mb-6 flex items-center justify-between">
-            <Logo />
+            <Logo size="lg" />
             <span className="inline-flex items-center gap-1.5 rounded-pill border border-neon/30 bg-neon/10 px-3 py-1 text-[10px] uppercase tracking-wider text-neon">
               <ShieldCheck className="h-3 w-3" /> Admin
             </span>

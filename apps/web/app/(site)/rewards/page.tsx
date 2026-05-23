@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { CategoryHero } from '@/components/site/CategoryHero';
+import { BackBar } from '@/components/site/BackBar';
 import { useT, useLang } from '@/lib/i18n/context';
 import { Trophy, Gift, Calendar, Disc, Check, Smartphone, Ticket, Sparkles, Lock } from 'lucide-react';
 
@@ -74,6 +75,7 @@ export default function RewardsPage() {
 
   return (
     <div className="space-y-6">
+      <BackBar title={t('rewards.title')} />
       <CategoryHero
         kicker={t('rewards.title')}
         title={t('rewards.title')}

@@ -88,7 +88,7 @@ export function AdminSidebar() {
   return (
     <aside className="hidden h-screen w-[260px] shrink-0 flex-col border-r border-brand-divider bg-brand-paper lg:flex">
       <div className="border-b border-brand-divider px-5 py-5">
-        <Logo href={ROUTES.admin.home} tone="dark" />
+        <Logo href={ROUTES.admin.home} tone="dark" size="md" />
         <p className="mt-2 text-[10px] uppercase tracking-[0.18em] text-brand-yellow-700">{t('admin.title')}</p>
       </div>
 

@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { CategoryHero } from '@/components/site/CategoryHero';
+import { BackBar } from '@/components/site/BackBar';
 import { useT, useLang } from '@/lib/i18n/context';
 import { mockBonusRules } from '@/lib/mock/bonuses';
 import { Gift, Sparkles, Crown, Repeat, Users, Send, Ticket } from 'lucide-react';
@@ -65,6 +66,7 @@ export default function PromotionsPage() {
 
   return (
     <div className="space-y-6">
+      <BackBar title={t('promotions.title')} />
       <CategoryHero
         kicker={t('promotions.title')}
         title={t('promotions.title')}

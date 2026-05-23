@@ -74,6 +74,7 @@
   "drawer": {
     "main": "মূল মেনু",
     "games": "গেমস",
+    "others": "অন্যান্য",
     "promotion": "প্রমোশন",
     "rewards": "রিওয়ার্ড",
     "referralProgram": "রেফারেল প্রোগ্রাম",
@@ -89,7 +90,12 @@
     "fast": "ফাস্ট",
     "fishing": "ফিশিং",
     "login": "লগইন",
-    "register": "রেজিস্টার"
+    "register": "রেজিস্টার",
+    "logout": "লগআউট",
+    "language": "ভাষা",
+    "faq": "প্রশ্ন ও উত্তর",
+    "liveChat": "লাইভ চ্যাট",
+    "downloadApp": "অ্যাপ ডাউনলোড"
   },
   "home": {
     "heroTitle1": "আজই খেলুন, জিতুন, আর বোনাস দাবি করুন",

@@ -1,22 +1,23 @@
 // Built by Anointed Coder.
-// Babu88-inspired mobile bottom navigation.
+// Babu-style mobile bottom navigation (Phase 8A redesign).
 //
-// Slot layout (4 items total):
-//   1. Promotion           navigation link
-//   2. Lotto               navigation link with NEW marker
-//   3. RAISED YELLOW CTA   primary action: Register (guest) | Deposit (logged-in)
-//   4. Login (guest) | Profile (logged-in)
+// 5 slots, center is a raised yellow Home button.
 //
-// Home is reachable via the Pasha 9 logo in the header. Drawer with all
-// other categories opens from the hamburger.
+//   Logged-in :  Promotion | Lotto |  HOME  | Betting Pass | Referral
+//   Guest     :  Promotion | Lotto |  HOME  | Register     | Login
+//
+// Home brings the user back to the landing page from any internal route,
+// matching the client's "users must never feel trapped" requirement.
+// Deposit and Profile are reachable from the header (balance pill,
+// user icon, hamburger Others section) so they are intentionally not in
+// the bottom rail anymore.
 
 'use client';
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Gift, Ticket, UserPlus, LogIn, Plus, User as UserIcon } from 'lucide-react';
+import { Gift, Ticket, Home as HomeIcon, Star, Users, UserPlus, LogIn } from 'lucide-react';
 import { useT } from '@/lib/i18n/context';
-import { formatBDT } from '@/lib/utils/format';
 import { MarkerNew } from './markers';
 
 interface Props {
@@ -27,9 +28,10 @@ interface Props {
   balance?: number | null;
 }
 
-export function StickyBottomNav({ isLoggedIn, onRequestLogin, onRequestSignup, balance }: Props) {
+export function StickyBottomNav({ isLoggedIn, onRequestLogin, onRequestSignup }: Props) {
   const t = useT();
   const pathname = usePathname();
+  const onHome = pathname === '/';
 
   return (
     <nav
@@ -37,66 +39,80 @@ export function StickyBottomNav({ isLoggedIn, onRequestLogin, onRequestSignup, b
       aria-label="Primary"
       className="fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-brand-divider bg-brand-paper pb-[max(env(safe-area-inset-bottom),8px)] shadow-[0_-8px_24px_-12px_rgba(15,17,21,0.15)] lg:hidden"
     >
-      <Link href="/promotions" className="bnav-btn" data-active={pathname.startsWith('/promotions')} aria-label={t('navx.promotions')}>
+      <Link
+        href="/promotions"
+        className="bnav-btn"
+        data-active={pathname.startsWith('/promotions')}
+        aria-label={t('navx.promotions')}
+      >
         <Gift className="h-5 w-5 text-brand-yellow-600" />
         <span>{t('navx.promotions')}</span>
       </Link>
 
-      <Link href="/lotto" className="bnav-btn" data-active={pathname.startsWith('/lotto')} aria-label={t('navx.lotto')}>
+      <Link
+        href="/lotto"
+        className="bnav-btn"
+        data-active={pathname.startsWith('/lotto')}
+        aria-label={t('navx.lotto')}
+      >
         <span className="relative inline-flex">
           <Ticket className="h-5 w-5 text-brand-yellow-600" />
-          <span className="absolute -right-3 -top-2"><MarkerNew /></span>
+          <span className="absolute -right-3 -top-2">
+            <MarkerNew />
+          </span>
         </span>
         <span>{t('navx.lotto')}</span>
       </Link>
 
-      {isLoggedIn ? (
-        <Link
-          href="/deposit"
-          className="bnav-fab"
-          aria-label={t('navx.deposit')}
-        >
-          <span className="bnav-fab-circle">
-            <Plus className="h-7 w-7" />
-          </span>
-          <span className="bnav-fab-label">{t('navx.deposit')}</span>
-        </Link>
-      ) : (
-        <button
-          type="button"
-          onClick={onRequestSignup}
-          className="bnav-fab"
-          aria-label={t('navx.register')}
-        >
-          <span className="bnav-fab-circle">
-            <UserPlus className="h-7 w-7" />
-          </span>
-          <span className="bnav-fab-label">{t('navx.register')}</span>
-        </button>
-      )}
+      <Link href="/" className="bnav-fab" aria-label={t('nav.home')} data-active={onHome}>
+        <span className="bnav-fab-circle">
+          <HomeIcon className="h-7 w-7" />
+        </span>
+        <span className="bnav-fab-label">{t('nav.home')}</span>
+      </Link>
 
       {isLoggedIn ? (
-        <Link
-          href="/dashboard/profile"
-          className="bnav-btn"
-          data-active={pathname.startsWith('/dashboard/profile')}
-          aria-label={t('navx.profile')}
-        >
-          <UserIcon className="h-5 w-5" />
-          <span className="truncate">
-            {balance != null ? formatBDT(balance) : t('navx.profile')}
-          </span>
-        </Link>
+        <>
+          <Link
+            href="/betting-pass"
+            className="bnav-btn"
+            data-active={pathname.startsWith('/betting-pass')}
+            aria-label={t('navx.bettingPass')}
+          >
+            <Star className="h-5 w-5 text-brand-yellow-600" />
+            <span>{t('navx.bettingPass')}</span>
+          </Link>
+          <Link
+            href="/dashboard/referral"
+            className="bnav-btn"
+            data-active={pathname.endsWith('/referral')}
+            aria-label={t('navx.referral')}
+          >
+            <Users className="h-5 w-5 text-brand-yellow-600" />
+            <span>{t('navx.referral')}</span>
+          </Link>
+        </>
       ) : (
-        <button
-          type="button"
-          onClick={onRequestLogin}
-          className="bnav-btn"
-          aria-label={t('navx.login')}
-        >
-          <LogIn className="h-5 w-5 text-brand-blue-600" />
-          <span>{t('navx.login')}</span>
-        </button>
+        <>
+          <button
+            type="button"
+            onClick={onRequestSignup}
+            className="bnav-btn"
+            aria-label={t('navx.register')}
+          >
+            <UserPlus className="h-5 w-5 text-brand-yellow-600" />
+            <span>{t('navx.register')}</span>
+          </button>
+          <button
+            type="button"
+            onClick={onRequestLogin}
+            className="bnav-btn"
+            aria-label={t('navx.login')}
+          >
+            <LogIn className="h-5 w-5 text-brand-blue-600" />
+            <span>{t('navx.login')}</span>
+          </button>
+        </>
       )}
     </nav>
   );

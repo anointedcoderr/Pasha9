@@ -74,6 +74,7 @@
   "drawer": {
     "main": "Main",
     "games": "Games",
+    "others": "Others",
     "promotion": "Promotion",
     "rewards": "Rewards",
     "referralProgram": "Referral Program",
@@ -89,7 +90,12 @@
     "fast": "Fast",
     "fishing": "Fishing",
     "login": "Login",
-    "register": "Register"
+    "register": "Register",
+    "logout": "Logout",
+    "language": "Language",
+    "faq": "FAQ",
+    "liveChat": "Live Chat",
+    "downloadApp": "Download App"
   },
   "home": {
     "heroTitle1": "Play smarter, win bigger, claim your bonus",

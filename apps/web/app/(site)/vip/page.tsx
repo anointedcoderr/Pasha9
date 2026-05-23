@@ -3,6 +3,7 @@
 
 import Link from 'next/link';
 import { CategoryHero } from '@/components/site/CategoryHero';
+import { BackBar } from '@/components/site/BackBar';
 import { useT, useLang } from '@/lib/i18n/context';
 import { Crown, Lock, ShieldCheck, Headphones, BadgePercent, Wallet } from 'lucide-react';
 
@@ -37,6 +38,7 @@ export default function VipPage() {
   const { lang } = useLang();
   return (
     <div className="space-y-6">
+      <BackBar title={t('vip.title')} />
       <CategoryHero
         kicker="VIP"
         title={t('vip.title')}

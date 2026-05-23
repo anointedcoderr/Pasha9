@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { CategoryHero } from '@/components/site/CategoryHero';
+import { BackBar } from '@/components/site/BackBar';
 import { useT, useLang } from '@/lib/i18n/context';
 import { Ticket, Lock, Clock, Trophy, Zap } from 'lucide-react';
 import { formatBDT, formatDateTime } from '@/lib/utils/format';
@@ -83,6 +84,7 @@ export default function LottoPage() {
 
   return (
     <div className="space-y-6">
+      <BackBar title={t('lotto.title')} />
       <CategoryHero
         kicker={t('lotto.title')}
         title={t('lotto.title')}

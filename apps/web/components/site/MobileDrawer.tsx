@@ -1,14 +1,39 @@
 // Built by Anointed Coder.
-// Left-side white drawer for mobile. Grouped sections (Main, Games) per the
-// Babu88-inspired reference, with a yellow active state.
+// Left-side white drawer for mobile. Three grouped sections (Main, Games,
+// Others) per the Babu-inspired reference, with a yellow active state.
+// Others holds language / FAQ / live chat / download app / login / register
+// / logout - guarded by the visitor's auth state.
 
 'use client';
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect } from 'react';
-import { X, Gift, Trophy, Users, Star, Sparkles, Ticket, Briefcase, Cherry, Tv2, Zap, Activity, Dice5, Gauge, Fish } from 'lucide-react';
-import { useT } from '@/lib/i18n/context';
+import { useEffect, useState } from 'react';
+import {
+  X,
+  Gift,
+  Trophy,
+  Users,
+  Star,
+  Sparkles,
+  Ticket,
+  Briefcase,
+  Cherry,
+  Tv2,
+  Zap,
+  Activity,
+  Dice5,
+  Gauge,
+  Fish,
+  Languages,
+  HelpCircle,
+  MessageCircle,
+  Download,
+  LogOut,
+  UserPlus,
+  LogIn,
+} from 'lucide-react';
+import { useT, useLang } from '@/lib/i18n/context';
 import { Logo } from './Logo';
 import { cn } from '@/lib/utils/cn';
 
@@ -38,19 +63,45 @@ const GAMES: Item[] = [
   { key: 'fishing', href: '/fishing', icon: Fish },
 ];
 
-export function MobileDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
+interface Props {
+  open: boolean;
+  onClose: () => void;
+  isLoggedIn: boolean;
+  onRequestLogin: () => void;
+  onRequestSignup: () => void;
+  onLogout: () => void;
+}
+
+export function MobileDrawer({ open, onClose, isLoggedIn, onRequestLogin, onRequestSignup, onLogout }: Props) {
   const t = useT();
+  const { lang, setLang } = useLang();
   const pathname = usePathname();
+  const [apkUrl, setApkUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    fetch('/api/content/apk')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.url) setApkUrl(data.url as string);
+      })
+      .catch(() => {});
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
+    return () => {
+      document.body.style.overflow = prev;
+    };
   }, [open]);
 
   // Close on route change
-  useEffect(() => { if (open) onClose(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [pathname]);
+  useEffect(() => {
+    if (open) onClose();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
 
   return (
     <>
@@ -71,7 +122,7 @@ export function MobileDrawer({ open, onClose }: { open: boolean; onClose: () => 
         aria-label="Site navigation"
       >
         <div className="flex items-center justify-between border-b border-brand-divider px-4 py-3">
-          <Logo tone="dark" />
+          <Logo tone="dark" size="md" />
           <button
             type="button"
             aria-label="Close menu"
@@ -93,18 +144,110 @@ export function MobileDrawer({ open, onClose }: { open: boolean; onClose: () => 
               <DrawerLink key={item.key} item={item} t={t} pathname={pathname} />
             ))}
           </Section>
+          <Section label={t('drawer.others')}>
+            <button
+              type="button"
+              onClick={() => setLang(lang === 'bn' ? 'en' : 'bn')}
+              className="drawer-link w-full text-left"
+            >
+              <Languages className="h-4 w-4 text-brand-yellow-600" />
+              <span>{t('drawer.language')}</span>
+              <span className="ml-auto rounded-md bg-brand-surface px-1.5 py-0.5 text-[10px] font-bold uppercase text-brand-inkSoft">
+                {lang === 'bn' ? 'বাং' : 'EN'}
+              </span>
+            </button>
+            <Link
+              href="/faq"
+              className="drawer-link"
+              data-active={pathname === '/faq'}
+            >
+              <HelpCircle className="h-4 w-4 text-brand-yellow-600" />
+              <span>{t('drawer.faq')}</span>
+            </Link>
+            <Link
+              href="/support"
+              className="drawer-link"
+              data-active={pathname === '/support'}
+            >
+              <MessageCircle className="h-4 w-4 text-brand-yellow-600" />
+              <span>{t('drawer.liveChat')}</span>
+            </Link>
+            <a
+              href={apkUrl ?? '/apk'}
+              target={apkUrl ? '_blank' : undefined}
+              rel={apkUrl ? 'noreferrer' : undefined}
+              className="drawer-link"
+            >
+              <Download className="h-4 w-4 text-brand-yellow-600" />
+              <span>{t('drawer.downloadApp')}</span>
+            </a>
+            {isLoggedIn ? (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onLogout();
+                }}
+                className="drawer-link w-full text-left"
+              >
+                <LogOut className="h-4 w-4 text-red-600" />
+                <span className="text-red-700">{t('drawer.logout')}</span>
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onRequestLogin();
+                  }}
+                  className="drawer-link w-full text-left"
+                >
+                  <LogIn className="h-4 w-4 text-brand-blue-600" />
+                  <span>{t('drawer.login')}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onRequestSignup();
+                  }}
+                  className="drawer-link w-full text-left"
+                >
+                  <UserPlus className="h-4 w-4 text-brand-yellow-600" />
+                  <span>{t('drawer.register')}</span>
+                </button>
+              </>
+            )}
+          </Section>
         </nav>
 
-        <div className="border-t border-brand-divider p-3">
-          <div className="grid grid-cols-2 gap-2">
-            <Link href="/?login=1" className="btn-blue inline-flex h-10 items-center justify-center rounded-lg text-sm">
-              {t('drawer.login')}
-            </Link>
-            <Link href="/?signup=1" className="btn-yellow inline-flex h-10 items-center justify-center rounded-lg text-sm">
-              {t('drawer.register')}
-            </Link>
+        {!isLoggedIn ? (
+          <div className="border-t border-brand-divider p-3">
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onRequestLogin();
+                }}
+                className="btn-blue inline-flex h-10 items-center justify-center rounded-lg text-sm"
+              >
+                {t('drawer.login')}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onRequestSignup();
+                }}
+                className="btn-yellow inline-flex h-10 items-center justify-center rounded-lg text-sm"
+              >
+                {t('drawer.register')}
+              </button>
+            </div>
           </div>
-        </div>
+        ) : null}
       </aside>
     </>
   );

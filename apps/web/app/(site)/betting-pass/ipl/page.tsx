@@ -3,6 +3,7 @@
 
 import Link from 'next/link';
 import { CategoryHero } from '@/components/site/CategoryHero';
+import { BackBar } from '@/components/site/BackBar';
 import { useLang } from '@/lib/i18n/context';
 import { Trophy, Lock, Gift, Calendar } from 'lucide-react';
 
@@ -10,6 +11,7 @@ export default function IplBettingPassPage() {
   const { lang } = useLang();
   return (
     <div className="space-y-6">
+      <BackBar title={lang === 'bn' ? 'আইপিএল ২০২৬ বেটিং পাস' : 'IPL 2026 Betting Pass'} />
       <CategoryHero
         kicker="IPL 2026"
         title={lang === 'bn' ? 'আইপিএল ২০২৬ বেটিং পাস' : 'IPL 2026 Betting Pass'}

@@ -1,6 +1,7 @@
 'use client';
 
 import { PageHeader } from '@/components/site/PageHeader';
+import { BackBar } from '@/components/site/BackBar';
 import { Trophy, Activity } from 'lucide-react';
 import { mockGames } from '@/lib/mock/games';
 import { GameSection } from '@/components/site/GameSection';
@@ -18,6 +19,7 @@ export default function SportsPage() {
 
   return (
     <>
+      <BackBar title="Sports Book" />
       <PageHeader title="Sports Book" subtitle="Pre-match and in-play markets across leagues" icon={<Trophy className="h-5 w-5" />} />
 
       <div className="mb-8 space-y-3">

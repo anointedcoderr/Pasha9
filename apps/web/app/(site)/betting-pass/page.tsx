@@ -3,6 +3,7 @@
 
 import Link from 'next/link';
 import { CategoryHero } from '@/components/site/CategoryHero';
+import { BackBar } from '@/components/site/BackBar';
 import { useT, useLang } from '@/lib/i18n/context';
 import { Crown, Lock, Star, Zap, Gift } from 'lucide-react';
 
@@ -19,6 +20,7 @@ export default function BettingPassPage() {
 
   return (
     <div className="space-y-6">
+      <BackBar title={t('bp.title')} />
       <CategoryHero
         kicker={t('bp.title')}
         title={t('bp.title')}

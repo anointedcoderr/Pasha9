@@ -7,6 +7,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { CategoryHero } from '@/components/site/CategoryHero';
+import { BackBar } from '@/components/site/BackBar';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { FormField, Input, Textarea } from '@/components/ui/Input';
@@ -96,6 +97,7 @@ export default function AffiliatePage() {
 
   return (
     <div className="space-y-6">
+      <BackBar title={lang === 'bn' ? 'অ্যাফিলিয়েট প্রোগ্রাম' : 'Affiliate Program'} />
       <CategoryHero
         kicker={lang === 'bn' ? 'অ্যাফিলিয়েট প্রোগ্রাম' : 'Affiliate Program'}
         title={lang === 'bn' ? 'বন্ধু আমন্ত্রণ করুন, লাইফটাইম কমিশন' : 'Invite your network, earn lifetime commission'}

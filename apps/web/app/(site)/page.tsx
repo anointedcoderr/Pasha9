@@ -6,7 +6,8 @@ import { HeroSlider } from '@/components/site/HeroSlider';
 import { AnnouncementPopup } from '@/components/site/AnnouncementPopup';
 import { PromoTicker } from '@/components/site/PromoTicker';
 import { JackpotStrip } from '@/components/site/JackpotStrip';
-import { QuickActionStrip } from '@/components/site/QuickActionStrip';
+import { WalletStrip } from '@/components/site/WalletStrip';
+import { CategorySlider } from '@/components/site/CategorySlider';
 import { HomeGameSection } from '@/components/site/HomeGameSection';
 import { AmbassadorVideoSection } from '@/components/site/AmbassadorVideoSection';
 import { SportsCardsCarousel } from '@/components/site/SportsCardsCarousel';
@@ -32,11 +33,13 @@ export default function HomePage() {
     <div className="space-y-6">
       <HeroSlider />
 
+      <WalletStrip />
+
+      <CategorySlider />
+
       <PromoTicker />
 
       <JackpotStrip />
-
-      <QuickActionStrip />
 
       <HomeGameSection
         title={t('home.sectionHot')}
