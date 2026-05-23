@@ -1,88 +1,157 @@
+// Built by Anointed Coder.
 'use client';
 
-import { PageHeader } from '@/components/site/PageHeader';
-import { mockBonusRules } from '@/lib/mock/bonuses';
-import { Gift, Sparkles, Crown, Repeat, Users, Send } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { CategoryHero } from '@/components/site/CategoryHero';
 import { useT, useLang } from '@/lib/i18n/context';
-import { formatBDT } from '@/lib/utils/format';
+import { mockBonusRules } from '@/lib/mock/bonuses';
+import { Gift, Sparkles, Crown, Repeat, Users, Send, Ticket } from 'lucide-react';
 import type { BonusRule } from '@/types';
+import { formatBDT } from '@/lib/utils/format';
 
-const iconMap = {
+type Filter = 'all' | BonusRule['type'];
+
+const ICON: Record<BonusRule['type'], React.ComponentType<{ className?: string }>> = {
   first_deposit: Sparkles,
   daily: Repeat,
   weekly: Gift,
   referral: Users,
   vip: Crown,
   invite: Send,
-} as const;
+};
 
-const tagMap = (lang: 'bn' | 'en', t: (k: string) => string): Record<BonusRule['type'], string> => ({
-  first_deposit: t('promotions.firstDeposit'),
-  daily: t('promotions.daily'),
-  weekly: t('promotions.weekly'),
-  referral: t('promotions.referral'),
-  vip: t('promotions.vip'),
-  invite: t('promotions.invite'),
-});
+const ACCENT_GRADIENT: Record<BonusRule['type'], string> = {
+  first_deposit: 'from-brand-yellow-400 via-amber-500 to-orange-500',
+  daily: 'from-emerald-400 via-emerald-600 to-teal-700',
+  weekly: 'from-brand-blue-500 via-brand-blue-600 to-brand-blue-700',
+  referral: 'from-fuchsia-500 via-indigo-600 to-indigo-800',
+  vip: 'from-amber-400 via-orange-500 to-rose-600',
+  invite: 'from-rose-400 via-rose-600 to-orange-600',
+};
 
 export default function PromotionsPage() {
   const t = useT();
   const { lang } = useLang();
-  const tags = tagMap(lang, t);
+  const [filter, setFilter] = useState<Filter>('all');
+  const [list, setList] = useState<BonusRule[]>(mockBonusRules);
+
+  // The bonus rules table is M2 admin-managed; until then we render the seed
+  // mock. Wired here so the page will pick up real data the moment the
+  // admin Bonus Rules API ships.
+  useEffect(() => {
+    fetch('/api/admin/bonus-rules')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (Array.isArray(data?.rules) && data.rules.length) setList(data.rules);
+      })
+      .catch(() => {});
+  }, []);
+
+  const filtered = useMemo(() => {
+    if (filter === 'all') return list;
+    return list.filter((r) => r.type === filter);
+  }, [filter, list]);
+
+  const filters: Array<{ key: Filter; label: string }> = [
+    { key: 'all', label: t('common.all') },
+    { key: 'first_deposit', label: t('promotions.firstDeposit') },
+    { key: 'daily', label: t('promotions.daily') },
+    { key: 'weekly', label: t('promotions.weekly') },
+    { key: 'referral', label: t('promotions.referral') },
+    { key: 'vip', label: t('promotions.vip') },
+    { key: 'invite', label: t('promotions.invite') },
+  ];
 
   return (
-    <>
-      <PageHeader title={t('promotions.title')} subtitle={t('promotions.subtitle')} icon={<Gift className="h-5 w-5" />} />
+    <div className="space-y-6">
+      <CategoryHero
+        kicker={t('promotions.title')}
+        title={t('promotions.title')}
+        description={t('promotions.subtitle')}
+        accent="yellow"
+      />
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap gap-2">
+          {filters.map((f) => (
+            <button
+              key={f.key}
+              type="button"
+              onClick={() => setFilter(f.key)}
+              className="pill-provider"
+              data-active={filter === f.key}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-brand-inkMute">
+          {filtered.length} {t('cat.results')}
+        </p>
+      </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {mockBonusRules.map((rule) => {
-          const Icon = iconMap[rule.type];
+        {filtered.map((rule) => {
+          const Icon = ICON[rule.type] ?? Ticket;
+          const tagLabel =
+            rule.type === 'first_deposit' ? t('promotions.firstDeposit') :
+            rule.type === 'daily' ? t('promotions.daily') :
+            rule.type === 'weekly' ? t('promotions.weekly') :
+            rule.type === 'referral' ? t('promotions.referral') :
+            rule.type === 'vip' ? t('promotions.vip') :
+            t('promotions.invite');
           return (
-            <div key={rule.id} className="card-glow flex h-full flex-col p-6">
-              <div className="flex items-start justify-between">
-                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-grad-gold text-base-deep shadow-glow-gold">
-                  <Icon className="h-5 w-5" />
-                </span>
-                <span className={cssStatus(rule.status)}>{rule.status === 'active' ? 'Live' : 'Paused'}</span>
-              </div>
-              <h3 className="mt-4 text-lg font-semibold text-ink-hi">{tags[rule.type]}</h3>
-              <p className="mt-1 text-sm text-ink-mid">{rule.description}</p>
-
-              <dl className="mt-5 grid grid-cols-2 gap-3 text-sm">
-                <div className="rounded-lg border border-neon/10 bg-base-deep/40 p-3">
-                  <dt className="text-[11px] uppercase tracking-wider text-ink-lo">Rate</dt>
-                  <dd className="mt-1 font-semibold text-ink-hi">
+            <article key={rule.id} className="overflow-hidden rounded-2xl border border-brand-divider bg-brand-paper">
+              <div className={`relative aspect-[16/9] overflow-hidden bg-gradient-to-br ${ACCENT_GRADIENT[rule.type]}`}>
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.25),transparent_55%)]" />
+                <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-3 px-4 py-3 text-white">
+                  <span className="text-[10px] font-bold uppercase tracking-wider">{tagLabel}</span>
+                  <span className="rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-semibold backdrop-blur">
                     {rule.percentage > 0 ? `${rule.percentage}%` : formatBDT(rule.amount)}
-                  </dd>
+                  </span>
                 </div>
-                <div className="rounded-lg border border-neon/10 bg-base-deep/40 p-3">
-                  <dt className="text-[11px] uppercase tracking-wider text-ink-lo">Min Deposit</dt>
-                  <dd className="mt-1 font-semibold text-ink-hi">{formatBDT(rule.minDeposit)}</dd>
+                <div className="absolute right-4 top-4 flex h-12 w-12 items-center justify-center rounded-xl bg-white/15 text-white backdrop-blur">
+                  <Icon className="h-5 w-5" />
                 </div>
-                <div className="rounded-lg border border-neon/10 bg-base-deep/40 p-3 col-span-2">
-                  <dt className="text-[11px] uppercase tracking-wider text-ink-lo">Max Bonus</dt>
-                  <dd className="mt-1 font-semibold text-gradient-gold">{rule.maxBonus ? formatBDT(rule.maxBonus) : 'No cap'}</dd>
-                </div>
-              </dl>
+              </div>
 
-              <button className="mt-5 btn-gold inline-flex h-10 items-center justify-center rounded-xl font-semibold">
-                Claim
-              </button>
-            </div>
+              <div className="px-5 py-4">
+                <h3 className="text-base font-extrabold text-brand-ink">{rule.name}</h3>
+                <p className="mt-1.5 text-sm text-brand-inkSoft">{rule.description}</p>
+
+                <dl className="mt-4 grid grid-cols-2 gap-3 text-xs">
+                  <Cell label={lang === 'bn' ? 'সর্বনিম্ন' : 'Min Deposit'} value={formatBDT(rule.minDeposit)} />
+                  <Cell label={lang === 'bn' ? 'সর্বোচ্চ' : 'Max Bonus'} value={rule.maxBonus ? formatBDT(rule.maxBonus) : (lang === 'bn' ? 'কোনো সীমা নেই' : 'No cap')} />
+                </dl>
+
+                <div className="mt-4 flex items-center justify-between">
+                  <span className={rule.status === 'active' ? 'text-xs font-semibold text-emerald-700' : 'text-xs font-semibold text-amber-700'}>
+                    {rule.status === 'active' ? (lang === 'bn' ? 'চলছে' : 'Live') : (lang === 'bn' ? 'স্থগিত' : 'Paused')}
+                  </span>
+                  <Link href="/?signup=1" className="btn-yellow inline-flex h-9 items-center rounded-lg px-4 text-xs">
+                    {lang === 'bn' ? 'দাবি করুন' : 'Claim'}
+                  </Link>
+                </div>
+              </div>
+            </article>
           );
         })}
       </div>
 
-      <section className="card-glow mt-10 p-6">
-        <h2 className="text-lg font-semibold text-ink-hi">{t('promotions.termsTitle')}</h2>
-        <p className="mt-2 text-sm text-ink-mid">{t('promotions.termsBody')}</p>
+      <section className="card-light p-6">
+        <h2 className="text-lg font-extrabold text-brand-ink">{t('promotions.termsTitle')}</h2>
+        <p className="mt-2 text-sm text-brand-inkSoft">{t('promotions.termsBody')}</p>
       </section>
-    </>
+    </div>
   );
 }
 
-function cssStatus(status: 'active' | 'paused') {
-  return status === 'active'
-    ? 'inline-flex items-center gap-1 rounded-md border border-neon/30 bg-neon/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-neon'
-    : 'inline-flex items-center gap-1 rounded-md border border-gold-500/30 bg-gold-500/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-gold-300';
+function Cell({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-brand-divider bg-brand-surface p-2">
+      <dt className="text-[10px] font-semibold uppercase tracking-wider text-brand-inkMute">{label}</dt>
+      <dd className="mt-0.5 font-semibold text-brand-ink tabular-nums">{value}</dd>
+    </div>
+  );
 }

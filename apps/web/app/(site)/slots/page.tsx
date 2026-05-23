@@ -1,16 +1,23 @@
+// Built by Anointed Coder.
 'use client';
 
-import { PageHeader } from '@/components/site/PageHeader';
-import { GameSection } from '@/components/site/GameSection';
+import { CategoryHero } from '@/components/site/CategoryHero';
+import { CategoryCatalog } from '@/components/site/CategoryCatalog';
 import { mockGames } from '@/lib/mock/games';
-import { Cherry } from 'lucide-react';
+import { useT } from '@/lib/i18n/context';
 
 export default function SlotsPage() {
+  const t = useT();
   const games = mockGames.filter((g) => g.categoryId === 'c_slots');
   return (
-    <>
-      <PageHeader title="Slots Arena" subtitle="Spin reels, hit jackpots, daily draws" icon={<Cherry className="h-5 w-5" />} />
-      <GameSection title="Popular Slots" games={games} layout="grid" />
-    </>
+    <div className="space-y-6">
+      <CategoryHero
+        kicker={t('nav.slots')}
+        title={t('home.sectionSlots')}
+        description={t('home.sectionSlotsDesc')}
+        accent="yellow"
+      />
+      <CategoryCatalog games={games} />
+    </div>
   );
 }

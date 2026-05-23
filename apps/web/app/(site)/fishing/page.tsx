@@ -1,16 +1,23 @@
+// Built by Anointed Coder.
 'use client';
 
-import { PageHeader } from '@/components/site/PageHeader';
-import { GameSection } from '@/components/site/GameSection';
+import { CategoryHero } from '@/components/site/CategoryHero';
+import { CategoryCatalog } from '@/components/site/CategoryCatalog';
 import { mockGames } from '@/lib/mock/games';
-import { Fish } from 'lucide-react';
+import { useT } from '@/lib/i18n/context';
 
 export default function FishingPage() {
+  const t = useT();
   const games = mockGames.filter((g) => g.categoryId === 'c_fish');
   return (
-    <>
-      <PageHeader title="Fishing Games" subtitle="Fast paced arcade style cannon games" icon={<Fish className="h-5 w-5" />} />
-      <GameSection title="Featured fishing titles" games={games} layout="grid" />
-    </>
+    <div className="space-y-6">
+      <CategoryHero
+        kicker={t('nav.fishing')}
+        title={t('home.sectionFish')}
+        description={t('home.sectionFishDesc')}
+        accent="blue"
+      />
+      <CategoryCatalog games={games} />
+    </div>
   );
 }

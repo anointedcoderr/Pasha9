@@ -1,52 +1,51 @@
+// Built by Anointed Coder.
 'use client';
 
-import { GameCard } from '@/components/site/GameCard';
-import { PageHeader } from '@/components/site/PageHeader';
+import { useState } from 'react';
+import { CategoryHero } from '@/components/site/CategoryHero';
+import { CategoryCatalog } from '@/components/site/CategoryCatalog';
 import { mockGames } from '@/lib/mock/games';
 import { mockCategories } from '@/lib/mock/categories';
-import { Gamepad2 } from 'lucide-react';
-import { useLang } from '@/lib/i18n/context';
-import { useState } from 'react';
-import { cn } from '@/lib/utils/cn';
+import { useT, useLang } from '@/lib/i18n/context';
 
 export default function GamesPage() {
+  const t = useT();
   const { lang } = useLang();
-  const [active, setActive] = useState<string>('all');
-  const games = active === 'all' ? mockGames : mockGames.filter((g) => g.categoryId === active);
+  const [category, setCategory] = useState<string>('all');
+  const filtered = category === 'all' ? mockGames : mockGames.filter((g) => g.categoryId === category);
 
   return (
-    <>
-      <PageHeader title="Game Library" subtitle="Browse the full catalogue across categories" icon={<Gamepad2 className="h-5 w-5" />} />
+    <div className="space-y-6">
+      <CategoryHero
+        kicker={t('navx.slots').replace(/.*/, t('home.sectionHot').toUpperCase())}
+        title={t('home.sectionHot')}
+        description={t('home.sectionHotDesc')}
+        accent="navy"
+      />
 
-      <div className="mb-6 flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2">
         <button
-          onClick={() => setActive('all')}
-          className={cn(
-            'rounded-pill px-4 py-2 text-sm transition',
-            active === 'all' ? 'btn-gold' : 'border border-neon/15 bg-base-panel/60 text-ink-mid hover:text-ink-hi',
-          )}
+          type="button"
+          onClick={() => setCategory('all')}
+          className="pill-provider"
+          data-active={category === 'all'}
         >
-          All
+          {t('common.all')}
         </button>
         {mockCategories.map((c) => (
           <button
             key={c.id}
-            onClick={() => setActive(c.id)}
-            className={cn(
-              'rounded-pill px-4 py-2 text-sm transition',
-              active === c.id ? 'btn-gold' : 'border border-neon/15 bg-base-panel/60 text-ink-mid hover:text-ink-hi',
-            )}
+            type="button"
+            onClick={() => setCategory(c.id)}
+            className="pill-provider"
+            data-active={category === c.id}
           >
             {lang === 'bn' ? c.nameBn : c.nameEn}
           </button>
         ))}
       </div>
 
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-        {games.map((g) => (
-          <GameCard key={g.id} game={g} />
-        ))}
-      </div>
-    </>
+      <CategoryCatalog games={filtered} />
+    </div>
   );
 }

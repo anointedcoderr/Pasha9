@@ -15,7 +15,6 @@ export const metadata: Metadata = {
   authors: [{ name: 'Anointed Coder', url: 'https://t.me/AnointedCoder' }],
   creator: 'Anointed Coder',
   publisher: 'Anointed Coder',
-  themeColor: '#06120c',
   icons: {
     icon: '/favicon.svg',
   },

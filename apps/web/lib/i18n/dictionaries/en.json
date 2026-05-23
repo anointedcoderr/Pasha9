@@ -161,6 +161,51 @@
       "android": "Available on Android"
     }
   },
+  "cat": {
+    "sort": "Sort by",
+    "sortFeatured": "Featured first",
+    "sortName": "Name A to Z",
+    "sortMaxBet": "Highest max bet",
+    "searchPlaceholder": "Search games",
+    "results": "games match",
+    "loadMore": "Load more",
+    "emptyTitle": "No games match the filter",
+    "emptyDescription": "Try clearing the search or selecting another provider."
+  },
+  "rewards": {
+    "title": "Rewards and Store",
+    "subtitle": "Spend coins on rewards, check in daily and spin the wheel",
+    "tabStore": "Reward Store",
+    "tabCheckIn": "Check In",
+    "tabSpin": "Spin",
+    "yourBalance": "Your reward coins",
+    "claim": "Claim",
+    "claimed": "Claimed",
+    "comingSoon": "Real reward redemption will land in Milestone 2",
+    "checkInTitle": "Daily Check In",
+    "checkInBody": "Open Pasha 9 every day to grow your bonus streak. Real bonus payout is wired in Milestone 2.",
+    "spinTitle": "Lucky Spin",
+    "spinBody": "Spin to win bonus coins. Visual demo until Milestone 2 connects the reward engine.",
+    "spinCta": "Spin now"
+  },
+  "lotto": {
+    "title": "Lotto and Number Games",
+    "subtitle": "Daily and weekly draws with growing prize pools",
+    "drawTitle": "Upcoming draw",
+    "buyTicket": "Buy ticket",
+    "howTitle": "How it works",
+    "comingSoon": "Real ticket purchase ships in Milestone 2"
+  },
+  "bp": {
+    "title": "Pasha 9 Betting Pass",
+    "subtitle": "Level up by depositing and playing, unlock real-world prizes through the season",
+    "comingSoon": "Pass tier engine connects in Milestone 2"
+  },
+  "vip": {
+    "title": "VIP Club",
+    "subtitle": "Premium players get higher limits, faster withdrawals and dedicated support",
+    "comingSoon": "Full VIP benefits and tier promotion land in Milestone 2"
+  },
   "promotions": {
     "title": "Promotions and Rewards",
     "subtitle": "Play regularly and claim daily rewards",
