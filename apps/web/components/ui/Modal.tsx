@@ -27,7 +27,7 @@ export function Modal({ open, onOpenChange, title, description, children, footer
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm" />
+        <Dialog.Overlay className="fixed inset-0 z-40 bg-black/55 backdrop-blur-sm" />
         <Dialog.Content
           className={cn(
             'fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 rounded-card',
@@ -43,7 +43,7 @@ export function Modal({ open, onOpenChange, title, description, children, footer
             </div>
           ) : null}
           {!hideClose ? (
-            <Dialog.Close className="absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-mid transition hover:bg-white/5 hover:text-ink-hi">
+            <Dialog.Close className="absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-mid transition hover:bg-brand-surface hover:text-ink-hi focus-visible:ring-2 focus-visible:ring-brand-blue-500/40 outline-none">
               <X className="h-4 w-4" />
             </Dialog.Close>
           ) : null}
@@ -91,7 +91,7 @@ export function Drawer({
               {description ? <Dialog.Description className="mt-1 text-sm text-ink-lo">{description}</Dialog.Description> : null}
             </div>
           ) : null}
-          <Dialog.Close className="absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-mid hover:bg-white/5 hover:text-ink-hi">
+          <Dialog.Close className="absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-mid hover:bg-brand-surface hover:text-ink-hi focus-visible:ring-2 focus-visible:ring-brand-blue-500/40 outline-none">
             <X className="h-4 w-4" />
           </Dialog.Close>
           <div className="max-h-[calc(100vh-7rem)] overflow-y-auto pr-1">{children}</div>

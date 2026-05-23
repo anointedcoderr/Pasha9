@@ -44,7 +44,7 @@ export default function AdminSettingsPage() {
         <Card padding="lg">
           <CardHeader title="Operations" />
           <div className="space-y-3">
-            <Row label="Maintenance mode" hint="Pause all gameplay across the platform" value={maintenance} onChange={setMaintenance} />
+            <Row label="Maintenance mode" hint="Pause all gameplay across the platform" value={maintenance} onChange={setMaintenance} tone="danger" />
             <Row label="New signup open" hint="Allow new user registrations" value={signupOpen} onChange={setSignupOpen} />
             <FormField label="Minimum deposit (BDT)"><Input type="number" value={minDeposit} onChange={(e) => setMinDeposit(Number(e.target.value) || 0)} /></FormField>
             <FormField label="Minimum withdrawal (BDT)"><Input type="number" defaultValue={500} /></FormField>
@@ -93,14 +93,14 @@ export default function AdminSettingsPage() {
   );
 }
 
-function Row({ label, hint, value, onChange }: { label: string; hint: string; value: boolean; onChange: (v: boolean) => void }) {
+function Row({ label, hint, value, onChange, tone }: { label: string; hint: string; value: boolean; onChange: (v: boolean) => void; tone?: 'brand' | 'danger' }) {
   return (
     <div className="flex items-start justify-between gap-3 rounded-xl border border-neon/10 bg-base-deep/40 p-3">
       <div>
         <p className="text-sm font-medium text-ink-hi">{label}</p>
         <p className="text-xs text-ink-mid">{hint}</p>
       </div>
-      <Switch checked={value} onChange={onChange} />
+      <Switch checked={value} onChange={onChange} tone={tone} />
     </div>
   );
 }

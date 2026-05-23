@@ -35,7 +35,7 @@ export function StickyBottomNav({ isLoggedIn, onRequestLogin, onRequestSignup, b
     <nav
       role="navigation"
       aria-label="Primary"
-      className="fixed inset-x-0 bottom-0 z-40 flex border-t border-brand-divider bg-brand-paper pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_-12px_rgba(15,17,21,0.15)] lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-brand-divider bg-brand-paper pb-[max(env(safe-area-inset-bottom),8px)] shadow-[0_-8px_24px_-12px_rgba(15,17,21,0.15)] lg:hidden"
     >
       <Link href="/promotions" className="bnav-btn" data-active={pathname.startsWith('/promotions')} aria-label={t('navx.promotions')}>
         <Gift className="h-5 w-5 text-brand-yellow-600" />

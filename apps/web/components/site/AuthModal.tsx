@@ -122,12 +122,12 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
         />
       </FormField>
       <div className="flex items-center justify-between text-sm">
-        <a href="#" className="text-ink-mid hover:text-ink-hi">{t('auth.forgot')}</a>
+        <a href="#" className="font-semibold text-brand-blue-600 hover:text-brand-blue-700">{t('auth.forgot')}</a>
       </div>
       {apiError ? (
-        <p className="text-sm text-signal-danger">{apiError.message ?? apiError.code}</p>
+        <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{apiError.message ?? apiError.code}</p>
       ) : null}
-      <Button full type="submit" size="lg" loading={loading} leftIcon={<KeyRound className="h-4 w-4" />}>
+      <Button full type="submit" size="lg" variant="gold" loading={loading} leftIcon={<KeyRound className="h-4 w-4" />}>
         {t('common.login')}
       </Button>
     </form>
@@ -205,12 +205,12 @@ function SignupForm({ onSuccess, onSwitch }: { onSuccess: () => void; onSwitch: 
         <span>{t('auth.agree')}</span>
       </label>
       {errors.agree ? <p className="-mt-2 text-xs text-signal-danger">{t(`auth.${errors.agree.message}`)}</p> : null}
-      {apiError ? <p className="text-sm text-signal-danger">{apiError.message ?? apiError.code}</p> : null}
-      <Button full type="submit" size="lg" loading={loading} leftIcon={<UserPlus className="h-4 w-4" />}>
+      {apiError ? <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{apiError.message ?? apiError.code}</p> : null}
+      <Button full type="submit" size="lg" variant="gold" loading={loading} leftIcon={<UserPlus className="h-4 w-4" />}>
         {t('common.signup')}
       </Button>
       <p className="text-center text-sm text-ink-lo">
-        <button type="button" onClick={onSwitch} className="text-neon hover:text-ink-hi">
+        <button type="button" onClick={onSwitch} className="font-semibold text-brand-blue-600 hover:text-brand-blue-700">
           {t('auth.switchToLogin')}
         </button>
       </p>

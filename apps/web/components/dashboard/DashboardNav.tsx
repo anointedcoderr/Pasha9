@@ -24,7 +24,7 @@ export function DashboardNav() {
   const pathname = usePathname();
   const t = useT();
   return (
-    <aside className="card-glow lg:sticky lg:top-[88px] lg:h-fit">
+    <aside className="card-light lg:sticky lg:top-[88px] lg:h-fit">
       <nav className="p-3">
         {ITEMS.map(({ key, href, icon: Icon }) => {
           const active = pathname === href;
@@ -34,12 +34,14 @@ export function DashboardNav() {
               href={href}
               className={cn(
                 'group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition',
-                active ? 'bg-neon/10 text-ink-hi ring-neon-soft' : 'text-ink-mid hover:bg-white/[0.04] hover:text-ink-hi',
+                active
+                  ? 'bg-brand-yellow-500/15 text-brand-ink shadow-[inset_3px_0_0_#FFCC00]'
+                  : 'text-brand-inkSoft hover:bg-brand-surface hover:text-brand-ink',
               )}
             >
-              <Icon className={cn('h-4 w-4', active ? 'text-neon' : 'text-ink-mid group-hover:text-neon')} />
+              <Icon className={cn('h-4 w-4', active ? 'text-brand-yellow-600' : 'text-brand-inkMute group-hover:text-brand-ink')} />
               <span>{t(`dashboard.${key}`)}</span>
-              {active ? <span className="ml-auto h-1.5 w-1.5 rounded-full bg-neon" /> : null}
+              {active ? <span className="ml-auto h-1.5 w-1.5 rounded-full bg-brand-yellow-500" /> : null}
             </Link>
           );
         })}
