@@ -110,7 +110,56 @@
     "sectionFishDesc": "Fast paced fun gameplay",
     "tickerLabel": "Jackpot Feed",
     "promoStripTitle": "Live Promotions",
-    "promoStripCta": "View all"
+    "promoStripCta": "View all",
+    "announcementHeader": "Important announcement",
+    "qa": {
+      "registerStep": "Step 1",
+      "registerTitle": "Register account",
+      "depositStep": "Step 2",
+      "depositTitle": "Make a deposit",
+      "playStep": "Step 3",
+      "playTitle": "Play and win"
+    },
+    "jackpot": {
+      "title": "Live Jackpot Pool",
+      "subtitle": "Updated in real time",
+      "mini": "Mini",
+      "grand": "Grand",
+      "major": "Major"
+    },
+    "sectionCrash": "Crash Games",
+    "sectionCrashDesc": "Quick rounds, big multipliers",
+    "sectionLotto": "Lottery and Number Games",
+    "sectionLottoDesc": "Daily and weekly draws",
+    "sports": {
+      "title": "Upcoming Matches",
+      "subtitle": "Cricket and football fixtures across leagues"
+    },
+    "ambassador": {
+      "fallbackName": "Pasha 9 Brand Ambassador",
+      "caption": "Official ambassador of Pasha 9 for the 2025/2026 season."
+    },
+    "video": {
+      "title": "Behind the scenes",
+      "caption": "Watch the official Pasha 9 promo and matchday highlights."
+    },
+    "pair": {
+      "referKicker": "Refer and Earn",
+      "referTitle": "Invite friends, earn lifetime commission",
+      "referBody": "Earn 8 / 4 / 2 percent across three referral levels with daily payouts.",
+      "referCta": "Open Affiliate",
+      "passKicker": "Exclusive",
+      "passTitle": "Pasha 9 Betting Pass",
+      "passBody": "Deposit, level up and unlock real prizes through the season.",
+      "passCta": "Open Pass"
+    },
+    "app": {
+      "kicker": "Pasha 9 App",
+      "title": "Pasha 9 mobile app, fast and smooth",
+      "subtitle": "Download the Android app for one-tap login, faster deposits and live notifications.",
+      "download": "Download Now",
+      "android": "Available on Android"
+    }
   },
   "promotions": {
     "title": "Promotions and Rewards",

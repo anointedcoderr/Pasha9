@@ -87,58 +87,43 @@ export function HeroSlider() {
   })), []);
 
   return (
-    <section className="relative overflow-hidden rounded-card border border-neon/10 bg-base-panel/50 shadow-glow">
+    <section className="relative overflow-hidden rounded-2xl border border-brand-divider bg-brand-ink text-white shadow-sm">
       <div aria-hidden className="pointer-events-none absolute inset-0">
-        <div className="absolute -top-32 left-1/2 h-72 w-[110%] -translate-x-1/2 rounded-full bg-grad-radial-glow blur-2xl" />
-        <div className="absolute inset-0 opacity-60 mix-blend-screen">
-          {coins.map((c, idx) => (
-            <span
-              key={idx}
-              className="glow-coin animate-floaty"
-              style={{
-                left: `${c.x}%`,
-                bottom: `${c.y}%`,
-                width: c.size,
-                height: c.size,
-                animationDelay: `${c.delay}s`,
-              }}
-            />
-          ))}
-        </div>
-        <div className="absolute inset-y-0 right-0 w-1/2 bg-gradient-to-l from-gold-700/10 via-gold-500/5 to-transparent" />
+        <div className="absolute -top-32 left-1/2 h-72 w-[120%] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(255,204,0,0.20),transparent_60%)] blur-2xl" />
+        <div className="absolute inset-y-0 right-0 w-1/2 bg-gradient-to-l from-brand-blue-500/15 via-brand-blue-500/5 to-transparent" />
       </div>
 
-      <div className="relative grid min-h-[360px] grid-cols-1 items-center gap-6 px-6 py-10 md:min-h-[420px] md:grid-cols-2 md:px-12 md:py-14">
+      <div className="relative grid min-h-[260px] grid-cols-1 items-center gap-6 px-5 py-8 md:min-h-[360px] md:grid-cols-2 md:px-10 md:py-12">
         <AnimatePresence mode="wait">
           <motion.div
             key={i}
             initial={{ opacity: 0, x: -28 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 12 }}
-            transition={{ duration: 0.45, ease: 'easeOut' }}
+            transition={{ duration: 0.4, ease: 'easeOut' }}
             className="max-w-xl"
           >
-            <div className="inline-flex items-center gap-2 rounded-full border border-gold-500/30 bg-gold-500/10 px-3 py-1 text-xs text-gold-300">
+            <div className="inline-flex items-center gap-2 rounded-full bg-brand-yellow-500/20 px-3 py-1 text-xs font-semibold text-brand-yellow-400">
               <Sparkles className="h-3.5 w-3.5" /> {t('home.tickerLabel')}
             </div>
-            <h1 className="mt-4 text-3xl font-extrabold leading-tight text-ink-hi md:text-5xl">
-              <span className="text-gradient-gold">{slide.title}</span>
+            <h1 className="mt-3 text-2xl font-extrabold leading-tight md:text-4xl">
+              {slide.title}
             </h1>
-            <p className="mt-4 max-w-md text-base text-ink-mid md:text-lg">{slide.subtitle}</p>
-            <div className="mt-7 flex flex-wrap items-center gap-3">
+            <p className="mt-3 max-w-md text-sm text-white/75 md:text-base">{slide.subtitle}</p>
+            <div className="mt-5 flex flex-wrap items-center gap-3">
               <Link href={slide.primary.href}>
-                <Button size="lg" leftIcon={<Sparkles className="h-4 w-4" />}>{slide.primary.label}</Button>
+                <Button size="lg" variant="yellow" leftIcon={<Sparkles className="h-4 w-4" />}>{slide.primary.label}</Button>
               </Link>
               {slide.secondary ? (
                 <Link href={slide.secondary.href}>
-                  <Button size="lg" variant="neon" leftIcon={<Gift className="h-4 w-4" />}>{slide.secondary.label}</Button>
+                  <Button size="lg" variant="blue" leftIcon={<Gift className="h-4 w-4" />}>{slide.secondary.label}</Button>
                 </Link>
               ) : null}
             </div>
           </motion.div>
         </AnimatePresence>
 
-        <div className="relative hidden h-full min-h-[280px] md:block">
+        <div className="relative hidden h-full min-h-[260px] md:block">
           <HeroArt variant={slide.art} />
         </div>
       </div>
@@ -151,7 +136,7 @@ export function HeroSlider() {
             aria-label={`Slide ${idx + 1}`}
             className={cn(
               'h-1.5 rounded-full transition-all',
-              idx === i ? 'w-8 bg-grad-gold' : 'w-4 bg-white/15',
+              idx === i ? 'w-8 bg-brand-yellow-500' : 'w-4 bg-white/25',
             )}
           />
         ))}
@@ -161,7 +146,7 @@ export function HeroSlider() {
         type="button"
         aria-label="Previous"
         onClick={() => setI((p) => (p - 1 + slides.length) % slides.length)}
-        className="absolute left-3 top-1/2 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-neon/20 bg-base-deep/60 text-ink-mid hover:text-ink-hi md:inline-flex"
+        className="absolute left-3 top-1/2 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25 md:inline-flex"
       >
         <ChevronLeft className="h-4 w-4" />
       </button>
@@ -169,7 +154,7 @@ export function HeroSlider() {
         type="button"
         aria-label="Next"
         onClick={() => setI((p) => (p + 1) % slides.length)}
-        className="absolute right-3 top-1/2 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-neon/20 bg-base-deep/60 text-ink-mid hover:text-ink-hi md:inline-flex"
+        className="absolute right-3 top-1/2 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25 md:inline-flex"
       >
         <ChevronRight className="h-4 w-4" />
       </button>
