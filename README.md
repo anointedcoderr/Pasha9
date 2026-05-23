@@ -1,8 +1,8 @@
-# Pasha9
+# Pasha 9
 
 > Bangla casino and betting platform. Live at https://pasha9.com.
 >
-> Built by Anointed Coder. Contact: anointedcoder@gmail.com, https://t.me/AnointedCoder, https://wa.link/fi5z8a.
+> Built by Anointed Coder. Contact: info@anointedcoder.com, https://t.me/AnointedCoder, https://wa.link/fi5z8a.
 
 This monorepo contains the live Pasha9 platform: Next.js 14 frontend, server-side API routes, Prisma PostgreSQL data layer, shared Tailwind tokens, deployment artifacts, and the full documentation set used during handover.
 
@@ -61,4 +61,4 @@ For support, custom feature work, or migration help:
 
 - Telegram: https://t.me/AnointedCoder
 - WhatsApp: https://wa.link/fi5z8a
-- Email: anointedcoder@gmail.com
+- Email: info@anointedcoder.com

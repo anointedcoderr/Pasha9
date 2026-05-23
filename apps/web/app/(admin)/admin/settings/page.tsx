@@ -3,7 +3,7 @@
 
 import { PageHeader } from '@/components/site/PageHeader';
 import { Card, CardHeader } from '@/components/ui/Card';
-import { FormField, Input, Textarea } from '@/components/ui/Input';
+import { FormField, Input } from '@/components/ui/Input';
 import { Switch } from '@/components/ui/Switch';
 import { Button } from '@/components/ui/Button';
 import { Settings, ShieldAlert } from 'lucide-react';
@@ -25,7 +25,7 @@ export default function AdminSettingsPage() {
           <div>
             <h2 className="text-base font-semibold text-ink-hi">Compliance Notice</h2>
             <p className="mt-1 text-sm text-ink-mid">
-              The platform is built as a technical product only. The site owner is responsible for obtaining the appropriate license, complying with local laws, securing payment provider approval, satisfying KYC requirements, and signing the necessary agreements with each game provider before any public launch. {BRAND.builtBy}.
+              The platform is built as a technical product only. The site owner is responsible for obtaining the appropriate license, complying with local laws, securing payment provider approval, satisfying KYC requirements, and signing the necessary agreements with each game provider before any public launch. {BRAND.developer.label}.
             </p>
           </div>
         </div>
@@ -35,10 +35,9 @@ export default function AdminSettingsPage() {
         <Card padding="lg">
           <CardHeader title="General" />
           <div className="space-y-3">
-            <FormField label="Site name"><Input defaultValue={BRAND.name} /></FormField>
+            <FormField label="Site name"><Input defaultValue={BRAND.display} /></FormField>
             <FormField label="Default language"><Input defaultValue="Bangla" /></FormField>
             <FormField label="Currency"><Input defaultValue="BDT" /></FormField>
-            <FormField label="Support email"><Input defaultValue={BRAND.builderEmail} /></FormField>
           </div>
         </Card>
 
@@ -53,12 +52,11 @@ export default function AdminSettingsPage() {
         </Card>
 
         <Card padding="lg">
-          <CardHeader title="Branding" />
+          <CardHeader title="Public Support Contacts" subtitle="What players see in the footer, support page and floating contact button. Leave empty to hide a channel." />
           <div className="space-y-3">
-            <FormField label="Logo text"><Input defaultValue="Pasha9" /></FormField>
-            <FormField label="Footer note"><Textarea rows={3} defaultValue={`${BRAND.builtBy} · ${BRAND.builderEmail}`} /></FormField>
-            <FormField label="Telegram link"><Input defaultValue={BRAND.telegram} /></FormField>
-            <FormField label="WhatsApp link"><Input defaultValue={BRAND.whatsapp} /></FormField>
+            <FormField label="Telegram link"><Input placeholder="https://t.me/your-channel" /></FormField>
+            <FormField label="WhatsApp link"><Input placeholder="https://wa.me/8801XXXXXXXXX" /></FormField>
+            <FormField label="Support email"><Input placeholder="support@pasha9.com" /></FormField>
           </div>
         </Card>
 
@@ -76,7 +74,7 @@ export default function AdminSettingsPage() {
       </div>
 
       <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-neon/10 pt-4 text-xs text-ink-lo">
-        <span>{BRAND.builtBy} · <a href={`mailto:${BRAND.builderEmail}`} className="hover:text-ink-hi">{BRAND.builderEmail}</a></span>
+        <span>{BRAND.developer.label} · <a href={`mailto:${BRAND.developer.email}`} className="hover:text-ink-hi">{BRAND.developer.email}</a></span>
         <Button>Save Settings</Button>
       </div>
     </>

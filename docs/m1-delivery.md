@@ -1,6 +1,6 @@
-# Pasha9 Milestone 1 Delivery
+# Pasha 9 Milestone 1 Delivery
 
-Built by Anointed Coder. anointedcoder@gmail.com.
+Built by Anointed Coder. info@anointedcoder.com.
 
 ## Live links
 

@@ -1,4 +1,4 @@
-# Pasha9 Milestone 1 Testing Checklist
+# Pasha 9 Milestone 1 Testing Checklist
 
 Run end to end on the live VPS (`https://pasha9.com`) before requesting M1 approval. Built by Anointed Coder.
 
@@ -57,7 +57,7 @@ Run end to end on the live VPS (`https://pasha9.com`) before requesting M1 appro
 ## F. Branding
 
 - [ ] `pnpm check:branding` exits 0 on the production code
-- [ ] Footer of every public page shows `Built by Anointed Coder`, `anointedcoder@gmail.com`
+- [ ] Footer of every public page shows `Built by Anointed Coder`, `info@anointedcoder.com`
 - [ ] Admin sidebar bottom shows the same credit plus Telegram and WhatsApp buttons
 - [ ] Admin login card shows the credit
 - [ ] System Settings page shows the credit

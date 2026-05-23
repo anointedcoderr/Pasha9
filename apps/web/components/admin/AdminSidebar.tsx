@@ -113,13 +113,13 @@ export function AdminSidebar() {
       </nav>
 
       <div className="border-t border-neon/10 px-5 py-4">
-        <p className="text-[11px] text-ink-lo">{BRAND.builtBy}</p>
+        <p className="text-[11px] text-ink-lo">{BRAND.developer.label}</p>
         <p className="mt-1 text-xs text-ink-mid">
-          <a href={`mailto:${BRAND.builderEmail}`} className="hover:text-ink-hi">{BRAND.builderEmail}</a>
+          <a href={`mailto:${BRAND.developer.email}`} className="hover:text-ink-hi">{BRAND.developer.email}</a>
         </p>
         <div className="mt-3 flex items-center gap-2">
           <a
-            href={BRAND.telegram}
+            href={BRAND.developer.telegram}
             target="_blank"
             rel="noreferrer"
             className="inline-flex items-center gap-1.5 rounded-lg border border-neon/15 bg-base-panel/60 px-2 py-1 text-[11px] text-ink-mid hover:text-ink-hi"
@@ -127,7 +127,7 @@ export function AdminSidebar() {
             <Send className="h-3 w-3 text-[#229ED9]" /> Telegram
           </a>
           <a
-            href={BRAND.whatsapp}
+            href={BRAND.developer.whatsapp}
             target="_blank"
             rel="noreferrer"
             className="inline-flex items-center gap-1.5 rounded-lg border border-neon/15 bg-base-panel/60 px-2 py-1 text-[11px] text-ink-mid hover:text-ink-hi"

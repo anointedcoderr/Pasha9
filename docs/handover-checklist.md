@@ -1,4 +1,4 @@
-# Pasha9 Milestone 1 Handover Checklist
+# Pasha 9 Milestone 1 Handover Checklist
 
 Built by Anointed Coder.
 
@@ -89,6 +89,6 @@ Delivered privately to Anointed Coder and the client, never committed to the rep
 ## Contact
 
 - Anointed Coder
-- anointedcoder@gmail.com
+- info@anointedcoder.com
 - https://t.me/AnointedCoder
 - https://wa.link/fi5z8a

@@ -90,9 +90,9 @@ export default function AdminLoginPage() {
           </form>
 
           <div className="mt-6 border-t border-neon/10 pt-4 text-center text-[11px] text-ink-lo">
-            <p>{BRAND.builtBy}</p>
+            <p>{BRAND.developer.label}</p>
             <p className="mt-1">
-              <a href={`mailto:${BRAND.builderEmail}`} className="hover:text-ink-hi">{BRAND.builderEmail}</a>
+              <a href={`mailto:${BRAND.developer.email}`} className="hover:text-ink-hi">{BRAND.developer.email}</a>
             </p>
             <p className="mt-3">
               <Link href="/" className="text-ink-mid hover:text-ink-hi">Back to site</Link>

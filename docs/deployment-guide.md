@@ -1,4 +1,4 @@
-# Pasha9 Deployment Guide
+# Pasha 9 Deployment Guide
 
 Live deployment of the Pasha9 platform to an Ubuntu 24.04 VPS serving `pasha9.com` and `www.pasha9.com`. Built by Anointed Coder.
 
@@ -176,7 +176,7 @@ Expected: `nginx -t` prints `syntax is ok` and `test is successful`.
 ## 10. SSL via Let's Encrypt (run as root)
 
 ```bash
-certbot --nginx -d pasha9.com -d www.pasha9.com --redirect --agree-tos --email anointedcoder@gmail.com -n
+certbot --nginx -d pasha9.com -d www.pasha9.com --redirect --agree-tos --email info@anointedcoder.com -n
 systemctl status certbot.timer
 ```
 

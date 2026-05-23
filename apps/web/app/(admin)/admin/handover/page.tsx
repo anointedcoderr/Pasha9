@@ -42,18 +42,18 @@ export default function AdminHandoverPage() {
       <PageHeader title="Source Handover" subtitle="Everything needed for a clean transfer to the client" icon={<FileKey2 className="h-5 w-5" />} />
 
       <Card padding="lg" tone="gold" className="mb-6">
-        <h2 className="text-base font-semibold text-ink-hi">{BRAND.builtBy}</h2>
+        <h2 className="text-base font-semibold text-ink-hi">{BRAND.developer.label}</h2>
         <p className="mt-1 text-sm text-ink-mid">
-          Lead developer: {BRAND.builderName} · <a href={`mailto:${BRAND.builderEmail}`} className="hover:text-ink-hi">{BRAND.builderEmail}</a>
+          Lead developer: {BRAND.developer.name} · <a href={`mailto:${BRAND.developer.email}`} className="hover:text-ink-hi">{BRAND.developer.email}</a>
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
-          <a href={BRAND.telegram} target="_blank" rel="noreferrer">
+          <a href={BRAND.developer.telegram} target="_blank" rel="noreferrer">
             <Button variant="neon" leftIcon={<Send className="h-4 w-4" />}>Telegram</Button>
           </a>
-          <a href={BRAND.whatsapp} target="_blank" rel="noreferrer">
+          <a href={BRAND.developer.whatsapp} target="_blank" rel="noreferrer">
             <Button variant="neon" leftIcon={<MessageCircle className="h-4 w-4" />}>WhatsApp</Button>
           </a>
-          <a href={`mailto:${BRAND.builderEmail}`}>
+          <a href={`mailto:${BRAND.developer.email}`}>
             <Button variant="ghost">Email</Button>
           </a>
         </div>

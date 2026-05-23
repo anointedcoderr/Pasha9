@@ -1,6 +1,6 @@
-# Pasha9 Milestones
+# Pasha 9 Milestones
 
-Project: Bangla casino and betting platform. Owner is the client. Built by Anointed Coder. Contact: anointedcoder@gmail.com.
+Project: Bangla casino and betting platform. Owner is the client. Built by Anointed Coder. Contact: info@anointedcoder.com.
 
 The build is split into three priced milestones, each with a strict scope so the client always knows what has shipped and what is next.
 

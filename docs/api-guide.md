@@ -1,4 +1,4 @@
-# Pasha9 API Guide
+# Pasha 9 API Guide
 
 REST endpoints exposed by the Next.js Route Handlers in `apps/web/app/api/*`. Built by Anointed Coder.
 

@@ -1,4 +1,4 @@
-# Pasha9 Admin Guide
+# Pasha 9 Admin Guide
 
 Operator handbook for the live admin panel at `https://pasha9.com/admin`. Built by Anointed Coder.
 

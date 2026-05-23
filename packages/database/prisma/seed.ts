@@ -328,10 +328,13 @@ async function seedPaymentMethods() {
 async function seedSystemSettings() {
   log('system settings');
   const items: Array<{ key: string; value: string; type: string; category: SettingCategory }> = [
-    { key: 'site_name', value: 'Pasha9', type: 'string', category: SettingCategory.general },
+    { key: 'site_name', value: 'Pasha 9', type: 'string', category: SettingCategory.general },
     { key: 'site_domain', value: 'pasha9.com', type: 'string', category: SettingCategory.general },
-    { key: 'support_telegram', value: 'https://t.me/AnointedCoder', type: 'string', category: SettingCategory.general },
-    { key: 'support_whatsapp', value: 'https://wa.link/fi5z8a', type: 'string', category: SettingCategory.general },
+    // Client-owned public support contacts. Left empty intentionally so the operator fills
+    // them from the admin Settings page; the public site hides any channel that is still empty.
+    { key: 'support_telegram', value: '', type: 'string', category: SettingCategory.general },
+    { key: 'support_whatsapp', value: '', type: 'string', category: SettingCategory.general },
+    { key: 'support_email', value: '', type: 'string', category: SettingCategory.general },
     { key: 'apk_download_url', value: '', type: 'string', category: SettingCategory.apk },
     { key: 'apk_version', value: '', type: 'string', category: SettingCategory.apk },
     { key: 'sms_provider', value: '', type: 'string', category: SettingCategory.sms },
