@@ -161,6 +161,7 @@ export function Header() {
         onOpenMenu={() => setDrawerOpen(true)}
         onRequestLogin={openLogin}
         onRequestSignup={openSignup}
+        balance={me?.wallet?.balance != null ? Number(me.wallet.balance) : null}
       />
     </>
   );
