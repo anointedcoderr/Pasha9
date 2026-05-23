@@ -1,6 +1,7 @@
 // Built by Anointed Coder.
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { CategoryHero } from '@/components/site/CategoryHero';
 import { useT, useLang } from '@/lib/i18n/context';
@@ -18,6 +19,17 @@ interface Draw {
   accent: 'yellow' | 'blue' | 'red' | 'royal';
 }
 
+interface LiveDraw {
+  id: string;
+  name: string;
+  schedule: string | null;
+  drawsAt: string | null;
+  digitsCount: number;
+  ticketPrice: number | string;
+  prizePool: number | string;
+  accent: Draw['accent'];
+}
+
 function future(daysFromNow: number, hour: number) {
   const d = new Date();
   d.setDate(d.getDate() + daysFromNow);
@@ -25,12 +37,25 @@ function future(daysFromNow: number, hour: number) {
   return d.toISOString();
 }
 
-const DRAWS: Draw[] = [
+const FALLBACK: Draw[] = [
   { id: 'd1', name: 'Daily 4D', schedule: 'Daily 21:00', ticketPrice: 20, prizePool: 1_500_000, digits: ['?', '?', '?', '?'], drawsAt: future(0, 21), accent: 'yellow' },
   { id: 'd2', name: 'Mega Friday', schedule: 'Friday 22:30', ticketPrice: 50, prizePool: 8_500_000, digits: ['?', '?', '?', '?', '?'], drawsAt: future(3, 22), accent: 'red' },
   { id: 'd3', name: 'Numbers Rush', schedule: 'Daily 17:30', ticketPrice: 10, prizePool: 450_000, digits: ['?', '?', '?'], drawsAt: future(0, 17), accent: 'blue' },
   { id: 'd4', name: 'Lotto Super 6', schedule: 'Saturday 20:00', ticketPrice: 30, prizePool: 3_200_000, digits: ['?', '?', '?', '?', '?', '?'], drawsAt: future(4, 20), accent: 'royal' },
 ];
+
+function adaptLive(live: LiveDraw): Draw {
+  return {
+    id: live.id,
+    name: live.name,
+    schedule: live.schedule ?? '',
+    ticketPrice: Number(live.ticketPrice),
+    prizePool: Number(live.prizePool),
+    digits: Array(Math.max(1, Math.min(10, live.digitsCount))).fill('?'),
+    drawsAt: live.drawsAt ?? future(0, 21),
+    accent: live.accent,
+  };
+}
 
 const GRAD: Record<Draw['accent'], string> = {
   yellow: 'from-brand-yellow-400 via-amber-500 to-orange-500',
@@ -42,6 +67,19 @@ const GRAD: Record<Draw['accent'], string> = {
 export default function LottoPage() {
   const t = useT();
   const { lang } = useLang();
+  const [draws, setDraws] = useState<Draw[]>(FALLBACK);
+
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/content/lotto')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        const live = Array.isArray(data?.draws) ? (data.draws as LiveDraw[]) : [];
+        if (alive && live.length) setDraws(live.map(adaptLive));
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -53,7 +91,7 @@ export default function LottoPage() {
       />
 
       <section className="grid gap-4 md:grid-cols-2">
-        {DRAWS.map((d) => (
+        {draws.map((d) => (
           <article key={d.id} className={`relative overflow-hidden rounded-2xl text-white bg-gradient-to-br ${GRAD[d.accent]}`}>
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_30%,rgba(255,255,255,0.25),transparent_55%)]" />
             <div className="relative grid grid-cols-[1fr_auto] items-center gap-4 px-5 py-6 md:px-7 md:py-7">

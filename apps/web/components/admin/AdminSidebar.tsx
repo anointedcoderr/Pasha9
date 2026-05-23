@@ -26,6 +26,8 @@ import {
   MessageCircle,
   Briefcase,
   Trophy,
+  Star,
+  Ticket,
 } from 'lucide-react';
 import { Logo } from '@/components/site/Logo';
 import { ROUTES } from '@/lib/constants/routes';
@@ -59,10 +61,13 @@ const GROUPS = [
     items: [
       { key: 'banners', href: ROUTES.admin.banners, icon: ImageIcon },
       { key: 'popups', href: ROUTES.admin.popups, icon: Megaphone },
+      { key: 'promoText', href: ROUTES.admin.promoText, icon: Type },
+      { key: 'homepage', href: ROUTES.admin.homepage, icon: Home },
+      { key: 'ambassador', href: '/admin/ambassador', icon: Star },
+      { key: 'lotto', href: '/admin/lotto', icon: Ticket },
+      { key: 'rewards', href: '/admin/rewards', icon: Trophy },
       { key: 'categories', href: ROUTES.admin.categories, icon: Layers },
       { key: 'providers', href: ROUTES.admin.providers, icon: Boxes },
-      { key: 'homepage', href: ROUTES.admin.homepage, icon: Home },
-      { key: 'promoText', href: ROUTES.admin.promoText, icon: Type },
     ],
   },
   {
@@ -81,16 +86,16 @@ export function AdminSidebar() {
   const t = useT();
 
   return (
-    <aside className="hidden h-screen w-[260px] shrink-0 flex-col border-r border-neon/10 bg-base-deep/85 backdrop-blur lg:flex">
-      <div className="border-b border-neon/10 px-5 py-5">
-        <Logo href={ROUTES.admin.home} />
-        <p className="mt-2 text-[10px] uppercase tracking-[0.18em] text-gold-300">{t('admin.title')}</p>
+    <aside className="hidden h-screen w-[260px] shrink-0 flex-col border-r border-brand-divider bg-brand-paper lg:flex">
+      <div className="border-b border-brand-divider px-5 py-5">
+        <Logo href={ROUTES.admin.home} tone="dark" />
+        <p className="mt-2 text-[10px] uppercase tracking-[0.18em] text-brand-yellow-700">{t('admin.title')}</p>
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-4 font-admin text-sm">
         {GROUPS.map((g) => (
           <div key={g.label} className="mb-5">
-            <p className="px-3 pb-2 text-[10px] uppercase tracking-[0.18em] text-ink-lo">{g.label}</p>
+            <p className="px-3 pb-2 text-[10px] uppercase tracking-[0.18em] text-brand-inkMute">{g.label}</p>
             <div className="space-y-1">
               {g.items.map(({ key, href, icon: Icon }) => {
                 const active = pathname === href;
@@ -101,13 +106,13 @@ export function AdminSidebar() {
                     className={cn(
                       'group flex items-center gap-3 rounded-lg px-3 py-2 transition',
                       active
-                        ? 'bg-gradient-to-r from-neon/15 to-transparent text-ink-hi'
-                        : 'text-ink-mid hover:bg-white/5 hover:text-ink-hi',
+                        ? 'bg-brand-yellow-500/12 text-brand-ink shadow-[inset_3px_0_0_#FFCC00]'
+                        : 'text-brand-inkSoft hover:bg-brand-surface hover:text-brand-ink',
                     )}
                   >
-                    <Icon className={cn('h-4 w-4', active ? 'text-neon' : 'text-ink-mid group-hover:text-neon')} />
+                    <Icon className={cn('h-4 w-4', active ? 'text-brand-yellow-700' : 'text-brand-inkMute group-hover:text-brand-yellow-700')} />
                     <span>{t(`admin.${key}`)}</span>
-                    {active ? <span className="ml-auto h-1.5 w-1.5 rounded-full bg-neon shadow-glow-neon" /> : null}
+                    {active ? <span className="ml-auto h-1.5 w-1.5 rounded-full bg-brand-yellow-500" /> : null}
                   </Link>
                 );
               })}
@@ -116,17 +121,17 @@ export function AdminSidebar() {
         ))}
       </nav>
 
-      <div className="border-t border-neon/10 px-5 py-4">
-        <p className="text-[11px] text-ink-lo">{BRAND.developer.label}</p>
-        <p className="mt-1 text-xs text-ink-mid">
-          <a href={`mailto:${BRAND.developer.email}`} className="hover:text-ink-hi">{BRAND.developer.email}</a>
+      <div className="border-t border-brand-divider px-5 py-4">
+        <p className="text-[11px] text-brand-inkMute">{BRAND.developer.label}</p>
+        <p className="mt-1 text-xs text-brand-inkSoft">
+          <a href={`mailto:${BRAND.developer.email}`} className="hover:text-brand-ink">{BRAND.developer.email}</a>
         </p>
         <div className="mt-3 flex items-center gap-2">
           <a
             href={BRAND.developer.telegram}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-neon/15 bg-base-panel/60 px-2 py-1 text-[11px] text-ink-mid hover:text-ink-hi"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-brand-divider bg-brand-surface px-2 py-1 text-[11px] text-brand-inkSoft hover:text-brand-ink"
           >
             <Send className="h-3 w-3 text-[#229ED9]" /> Telegram
           </a>
@@ -134,7 +139,7 @@ export function AdminSidebar() {
             href={BRAND.developer.whatsapp}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-neon/15 bg-base-panel/60 px-2 py-1 text-[11px] text-ink-mid hover:text-ink-hi"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-brand-divider bg-brand-surface px-2 py-1 text-[11px] text-brand-inkSoft hover:text-brand-ink"
           >
             <MessageCircle className="h-3 w-3 text-[#25D366]" /> WhatsApp
           </a>

@@ -71,6 +71,18 @@ export default function AdminSettingsPage() {
             <FormField label="Risk level"><Input defaultValue="medium" /></FormField>
           </div>
         </Card>
+
+        <Card padding="lg">
+          <CardHeader title="Mobile App (APK)" subtitle="Visible on the homepage app strip and the public /apk page." />
+          <div className="space-y-3">
+            <FormField label="APK download URL" hint="External link or /uploads/apk/...apk">
+              <Input placeholder="https://pasha9.com/uploads/apk/pasha9.apk" />
+            </FormField>
+            <FormField label="APK version" hint="Shown next to the Download button">
+              <Input placeholder="1.0.0" />
+            </FormField>
+          </div>
+        </Card>
       </div>
 
       <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-neon/10 pt-4 text-xs text-ink-lo">

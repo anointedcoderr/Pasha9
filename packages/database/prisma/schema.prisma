@@ -528,6 +528,40 @@ model AffiliateCommission {
   @@index([createdAt])
 }
 
+// ---------- Lotto draws and reward catalog (Phase 5) ----------
+
+model LottoDraw {
+  id          String        @id @default(cuid())
+  name        String
+  schedule    String?       // human readable: "Daily 21:00", "Friday 22:30"
+  drawsAt     DateTime?     // next draw timestamp
+  digitsCount Int           @default(4)
+  ticketPrice Decimal       @default(20) @db.Decimal(14, 2)
+  prizePool   Decimal       @default(0)  @db.Decimal(14, 2)
+  accent      String        @default("yellow") // yellow, blue, red, royal
+  position    Int           @default(0)
+  status      ContentStatus @default(active)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([status, position])
+}
+
+model RewardItem {
+  id          String        @id @default(cuid())
+  title       String
+  description String?
+  cost        Int           @default(1000) // coin cost
+  category    String        @default("misc") // recharge, spin, bet, physical, misc
+  accent      String        @default("yellow") // yellow, blue, red, green
+  position    Int           @default(0)
+  status      ContentStatus @default(active)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([status, position])
+}
+
 // ---------- Audit and system ----------
 
 model ActivityLog {

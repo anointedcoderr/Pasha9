@@ -66,6 +66,9 @@ async function seedRolesAndPermissions() {
     { key: 'affiliate.read', label: 'View affiliate applications and members', group: 'affiliate' },
     { key: 'affiliate.write', label: 'Approve, reject and manage affiliates', group: 'affiliate' },
     { key: 'affiliate.tiers.write', label: 'Manage commission tier settings', group: 'affiliate' },
+    { key: 'ambassador.write', label: 'Edit ambassador and promo video', group: 'content' },
+    { key: 'lotto.write', label: 'Manage lotto draws', group: 'content' },
+    { key: 'rewards.write', label: 'Manage reward catalog', group: 'content' },
     { key: 'settings.write', label: 'Edit system settings', group: 'system' },
     { key: 'activity.read', label: 'View activity log', group: 'system' },
     { key: 'staff.manage', label: 'Manage staff accounts', group: 'system' },
@@ -341,6 +344,15 @@ async function seedSystemSettings() {
     { key: 'support_email', value: '', type: 'string', category: SettingCategory.general },
     { key: 'apk_download_url', value: '', type: 'string', category: SettingCategory.apk },
     { key: 'apk_version', value: '', type: 'string', category: SettingCategory.apk },
+    // Ambassador and promo video, edited from /admin/ambassador
+    { key: 'ambassador_name', value: '', type: 'string', category: SettingCategory.content },
+    { key: 'ambassador_caption', value: '', type: 'string', category: SettingCategory.content },
+    { key: 'ambassador_image_url', value: '', type: 'string', category: SettingCategory.content },
+    { key: 'ambassador_active', value: 'true', type: 'boolean', category: SettingCategory.content },
+    { key: 'video_promo_title', value: '', type: 'string', category: SettingCategory.content },
+    { key: 'video_promo_caption', value: '', type: 'string', category: SettingCategory.content },
+    { key: 'video_promo_url', value: '', type: 'string', category: SettingCategory.content },
+    { key: 'video_promo_poster_url', value: '', type: 'string', category: SettingCategory.content },
     { key: 'sms_provider', value: '', type: 'string', category: SettingCategory.sms },
     { key: 'sms_api_key', value: '', type: 'string', category: SettingCategory.sms },
     { key: 'sms_sender_id', value: '', type: 'string', category: SettingCategory.sms },
@@ -418,6 +430,44 @@ async function seedCommissionTiers() {
   }
 }
 
+async function seedLottoDraws() {
+  log('lotto draws');
+  const draws = [
+    { name: 'Daily 4D', schedule: 'Daily 21:00', digitsCount: 4, ticketPrice: 20, prizePool: 1_500_000, accent: 'yellow', position: 1 },
+    { name: 'Mega Friday', schedule: 'Friday 22:30', digitsCount: 5, ticketPrice: 50, prizePool: 8_500_000, accent: 'red', position: 2 },
+    { name: 'Numbers Rush', schedule: 'Daily 17:30', digitsCount: 3, ticketPrice: 10, prizePool: 450_000, accent: 'blue', position: 3 },
+    { name: 'Lotto Super 6', schedule: 'Saturday 20:00', digitsCount: 6, ticketPrice: 30, prizePool: 3_200_000, accent: 'royal', position: 4 },
+  ];
+  for (const d of draws) {
+    const existing = await db.lottoDraw.findFirst({ where: { name: d.name } });
+    if (existing) {
+      await db.lottoDraw.update({ where: { id: existing.id }, data: d });
+    } else {
+      await db.lottoDraw.create({ data: d });
+    }
+  }
+}
+
+async function seedRewardItems() {
+  log('reward catalog');
+  const items = [
+    { title: 'Mobile Recharge 500', description: 'Top up any Bangladesh operator for 500 BDT', cost: 1000, category: 'recharge', accent: 'yellow', position: 1 },
+    { title: 'Mobile Recharge 1000', description: 'Top up any Bangladesh operator for 1000 BDT', cost: 2000, category: 'recharge', accent: 'yellow', position: 2 },
+    { title: 'Free Spins x30', description: 'Use on selected slot games', cost: 2100, category: 'spin', accent: 'red', position: 3 },
+    { title: 'Free Spins x50', description: 'Use on selected slot games', cost: 3500, category: 'spin', accent: 'red', position: 4 },
+    { title: 'Bluetooth Speaker', description: 'Pasha 9 partner branded speaker', cost: 4200, category: 'physical', accent: 'blue', position: 5 },
+    { title: 'Free Bet 1000', description: 'Use on sportsbook markets', cost: 2400, category: 'bet', accent: 'green', position: 6 },
+  ];
+  for (const r of items) {
+    const existing = await db.rewardItem.findFirst({ where: { title: r.title } });
+    if (existing) {
+      await db.rewardItem.update({ where: { id: existing.id }, data: r });
+    } else {
+      await db.rewardItem.create({ data: r });
+    }
+  }
+}
+
 async function main() {
   log('starting');
   await seedRolesAndPermissions();
@@ -432,6 +482,8 @@ async function main() {
   await seedPaymentMethods();
   await seedSystemSettings();
   await seedCommissionTiers();
+  await seedLottoDraws();
+  await seedRewardItems();
 
   log(`super admin id: ${admin.id}`);
   log('done');

@@ -1,7 +1,7 @@
 // Built by Anointed Coder.
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CategoryHero } from '@/components/site/CategoryHero';
 import { useT, useLang } from '@/lib/i18n/context';
 import { Trophy, Gift, Calendar, Disc, Check, Smartphone, Ticket, Sparkles, Lock } from 'lucide-react';
@@ -44,6 +44,27 @@ export default function RewardsPage() {
   const { lang } = useLang();
   const [tab, setTab] = useState<Tab>('store');
   const [coins] = useState(0); // M2: load from /api/auth/me wallet.bonusBalance or a dedicated coins ledger
+  const [list, setList] = useState<RewardItem[]>(REWARDS);
+
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/content/rewards')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        const items = Array.isArray(data?.items) ? (data.items as Array<{ id: string; title: string; description?: string | null; cost: number; accent: RewardItem['accent']; }>) : [];
+        if (alive && items.length) {
+          setList(items.map((i) => ({
+            id: i.id,
+            title: i.title,
+            description: i.description ?? '',
+            cost: Number(i.cost),
+            accent: i.accent,
+          })));
+        }
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
 
   const tabs: Array<{ key: Tab; label: string; icon: React.ComponentType<{ className?: string }> }> = [
     { key: 'store', label: t('rewards.tabStore'), icon: Gift },
@@ -104,7 +125,7 @@ export default function RewardsPage() {
 
       {tab === 'store' ? (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {REWARDS.map((r) => {
+          {list.map((r) => {
             const Icon = ACCENT_ICON[r.accent];
             const canClaim = coins >= r.cost;
             return (

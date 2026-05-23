@@ -1,7 +1,9 @@
 // Built by Anointed Coder.
-// Brand ambassador + promo video section. Placeholders use original Pasha 9
-// custom SVG art so no copyrighted material is referenced. The admin can
-// replace these with real assets in Phase 5 via the ambassador admin page.
+// Brand ambassador + promo video section. Admin-editable from
+// /admin/ambassador. Until the admin populates them, the section falls
+// back to original Pasha 9 placeholder visuals so nothing copyrighted
+// ships by default. If the admin hides the ambassador via the active
+// toggle, the section renders nothing.
 
 'use client';
 
@@ -9,52 +11,46 @@ import { useEffect, useState } from 'react';
 import { Play } from 'lucide-react';
 import { useT } from '@/lib/i18n/context';
 
-interface AmbassadorData {
-  name: string;
-  caption: string;
-  imageUrl?: string | null;
-}
-
-interface VideoData {
-  title: string;
-  caption: string;
-  posterUrl?: string | null;
-  videoUrl?: string | null;
+interface ContentBlob {
+  active: boolean;
+  ambassador: {
+    name: string | null;
+    caption: string | null;
+    imageUrl: string | null;
+  };
+  video: {
+    title: string | null;
+    caption: string | null;
+    url: string | null;
+    posterUrl: string | null;
+  };
 }
 
 export function AmbassadorVideoSection() {
   const t = useT();
-  const [ambassador, setAmbassador] = useState<AmbassadorData | null>(null);
-  const [video, setVideo] = useState<VideoData | null>(null);
+  const [data, setData] = useState<ContentBlob | null>(null);
 
   useEffect(() => {
     let alive = true;
-    // Admin-editable assets land via SystemSetting in Phase 5. For now we
-    // request them and fall back to brand defaults if not present.
-    fetch('/api/content/homepage')
+    fetch('/api/content/ambassador')
       .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (!alive || !data?.sections) return;
-        const find = (key: string) => (data.sections as Array<{ section: string; titleEn?: string; bodyEn?: string; imageUrl?: string }>).find((s) => s.section === key);
-        const a = find('ambassador');
-        const v = find('promo_video');
-        if (a) setAmbassador({ name: a.titleEn ?? 'Pasha 9 Ambassador', caption: a.bodyEn ?? t('home.ambassador.caption'), imageUrl: a.imageUrl });
-        if (v) setVideo({ title: v.titleEn ?? t('home.video.title'), caption: v.bodyEn ?? t('home.video.caption'), posterUrl: v.imageUrl });
-      })
+      .then((d: ContentBlob | null) => { if (alive && d) setData(d); })
       .catch(() => {});
     return () => { alive = false; };
-  }, [t]);
+  }, []);
 
-  const a = ambassador ?? {
-    name: t('home.ambassador.fallbackName'),
-    caption: t('home.ambassador.caption'),
-    imageUrl: null,
+  if (data && !data.active) return null;
+
+  const a = {
+    name: data?.ambassador.name ?? t('home.ambassador.fallbackName'),
+    caption: data?.ambassador.caption ?? t('home.ambassador.caption'),
+    imageUrl: data?.ambassador.imageUrl ?? null,
   };
-  const v = video ?? {
-    title: t('home.video.title'),
-    caption: t('home.video.caption'),
-    posterUrl: null,
-    videoUrl: null,
+  const v = {
+    title: data?.video.title ?? t('home.video.title'),
+    caption: data?.video.caption ?? t('home.video.caption'),
+    url: data?.video.url ?? null,
+    posterUrl: data?.video.posterUrl ?? null,
   };
 
   return (
@@ -65,7 +61,7 @@ export function AmbassadorVideoSection() {
   );
 }
 
-function AmbassadorCard({ name, caption, imageUrl }: AmbassadorData) {
+function AmbassadorCard({ name, caption, imageUrl }: { name: string; caption: string; imageUrl: string | null }) {
   return (
     <article className="relative overflow-hidden rounded-2xl border border-brand-divider bg-brand-ink text-white">
       <div className="absolute inset-0 bg-gradient-to-br from-brand-yellow-500/30 via-transparent to-brand-blue-500/30" />
@@ -89,7 +85,7 @@ function AmbassadorCard({ name, caption, imageUrl }: AmbassadorData) {
   );
 }
 
-function VideoCard({ title, caption, posterUrl }: VideoData) {
+function VideoCard({ title, caption, url, posterUrl }: { title: string; caption: string; url: string | null; posterUrl: string | null }) {
   return (
     <article className="group relative overflow-hidden rounded-2xl border border-brand-divider bg-brand-ink text-white">
       <div className="absolute inset-0">
@@ -108,13 +104,26 @@ function VideoCard({ title, caption, posterUrl }: VideoData) {
           <h3 className="mt-2 text-xl font-extrabold leading-tight md:text-2xl">{title}</h3>
           <p className="mt-2 max-w-md text-sm text-white/75">{caption}</p>
         </div>
-        <button
-          type="button"
-          aria-label="Play promo video"
-          className="inline-flex h-12 w-12 items-center justify-center self-start rounded-full bg-brand-yellow-500 text-brand-ink shadow-lg transition group-hover:scale-105"
-        >
-          <Play className="h-5 w-5" />
-        </button>
+        {url ? (
+          <a
+            href={url}
+            target="_blank"
+            rel="noreferrer"
+            aria-label="Play promo video"
+            className="inline-flex h-12 w-12 items-center justify-center self-start rounded-full bg-brand-yellow-500 text-brand-ink shadow-lg transition group-hover:scale-105"
+          >
+            <Play className="h-5 w-5" />
+          </a>
+        ) : (
+          <button
+            type="button"
+            aria-label="Play promo video"
+            disabled
+            className="inline-flex h-12 w-12 cursor-not-allowed items-center justify-center self-start rounded-full bg-brand-yellow-500/60 text-brand-ink shadow-lg"
+          >
+            <Play className="h-5 w-5" />
+          </button>
+        )}
       </div>
     </article>
   );

@@ -42,12 +42,12 @@ export function AdminTopbar({ onMenu }: { onMenu?: () => void }) {
   const roleLabel = me?.role?.label ?? (me?.role?.key ? me.role.key.replace('_', ' ') : 'staff');
 
   return (
-    <header className="sticky top-0 z-20 flex h-[68px] items-center gap-3 border-b border-neon/10 bg-base-deep/85 px-4 backdrop-blur md:px-6">
+    <header className="sticky top-0 z-20 flex h-[68px] items-center gap-3 border-b border-brand-divider bg-brand-paper px-4 md:px-6">
       <button
         type="button"
         aria-label="Open menu"
         onClick={onMenu}
-        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-neon/15 text-ink-mid hover:text-ink-hi lg:hidden"
+        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-brand-divider text-brand-inkSoft hover:text-brand-ink lg:hidden"
       >
         <Menu className="h-4 w-4" />
       </button>
@@ -61,36 +61,36 @@ export function AdminTopbar({ onMenu }: { onMenu?: () => void }) {
         <button
           type="button"
           aria-label="Notifications"
-          className="relative inline-flex h-9 w-9 items-center justify-center rounded-lg border border-neon/15 text-ink-mid hover:text-ink-hi"
+          className="relative inline-flex h-9 w-9 items-center justify-center rounded-lg border border-brand-divider text-brand-inkSoft hover:text-brand-ink"
         >
           <Bell className="h-4 w-4" />
-          <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-neon" />
+          <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-brand-blue-500" />
         </button>
         <Dropdown>
           <DropdownTrigger asChild>
             <button
               type="button"
               aria-label="Account menu"
-              className="flex items-center gap-2 rounded-lg border border-neon/15 px-2 py-1.5 text-sm transition hover:border-neon/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-neon"
+              className="flex items-center gap-2 rounded-lg border border-brand-divider px-2 py-1.5 text-sm transition hover:border-brand-yellow-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue-500"
             >
-              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-grad-gold text-xs font-bold text-base-deep">
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-grad-yellow text-xs font-bold text-brand-ink">
                 {initials}
               </span>
               <span className="hidden text-left md:block">
-                <span className="block text-xs text-ink-hi">{me?.username ?? 'admin'}</span>
-                <span className="block text-[10px] uppercase tracking-wider text-gold-300">{roleLabel}</span>
+                <span className="block text-xs text-brand-ink">{me?.username ?? 'admin'}</span>
+                <span className="block text-[10px] uppercase tracking-wider text-brand-yellow-700">{roleLabel}</span>
               </span>
             </button>
           </DropdownTrigger>
           <DropdownContent>
             <DropdownLabel>Account</DropdownLabel>
-            <DropdownItem icon={<ShieldCheck className="h-4 w-4 text-neon" />} onSelect={() => router.push('/admin/profile')}>
+            <DropdownItem icon={<ShieldCheck className="h-4 w-4 text-brand-yellow-700" />} onSelect={() => router.push('/admin/profile')}>
               Profile
             </DropdownItem>
-            <DropdownItem icon={<SettingsIcon className="h-4 w-4 text-ink-mid" />} onSelect={() => router.push('/admin/settings')}>
+            <DropdownItem icon={<SettingsIcon className="h-4 w-4 text-brand-inkSoft" />} onSelect={() => router.push('/admin/settings')}>
               Settings
             </DropdownItem>
-            <DropdownItem icon={<ClipboardList className="h-4 w-4 text-ink-mid" />} onSelect={() => router.push('/admin/activity')}>
+            <DropdownItem icon={<ClipboardList className="h-4 w-4 text-brand-inkSoft" />} onSelect={() => router.push('/admin/activity')}>
               Activity Log
             </DropdownItem>
             <DropdownSeparator />

@@ -20,6 +20,129 @@ body.theme-light ::-webkit-scrollbar-thumb { background: rgba(15, 17, 21, 0.25);
 body.theme-light ::-webkit-scrollbar-thumb:hover { background: rgba(15, 17, 21, 0.45); }
 body.theme-light :focus-visible { outline-color: #1E73E8; }
 
+/* ---------------------------------------------------------------------------
+ * Admin light theme overrides (Phase 5 redesign).
+ *
+ * Existing admin pages were built with the deep-green/gold/neon utility
+ * classes (text-ink-hi, card-glow, border-neon/15, bg-base-panel/40 etc.).
+ * Instead of editing every admin page individually we remap those classes
+ * to the brand-light palette whenever the body has theme-admin. This gives
+ * the admin a consistent white/yellow look while leaving the legacy tokens
+ * intact for the user dashboard until that migrates later.
+ * ------------------------------------------------------------------------ */
+body.theme-admin {
+  background: #F6F7F9;
+  color: #0F1115;
+  font-family: var(--font-bn), var(--font-en), var(--font-admin), system-ui, sans-serif;
+}
+body.theme-admin a { color: inherit; }
+body.theme-admin ::selection { background: rgba(255, 204, 0, 0.45); color: #0F1115; }
+body.theme-admin ::-webkit-scrollbar-thumb { background: rgba(15, 17, 21, 0.25); }
+body.theme-admin ::-webkit-scrollbar-thumb:hover { background: rgba(15, 17, 21, 0.45); }
+body.theme-admin :focus-visible { outline-color: #1E73E8; }
+
+/* Card surfaces */
+body.theme-admin .card-glow,
+body.theme-admin .surface,
+body.theme-admin .surface-elev {
+  background: #FFFFFF;
+  border: 1px solid #E7EAEE;
+  box-shadow: 0 1px 0 rgba(15, 17, 21, 0.02), 0 8px 22px -16px rgba(15, 17, 21, 0.12);
+}
+body.theme-admin .card-glow::before { display: none; }
+body.theme-admin .ring-gold-soft { box-shadow: 0 0 0 1px rgba(245, 180, 0, 0.35), 0 0 16px rgba(245, 180, 0, 0.10); }
+body.theme-admin .ring-neon-soft { box-shadow: 0 0 0 1px rgba(30, 115, 232, 0.30), 0 0 16px rgba(30, 115, 232, 0.10); }
+body.theme-admin .divider-neon { background: linear-gradient(90deg, transparent, #E7EAEE, transparent); }
+
+/* Ink palette */
+body.theme-admin .text-ink-hi { color: #0F1115; }
+body.theme-admin .text-ink-mid { color: #3B4252; }
+body.theme-admin .text-ink-lo { color: #6B7280; }
+body.theme-admin .text-ink-mute { color: #9CA3AF; }
+body.theme-admin .text-gradient-gold,
+body.theme-admin .text-gradient-neon {
+  background: linear-gradient(135deg, #F5B400 0%, #D89E00 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Borders that were green-tinted in the dark theme */
+body.theme-admin .border-neon\/05,
+body.theme-admin .border-neon\/08,
+body.theme-admin .border-neon\/10,
+body.theme-admin .border-neon\/15,
+body.theme-admin .border-neon\/20,
+body.theme-admin .border-neon\/25,
+body.theme-admin .border-neon\/30,
+body.theme-admin .border-neon\/40 { border-color: #E7EAEE; }
+body.theme-admin .border-gold-500\/15,
+body.theme-admin .border-gold-500\/25,
+body.theme-admin .border-gold-500\/30,
+body.theme-admin .border-gold-500\/40 { border-color: rgba(245, 180, 0, 0.40); }
+
+/* Background tints */
+body.theme-admin .bg-base,
+body.theme-admin .bg-base-deep { background-color: #F6F7F9; }
+body.theme-admin .bg-base-panel { background-color: #FFFFFF; }
+body.theme-admin .bg-base-deep\/40,
+body.theme-admin .bg-base-deep\/50,
+body.theme-admin .bg-base-deep\/60,
+body.theme-admin .bg-base-deep\/85 { background-color: #F6F7F9; }
+body.theme-admin .bg-base-panel\/40,
+body.theme-admin .bg-base-panel\/50,
+body.theme-admin .bg-base-panel\/60,
+body.theme-admin .bg-base-panel\/85,
+body.theme-admin .bg-base-panel\/95 { background-color: #FFFFFF; }
+body.theme-admin .bg-neon\/05,
+body.theme-admin .bg-neon\/08,
+body.theme-admin .bg-neon\/10,
+body.theme-admin .bg-neon\/15 { background-color: rgba(255, 204, 0, 0.10); }
+
+/* Inputs */
+body.theme-admin .input-base {
+  background: #FFFFFF;
+  border: 1px solid #E7EAEE;
+  color: #0F1115;
+}
+body.theme-admin .input-base::placeholder { color: #9CA3AF; }
+body.theme-admin .input-base:focus {
+  border-color: #FFCC00;
+  box-shadow: 0 0 0 3px rgba(255, 204, 0, 0.18);
+}
+
+/* Table */
+body.theme-admin .table-row { border-bottom: 1px solid #F1F3F6; }
+body.theme-admin .table-row:hover { background: #FAFBFC; }
+
+/* Chips */
+body.theme-admin .chip { background: #F6F7F9; border-color: #E7EAEE; color: #0F1115; }
+body.theme-admin .chip-ok { background: rgba(34, 197, 94, 0.10); border-color: rgba(34, 197, 94, 0.30); color: #15803D; }
+body.theme-admin .chip-warn { background: rgba(245, 180, 0, 0.12); border-color: rgba(245, 180, 0, 0.30); color: #A16207; }
+body.theme-admin .chip-danger { background: rgba(239, 68, 68, 0.10); border-color: rgba(239, 68, 68, 0.30); color: #B91C1C; }
+body.theme-admin .chip-gold { background: rgba(255, 204, 0, 0.12); border-color: rgba(255, 204, 0, 0.40); color: #A16207; }
+
+/* Buttons */
+body.theme-admin .btn-gold {
+  background: linear-gradient(135deg, #FFE066 0%, #FFCC00 55%, #F5B400 100%);
+  color: #0F1115;
+  box-shadow:
+    0 0 0 1px rgba(245, 180, 0, 0.55) inset,
+    0 6px 14px -8px rgba(245, 180, 0, 0.7);
+}
+body.theme-admin .btn-neon {
+  background: #FFFFFF;
+  color: #0F1115;
+  border: 1px solid #E7EAEE;
+}
+body.theme-admin .btn-neon:hover { border-color: #FFCC00; background: #FFFCEE; }
+
+/* Active nav rail (used by admin sidebar) */
+body.theme-admin .ring-neon-soft.bg-neon\/10 {
+  background: rgba(255, 204, 0, 0.12);
+  box-shadow: inset 3px 0 0 #FFCC00;
+}
+
 @layer components {
   /* Brand buttons (light theme primary + secondary) */
   .btn-yellow {
