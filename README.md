@@ -2,7 +2,7 @@
 
 > Bangla casino and betting platform. Live at https://pasha9.com.
 >
-> Built by Anointed Coder. Contact: info@anointedcoder.com, https://t.me/AnointedCoder, https://wa.link/fi5z8a.
+> Built by Anointed Coder. Contact: info@anointedcoder.com, https://t.me/anointedcoder, https://wa.link/fi5z8a.
 
 This monorepo contains the live Pasha9 platform: Next.js 14 frontend, server-side API routes, Prisma PostgreSQL data layer, shared Tailwind tokens, deployment artifacts, and the full documentation set used during handover.
 
@@ -51,16 +51,16 @@ The gate blocks references to retired brand names, em or en dashes, and missing 
 
 ## Milestones
 
-Milestone 1 is complete and live at `https://pasha9.com`. It includes the live production deployment, real auth, editable CMS, Babu88-inspired light theme, full affiliate system, ambassador and video editor, lotto and reward catalog editors, mobile bottom navigation, audit log. Final tag: `m1-redesign-complete`.
+Milestone 1 is complete and live at `https://pasha9.com`. Final tag: `m1-final-delivery`. M1 covers the live production deployment, real auth with 8h transparent-refresh sessions, editable CMS (banners image + video, popups, promo text, homepage, ambassador, rewards, lotto), full affiliate system, deposit-driven 4D lottery with iBox settlement and prize structure, manual deposit + withdrawal money flow with real admin approval, Babu-style theme, premium logo + favicon swap via admin, first-visit auth popup, floating support, BackBar on every internal page, mobile bottom nav with raised Home, mobile dashboard + admin drawers, the admin Control Center, Website Customization hub, Staff / Reports / Security / Marketing scaffolds (honestly marked) and the branding gate.
 
-See [docs/milestones.md](docs/milestones.md) for the full M1 scope and the M2 + M3 plan. See [docs/m1-delivery.md](docs/m1-delivery.md) for the client-facing delivery summary, and [docs/testing-checklist.md](docs/testing-checklist.md) for the QA walkthrough.
+See [docs/milestones.md](docs/milestones.md) for the full M1 scope and the M2 + M3 plan. See [docs/m1-delivery.md](docs/m1-delivery.md) for the client-facing delivery summary, and [docs/testing-checklist.md](docs/testing-checklist.md) for the QA walkthrough and the rollback procedure.
 
-Milestone 2 (deposits, withdrawals, bonuses, turnover, affiliate auto-accrual, payouts, SMS / OTP, tracking pixels, staff management, reports) and Milestone 3 (Android APK, final testing, source handover) start only after explicit M1 approval.
+Milestone 2 (live payment + payout gateway, bonus auto-application, turnover, affiliate auto-accrual, SMS / OTP, tracking pixel dispatcher, staff management UI, reports time-series, lotto draw cron + 2nd / 3rd tiers, promo codes, push, cashback) and Milestone 3 (Android APK, final testing, source handover, 2 weeks support) start only after explicit M1 approval.
 
 ## Built by Anointed Coder
 
 For support, custom feature work, or migration help:
 
-- Telegram: https://t.me/AnointedCoder
+- Telegram: https://t.me/anointedcoder
 - WhatsApp: https://wa.link/fi5z8a
 - Email: info@anointedcoder.com

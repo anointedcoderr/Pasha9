@@ -1,168 +1,328 @@
-## Pasha 9 Milestone 1 Testing Checklist
+# Pasha 9 Milestone 1 Testing Checklist
 
-Run end to end on the live VPS at `https://pasha9.com` before requesting M1 approval. Built by Anointed Coder.
+Run this on the live site (`https://pasha9.com`) before sign-off. Tick each box. Anything that fails is a release blocker; anything marked `(M2)` is intentionally not in M1 and does not block sign-off.
 
-Open the site in a clean incognito window for every visual test so cached state does not mask issues.
+Built by Anointed Coder.
 
-### A. Infrastructure
+---
 
-- [ ] `https://pasha9.com` returns 200 with a valid SSL certificate
-- [ ] `https://www.pasha9.com` resolves and redirects (or returns 200)
-- [ ] `pm2 status` reports `pasha9-web` as `online`, restart count under 10
-- [ ] `pm2 logs pasha9-web --lines 100 --nostream` has no recurring stack traces
-- [ ] `systemctl is-active nginx postgresql` both `active`
-- [ ] `ufw status` shows only 22, 80, 443
-- [ ] `/var/www/pasha9/uploads/` exists with subfolders banners, games, payment-proofs, apk
-- [ ] `scripts/backup-db.sh` produces fresh archives manually
+## Pre-flight
 
-### B. Branding
+- [ ] Latest commit deployed: `git log -1 --oneline` on the VPS matches the head of `m1-production` on GitHub.
+- [ ] PM2 status: `pm2 status` shows `pasha9-web` `online` with low restart count.
+- [ ] Nginx + SSL: `https://pasha9.com` and `https://www.pasha9.com` both load without warnings, certificate is valid.
+- [ ] Latest backup exists: `ls -la /var/backups/pasha9/db/` shows a dump from the last 24h.
 
-- [ ] `pnpm check:branding` exits 0
-- [ ] Header logo reads "Pasha 9" with visible space, the 9 is yellow
-- [ ] Page title in browser tab reads "Pasha 9 | Royal Bangla Casino"
-- [ ] Footer last line shows Built by Anointed Coder, info@anointedcoder.com, Telegram and WhatsApp pills
-- [ ] No `sanjid14` text on any rendered page or in `view-source:` for `/`, `/admin/login`
-- [ ] No em dash or en dash visible anywhere
+---
 
-### C. Public site theme + chrome
+## Public website
 
-- [ ] First incognito visit paints in Bangla, no flash to English
-- [ ] Language toggle switches BN to EN and persists across reloads
-- [ ] Header is white on desktop, has Login (blue) + Register (yellow) for guests, balance pill for logged-in users
-- [ ] Category nav strip is dark with yellow active underline
-- [ ] Custom HOT marker on Betting Pass, NEW markers on Crash, Fast, VIP, Rewards, Lotto
-- [ ] Mobile top: app download strip with close button + compact white header with hamburger
-- [ ] Mobile drawer: white background, grouped Main + Games sections, yellow active state, body locks scroll while open
-- [ ] Mobile sticky bottom nav: 4 slots (Promotion, Lotto, raised yellow center, Login or Profile)
-- [ ] For guests the raised yellow circle is Register; for logged-in users it is Deposit
-- [ ] Profile slot shows current balance under the avatar after login
-- [ ] Floating support button only appears once admin sets a Telegram or WhatsApp link in Settings
+### Homepage (`/`)
 
-### D. Public homepage
+- [ ] First-visit popup appears in incognito after about 1 second with Register / Login / Maybe later. Closing it sets `pasha9_first_visit_seen` cookie and the popup does not return on refresh.
+- [ ] Hero slider renders. If a video banner is configured it autoplays muted with a mute / unmute toggle top-right. If only image banners, they swap every 6.5 seconds.
+- [ ] WalletStrip below the hero shows the right state:
+  - Guest: dark gradient with Register / Login CTAs.
+  - Logged-in: greeting + balance + refresh icon + Deposit / Withdraw / History buttons.
+- [ ] Category slider scrolls horizontally on mobile (Jackpot / Hot / Slot / Casino / Crash / Sports / Fishing / Table).
+- [ ] PromoTicker marquee rolls.
+- [ ] Game rails (Hot, Slots, Live Casino, Fishing, Crash, Lotto) render in 3 cols on phone, 5-6 cols on desktop.
+- [ ] Ambassador + Video section renders with admin-set content.
+- [ ] Refer & Earn + Betting Pass promo pair renders.
+- [ ] App Download section renders.
+- [ ] Footer renders with developer credit on the last line.
 
-- [ ] First incognito visit shows the announcement popup, close button works, cookie prevents re-showing for 1 day
-- [ ] Hero carousel pulls banners from `/api/content/banners`, dots and arrows work
-- [ ] Promo marquee scrolls live PromoText entries
-- [ ] Jackpot strip shows mini, grand, major and increments every ~1s
-- [ ] Quick action 3-step strip (Register, Deposit, Play) renders
-- [ ] Hot, Slots, Live Casino, Fishing, Crash, Lotto rails populate
-- [ ] First tile of Hot has the HOT marker, first tile of Crash and Lotto has the NEW marker
-- [ ] Ambassador and Video section renders, uses placeholder visuals when admin has not set values
-- [ ] Sports cards carousel scrolls horizontally
-- [ ] Refer and Earn → `/affiliate` and Betting Pass → `/betting-pass` promo cards link correctly
-- [ ] App Download section renders, Download Now opens the configured APK URL (or `/apk` when empty)
+### Header (every page)
 
-### E. Public secondary pages
+- [ ] Logo: chunky gold tile + Pasha 9 wordmark. If admin set a remote `logo_url` it renders that image instead.
+- [ ] Guest header (mobile + desktop): bell + user icon (opens login) + Login (desktop only) + Register (desktop only).
+- [ ] Logged-in header: bell with red dot + balance pill + Deposit (+) + Profile icon + (desktop) Logout. After login, all of these appear without a hard refresh.
+- [ ] Notification drawer opens from the bell with empty state for guests and 2 friendly system notifications for logged-in users.
 
-- [ ] `/slots`, `/live-casino`, `/fishing`, `/games`, `/games/[category]` (try crash, table, fast) all render the CategoryHero + provider pills + sort + search + dense grid + Load More
-- [ ] `/promotions` renders large image-first promo cards, type filter pills work
-- [ ] `/rewards` shows three tabs (Reward Store, Check In, Spin), spin wheel SVG renders, Claim buttons disabled with M2 tooltip
-- [ ] `/lotto` shows 4 draw cards with masked digit chips, How It Works
-- [ ] `/betting-pass`, `/betting-pass/ipl`, `/vip` render with their M2 notice
-- [ ] `/affiliate` shows hero, perk cards, full commission tier table from DB, How It Works, FAQ, application form
+### Mobile bottom nav
 
-### F. Auth
+- [ ] Guest: `Promotion | Lotto | HOME | Register | Login`. Tap Register / Login opens the auth modal on the correct tab.
+- [ ] Logged-in: `Promotion | Lotto | HOME | Betting Pass | Referral`.
+- [ ] Tap HOME from any internal page returns to `/`.
+- [ ] Active underline stays clear of the iOS gesture bar.
 
-- [ ] Signup via AuthModal creates a User with bcrypt hash and 8-char referralCode
-- [ ] Login with phone or username succeeds
-- [ ] Wrong password returns INVALID_CREDENTIALS
-- [ ] `pasha9_session` httpOnly cookie set after login
-- [ ] Logout clears both `pasha9_session` and `pasha9_refresh`
-- [ ] `/dashboard/*` redirects to home with `?login=1` when not signed in
-- [ ] `/admin/*` (except login) redirects to `/admin/login` when not signed in
-- [ ] Admin login rejects a player account with INVALID_CREDENTIALS
-- [ ] Change password from `/admin/profile` works and you can log back in with the new one
-- [ ] Change password revokes other sessions
+### Mobile drawer (hamburger)
 
-### G. Affiliate flow
+- [ ] Three sections: Main, Games, Others.
+- [ ] Others section: Language toggle (chip shows EN / বাং), FAQ, Live Chat, Download App (uses admin APK URL), Logout (logged-in only) / Login + Register (guest only).
+- [ ] Tapping any item navigates AND closes the drawer.
 
-- [ ] As a new player, visit `/affiliate`, fill the application form, submit
-- [ ] `/dashboard/affiliate` shows "Application under review"
-- [ ] Super admin sees the application in `/admin/affiliate`, opens the drawer
-- [ ] Approve action with optional tier assignment moves the user to active
-- [ ] User's `/dashboard/affiliate` now shows referral code, copy buttons, KPIs, downline tabs
-- [ ] Copy code and copy link both put the value on the clipboard
-- [ ] Signing up another user with the affiliate's `?r=CODE` link populates `referredById`
-- [ ] Downline tab Level 1 shows the new user
-- [ ] Suspend, Activate, Reset actions update the user correctly
-- [ ] `/admin/affiliate/tiers` edit changes percentages, the public `/affiliate` tier table reflects them within 30 seconds
-- [ ] Delete refuses with TIER_IN_USE error when a user is assigned to the tier
-- [ ] Activity Log captures AFFILIATE_APPLY, AFFILIATE_APPROVE, AFFILIATE_REJECT, COMMISSION_TIER_UPDATE entries
+### Internal pages
 
-### H. Admin content management
+- [ ] `/promotions`, `/lotto`, `/rewards`, `/betting-pass`, `/betting-pass/ipl`, `/referral`, `/affiliate`, `/vip`, `/sports`, `/faq` all render a BackBar at the top with back arrow + Home link + breadcrumb title.
+- [ ] Back arrow respects browser history; if the visitor landed directly on the page it routes to `/`.
 
-- [ ] Admin chrome reads white with yellow active rail, no dark surface bleeds through any page
-- [ ] `/admin/banners`: create, edit, toggle, reorder, delete works; hero on `/` updates
-- [ ] `/admin/popups`: create one with no time window, save, fresh incognito on `/` shows it
-- [ ] `/admin/promo-text`: add a line, save, marquee on `/` updates
-- [ ] `/admin/homepage`: edit hero_primary title (BN), save, public homepage updates
-- [ ] `/admin/ambassador`: change ambassador name, save, AmbassadorVideoSection on `/` updates; toggle active off, section hides
-- [ ] `/admin/lotto`: edit Daily 4D prize pool, save, `/lotto` updates within cache window
-- [ ] `/admin/rewards`: edit Mobile Recharge 500 cost, save, `/rewards` Reward Store tab updates
-- [ ] `/admin/settings` → Public Support Contacts: paste Telegram and WhatsApp, save, footer Follow column and floating button appear on the public site
-- [ ] `/admin/settings` → Mobile App (APK): paste a URL and version, save, homepage App Download CTA opens that URL
-- [ ] `/admin/activity` shows every admin write with actor, action, IP and user-agent
-- [ ] `/admin/handover` and `/admin/settings` show the Built by Anointed Coder credit
+### Auth flow
 
-### I. Mobile
+- [ ] Register a fresh user. Password fields have eye / eye-off toggle that reveals the value when clicked and is keyboard accessible (Tab + Enter).
+- [ ] Login as that user. Header chrome flips to logged-in state without a hard refresh.
+- [ ] Session lifetime: wait > 10 minutes idle, navigate to `/dashboard`. Still logged in.
+- [ ] Wait > 30 minutes idle, navigate again. Still logged in (transparent refresh).
+- [ ] Logout. Header reverts to guest UI.
+- [ ] Password change in `/dashboard/security`. Each of the three password fields has its own eye toggle.
 
-- [ ] At 375 px and 414 px widths every page renders without horizontal scroll
-- [ ] AuthModal opens and submits cleanly on a real phone
-- [ ] Bottom sticky nav is reachable and the raised yellow button is centred
-- [ ] Drawer opens on hamburger tap and locks scroll
-- [ ] Floating support button does not overlap the bottom nav
+### Deposit flow
 
-### J. Database integrity (run before delivery)
+- [ ] As guest on `/deposit`: amber "You must be logged in" banner shows with a Log in button. Submit button disabled.
+- [ ] As logged-in on `/deposit`: banner hidden, submit enabled.
+- [ ] Enter amount `1200`, choose method, paste TX ID, submit.
+- [ ] Confirmation card shows `Reference: <real cuid>`.
+- [ ] Server check: `SELECT id, "userId", amount, status FROM "Deposit" ORDER BY "createdAt" DESC LIMIT 1;` returns your row with `status='pending'`.
 
-```
-sudo -u postgres psql sanjid14 -c "
-SELECT 'roles' AS t, count(*) FROM \"Role\"
-UNION ALL SELECT 'permissions', count(*) FROM \"Permission\"
-UNION ALL SELECT 'role_perms', count(*) FROM \"RolePermission\"
-UNION ALL SELECT 'super_admins', count(*) FROM \"User\" u JOIN \"Role\" r ON u.\"roleId\"=r.id WHERE r.key='super_admin'
-UNION ALL SELECT 'banners', count(*) FROM \"Banner\"
-UNION ALL SELECT 'popups', count(*) FROM \"PopupAnnouncement\"
-UNION ALL SELECT 'promo_text', count(*) FROM \"PromoText\"
-UNION ALL SELECT 'homepage_sections', count(*) FROM \"HomepageContent\"
-UNION ALL SELECT 'categories', count(*) FROM \"GameCategory\"
-UNION ALL SELECT 'providers', count(*) FROM \"GameProvider\"
-UNION ALL SELECT 'games', count(*) FROM \"Game\"
-UNION ALL SELECT 'payment_methods', count(*) FROM \"PaymentMethod\"
-UNION ALL SELECT 'system_settings', count(*) FROM \"SystemSetting\"
-UNION ALL SELECT 'commission_tiers', count(*) FROM \"CommissionTier\"
-UNION ALL SELECT 'lotto_draws', count(*) FROM \"LottoDraw\"
-UNION ALL SELECT 'reward_items', count(*) FROM \"RewardItem\";
-"
-```
+### Withdrawal flow
 
-Expected minimums after a clean seed:
+- [ ] As logged-in on `/withdraw`: balance label matches `/dashboard` wallet balance.
+- [ ] Attempt amount higher than balance: server error reads `INSUFFICIENT_FUNDS` with HTTP 400 detail.
+- [ ] Submit a valid amount with method + account + holder. Confirmation card shows `Reference: <real cuid>`.
+- [ ] Server check: `SELECT * FROM "Withdrawal" ORDER BY "createdAt" DESC LIMIT 1;` returns the row with `status='pending'`.
 
-| Row | Minimum |
-|---|---|
-| roles | 4 |
-| permissions | 23 |
-| role_perms | 47 or higher |
-| super_admins | at least 1 |
-| banners | 3 |
-| popups | 1 |
-| promo_text | 4 |
-| homepage_sections | 4 |
-| categories | 8 |
-| providers | 5 |
-| games | 8 |
-| payment_methods | 5 |
-| system_settings | 28 |
-| commission_tiers | 3 |
-| lotto_draws | 4 |
-| reward_items | 6 |
+### Lotto
 
-### K. Final automated gates
+- [ ] `/lotto` top strip shows "Every day at 7:30 PM BST".
+- [ ] Guest sees the "How to earn tickets" card with Register / Login CTAs.
+- [ ] Logged-in user sees their ticket count, lotto balance and progress bar toward the next 2-ticket block.
+- [ ] Prize structure cards show 1st 2000x / 2nd 800x / 3rd 300x / Special 150x / Consolation 30x.
+- [ ] iBox explainer with 1234 and 1111 examples.
+- [ ] Lottery Rules & FAQ accordion: 7 items in both Bangla and English.
+- [ ] Latest Results panel: shows winning number digits as gold chips (after the admin settles a draw).
 
-```
-pnpm install
-pnpm --filter @pasha9/web typecheck
-pnpm --filter @pasha9/web build
+### Affiliate
+
+- [ ] `/affiliate` public page renders the tier table (data live from DB).
+- [ ] Logged-in `/dashboard/affiliate` shows the referral code + link, KPIs, downline tabs. Apply button works for non-affiliates.
+
+### Floating support
+
+- [ ] Yellow chat bubble bottom-right on every public + dashboard page.
+- [ ] Tap opens a clean white panel listing WhatsApp / Telegram (only when set) + Live Chat (always shown) + Email (only when set).
+- [ ] Escape and outside-click close the panel.
+
+### Dashboard
+
+- [ ] Mobile: dashboard nav is collapsed into a "Dashboard / <active>" bar. Tap opens the list; tapping an item navigates AND closes the list.
+- [ ] Desktop: dashboard sidebar is sticky on the left.
+- [ ] Every item (Overview, Wallet, Deposit, Withdraw, Bonus Center, Referral, Affiliate, Transactions, Profile, Security) opens and renders without redirect to login.
+
+### Internationalisation
+
+- [ ] Switch language to বাং in the header or drawer. All visible labels render in Bangla. No flash to English on refresh.
+- [ ] Switch back to EN. No flash to Bangla on refresh.
+
+---
+
+## Admin panel
+
+### Sidebar
+
+- [ ] Desktop: sidebar shows the 10-section structure - Overview, Operations, Users & Money, Bonus & Affiliate, Content & Media, Lotto & Rewards, Games, Reports & Marketing, Security & Staff, System.
+- [ ] **Mobile: tap the hamburger in the topbar. A slide-in drawer opens with the same section structure. Tapping an item navigates AND closes the drawer.**
+
+### Login
+
+- [ ] `/admin/login` loads. Logo size is `lg`. Password field has eye toggle.
+- [ ] Wrong password shows an inline error.
+- [ ] Correct password redirects to `/admin`.
+
+### Control Center (`/admin`)
+
+- [ ] 8 stat tiles render with real numbers.
+- [ ] Pending queue card lists the 5 newest pending deposits and 5 newest pending withdrawals with Review links.
+- [ ] Shortcuts card has 6 Quick links.
+- [ ] Recent activity table shows real `ActivityLog` rows.
+- [ ] Snapshot timestamp at the bottom of the page renders.
+- [ ] Refresh button works and re-fetches.
+
+### Deposits (`/admin/deposits`)
+
+- [ ] Pending rows appear immediately after a user submits a deposit on `/deposit`.
+- [ ] Click Approve. Toast confirms `N lottery ticket(s) generated`. Server check:
+  - `SELECT * FROM "Transaction" WHERE type='deposit' ORDER BY "createdAt" DESC LIMIT 1;` shows the new credit row.
+  - `SELECT balance FROM "Wallet" WHERE "userId"='<id>';` shows the new balance.
+  - `SELECT count(*) FROM "LotteryTicket" WHERE "userId"='<id>';` matches `floor(totalApproved / 1200) * 2`.
+- [ ] Click Reject. Status flips to `rejected`. Wallet unchanged.
+
+### Withdrawals (`/admin/withdrawals`)
+
+- [ ] Pending rows appear after a user submits on `/withdraw`.
+- [ ] Click Approve. Toast confirms wallet debited. Server check:
+  - `SELECT balance FROM "Wallet"` shows the new lower balance.
+  - `SELECT * FROM "Transaction" WHERE type='withdraw' ORDER BY "createdAt" DESC LIMIT 1;` shows the debit row.
+- [ ] Approve attempt that would overdraw the wallet returns `INSUFFICIENT_FUNDS`.
+- [ ] Click Reject. Status flips, wallet unchanged.
+
+### Lotto (`/admin/lotto`)
+
+- [ ] Daily 4D draw row shows `awaiting settlement` chip.
+- [ ] Click Settle. Enter a 4-digit winning number and the 5 multipliers. Save.
+- [ ] Toast: `Published <number>. N winner(s), <BDT> paid.`
+- [ ] Row chip flips to `settled · <number>`.
+- [ ] On the public `/lotto`, the Latest Results panel renders the new winning number.
+- [ ] Logged-in user whose ticket matched sees lotto balance increase.
+
+### Website Customization (`/admin/website`)
+
+- [ ] Type a `logo_url` (publicly accessible PNG / SVG). Save.
+- [ ] Refresh public site: Header logo and admin sidebar logo render that image instead of the bundled SVG.
+- [ ] Type a `favicon_url`. Save. Refresh: browser tab icon updates.
+- [ ] Clear `logo_url`. Refresh: bundled gold SVG mark returns.
+
+### Banners (`/admin/banners`)
+
+- [ ] Create an image banner: choose `image`, set Image URL + title + subtitle + CTA. Save. Hero shows it on `/`.
+- [ ] Create a video banner: choose `video`, paste Video URL (small MP4) + Poster URL. Save. Hero autoplays the video muted with a mute toggle.
+- [ ] Row preview shows the `image` / `video` chip and the active URL.
+
+### Popups (`/admin/popups`)
+
+- [ ] Create a popup. First visit shows it via `AnnouncementPopup`. Cookie `pasha9_popup_seen` suppresses it on refresh.
+
+### Promo Text (`/admin/promo-text`)
+
+- [ ] Add a line. Marquee on homepage picks it up on next page load.
+
+### Homepage (`/admin/homepage`)
+
+- [ ] Edit a section. Reload `/`: the new copy appears.
+
+### Ambassador (`/admin/ambassador`)
+
+- [ ] Edit ambassador 1 + ambassador 2 + video URL + active toggle. Public homepage section reflects it.
+
+### Rewards (`/admin/rewards`)
+
+- [ ] CRUD a reward. `/rewards` Reward Store shows it.
+
+### Categories + Providers + Games
+
+- [ ] CRUD a category. Public category nav reflects it.
+- [ ] CRUD a provider. Provider filter pills reflect it.
+- [ ] CRUD a game. Homepage rails + category pages reflect it.
+
+### Users (`/admin/users`)
+
+- [ ] Loads. (Full CRUD + status toggle UI is M2.)
+
+### Activity Log (`/admin/activity`)
+
+- [ ] Loads. Recent rows match `SELECT * FROM "ActivityLog" ORDER BY "createdAt" DESC LIMIT 20;`.
+
+### Reports (`/admin/reports`)
+
+- [ ] Stat tiles match `/admin` Control Center.
+- [ ] Cash flow and Lotto exposure cards render real totals.
+- [ ] Ready-for-M2 grid renders with the dashed chips.
+
+### Security (`/admin/security`)
+
+- [ ] Loads. Each row carries a clear Live / Requires provider / Ready for M2 chip.
+
+### Staff (`/admin/staff`)
+
+- [ ] Read-only role + permission matrix renders with the seed data: super_admin (all), admin (most), staff (read + review).
+
+### Marketing (`/admin/marketing`)
+
+- [ ] Live channel cards link out to the existing CRUD pages.
+- [ ] Ready-for-M2 cards render dashed.
+
+### Settings (`/admin/settings`)
+
+- [ ] All fields editable. Maintenance Mode toggle uses the amber / red tone (not green).
+- [ ] Save. Run `SELECT key, value FROM "SystemSetting" WHERE key='maintenance_mode';` to confirm persistence.
+
+### Source Handover (`/admin/handover`)
+
+- [ ] Loads with the developer credit block.
+
+---
+
+## Security checklist
+
+- [ ] HTTPS only (HSTS via Nginx). HTTP requests redirect to HTTPS.
+- [ ] Session cookies are `HttpOnly + Secure + SameSite=Lax`. Verify in browser devtools.
+- [ ] `/api/auth/me` returns 401 for unauthenticated callers (curl test).
+- [ ] `/api/admin/*` returns 401 / 403 for non-admin or unauthenticated callers.
+- [ ] Rate limit: 11th login attempt in 60s from the same IP returns 429.
+- [ ] Branding gate passes locally and in CI: `pnpm check:branding` exits 0.
+- [ ] No secrets in git. `git log --all -- .env` returns nothing. The deployment guide does not contain a real password.
+- [ ] Super admin password rotated after first login. Old seed default is invalid.
+- [ ] Database role used by the app is NOT the `postgres` superuser.
+- [ ] UFW: only ports 22, 80, 443 are open. `sudo ufw status verbose`.
+
+---
+
+## Backup checklist
+
+- [ ] Nightly cron exists: `sudo crontab -l` shows the backup-db.sh entry.
+- [ ] Latest dump exists: `ls -la /var/backups/pasha9/db/` lists a `.sql.gz` dated within the last 24h.
+- [ ] Latest uploads tarball exists: `ls -la /var/backups/pasha9/uploads/`.
+- [ ] Rotation works: count of dumps in `/var/backups/pasha9/db/` is <= 14.
+- [ ] Restore drill (run during a quiet window):
+  - `sudo -iu postgres createdb sanjid14_restore_test`
+  - `gunzip -c /var/backups/pasha9/db/<dump>.sql.gz | sudo -iu postgres psql sanjid14_restore_test`
+  - Spot-check a few row counts vs production.
+  - `sudo -iu postgres dropdb sanjid14_restore_test` when done.
+
+---
+
+## Performance & monitoring
+
+- [ ] PM2 logs are reasonable size: `ls -lh /var/log/pasha9/` shows logs under 100 MB; logrotate is configured.
+- [ ] Largest page bundle is reasonable: `/admin` around 217 kB First Load, `/lotto` around 118 kB, `/affiliate` around 141 kB. Verify with `pnpm build` output.
+- [ ] First Load JS shared: around 87 kB.
+
+---
+
+## Final deploy commands
+
+```bash
+cd /var/www/pasha9/app
+git fetch origin
+git checkout m1-production
+git reset --hard origin/m1-production
+unset NODE_ENV
+pnpm install --prod=false
+set -a
+source .env
+set +a
+pnpm exec prisma generate --schema packages/database/prisma/schema.prisma
+pnpm exec prisma db push --schema packages/database/prisma/schema.prisma
 pnpm check:branding
+pnpm build
+pm2 restart pasha9-web --update-env
+pm2 save
+pm2 status
 ```
 
-All four must exit 0 before delivery.
+## Rollback (anything goes wrong)
+
+```bash
+cd /var/www/pasha9/app
+git fetch origin
+git reset --hard <previous_short_sha>
+pnpm install --prod=false
+pnpm build
+pm2 restart pasha9-web --update-env
+pm2 save
+
+# Only if a schema change must be undone (rare, every Phase 8 change is additive):
+ls -la /var/backups/pasha9/db/
+sudo -iu postgres gunzip -c /var/backups/pasha9/db/<dump>.sql.gz | psql sanjid14
+```
+
+Every Phase 8 schema change was additive (new tables, new nullable columns, new default-valued columns). A simple `git reset` + `pnpm build` reverts any UI or API change without touching the database.
+
+---
+
+## Sign-off
+
+- [ ] Client has walked through every section above on the live site.
+- [ ] Client has approved Milestone 1 in writing (email or Telegram).
+- [ ] Tag `m1-final-delivery` exists on the `m1-production` branch.
+
+For anything that needs the developer: `info@anointedcoder.com`, Telegram `https://t.me/anointedcoder`, WhatsApp `https://wa.link/fi5z8a`.

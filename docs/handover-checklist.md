@@ -90,5 +90,5 @@ Delivered privately to Anointed Coder and the client, never committed to the rep
 
 - Anointed Coder
 - info@anointedcoder.com
-- https://t.me/AnointedCoder
+- https://t.me/anointedcoder
 - https://wa.link/fi5z8a

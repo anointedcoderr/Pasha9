@@ -28,7 +28,7 @@ export const BRAND = {
     label: 'Built by Anointed Coder',
     name: 'Anointed Coder',
     email: 'info@anointedcoder.com',
-    telegram: 'https://t.me/AnointedCoder',
+    telegram: 'https://t.me/anointedcoder',
     whatsapp: 'https://wa.link/fi5z8a',
   },
   /** Copyright holder for the platform. */

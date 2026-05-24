@@ -135,4 +135,4 @@ Role-permission mapping lives in `packages/database/prisma/seed.ts` and is re-ap
 - The footer Follow column is empty. Admin has not yet set public Telegram, WhatsApp, or email in Settings.
 - Ambassador section is empty on the homepage. Admin has not yet set ambassador fields in `/admin/ambassador`. Toggling Active off there hides the section entirely.
 
-For anything else: Telegram `t.me/AnointedCoder` or WhatsApp `wa.link/fi5z8a`.
+For anything else: Telegram `t.me/anointedcoder` or WhatsApp `wa.link/fi5z8a`.

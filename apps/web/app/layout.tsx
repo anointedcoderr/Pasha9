@@ -13,7 +13,7 @@ export const metadata: Metadata = {
   },
   description: 'Pasha 9 brings a premium Bangla casino and betting experience. Play smarter, win bigger.',
   applicationName: 'Pasha 9',
-  authors: [{ name: 'Anointed Coder', url: 'https://t.me/AnointedCoder' }],
+  authors: [{ name: 'Anointed Coder', url: 'https://t.me/anointedcoder' }],
   creator: 'Anointed Coder',
   publisher: 'Anointed Coder',
   icons: {
