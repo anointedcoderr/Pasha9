@@ -77,6 +77,7 @@ export function Logo({
           !remoteLogo && 'shadow-[0_8px_22px_-10px_rgba(245,180,0,0.85),inset_0_1px_0_rgba(255,255,255,0.55),inset_0_-2px_4px_rgba(0,0,0,0.18)]',
           'ring-1 ring-black/10',
           'overflow-hidden',
+          'transition-transform duration-200 group-hover:-translate-y-0.5',
         )}
       >
         {remoteLogo ? (

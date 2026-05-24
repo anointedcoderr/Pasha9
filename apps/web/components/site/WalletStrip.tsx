@@ -115,7 +115,8 @@ export function WalletStrip() {
   const balance = Number(me.wallet?.balance ?? 0);
 
   return (
-    <section className="relative overflow-hidden rounded-2xl bg-[linear-gradient(135deg,#0F1115_0%,#1A1D24_60%,#0F1115_100%)] p-4 text-white shadow-[0_10px_30px_-18px_rgba(15,17,21,0.7)] md:p-5">
+    <section className="relative overflow-hidden rounded-2xl border border-brand-yellow-500/15 bg-[linear-gradient(135deg,#0F1115_0%,#1A1D24_60%,#0F1115_100%)] p-4 text-white shadow-[0_18px_44px_-26px_rgba(15,17,21,0.85)] md:p-5">
+      {/* Decorative glows */}
       <span
         aria-hidden
         className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-brand-yellow-500/25 blur-3xl"
@@ -124,17 +125,29 @@ export function WalletStrip() {
         aria-hidden
         className="pointer-events-none absolute -left-10 bottom-0 h-40 w-40 rounded-full bg-brand-blue-500/20 blur-3xl"
       />
+      {/* Diagonal hairline */}
+      <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-brand-yellow-500/60 to-transparent" />
+
       <div className="relative grid gap-4 md:grid-cols-[1fr_auto] md:items-center">
         <div className="flex items-start gap-3 min-w-0">
-          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-brand-yellow-500 text-brand-ink shadow-[0_8px_18px_-6px_rgba(245,180,0,0.6)]">
-            <Sparkles className="h-5 w-5" />
+          <span className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#FFE066_0%,#FFCC00_55%,#F5B400_100%)] text-brand-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.55),inset_0_-2px_4px_rgba(168,114,0,0.35),0_10px_22px_-6px_rgba(245,180,0,0.7)] ring-1 ring-black/10">
+            <Sparkles className="h-5 w-5 drop-shadow-[0_1px_1px_rgba(0,0,0,0.25)]" />
           </span>
           <div className="min-w-0">
             <p className="truncate text-[12px] font-semibold text-white/70">
-              {lang === 'bn' ? 'হ্যালো' : 'Hi'}, <span className="text-white">{me.username}</span>
+              {lang === 'bn' ? 'হ্যালো' : 'Hi'}, <span className="font-bold text-white">{me.username}</span>
             </p>
             <div className="mt-0.5 flex items-baseline gap-2">
-              <p className="truncate text-2xl font-extrabold tabular-nums text-white md:text-3xl">
+              <p
+                className="truncate text-2xl font-black tabular-nums leading-none md:text-[28px]"
+                style={{
+                  backgroundImage:
+                    'linear-gradient(180deg,#FFFFFF 0%,#FFE9A8 70%,#F5B400 100%)',
+                  WebkitBackgroundClip: 'text',
+                  backgroundClip: 'text',
+                  color: 'transparent',
+                }}
+              >
                 {formatBDT(balance)}
               </p>
               <button
@@ -148,7 +161,7 @@ export function WalletStrip() {
                 <RefreshCw className={cn('h-3.5 w-3.5', refreshing && 'animate-spin')} />
               </button>
             </div>
-            <p className="mt-0.5 text-[11px] uppercase tracking-wider text-white/55">
+            <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.18em] text-white/55">
               {lang === 'bn' ? 'মূল ব্যালেন্স' : 'Main balance'}
             </p>
           </div>
@@ -157,23 +170,23 @@ export function WalletStrip() {
         <div className="grid grid-cols-3 gap-2 md:flex md:gap-2">
           <Link
             href={ROUTES.deposit}
-            className="btn-yellow inline-flex h-11 items-center justify-center rounded-xl px-3 text-[13px]"
+            className="btn-yellow inline-flex h-11 items-center justify-center rounded-xl px-3 text-[13px] shadow-[0_8px_16px_-6px_rgba(245,180,0,0.65)]"
           >
             <ArrowDownToLine className="mr-1.5 h-4 w-4" />
             {t('wallet.deposit')}
           </Link>
           <Link
             href={ROUTES.withdraw}
-            className="inline-flex h-11 items-center justify-center rounded-xl border border-white/20 bg-white/10 px-3 text-[13px] font-semibold text-white backdrop-blur transition hover:bg-white/15"
+            className="inline-flex h-11 items-center justify-center rounded-xl border border-white/20 bg-white/[0.07] px-3 text-[13px] font-semibold text-white backdrop-blur transition hover:border-white/40 hover:bg-white/[0.13]"
           >
-            <ArrowUpToLine className="mr-1.5 h-4 w-4" />
+            <ArrowUpToLine className="mr-1.5 h-4 w-4 text-brand-yellow-400" />
             {t('wallet.withdraw')}
           </Link>
           <Link
             href={ROUTES.transactions}
-            className="inline-flex h-11 items-center justify-center rounded-xl border border-white/20 bg-white/10 px-3 text-[13px] font-semibold text-white backdrop-blur transition hover:bg-white/15"
+            className="inline-flex h-11 items-center justify-center rounded-xl border border-white/20 bg-white/[0.07] px-3 text-[13px] font-semibold text-white backdrop-blur transition hover:border-white/40 hover:bg-white/[0.13]"
           >
-            <ReceiptText className="mr-1.5 h-4 w-4" />
+            <ReceiptText className="mr-1.5 h-4 w-4 text-brand-yellow-400" />
             {lang === 'bn' ? 'ইতিহাস' : 'History'}
           </Link>
         </div>

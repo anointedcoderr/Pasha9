@@ -1,16 +1,14 @@
 // Built by Anointed Coder.
-// Babu-style mobile bottom navigation (Phase 8A redesign).
+// Babu-style mobile bottom navigation (final polish pass).
 //
-// 5 slots, center is a raised yellow Home button.
+// 5 slots, centre is a raised yellow Home button with triple ring.
 //
 //   Logged-in :  Promotion | Lotto |  HOME  | Betting Pass | Referral
 //   Guest     :  Promotion | Lotto |  HOME  | Register     | Login
 //
-// Home brings the user back to the landing page from any internal route,
-// matching the client's "users must never feel trapped" requirement.
-// Deposit and Profile are reachable from the header (balance pill,
-// user icon, hamburger Others section) so they are intentionally not in
-// the bottom rail anymore.
+// Each side icon sits in its own premium .bnav-icon-wrap so the active
+// state can swap to a gold gradient tile instead of just a colour
+// change. Centre Home FAB has a double halo (white + gold).
 
 'use client';
 
@@ -37,7 +35,7 @@ export function StickyBottomNav({ isLoggedIn, onRequestLogin, onRequestSignup }:
     <nav
       role="navigation"
       aria-label="Primary"
-      className="fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-brand-divider bg-brand-paper pb-[max(env(safe-area-inset-bottom),8px)] shadow-[0_-8px_24px_-12px_rgba(15,17,21,0.15)] lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-brand-divider bg-[linear-gradient(180deg,#FFFFFF_0%,#FAFBFC_100%)] pb-[max(env(safe-area-inset-bottom),10px)] shadow-[0_-10px_30px_-12px_rgba(15,17,21,0.18)] lg:hidden"
     >
       <Link
         href="/promotions"
@@ -45,7 +43,9 @@ export function StickyBottomNav({ isLoggedIn, onRequestLogin, onRequestSignup }:
         data-active={pathname.startsWith('/promotions')}
         aria-label={t('navx.promotions')}
       >
-        <Gift className="h-5 w-5 text-brand-yellow-600" />
+        <span className="bnav-icon-wrap">
+          <Gift className="h-[18px] w-[18px] text-brand-yellow-700" />
+        </span>
         <span>{t('navx.promotions')}</span>
       </Link>
 
@@ -55,18 +55,16 @@ export function StickyBottomNav({ isLoggedIn, onRequestLogin, onRequestSignup }:
         data-active={pathname.startsWith('/lotto')}
         aria-label={t('navx.lotto')}
       >
-        <span className="relative inline-flex">
-          <Ticket className="h-5 w-5 text-brand-yellow-600" />
-          <span className="absolute -right-3 -top-2">
-            <MarkerNew />
-          </span>
+        <span className="bnav-icon-wrap relative">
+          <Ticket className="h-[18px] w-[18px] text-brand-yellow-700" />
+          <span className="absolute -right-2.5 -top-2"><MarkerNew /></span>
         </span>
         <span>{t('navx.lotto')}</span>
       </Link>
 
-      <Link href="/" className="bnav-fab" aria-label={t('nav.home')} data-active={onHome}>
-        <span className="bnav-fab-circle">
-          <HomeIcon className="h-7 w-7" />
+      <Link href="/" className="bnav-fab" aria-label={t('nav.home')}>
+        <span className="bnav-fab-circle" data-active={onHome}>
+          <HomeIcon className="h-7 w-7 drop-shadow-[0_1px_2px_rgba(0,0,0,0.25)]" />
         </span>
         <span className="bnav-fab-label">{t('nav.home')}</span>
       </Link>
@@ -79,7 +77,9 @@ export function StickyBottomNav({ isLoggedIn, onRequestLogin, onRequestSignup }:
             data-active={pathname.startsWith('/betting-pass')}
             aria-label={t('navx.bettingPass')}
           >
-            <Star className="h-5 w-5 text-brand-yellow-600" />
+            <span className="bnav-icon-wrap">
+              <Star className="h-[18px] w-[18px] text-brand-yellow-700" />
+            </span>
             <span>{t('navx.bettingPass')}</span>
           </Link>
           <Link
@@ -88,7 +88,9 @@ export function StickyBottomNav({ isLoggedIn, onRequestLogin, onRequestSignup }:
             data-active={pathname.endsWith('/referral')}
             aria-label={t('navx.referral')}
           >
-            <Users className="h-5 w-5 text-brand-yellow-600" />
+            <span className="bnav-icon-wrap">
+              <Users className="h-[18px] w-[18px] text-brand-yellow-700" />
+            </span>
             <span>{t('navx.referral')}</span>
           </Link>
         </>
@@ -100,7 +102,9 @@ export function StickyBottomNav({ isLoggedIn, onRequestLogin, onRequestSignup }:
             className="bnav-btn"
             aria-label={t('navx.register')}
           >
-            <UserPlus className="h-5 w-5 text-brand-yellow-600" />
+            <span className="bnav-icon-wrap">
+              <UserPlus className="h-[18px] w-[18px] text-brand-yellow-700" />
+            </span>
             <span>{t('navx.register')}</span>
           </button>
           <button
@@ -109,7 +113,9 @@ export function StickyBottomNav({ isLoggedIn, onRequestLogin, onRequestSignup }:
             className="bnav-btn"
             aria-label={t('navx.login')}
           >
-            <LogIn className="h-5 w-5 text-brand-blue-600" />
+            <span className="bnav-icon-wrap" style={{ background: 'linear-gradient(180deg, rgba(30,115,232,0.10) 0%, rgba(30,115,232,0.02) 100%)' }}>
+              <LogIn className="h-[18px] w-[18px] text-brand-blue-600" />
+            </span>
             <span>{t('navx.login')}</span>
           </button>
         </>

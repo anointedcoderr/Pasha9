@@ -106,13 +106,15 @@ export function Header() {
     <>
       <MobileTopBar />
 
-      <header className="sticky top-0 z-30 border-b border-brand-divider bg-brand-paper">
-        <div className="mx-auto flex h-[68px] max-w-page items-center gap-3 px-3 md:px-6">
+      <header className="sticky top-0 z-30 border-b border-brand-divider bg-brand-paper shadow-[0_1px_0_rgba(15,17,21,0.04)]">
+        {/* Top hairline gold glow */}
+        <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-brand-yellow-500/35 to-transparent" />
+        <div className="relative mx-auto flex h-[68px] max-w-page items-center gap-3 px-3 md:px-6">
           <button
             type="button"
             aria-label="Open menu"
             onClick={() => setDrawerOpen(true)}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-brand-ink hover:bg-brand-surface lg:hidden"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-brand-divider bg-brand-paper text-brand-ink transition hover:border-brand-yellow-500 hover:bg-brand-surface lg:hidden"
           >
             <MenuIcon className="h-5 w-5" />
           </button>
@@ -129,28 +131,28 @@ export function Header() {
                   type="button"
                   onClick={notif.onOpen}
                   aria-label="Notifications"
-                  className="relative inline-flex h-10 w-10 items-center justify-center rounded-lg text-brand-ink hover:bg-brand-surface"
+                  className="relative inline-flex h-10 w-10 items-center justify-center rounded-xl border border-brand-divider bg-brand-paper text-brand-ink transition hover:border-brand-yellow-500 hover:bg-brand-surface"
                 >
                   <Bell className="h-4 w-4" />
-                  <span className="absolute right-2 top-2 h-2 w-2 rounded-full border-2 border-brand-paper bg-brand-hot" />
+                  <span className="absolute right-2 top-2 h-2 w-2 rounded-full border-2 border-brand-paper bg-brand-hot shadow-[0_0_6px_rgba(255,78,58,0.85)]" />
                 </button>
-                <Link href={ROUTES.wallet} className="pill-light tabular-nums">
+                <Link href={ROUTES.wallet} className="pill-light tabular-nums shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_2px_8px_-4px_rgba(245,180,0,0.35)]">
                   <WalletIcon className="h-4 w-4 text-brand-yellow-600" />
-                  <span className="hidden sm:inline">
+                  <span className="hidden font-bold sm:inline">
                     {formatBDT(Number(me.wallet?.balance ?? 0))}
                   </span>
                 </Link>
                 <Link
                   href={ROUTES.deposit}
                   aria-label="Deposit"
-                  className="btn-yellow inline-flex h-10 w-10 items-center justify-center rounded-lg"
+                  className="btn-yellow inline-flex h-10 w-10 items-center justify-center rounded-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.55),0_6px_14px_-6px_rgba(245,180,0,0.7)]"
                 >
                   <Plus className="h-4 w-4" />
                 </Link>
                 <Link
                   href="/dashboard/profile"
                   aria-label="My account"
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-brand-divider bg-brand-paper text-brand-ink hover:border-brand-yellow-500"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-brand-divider bg-brand-paper text-brand-ink transition hover:border-brand-yellow-500 hover:bg-brand-surface"
                 >
                   <UserIcon className="h-4 w-4" />
                 </Link>
@@ -158,7 +160,7 @@ export function Header() {
                   type="button"
                   onClick={logout}
                   aria-label="Logout"
-                  className="hidden h-10 w-10 items-center justify-center rounded-lg text-brand-inkMute hover:text-brand-ink md:inline-flex"
+                  className="hidden h-10 w-10 items-center justify-center rounded-xl border border-brand-divider bg-brand-paper text-brand-inkMute transition hover:border-brand-yellow-500 hover:text-brand-ink md:inline-flex"
                 >
                   <Lock className="h-4 w-4" />
                 </button>
@@ -172,7 +174,7 @@ export function Header() {
                   type="button"
                   onClick={notif.onOpen}
                   aria-label="Notifications"
-                  className="relative inline-flex h-10 w-10 items-center justify-center rounded-lg text-brand-ink hover:bg-brand-surface"
+                  className="relative inline-flex h-10 w-10 items-center justify-center rounded-xl border border-brand-divider bg-brand-paper text-brand-ink transition hover:border-brand-yellow-500 hover:bg-brand-surface"
                 >
                   <Bell className="h-4 w-4" />
                 </button>
@@ -180,7 +182,7 @@ export function Header() {
                   type="button"
                   onClick={openLogin}
                   aria-label={t('navx.login')}
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-brand-divider bg-brand-paper text-brand-ink hover:border-brand-yellow-500 md:hidden"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-brand-divider bg-brand-paper text-brand-ink transition hover:border-brand-yellow-500 hover:bg-brand-surface md:hidden"
                 >
                   <UserIcon className="h-4 w-4" />
                 </button>

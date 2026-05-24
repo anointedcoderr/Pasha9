@@ -75,14 +75,17 @@ export function FloatingContact() {
     >
       <div
         className={cn(
-          'w-[220px] origin-bottom-right rounded-2xl border border-brand-divider bg-brand-paper p-2 shadow-[0_18px_40px_-18px_rgba(15,17,21,0.35)] transition-all duration-200',
+          'w-[228px] origin-bottom-right overflow-hidden rounded-2xl border border-brand-yellow-500/30 bg-brand-paper p-2 shadow-[0_22px_44px_-18px_rgba(15,17,21,0.4),0_0_0_1px_rgba(255,204,0,0.05)] transition-all duration-200',
           open ? 'translate-y-0 scale-100 opacity-100' : 'pointer-events-none translate-y-2 scale-95 opacity-0',
         )}
       >
-        <p className="px-2 pb-2 pt-1 text-[10px] font-bold uppercase tracking-[0.18em] text-brand-inkMute">
-          {labels.tagline}
-        </p>
-        <div className="space-y-1">
+        <div className="flex items-center justify-between border-b border-brand-divider px-2 pb-2 pt-1">
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-brand-inkMute">
+            {labels.tagline}
+          </p>
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+        </div>
+        <div className="mt-2 space-y-1">
           {contacts?.whatsapp ? (
             <a
               href={contacts.whatsapp}
@@ -90,8 +93,8 @@ export function FloatingContact() {
               rel="noreferrer"
               className="flex items-center gap-3 rounded-xl px-2.5 py-2 transition hover:bg-brand-surface"
             >
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#25D366] text-white">
-                <MessageCircle className="h-4 w-4" />
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#25D366] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_10px_-4px_rgba(37,211,102,0.55)] ring-1 ring-black/5">
+                <MessageCircle className="h-4 w-4 drop-shadow-[0_1px_1px_rgba(0,0,0,0.25)]" />
               </span>
               <span className="text-sm font-semibold text-brand-ink">{labels.whatsapp}</span>
             </a>
@@ -103,8 +106,8 @@ export function FloatingContact() {
               rel="noreferrer"
               className="flex items-center gap-3 rounded-xl px-2.5 py-2 transition hover:bg-brand-surface"
             >
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#229ED9] text-white">
-                <Send className="h-4 w-4" />
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#229ED9] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_10px_-4px_rgba(34,158,217,0.55)] ring-1 ring-black/5">
+                <Send className="h-4 w-4 drop-shadow-[0_1px_1px_rgba(0,0,0,0.25)]" />
               </span>
               <span className="text-sm font-semibold text-brand-ink">{labels.telegram}</span>
             </a>
@@ -114,8 +117,8 @@ export function FloatingContact() {
             onClick={() => setOpen(false)}
             className="flex items-center gap-3 rounded-xl px-2.5 py-2 transition hover:bg-brand-surface"
           >
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-yellow-500 text-brand-ink">
-              <Headphones className="h-4 w-4" />
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[linear-gradient(135deg,#FFE066_0%,#FFCC00_55%,#F5B400_100%)] text-brand-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.55),inset_0_-2px_4px_rgba(168,114,0,0.35),0_4px_10px_-4px_rgba(245,180,0,0.7)] ring-1 ring-black/10">
+              <Headphones className="h-4 w-4 drop-shadow-[0_1px_1px_rgba(0,0,0,0.25)]" />
             </span>
             <span className="text-sm font-semibold text-brand-ink">{labels.chat}</span>
           </Link>
@@ -124,8 +127,8 @@ export function FloatingContact() {
               href={`mailto:${contacts.email}`}
               className="flex items-center gap-3 rounded-xl px-2.5 py-2 transition hover:bg-brand-surface"
             >
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-blue-500 text-white">
-                <Mail className="h-4 w-4" />
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[linear-gradient(135deg,#1E73E8_0%,#1659C2_100%)] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_10px_-4px_rgba(22,89,194,0.55)] ring-1 ring-black/5">
+                <Mail className="h-4 w-4 drop-shadow-[0_1px_1px_rgba(0,0,0,0.25)]" />
               </span>
               <span className="text-sm font-semibold text-brand-ink">{labels.email}</span>
             </a>

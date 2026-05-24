@@ -234,7 +234,9 @@ export function HeroSlider() {
   const hasImage = slide.mediaType === 'image' && !!slide.imageUrl;
 
   return (
-    <section className="relative overflow-hidden rounded-2xl border border-brand-divider bg-brand-ink text-white shadow-sm">
+    <section className="relative overflow-hidden rounded-2xl border border-brand-yellow-500/20 bg-brand-ink text-white shadow-[0_22px_56px_-32px_rgba(245,180,0,0.5)]">
+      {/* Top-edge hairline */}
+      <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 z-10 h-px bg-gradient-to-r from-transparent via-brand-yellow-500/60 to-transparent" />
       {/* Media layer */}
       <div className="absolute inset-0">
         <AnimatePresence mode="wait">
@@ -274,7 +276,10 @@ export function HeroSlider() {
             ) : null}
             {/* dim overlay so text on image / video stays readable */}
             {(hasVideo || hasImage) ? (
-              <span aria-hidden className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/35 to-black/10" />
+              <>
+                <span aria-hidden className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/55 to-black/15" />
+                <span aria-hidden className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+              </>
             ) : null}
           </motion.div>
         </AnimatePresence>
@@ -298,13 +303,21 @@ export function HeroSlider() {
             transition={{ duration: 0.4, ease: 'easeOut' }}
             className="max-w-xl"
           >
-            <div className="inline-flex items-center gap-2 rounded-full bg-brand-yellow-500/20 px-3 py-1 text-xs font-semibold text-brand-yellow-400">
-              <Sparkles className="h-3.5 w-3.5" /> {t('home.tickerLabel')}
+            <div className="inline-flex items-center gap-2 rounded-full border border-brand-yellow-500/30 bg-brand-yellow-500/15 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-brand-yellow-300 shadow-[0_4px_12px_-6px_rgba(245,180,0,0.55)]">
+              <Sparkles className="h-3 w-3" /> {t('home.tickerLabel')}
             </div>
-            <h1 className="mt-3 text-2xl font-extrabold leading-tight md:text-4xl">
+            <h1
+              className="mt-3 text-[26px] font-black leading-[1.05] tracking-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.55)] md:text-[44px]"
+              style={{
+                backgroundImage: 'linear-gradient(180deg,#FFFFFF 0%,#FFE9A8 78%,#F5B400 100%)',
+                WebkitBackgroundClip: 'text',
+                backgroundClip: 'text',
+                color: 'transparent',
+              }}
+            >
               {slide.title}
             </h1>
-            <p className="mt-3 max-w-md text-sm text-white/80 md:text-base">{slide.subtitle}</p>
+            <p className="mt-3 max-w-md text-[13px] leading-snug text-white/85 drop-shadow md:text-[15px]">{slide.subtitle}</p>
             <div className="mt-5 flex flex-wrap items-center gap-3">
               <Link href={slide.primary.href}>
                 <Button size="lg" variant="yellow" leftIcon={iconForKind(slide.primary.kind)}>{slide.primary.label}</Button>

@@ -150,9 +150,11 @@ export function MobileDrawer({ open, onClose, isLoggedIn, onRequestLogin, onRequ
               onClick={() => setLang(lang === 'bn' ? 'en' : 'bn')}
               className="drawer-link w-full text-left"
             >
-              <Languages className="h-4 w-4 text-brand-yellow-600" />
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-brand-yellow-500/10 text-brand-yellow-700">
+                <Languages className="h-3.5 w-3.5" />
+              </span>
               <span>{t('drawer.language')}</span>
-              <span className="ml-auto rounded-md bg-brand-surface px-1.5 py-0.5 text-[10px] font-bold uppercase text-brand-inkSoft">
+              <span className="ml-auto rounded-md border border-brand-divider bg-brand-surface px-1.5 py-0.5 text-[10px] font-bold uppercase text-brand-inkSoft">
                 {lang === 'bn' ? 'বাং' : 'EN'}
               </span>
             </button>
@@ -161,7 +163,9 @@ export function MobileDrawer({ open, onClose, isLoggedIn, onRequestLogin, onRequ
               className="drawer-link"
               data-active={pathname === '/faq'}
             >
-              <HelpCircle className="h-4 w-4 text-brand-yellow-600" />
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-brand-yellow-500/10 text-brand-yellow-700">
+                <HelpCircle className="h-3.5 w-3.5" />
+              </span>
               <span>{t('drawer.faq')}</span>
             </Link>
             <Link
@@ -169,7 +173,9 @@ export function MobileDrawer({ open, onClose, isLoggedIn, onRequestLogin, onRequ
               className="drawer-link"
               data-active={pathname === '/support'}
             >
-              <MessageCircle className="h-4 w-4 text-brand-yellow-600" />
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-brand-yellow-500/10 text-brand-yellow-700">
+                <MessageCircle className="h-3.5 w-3.5" />
+              </span>
               <span>{t('drawer.liveChat')}</span>
             </Link>
             <a
@@ -178,7 +184,9 @@ export function MobileDrawer({ open, onClose, isLoggedIn, onRequestLogin, onRequ
               rel={apkUrl ? 'noreferrer' : undefined}
               className="drawer-link"
             >
-              <Download className="h-4 w-4 text-brand-yellow-600" />
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-brand-yellow-500/10 text-brand-yellow-700">
+                <Download className="h-3.5 w-3.5" />
+              </span>
               <span>{t('drawer.downloadApp')}</span>
             </a>
             {isLoggedIn ? (
@@ -190,7 +198,9 @@ export function MobileDrawer({ open, onClose, isLoggedIn, onRequestLogin, onRequ
                 }}
                 className="drawer-link w-full text-left"
               >
-                <LogOut className="h-4 w-4 text-red-600" />
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-red-500/10 text-red-600">
+                  <LogOut className="h-3.5 w-3.5" />
+                </span>
                 <span className="text-red-700">{t('drawer.logout')}</span>
               </button>
             ) : (
@@ -203,7 +213,9 @@ export function MobileDrawer({ open, onClose, isLoggedIn, onRequestLogin, onRequ
                   }}
                   className="drawer-link w-full text-left"
                 >
-                  <LogIn className="h-4 w-4 text-brand-blue-600" />
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-brand-blue-500/10 text-brand-blue-600">
+                    <LogIn className="h-3.5 w-3.5" />
+                  </span>
                   <span>{t('drawer.login')}</span>
                 </button>
                 <button
@@ -214,7 +226,9 @@ export function MobileDrawer({ open, onClose, isLoggedIn, onRequestLogin, onRequ
                   }}
                   className="drawer-link w-full text-left"
                 >
-                  <UserPlus className="h-4 w-4 text-brand-yellow-600" />
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-brand-yellow-500/10 text-brand-yellow-700">
+                    <UserPlus className="h-3.5 w-3.5" />
+                  </span>
                   <span>{t('drawer.register')}</span>
                 </button>
               </>
@@ -255,9 +269,13 @@ export function MobileDrawer({ open, onClose, isLoggedIn, onRequestLogin, onRequ
 
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="mb-5">
-      <p className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-inkMute">{label}</p>
-      <div className="space-y-1">{children}</div>
+    <div className="mb-4">
+      <div className="mb-1 flex items-center gap-2 px-3">
+        <span className="h-1 w-1 rounded-full bg-brand-yellow-500" />
+        <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-brand-inkMute">{label}</p>
+        <span className="h-px flex-1 bg-gradient-to-r from-brand-divider via-brand-divider to-transparent" />
+      </div>
+      <div className="space-y-0.5">{children}</div>
     </div>
   );
 }
@@ -267,7 +285,9 @@ function DrawerLink({ item, t, pathname }: { item: Item; t: (k: string) => strin
   const Icon = item.icon;
   return (
     <Link href={item.href} className="drawer-link" data-active={active}>
-      <Icon className="h-4 w-4 text-brand-yellow-600" />
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-brand-yellow-500/10 text-brand-yellow-700">
+        <Icon className="h-3.5 w-3.5" />
+      </span>
       <span>{t(`drawer.${item.key}`)}</span>
     </Link>
   );

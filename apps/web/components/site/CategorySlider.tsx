@@ -59,32 +59,50 @@ export function CategorySlider() {
               key={item.key}
               href={item.href}
               data-active={active}
+              aria-label={lang === 'bn' ? item.labelBn : item.labelEn}
               className={cn(
                 'group relative flex shrink-0 snap-start flex-col items-center justify-end',
-                'h-[88px] w-[78px] rounded-2xl px-2 pb-2 pt-3 md:h-[100px] md:w-[92px]',
-                'overflow-hidden border border-brand-divider bg-brand-paper transition',
-                'hover:border-brand-yellow-500 hover:shadow-[0_8px_22px_-14px_rgba(245,180,0,0.6)]',
-                'data-[active=true]:border-brand-yellow-500 data-[active=true]:shadow-[0_8px_22px_-14px_rgba(245,180,0,0.6)]',
+                'h-[94px] w-[80px] rounded-2xl px-2 pb-2 pt-3 md:h-[110px] md:w-[96px]',
+                'overflow-hidden border border-brand-divider bg-brand-paper transition-all duration-200',
+                'hover:-translate-y-0.5 hover:border-brand-yellow-500 hover:shadow-[0_14px_28px_-16px_rgba(245,180,0,0.55)]',
+                'data-[active=true]:-translate-y-0.5 data-[active=true]:border-brand-yellow-500 data-[active=true]:shadow-[0_14px_28px_-16px_rgba(245,180,0,0.55)]',
               )}
             >
+              {/* Glow behind icon (intensity boosts on hover/active) */}
               <span
                 aria-hidden
                 className={cn(
-                  'pointer-events-none absolute -top-6 left-1/2 h-16 w-16 -translate-x-1/2 rounded-full opacity-30 blur-2xl transition group-hover:opacity-60',
+                  'pointer-events-none absolute -top-5 left-1/2 h-20 w-20 -translate-x-1/2 rounded-full opacity-35 blur-2xl transition-opacity duration-200 group-hover:opacity-65 group-data-[active=true]:opacity-65',
                   `bg-gradient-to-br ${TONE[item.tone]}`,
                 )}
               />
+              {/* Top-edge hairline */}
+              <span aria-hidden className="pointer-events-none absolute inset-x-2 top-1 h-px bg-gradient-to-r from-transparent via-brand-yellow-500/60 to-transparent opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-data-[active=true]:opacity-100" />
+              {/* Diagonal shine sweep on hover */}
+              <span
+                aria-hidden
+                className="pointer-events-none absolute -inset-y-2 -left-1/2 w-1/2 -skew-x-12 bg-gradient-to-r from-transparent via-white/40 to-transparent opacity-0 transition-all duration-700 group-hover:left-full group-hover:opacity-100"
+              />
+
+              {/* Icon tile with inset highlight + outer ring */}
               <span
                 className={cn(
-                  'relative mx-auto mb-1 flex h-12 w-12 items-center justify-center rounded-xl text-white shadow-[0_6px_14px_-8px_rgba(15,17,21,0.4)]',
+                  'relative mx-auto mb-1.5 flex h-12 w-12 items-center justify-center rounded-xl text-white',
+                  'shadow-[inset_0_1px_0_rgba(255,255,255,0.45),inset_0_-2px_4px_rgba(0,0,0,0.18),0_6px_14px_-6px_rgba(15,17,21,0.35)]',
+                  'ring-1 ring-black/10',
                   `bg-gradient-to-br ${TONE[item.tone]}`,
                 )}
               >
-                <Icon className="h-5 w-5" />
+                <Icon className="h-5 w-5 drop-shadow-[0_1px_2px_rgba(0,0,0,0.35)]" />
               </span>
-              <span className="relative text-center text-[11px] font-bold text-brand-ink md:text-[12px]">
+              <span className="relative text-center text-[11px] font-bold leading-tight text-brand-ink md:text-[12px]">
                 {lang === 'bn' ? item.labelBn : item.labelEn}
               </span>
+              {/* Active dot */}
+              <span
+                aria-hidden
+                className="pointer-events-none absolute bottom-1 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-brand-yellow-500 opacity-0 transition-opacity duration-200 group-data-[active=true]:opacity-100"
+              />
             </Link>
           );
         })}
