@@ -361,6 +361,21 @@
     "totalWithdrawals": "Total Withdrawals",
     "bonusIssued": "Bonus Issued",
     "referralSignups": "Referral Signups",
-    "netBalance": "Platform Net Balance"
+    "netBalance": "Platform Net Balance",
+    "website": "Website Customization",
+    "staff": "Staff & Sub-admins",
+    "reports": "Reports & Analytics",
+    "security": "Security Center",
+    "marketing": "Marketing Center",
+    "groupOverview": "Overview",
+    "groupOperations": "Operations",
+    "groupUsersAndMoney": "Users & Money",
+    "groupBonusAndAffiliate": "Bonus & Affiliate",
+    "groupContentAndMedia": "Content & Media",
+    "groupLottoRewards": "Lotto & Rewards",
+    "groupGames": "Games",
+    "groupReportsAndMarketing": "Reports & Marketing",
+    "groupSecurityAndStaff": "Security & Staff",
+    "groupSystem": "System"
   }
 }

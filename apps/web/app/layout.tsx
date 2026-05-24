@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { fontAdmin, fontBn, fontEn } from '@/styles/fonts';
 import { Providers } from './providers';
 import { resolveLang } from '@/lib/i18n/server';
+import { DynamicFavicon } from '@/components/site/DynamicFavicon';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -38,6 +39,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang={initialLang} data-lang={initialLang} className={`${fontBn.variable} ${fontEn.variable} ${fontAdmin.variable}`}>
       <body className={`${bodyFont} antialiased`}>
+        <DynamicFavicon />
         <Providers initialLang={initialLang}>{children}</Providers>
       </body>
     </html>

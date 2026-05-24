@@ -50,5 +50,10 @@ export const ROUTES = {
     settings: '/admin/settings',
     activity: '/admin/activity',
     handover: '/admin/handover',
+    website: '/admin/website',
+    staff: '/admin/staff',
+    reports: '/admin/reports',
+    security: '/admin/security',
+    marketing: '/admin/marketing',
   },
 } as const;

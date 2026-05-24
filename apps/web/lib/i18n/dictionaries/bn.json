@@ -361,6 +361,21 @@
     "totalWithdrawals": "মোট উইথড্র",
     "bonusIssued": "ইস্যুকৃত বোনাস",
     "referralSignups": "রেফারেল সাইনআপ",
-    "netBalance": "প্ল্যাটফর্ম নেট ব্যালেন্স"
+    "netBalance": "প্ল্যাটফর্ম নেট ব্যালেন্স",
+    "website": "ওয়েবসাইট কাস্টমাইজেশন",
+    "staff": "স্টাফ ও সাব-অ্যাডমিন",
+    "reports": "রিপোর্ট ও অ্যানালিটিক্স",
+    "security": "সিকিউরিটি সেন্টার",
+    "marketing": "মার্কেটিং সেন্টার",
+    "groupOverview": "ওভারভিউ",
+    "groupOperations": "অপারেশনস",
+    "groupUsersAndMoney": "ইউজার ও মানি",
+    "groupBonusAndAffiliate": "বোনাস ও অ্যাফিলিয়েট",
+    "groupContentAndMedia": "কনটেন্ট ও মিডিয়া",
+    "groupLottoRewards": "লটো ও রিওয়ার্ড",
+    "groupGames": "গেমস",
+    "groupReportsAndMarketing": "রিপোর্ট ও মার্কেটিং",
+    "groupSecurityAndStaff": "সিকিউরিটি ও স্টাফ",
+    "groupSystem": "সিস্টেম"
   }
 }

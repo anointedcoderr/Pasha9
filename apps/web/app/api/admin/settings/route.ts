@@ -32,8 +32,15 @@ export async function PATCH(req: NextRequest) {
     const parsed = patchSchema.safeParse(body);
     if (!parsed.success) return jsonError(400, 'VALIDATION', undefined, { issues: parsed.error.issues });
 
+    // Upsert (not update) so admin-driven keys like logo_url that the
+    // initial seed may not have created can be set from the UI on day
+    // one without a re-seed.
     const ops = parsed.data.updates.map((u) =>
-      db.systemSetting.update({ where: { key: u.key }, data: { value: u.value } }),
+      db.systemSetting.upsert({
+        where: { key: u.key },
+        update: { value: u.value },
+        create: { key: u.key, value: u.value },
+      }),
     );
     await db.$transaction(ops);
     await recordActivity({
