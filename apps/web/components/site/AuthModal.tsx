@@ -12,6 +12,7 @@ import { FormField, Input, PasswordInput } from '@/components/ui/Input';
 import { Phone, Lock, KeyRound, UserPlus, User as UserIcon, Gift } from 'lucide-react';
 import { loginSchema, signupSchema, type LoginInput, type SignupInput } from '@/lib/utils/validation';
 import { useT } from '@/lib/i18n/context';
+import { triggerWalletRefresh } from './WalletStrip';
 
 interface Props {
   open: boolean;
@@ -89,6 +90,10 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
         return;
       }
       onSuccess();
+      // Notify Header + WalletStrip so they re-fetch /api/auth/me. Without
+      // this, navigating back to a route that already mounted the Header
+      // (eg the same /dashboard) leaves the header showing guest UI.
+      triggerWalletRefresh();
       const next = params.get('next') ?? '/dashboard';
       router.push(next);
       router.refresh();
@@ -171,6 +176,7 @@ function SignupForm({ onSuccess, onSwitch }: { onSuccess: () => void; onSwitch: 
         return;
       }
       onSuccess();
+      triggerWalletRefresh();
       router.push('/dashboard');
       router.refresh();
     } catch {
