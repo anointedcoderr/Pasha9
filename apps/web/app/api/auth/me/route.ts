@@ -3,11 +3,15 @@
 export const dynamic = 'force-dynamic';
 
 import { db } from '@/lib/db/client';
-import { getSessionClaims } from '@/lib/auth/session';
+import { getOrRefreshSessionClaims } from '@/lib/auth/session';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 
 export async function GET() {
-  const claims = await getSessionClaims();
+  // Transparent refresh: if the short access cookie has expired but the
+  // long-lived refresh cookie still maps to a valid DB session, mint a
+  // fresh access cookie before responding so the visitor never has to
+  // re-authenticate during a normal session.
+  const claims = await getOrRefreshSessionClaims();
   if (!claims) return jsonError(401, 'UNAUTHENTICATED');
 
   const user = await db.user.findUnique({

@@ -4,13 +4,16 @@
 import { cookies, headers } from 'next/headers';
 import { createHash, randomBytes } from 'node:crypto';
 import { db } from '@/lib/db/client';
-import { signAccessToken, signRefreshToken, verifyAccessToken, type AccessClaims } from './jwt';
+import { signAccessToken, signRefreshToken, verifyAccessToken, verifyRefreshToken, type AccessClaims } from './jwt';
+import { loadPermissionsForRole } from './rbac';
 
 export const ACCESS_COOKIE = 'pasha9_session';
 export const REFRESH_COOKIE = 'pasha9_refresh';
 
-const ACCESS_MAX_AGE_SECONDS = 15 * 60; // 15 minutes
-const REFRESH_MAX_AGE_SECONDS = 7 * 24 * 60 * 60; // 7 days
+// Cookie lifetimes mirror the JWT TTLs in lib/auth/jwt.ts. Bumped from
+// 15 min / 7 days so a normal session does not log out mid-flow.
+const ACCESS_MAX_AGE_SECONDS = 8 * 60 * 60; // 8 hours
+const REFRESH_MAX_AGE_SECONDS = 30 * 24 * 60 * 60; // 30 days
 
 function sha256(value: string): string {
   return createHash('sha256').update(value).digest('hex');
@@ -93,8 +96,76 @@ export async function getSessionClaims(): Promise<AccessClaims | null> {
   return verifyAccessToken(token);
 }
 
-export async function requireSession(): Promise<AccessClaims> {
+/**
+ * Best-effort: if the access cookie is missing or expired but the
+ * refresh cookie still resolves to a valid, non-revoked session in
+ * the DB, mint a fresh access cookie (and rotate the refresh secret
+ * for safety) and return the new claims. Returns null otherwise.
+ *
+ * Safe to call on any request - never throws on bad/missing cookies.
+ * Used by /api/auth/me and /api/auth/refresh so users do not get
+ * bounced just because the short access cookie expired.
+ */
+export async function refreshSession(): Promise<AccessClaims | null> {
+  const jar = cookies();
+  const raw = jar.get(REFRESH_COOKIE)?.value;
+  if (!raw) return null;
+
+  const split = raw.split('.');
+  if (split.length < 2) return null;
+  const secret = split[split.length - 1];
+  const refreshJwt = split.slice(0, -1).join('.');
+  if (!secret || !refreshJwt) return null;
+
+  const claims = await verifyRefreshToken(refreshJwt);
+  if (!claims) return null;
+
+  const session = await db.session.findUnique({ where: { id: claims.sid } });
+  if (!session || session.revokedAt || session.expiresAt < new Date()) return null;
+  if (session.tokenHash !== hashToken(secret)) return null;
+  if (session.userId !== claims.sub) return null;
+
+  const user = await db.user.findUnique({
+    where: { id: session.userId },
+    include: { role: true },
+  });
+  if (!user || user.status === 'blocked') return null;
+
+  const perms = await loadPermissionsForRole(user.roleId);
+  // Reissue both cookies (rotates the refresh secret so a stolen
+  // refresh token has a smaller usable window). The DB session row
+  // is replaced via setAuthCookies' insert, which is fine for M1
+  // since the existing row's metadata is already in DB.
+  await setAuthCookies(user.id, user.role.key, perms, {
+    userAgent: session.userAgent ?? undefined,
+    ip: session.ip ?? undefined,
+  });
+  // Revoke the old session row so it cannot be replayed.
+  try {
+    await db.session.update({
+      where: { id: session.id },
+      data: { revokedAt: new Date() },
+    });
+  } catch {
+    // best-effort
+  }
+
+  return { sub: user.id, role: user.role.key, perms } as AccessClaims;
+}
+
+/**
+ * Returns the live access claims if present, otherwise transparently
+ * attempts a refresh. Use this anywhere you want "logged in if at
+ * all possible".
+ */
+export async function getOrRefreshSessionClaims(): Promise<AccessClaims | null> {
   const claims = await getSessionClaims();
+  if (claims) return claims;
+  return refreshSession();
+}
+
+export async function requireSession(): Promise<AccessClaims> {
+  const claims = await getOrRefreshSessionClaims();
   if (!claims) throw new Error('UNAUTHENTICATED');
   return claims;
 }

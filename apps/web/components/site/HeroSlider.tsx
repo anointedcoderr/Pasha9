@@ -14,18 +14,20 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useT, useLang } from '@/lib/i18n/context';
-import { ChevronLeft, ChevronRight, Sparkles, Gift, Volume2, VolumeX } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Sparkles, Gift, Volume2, VolumeX, Gamepad2, ArrowDownToLine, Wallet as WalletIcon } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils/cn';
 
 type Accent = 'gold' | 'neon' | 'mixed' | 'royal' | 'red';
 type MediaType = 'image' | 'video';
 
+type CtaKind = 'register' | 'login' | 'play' | 'deposit' | 'bonus' | 'wallet' | 'open';
+
 interface Slide {
   title: string;
   subtitle: string;
-  primary: { label: string; href: string };
-  secondary?: { label: string; href: string };
+  primary: { label: string; href: string; kind: CtaKind };
+  secondary?: { label: string; href: string; kind: CtaKind };
   art: 'royal' | 'live' | 'referral';
   mediaType?: MediaType;
   imageUrl?: string | null;
@@ -52,11 +54,52 @@ interface LiveBanner {
 const IMAGE_ROTATE_MS = 6500;
 const VIDEO_MAX_DWELL_MS = 12_000;
 
-function fallbackSlides(t: (k: string) => string): Slide[] {
+function guestFallbackSlides(t: (k: string) => string): Slide[] {
   return [
-    { title: t('home.heroTitle1'), subtitle: t('home.heroSub1'), primary: { label: t('home.heroCtaPrimary'), href: '/' }, secondary: { label: t('home.heroCtaSecondary'), href: '/promotions' }, art: 'royal' },
-    { title: t('home.heroTitle2'), subtitle: t('home.heroSub2'), primary: { label: t('home.heroCtaPrimary'), href: '/live-casino' }, art: 'live' },
-    { title: t('home.heroTitle3'), subtitle: t('home.heroSub3'), primary: { label: t('common.signup'), href: '/referral' }, art: 'referral' },
+    {
+      title: t('home.heroTitle1'),
+      subtitle: t('home.heroSub1'),
+      primary: { label: t('home.heroCtaRegister'), href: '/?signup=1', kind: 'register' },
+      secondary: { label: t('home.heroCtaBonus'), href: '/promotions', kind: 'bonus' },
+      art: 'royal',
+    },
+    {
+      title: t('home.heroTitle2'),
+      subtitle: t('home.heroSub2'),
+      primary: { label: t('home.heroCtaPlay'), href: '/live-casino', kind: 'play' },
+      art: 'live',
+    },
+    {
+      title: t('home.heroTitle3'),
+      subtitle: t('home.heroSub3'),
+      primary: { label: t('home.heroCtaRegister'), href: '/?signup=1', kind: 'register' },
+      art: 'referral',
+    },
+  ];
+}
+
+function authedFallbackSlides(t: (k: string) => string): Slide[] {
+  return [
+    {
+      title: t('home.heroTitleAuthed1'),
+      subtitle: t('home.heroSubAuthed1'),
+      primary: { label: t('home.heroCtaPlay'), href: '/games', kind: 'play' },
+      secondary: { label: t('home.heroCtaDeposit'), href: '/deposit', kind: 'deposit' },
+      art: 'royal',
+    },
+    {
+      title: t('home.heroTitle2'),
+      subtitle: t('home.heroSub2'),
+      primary: { label: t('home.heroCtaPlay'), href: '/live-casino', kind: 'play' },
+      art: 'live',
+    },
+    {
+      title: t('home.heroTitleAuthed3'),
+      subtitle: t('home.heroSubAuthed3'),
+      primary: { label: t('home.heroCtaBonus'), href: '/promotions', kind: 'bonus' },
+      secondary: { label: t('home.heroCtaWallet'), href: '/wallet', kind: 'wallet' },
+      art: 'referral',
+    },
   ];
 }
 
@@ -66,10 +109,45 @@ function artForAccent(accent: Accent): Slide['art'] {
   return 'royal';
 }
 
+// Detect href / label combinations that are obviously guest-only so we
+// can swap them for a logged-in equivalent. Admin-set live banners can
+// still target /promotions or /games freely.
+function looksGuestOnly(href: string, label?: string | null): boolean {
+  const h = (href || '').toLowerCase();
+  if (h.includes('login=1') || h.includes('signup=1') || h === '/login' || h === '/register') return true;
+  const l = (label || '').trim().toLowerCase();
+  return l === 'register' || l === 'register now' || l === 'login' || l === 'sign up' || l === 'sign in';
+}
+
+function iconForKind(kind: CtaKind) {
+  switch (kind) {
+    case 'play': return <Gamepad2 className="h-4 w-4" />;
+    case 'deposit': return <ArrowDownToLine className="h-4 w-4" />;
+    case 'wallet': return <WalletIcon className="h-4 w-4" />;
+    case 'bonus': return <Gift className="h-4 w-4" />;
+    case 'register':
+    case 'login':
+    case 'open':
+    default: return <Sparkles className="h-4 w-4" />;
+  }
+}
+
+function rewriteForAuthed(slide: Slide, t: (k: string) => string): Slide {
+  const next: Slide = { ...slide };
+  if (looksGuestOnly(slide.primary.href, slide.primary.label)) {
+    next.primary = { label: t('home.heroCtaPlay'), href: '/games', kind: 'play' };
+  }
+  if (slide.secondary && looksGuestOnly(slide.secondary.href, slide.secondary.label)) {
+    next.secondary = { label: t('home.heroCtaDeposit'), href: '/deposit', kind: 'deposit' };
+  }
+  return next;
+}
+
 export function HeroSlider() {
   const t = useT();
   const { lang } = useLang();
   const [live, setLive] = useState<LiveBanner[] | null>(null);
+  const [isAuthed, setIsAuthed] = useState<boolean | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -82,12 +160,42 @@ export function HeroSlider() {
     return () => { alive = false; };
   }, []);
 
+  // Auth state for CTA tailoring. Re-runs on the same wallet-refresh
+  // event Header / WalletStrip already use so the hero flips to the
+  // logged-in CTAs the moment the user signs in inside the same tab.
+  useEffect(() => {
+    let alive = true;
+    const probe = () => {
+      fetch('/api/auth/me', { cache: 'no-store', credentials: 'include' })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (!alive) return;
+          setIsAuthed(!!data?.user);
+        })
+        .catch(() => {
+          if (alive) setIsAuthed(false);
+        });
+    };
+    probe();
+    const handler = () => probe();
+    window.addEventListener('pasha9:wallet-refresh', handler);
+    return () => {
+      alive = false;
+      window.removeEventListener('pasha9:wallet-refresh', handler);
+    };
+  }, []);
+
   const slides: Slide[] = useMemo(() => {
-    if (!live || live.length === 0) return fallbackSlides(t);
-    return live.map<Slide>((b) => ({
+    if (!live || live.length === 0) {
+      // Show neutral guest slides while auth state is still loading so
+      // first paint matches SSR. Swap to authed slides as soon as we
+      // know.
+      return isAuthed ? authedFallbackSlides(t) : guestFallbackSlides(t);
+    }
+    const liveSlides = live.map<Slide>((b) => ({
       title: (lang === 'en' && b.titleEn) ? b.titleEn : b.title,
       subtitle: ((lang === 'en' && b.subtitleEn) ? b.subtitleEn : b.subtitle) ?? '',
-      primary: { label: b.ctaLabel ?? t('home.heroCtaPrimary'), href: b.link ?? '/' },
+      primary: { label: b.ctaLabel ?? t('home.heroCtaRegister'), href: b.link ?? '/', kind: 'open' },
       art: artForAccent(b.accent),
       mediaType: (b.mediaType ?? 'image') as MediaType,
       imageUrl: b.imageUrl,
@@ -95,7 +203,10 @@ export function HeroSlider() {
       posterUrl: b.posterUrl,
       accent: b.accent,
     }));
-  }, [live, lang, t]);
+    // For logged-in users, replace any obviously guest-only CTAs on
+    // admin-set live banners with sensible logged-in equivalents.
+    return isAuthed ? liveSlides.map((s) => rewriteForAuthed(s, t)) : liveSlides;
+  }, [live, lang, t, isAuthed]);
 
   const [i, setI] = useState(0);
   const [muted, setMuted] = useState(true);
@@ -196,11 +307,11 @@ export function HeroSlider() {
             <p className="mt-3 max-w-md text-sm text-white/80 md:text-base">{slide.subtitle}</p>
             <div className="mt-5 flex flex-wrap items-center gap-3">
               <Link href={slide.primary.href}>
-                <Button size="lg" variant="yellow" leftIcon={<Sparkles className="h-4 w-4" />}>{slide.primary.label}</Button>
+                <Button size="lg" variant="yellow" leftIcon={iconForKind(slide.primary.kind)}>{slide.primary.label}</Button>
               </Link>
               {slide.secondary ? (
                 <Link href={slide.secondary.href}>
-                  <Button size="lg" variant="blue" leftIcon={<Gift className="h-4 w-4" />}>{slide.secondary.label}</Button>
+                  <Button size="lg" variant="blue" leftIcon={iconForKind(slide.secondary.kind)}>{slide.secondary.label}</Button>
                 </Link>
               ) : null}
             </div>
