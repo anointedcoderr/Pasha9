@@ -1,77 +1,191 @@
+// Built by Anointed Coder.
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { PageHeader } from '@/components/site/PageHeader';
 import { DataTable } from '@/components/ui/DataTable';
 import { Chip } from '@/components/ui/Chip';
 import { Button } from '@/components/ui/Button';
-import { UserDetailDrawer } from '@/components/admin/UserDetailDrawer';
+import { Card } from '@/components/ui/Card';
+import { UserDetailDrawer, type AdminUserSummary, type AdminUserDetail } from '@/components/admin/UserDetailDrawer';
 import { BalanceAdjustModal } from '@/components/admin/BalanceAdjustModal';
-import { mockUsers } from '@/lib/mock/users';
 import { formatBDT, formatDate } from '@/lib/utils/format';
 import { useLang } from '@/lib/i18n/context';
-import { Users } from 'lucide-react';
-import type { User } from '@/types';
+import { Users, RefreshCw } from 'lucide-react';
 import type { ColumnDef } from '@tanstack/react-table';
+import { cn } from '@/lib/utils/cn';
 
 export default function AdminUsersPage() {
   const { lang } = useLang();
-  const [selected, setSelected] = useState<User | null>(null);
+  const [rows, setRows] = useState<AdminUserSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [balanceUser, setBalanceUser] = useState<User | null>(null);
+  const [balanceUser, setBalanceUser] = useState<AdminUserSummary | null>(null);
   const [balanceOpen, setBalanceOpen] = useState(false);
 
-  const columns = useMemo<ColumnDef<User>[]>(() => [
-    {
-      header: 'User',
-      accessorKey: 'username',
-      cell: ({ row }) => (
-        <div>
-          <p className="font-medium text-ink-hi">{row.original.username}</p>
-          <p className="text-xs text-ink-lo">{row.original.phone}</p>
-        </div>
-      ),
-    },
-    { header: 'Role', accessorKey: 'role', cell: ({ getValue }) => <span className="capitalize text-ink-mid">{String(getValue()).replace('_', ' ')}</span> },
-    { header: 'Status', accessorKey: 'status', cell: ({ getValue }) => <Chip tone={getValue() === 'active' ? 'ok' : getValue() === 'blocked' ? 'danger' : 'warn'}>{String(getValue())}</Chip> },
-    { header: 'Balance', accessorKey: 'balance', cell: ({ getValue }) => <span className="font-semibold text-gradient-gold">{formatBDT(Number(getValue()))}</span> },
-    { header: 'Total Deposit', accessorKey: 'totalDeposit', cell: ({ getValue }) => <span className="text-ink-mid">{formatBDT(Number(getValue()))}</span> },
-    { header: 'Joined', accessorKey: 'createdAt', cell: ({ getValue }) => <span className="text-ink-lo">{formatDate(String(getValue()), lang)}</span> },
-    {
-      header: '',
-      id: 'actions',
-      cell: ({ row }) => (
-        <div className="flex justify-end gap-2">
-          <Button size="sm" variant="ghost" onClick={() => { setSelected(row.original); setDrawerOpen(true); }}>View</Button>
-          <Button size="sm" variant="neon" onClick={() => { setBalanceUser(row.original); setBalanceOpen(true); }}>Adjust</Button>
-        </div>
-      ),
-    },
-  ], [lang]);
+  const load = useCallback(async () => {
+    setError(null);
+    setRefreshing(true);
+    try {
+      const res = await fetch('/api/admin/users?take=200', { cache: 'no-store' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message ?? data?.code ?? 'Failed');
+      const users = (data.users as Array<{
+        id: string;
+        username: string;
+        phone: string;
+        status: string;
+        country: string;
+        language: string;
+        createdAt: string;
+        role: { key: string; label: string };
+        wallet: { balance: number | string; bonusBalance: number | string; lockedBalance: number | string } | null;
+      }>).map<AdminUserSummary>((u) => ({
+        id: u.id,
+        username: u.username,
+        phone: u.phone,
+        status: u.status as AdminUserSummary['status'],
+        roleKey: u.role.key,
+        roleLabel: u.role.label,
+        country: u.country,
+        language: u.language as 'bn' | 'en',
+        createdAt: u.createdAt,
+        balance: Number(u.wallet?.balance ?? 0),
+      }));
+      setRows(users);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load users');
+    } finally {
+      setRefreshing(false);
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const columns = useMemo<ColumnDef<AdminUserSummary>[]>(
+    () => [
+      {
+        header: 'User',
+        accessorKey: 'username',
+        cell: ({ row }) => (
+          <div>
+            <p className="font-semibold text-ink-hi">{row.original.username}</p>
+            <p className="font-mono text-[11px] text-ink-lo">{row.original.phone}</p>
+          </div>
+        ),
+      },
+      { header: 'Role', accessorKey: 'roleKey', cell: ({ row }) => <span className="capitalize text-ink-mid">{row.original.roleLabel ?? row.original.roleKey.replace('_', ' ')}</span> },
+      {
+        header: 'Status',
+        accessorKey: 'status',
+        cell: ({ getValue }) => {
+          const v = String(getValue());
+          return <Chip tone={v === 'active' ? 'ok' : v === 'blocked' ? 'danger' : 'warn'}>{v}</Chip>;
+        },
+      },
+      { header: 'Balance', accessorKey: 'balance', cell: ({ getValue }) => <span className="font-semibold text-gradient-gold">{formatBDT(Number(getValue()))}</span> },
+      { header: 'Joined', accessorKey: 'createdAt', cell: ({ getValue }) => <span className="text-ink-lo">{formatDate(String(getValue()), lang)}</span> },
+      {
+        header: '',
+        id: 'actions',
+        cell: ({ row }) => (
+          <div className="flex justify-end gap-2">
+            <Button size="sm" variant="ghost" onClick={() => { setSelectedId(row.original.id); setDrawerOpen(true); }}>View</Button>
+            <Button size="sm" variant="neon" onClick={() => { setBalanceUser(row.original); setBalanceOpen(true); }}>Adjust</Button>
+          </div>
+        ),
+      },
+    ],
+    [lang],
+  );
+
+  // Fetch full detail (with aggregates) when the drawer opens.
+  const [detail, setDetail] = useState<AdminUserDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!drawerOpen || !selectedId) {
+      setDetail(null);
+      setDetailError(null);
+      return;
+    }
+    let alive = true;
+    setDetailLoading(true);
+    setDetailError(null);
+    fetch(`/api/admin/users/${selectedId}`, { cache: 'no-store' })
+      .then((r) => r.json().then((b) => ({ ok: r.ok, body: b })))
+      .then(({ ok, body }) => {
+        if (!alive) return;
+        if (!ok) {
+          setDetailError(body?.message ?? body?.code ?? 'Failed to load user');
+          setDetail(null);
+        } else {
+          setDetail(body.user as AdminUserDetail);
+        }
+      })
+      .catch((e) => { if (alive) setDetailError(e instanceof Error ? e.message : 'Failed'); })
+      .finally(() => { if (alive) setDetailLoading(false); });
+    return () => { alive = false; };
+  }, [drawerOpen, selectedId]);
 
   return (
     <>
-      <PageHeader title="User Management" subtitle={`${mockUsers.length} accounts`} icon={<Users className="h-5 w-5" />} />
-      <DataTable
-        columns={columns}
-        data={mockUsers}
-        searchPlaceholder="Search by username or phone"
-        searchKey="username"
-        onRowClick={(u) => { setSelected(u); setDrawerOpen(true); }}
+      <PageHeader
+        title="User Management"
+        subtitle={loading ? 'Loading...' : `${rows.length} accounts`}
+        icon={<Users className="h-5 w-5" />}
+        action={
+          <Button variant="neon" leftIcon={<RefreshCw className={cn('h-3.5 w-3.5', refreshing && 'animate-spin')} />} onClick={load}>
+            Refresh
+          </Button>
+        }
       />
+
+      {error ? <Card padding="md" className="mb-4"><p className="text-sm text-signal-danger">{error}</p></Card> : null}
+
+      {loading ? (
+        <Card padding="lg">Loading...</Card>
+      ) : (
+        <DataTable
+          columns={columns}
+          data={rows}
+          searchPlaceholder="Search by username or phone"
+          searchKey="username"
+          onRowClick={(u) => { setSelectedId(u.id); setDrawerOpen(true); }}
+        />
+      )}
 
       <UserDetailDrawer
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
-        user={selected}
+        detail={detail}
+        loading={detailLoading}
+        error={detailError}
         onAdjustBalance={(u) => { setBalanceUser(u); setBalanceOpen(true); setDrawerOpen(false); }}
+        onStatusChange={(nextStatus) => {
+          if (!detail) return;
+          fetch(`/api/admin/users/${detail.id}`, {
+            method: 'PATCH',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ status: nextStatus }),
+          })
+            .then((r) => r.json())
+            .then(() => { setDetail({ ...detail, status: nextStatus }); load(); })
+            .catch(() => {});
+        }}
       />
+
       <BalanceAdjustModal
         open={balanceOpen}
         onOpenChange={setBalanceOpen}
-        user={balanceUser}
+        user={balanceUser as unknown as Parameters<typeof BalanceAdjustModal>[0]['user']}
         onConfirm={(payload) => {
-          console.info('balance adjustment (mock)', payload);
+          console.info('balance adjustment (M1 surface, real wallet write ships in M2)', payload);
         }}
       />
     </>

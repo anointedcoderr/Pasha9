@@ -7,7 +7,7 @@ import { withAuth, ensurePermission, recordActivity } from '@/lib/auth/guard';
 import { storeFile, type UploadCategory } from '@/lib/uploads/storage';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 
-const ALLOWED: UploadCategory[] = ['banners', 'games', 'payment-proofs', 'apk'];
+const ALLOWED: UploadCategory[] = ['banners', 'games', 'payment-proofs', 'apk', 'branding', 'categories', 'jackpot'];
 
 export async function POST(req: NextRequest) {
   return withAuth(async () => {

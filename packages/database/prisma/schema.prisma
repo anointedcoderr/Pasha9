@@ -406,16 +406,20 @@ model HomepageContent {
 // ---------- Games ----------
 
 model GameCategory {
-  id        String        @id @default(cuid())
-  slug      String        @unique
-  nameBn    String
-  nameEn    String
-  iconKey   String
-  position  Int           @default(0)
-  status    ContentStatus @default(active)
-  games     Game[]
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
+  id           String        @id @default(cuid())
+  slug         String        @unique
+  nameBn       String
+  nameEn       String
+  iconKey      String
+  // Optional uploaded image used as the category icon. When set the
+  // public site prefers this over iconKey, falling back to iconKey if
+  // the image fails to load.
+  iconImageUrl String?
+  position     Int           @default(0)
+  status       ContentStatus @default(active)
+  games        Game[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 }
 
 model GameProvider {

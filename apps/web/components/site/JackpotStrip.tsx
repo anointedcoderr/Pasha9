@@ -1,10 +1,12 @@
 // Built by Anointed Coder.
 //
-// Premium jackpot strip. Dark glass card with gold trim, light streak
-// across the surface, sparkle dust, and three pool cards with strong
-// visual hierarchy (Grand sits in the centre, larger and gold-rimmed).
-// Numbers tick upward gently to feel alive. Pure UI, no real prize
-// pool source.
+// Premium jackpot strip. Reads admin-configured values from
+// /api/content/jackpot (title, subtitle, background, per-card title +
+// icon + base value). Falls back to the bundled premium defaults when
+// the operator has not configured a key. Returns null when the admin
+// has disabled the section. The ticker on top still adds small live
+// increments so the card feels alive - those increments are purely
+// visual, no wallet or transaction impact.
 
 'use client';
 
@@ -13,11 +15,47 @@ import { Sparkles, Crown, Trophy } from 'lucide-react';
 import { useT } from '@/lib/i18n/context';
 import { cn } from '@/lib/utils/cn';
 
+interface JackpotCard {
+  title: string | null;
+  iconUrl: string | null;
+  value: number | null;
+}
+
+interface JackpotConfig {
+  enabled: boolean;
+  title: string | null;
+  subtitle: string | null;
+  backgroundUrl: string | null;
+  mini: JackpotCard;
+  grand: JackpotCard;
+  major: JackpotCard;
+}
+
+const DEFAULT_MINI = 493;
+const DEFAULT_GRAND = 121_497;
+const DEFAULT_MAJOR = 7_923;
+
 export function JackpotStrip() {
   const t = useT();
-  const [mini, setMini] = useState(493);
-  const [grand, setGrand] = useState(121_497);
-  const [major, setMajor] = useState(7_923);
+  const [cfg, setCfg] = useState<JackpotConfig | null>(null);
+  const [mini, setMini] = useState(DEFAULT_MINI);
+  const [grand, setGrand] = useState(DEFAULT_GRAND);
+  const [major, setMajor] = useState(DEFAULT_MAJOR);
+
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/content/jackpot', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: JackpotConfig | null) => {
+        if (!alive || !data) return;
+        setCfg(data);
+        if (typeof data.mini.value === 'number') setMini(data.mini.value);
+        if (typeof data.grand.value === 'number') setGrand(data.grand.value);
+        if (typeof data.major.value === 'number') setMajor(data.major.value);
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -28,11 +66,30 @@ export function JackpotStrip() {
     return () => clearInterval(id);
   }, []);
 
+  // Admin disabled the whole section. Render nothing.
+  if (cfg && cfg.enabled === false) return null;
+
+  const sectionTitle = cfg?.title?.trim() || t('home.jackpot.title');
+  const sectionSubtitle = cfg?.subtitle?.trim() || t('home.jackpot.subtitle');
+  const miniTitle = cfg?.mini.title?.trim() || t('home.jackpot.mini');
+  const grandTitle = cfg?.grand.title?.trim() || t('home.jackpot.grand');
+  const majorTitle = cfg?.major.title?.trim() || t('home.jackpot.major');
+
   return (
     <section
-      aria-label={t('home.jackpot.title')}
+      aria-label={sectionTitle}
       className="relative overflow-hidden rounded-2xl border border-brand-yellow-500/30 bg-[linear-gradient(135deg,#0F1115_0%,#1A1D24_45%,#0F1115_100%)] p-4 text-white shadow-[0_18px_44px_-28px_rgba(245,180,0,0.55)] md:p-6"
     >
+      {/* Optional admin-uploaded background */}
+      {cfg?.backgroundUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={cfg.backgroundUrl}
+          alt=""
+          aria-hidden
+          className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-25 mix-blend-luminosity"
+        />
+      ) : null}
       {/* Decorative layers */}
       <span aria-hidden className="pointer-events-none absolute -top-20 -left-12 h-48 w-48 rounded-full bg-brand-yellow-500/30 blur-3xl" />
       <span aria-hidden className="pointer-events-none absolute -bottom-20 -right-10 h-48 w-48 rounded-full bg-rose-500/20 blur-3xl" />
@@ -44,12 +101,10 @@ export function JackpotStrip() {
             'repeating-linear-gradient(115deg, transparent 0 18px, rgba(255,255,255,0.04) 18px 19px)',
         }}
       />
-      {/* Sweep light streak */}
       <span
         aria-hidden
         className="pointer-events-none absolute inset-y-0 left-[-30%] w-[60%] -skew-x-12 bg-gradient-to-r from-transparent via-white/10 to-transparent"
       />
-      {/* Tiny coin sparkles */}
       <span aria-hidden className="pointer-events-none absolute right-6 top-3 h-1.5 w-1.5 rounded-full bg-brand-yellow-300 shadow-[0_0_8px_rgba(255,224,102,0.85)]" />
       <span aria-hidden className="pointer-events-none absolute right-14 top-7 h-1 w-1 rounded-full bg-white/70 shadow-[0_0_6px_rgba(255,255,255,0.85)]" />
       <span aria-hidden className="pointer-events-none absolute left-10 bottom-3 h-1 w-1 rounded-full bg-brand-yellow-400" />
@@ -60,33 +115,36 @@ export function JackpotStrip() {
             <Crown className="h-4 w-4" />
           </span>
           <p className="text-sm font-extrabold uppercase tracking-[0.18em] text-brand-yellow-300">
-            {t('home.jackpot.title')}
+            {sectionTitle}
           </p>
         </div>
         <p className="inline-flex items-center gap-1.5 rounded-full border border-brand-yellow-500/20 bg-white/5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-white/75">
           <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
-          {t('home.jackpot.subtitle')}
+          {sectionSubtitle}
         </p>
       </div>
 
       <div className="relative mt-4 grid grid-cols-3 items-end gap-2 sm:gap-3">
         <Pool
-          icon={<Sparkles className="h-3.5 w-3.5" />}
+          icon={cfg?.mini.iconUrl}
+          fallbackIcon={<Sparkles className="h-3.5 w-3.5" />}
           gradient="from-amber-300 via-amber-500 to-amber-700"
-          label={t('home.jackpot.mini')}
+          label={miniTitle}
           value={mini}
         />
         <Pool
-          icon={<Crown className="h-3.5 w-3.5" />}
+          icon={cfg?.grand.iconUrl}
+          fallbackIcon={<Crown className="h-3.5 w-3.5" />}
           gradient="from-rose-400 via-rose-500 to-red-700"
-          label={t('home.jackpot.grand')}
+          label={grandTitle}
           value={grand}
           highlight
         />
         <Pool
-          icon={<Trophy className="h-3.5 w-3.5" />}
+          icon={cfg?.major.iconUrl}
+          fallbackIcon={<Trophy className="h-3.5 w-3.5" />}
           gradient="from-sky-400 via-blue-500 to-blue-800"
-          label={t('home.jackpot.major')}
+          label={majorTitle}
           value={major}
         />
       </div>
@@ -96,12 +154,14 @@ export function JackpotStrip() {
 
 function Pool({
   icon,
+  fallbackIcon,
   gradient,
   label,
   value,
   highlight,
 }: {
-  icon: React.ReactNode;
+  icon: string | null | undefined;
+  fallbackIcon: React.ReactNode;
   gradient: string;
   label: string;
   value: number;
@@ -116,20 +176,22 @@ function Pool({
           : 'border-white/10 bg-white/[0.04] px-3 py-3 sm:py-4',
       )}
     >
-      {/* Tone wash */}
       <span aria-hidden className={cn('pointer-events-none absolute -top-10 left-1/2 h-24 w-24 -translate-x-1/2 rounded-full opacity-40 blur-2xl', `bg-gradient-to-br ${gradient}`)} />
-      {/* Bottom hairline */}
       <span aria-hidden className="pointer-events-none absolute inset-x-3 bottom-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent" />
 
-      {/* Icon badge */}
       <span
         className={cn(
-          'relative mx-auto flex items-center justify-center rounded-lg text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_10px_-4px_rgba(0,0,0,0.5)]',
+          'relative mx-auto flex items-center justify-center overflow-hidden rounded-lg text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_10px_-4px_rgba(0,0,0,0.5)]',
           highlight ? 'h-8 w-8 sm:h-9 sm:w-9' : 'h-7 w-7',
-          `bg-gradient-to-br ${gradient}`,
+          icon ? 'bg-white/10' : `bg-gradient-to-br ${gradient}`,
         )}
       >
-        {icon}
+        {icon ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={icon} alt="" className="h-full w-full object-contain p-1" />
+        ) : (
+          fallbackIcon
+        )}
       </span>
 
       <p className={cn(
