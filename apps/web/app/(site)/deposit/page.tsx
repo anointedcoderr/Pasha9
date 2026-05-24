@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { PageHeader } from '@/components/site/PageHeader';
@@ -10,6 +11,7 @@ import { Button } from '@/components/ui/Button';
 import { depositSchema, type DepositInput } from '@/lib/utils/validation';
 import { mockPaymentMethods } from '@/lib/mock/payment-methods';
 import { useT } from '@/lib/i18n/context';
+import { triggerWalletRefresh } from '@/components/site/WalletStrip';
 import { ArrowDownToLine, CheckCircle2, Upload, Info } from 'lucide-react';
 import { Card, CardHeader } from '@/components/ui/Card';
 
@@ -17,15 +19,19 @@ const QUICK = [500, 1000, 2000, 5000, 10000, 25000];
 
 export default function DepositPage() {
   const t = useT();
+  const router = useRouter();
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [filename, setFilename] = useState<string | null>(null);
+  const [serverError, setServerError] = useState<string | null>(null);
+  const [submittedDepositId, setSubmittedDepositId] = useState<string | null>(null);
 
   const {
     register,
     handleSubmit,
     setValue,
     watch,
+    reset,
     formState: { errors },
   } = useForm<DepositInput>({
     resolver: zodResolver(depositSchema),
@@ -34,11 +40,58 @@ export default function DepositPage() {
 
   const method = mockPaymentMethods.find((m) => m.name === watch('method'));
 
-  const onSubmit = async () => {
+  const onSubmit = async (values: DepositInput) => {
+    setServerError(null);
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 700));
-    setLoading(false);
-    setSubmitted(true);
+    try {
+      const res = await fetch('/api/deposits', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          amount: values.amount,
+          method: values.method,
+          transactionId: values.txn,
+          // proofUrl wiring lives with the file upload backend - M1 ships
+          // the filename to the admin via the admin note flow.
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (res.status === 401) {
+          setServerError('Please log in before submitting a deposit.');
+          router.push('/?login=1');
+          return;
+        }
+        if (res.status === 429) {
+          setServerError('Too many submissions. Please wait a minute and try again.');
+          return;
+        }
+        if (data?.code === 'VALIDATION') {
+          setServerError('Please check the amount, method and transaction ID.');
+          return;
+        }
+        setServerError(data?.message ?? data?.code ?? 'Could not submit deposit.');
+        return;
+      }
+      setSubmittedDepositId(data?.deposit?.id ?? null);
+      setSubmitted(true);
+      // Trigger a wallet refresh so any "pending" badges or counters
+      // pick up the new row. Main balance will only change after
+      // admin approval.
+      triggerWalletRefresh();
+    } catch {
+      setServerError('Network error. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const newRequest = () => {
+    setSubmitted(false);
+    setSubmittedDepositId(null);
+    setFilename(null);
+    setServerError(null);
+    reset({ amount: 0, method: mockPaymentMethods[0]?.name ?? '', txn: '' });
   };
 
   return (
@@ -51,9 +104,12 @@ export default function DepositPage() {
             <CheckCircle2 className="h-6 w-6" />
           </div>
           <h2 className="text-xl font-semibold text-ink-hi">Deposit request submitted</h2>
-          <p className="mt-2 text-sm text-ink-mid">Your request is pending admin review. You will be notified once the balance is credited.</p>
+          <p className="mt-2 text-sm text-ink-mid">Your request is pending admin review. Balance and lottery tickets are credited after approval.</p>
+          {submittedDepositId ? (
+            <p className="mt-1 text-xs text-ink-lo">Reference: <code className="font-mono">{submittedDepositId}</code></p>
+          ) : null}
           <div className="mt-6 flex justify-center gap-3">
-            <Button variant="neon" onClick={() => setSubmitted(false)}>New Request</Button>
+            <Button variant="neon" onClick={newRequest}>New Request</Button>
           </div>
         </Card>
       ) : (
@@ -128,6 +184,9 @@ export default function DepositPage() {
               </div>
             </Card>
 
+            {serverError ? (
+              <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{serverError}</p>
+            ) : null}
             <Button type="submit" size="lg" loading={loading} className="w-full md:w-auto">
               {t('deposit.submit')}
             </Button>
