@@ -4,10 +4,18 @@
 //   1. flips the Deposit row to status="approved"
 //   2. credits the user's main wallet
 //   3. writes a Transaction (deposit / completed)
-//   4. runs accrueLotteryTickets to bring the user's ticket count
-//      up to floor(totalApproved / 1200) * 2
+// After the transaction commits, two follow-on hooks run OUTSIDE the
+// deposit transaction so partial failures cannot roll back the credit:
+//   4. accrueLotteryTickets brings the ticket count up to
+//      floor(totalApproved / 1200) * 2
+//   5. applyDepositBonuses (M2D) issues welcome / deposit-match /
+//      reload grants and credits Wallet.bonusBalance + lockedBalance
 //
 // Idempotent: re-approving an already-approved deposit is a no-op.
+// M2D hotfix: the bonus result (granted + skipped + error) is
+// returned in the response AND written to ActivityLog with action
+// BONUS_GRANTED or BONUS_NOT_GRANTED so the live ops team can see
+// exactly what the engine did from /admin/activity.
 
 export const dynamic = 'force-dynamic';
 
@@ -41,8 +49,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
 
     const amount = new Prisma.Decimal(deposit.amount);
-
-    let bonusResult: ApplyDepositResult = { granted: [], skipped: [] };
 
     const updated = await db.$transaction(async (tx) => {
       const d = await tx.deposit.update({
@@ -80,16 +86,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         },
       });
 
-      // M2D bonus engine: welcome / deposit-match / reload triggers
-      // run inside the same transaction as the deposit credit so a
-      // failure rolls everything back. Engine logs Transaction rows
-      // for each grant (type=bonus) so the user ledger reflects them.
-      try {
-        bonusResult = await applyDepositBonuses(tx, deposit.userId, deposit.id, amount);
-      } catch (err) {
-        console.error('bonus engine failed during deposit approve', err);
-      }
-
       return d;
     });
 
@@ -103,9 +99,28 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     try {
       accrual = await accrueLotteryTickets(deposit.userId);
     } catch (err) {
-      console.error('lottery accrual failed', err);
+      console.error('[deposit-approve] lottery accrual failed', err);
     }
 
+    // M2D bonus engine. Runs outside the deposit transaction (same
+    // pattern as lottery accrual) so a bonus failure does not roll
+    // back the credit AND the failure is visible in logs + response.
+    let bonusResult: ApplyDepositResult = {
+      granted: [],
+      skipped: [],
+      candidateCount: 0,
+      error: null,
+      isFirstDeposit: false,
+    };
+    try {
+      bonusResult = await applyDepositBonuses(deposit.userId, deposit.id, amount);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[deposit-approve] bonus engine threw unexpectedly', err);
+      bonusResult.error = `engine_threw: ${msg.slice(0, 300)}`;
+    }
+
+    // Headline ActivityLog row (existing M1 behaviour).
     await recordActivity({
       actorId: session.sub,
       actorRole: session.role,
@@ -118,9 +133,55 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         targetTotalTickets: accrual.targetTotal,
         bonusesGranted: bonusResult.granted.length,
         bonusGrantIds: bonusResult.granted.map((g) => g.grantId),
+        bonusEngineError: bonusResult.error,
       },
     });
 
-    return jsonOk({ deposit: updated, accrual, bonuses: bonusResult });
+    // Separate ActivityLog row dedicated to the bonus decision so it
+    // is filterable + auditable. Action key signals success/failure
+    // at a glance in /admin/activity.
+    const summaryDetail = bonusResult.granted.length > 0
+      ? bonusResult.granted.map((g) => `${g.ruleName}(${g.ruleType})=${g.amount}`).join(' ; ')
+      : bonusResult.error
+        ? `ERROR ${bonusResult.error}`
+        : bonusResult.skipped.length > 0
+          ? bonusResult.skipped.map((s) => `${s.ruleName}:${s.reason}`).slice(0, 4).join(' ; ')
+          : `no_active_rules (candidates=${bonusResult.candidateCount})`;
+    await recordActivity({
+      actorId: session.sub,
+      actorRole: session.role,
+      action: bonusResult.granted.length > 0 ? 'BONUS_GRANTED' : 'BONUS_NOT_GRANTED',
+      target: deposit.id,
+      detail: summaryDetail.slice(0, 480),
+      meta: {
+        userId: deposit.userId,
+        depositAmount: Number(amount),
+        isFirstDeposit: bonusResult.isFirstDeposit,
+        candidateCount: bonusResult.candidateCount,
+        granted: bonusResult.granted,
+        skipped: bonusResult.skipped,
+        error: bonusResult.error,
+      },
+    });
+
+    return jsonOk({
+      deposit: updated,
+      accrual,
+      bonuses: {
+        granted: bonusResult.granted,
+        skipped: bonusResult.skipped,
+        candidateCount: bonusResult.candidateCount,
+        isFirstDeposit: bonusResult.isFirstDeposit,
+        error: bonusResult.error,
+        // headline summary for the admin Deposits page toast
+        bonusApplied: bonusResult.granted.length > 0,
+        bonusAmount: bonusResult.granted.reduce((acc, g) => acc + g.amount, 0),
+        bonusRuleCode: bonusResult.granted[0]?.ruleCode ?? null,
+        bonusRuleName: bonusResult.granted[0]?.ruleName ?? null,
+        bonusSkippedReason: bonusResult.granted.length === 0
+          ? (bonusResult.error ?? (bonusResult.skipped[0]?.reason ?? (bonusResult.candidateCount === 0 ? 'no_active_rules' : 'no_eligible_rule')))
+          : null,
+      },
+    });
   });
 }

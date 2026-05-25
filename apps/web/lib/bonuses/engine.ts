@@ -10,9 +10,13 @@
 //   - Turnover accrual (decrement requirement on bet/wager events)
 //   - Expiry sweep (forfeit unfinished grants past their deadline)
 //
-// All write helpers expect a Prisma transaction handle so they can be
-// composed inside the deposit-approve transaction without leaking
-// partial wallet state.
+// M2D hotfix: every skipped rule is recorded with a reason string,
+// engine returns an `error` field instead of throwing silently, and
+// applyDepositBonuses runs in its own short transactions per grant
+// (NOT inside the caller's deposit transaction). That way a bonus
+// failure neither rolls back the deposit nor disappears - it is
+// surfaced to the approve route which writes it to ActivityLog and
+// returns it in the API response.
 
 import { Prisma } from '@prisma/client';
 import type { BonusRule, BonusType, ContentStatus } from '@prisma/client';
@@ -40,9 +44,6 @@ function ruleIsActiveNow(rule: BonusRule, at: Date = new Date()): boolean {
   return true;
 }
 
-// Returns the bonus payout for a given deposit amount under a rule.
-// percentage is a 0-100 number applied to the deposit, then clamped
-// by maxBonus (0 = unlimited). amount (flat) is added on top.
 function computeDepositPayout(rule: BonusRule, depositAmount: Prisma.Decimal): Prisma.Decimal {
   const pct = new Prisma.Decimal(rule.percentage ?? 0);
   const flat = new Prisma.Decimal(rule.amount ?? 0);
@@ -60,8 +61,6 @@ function isMeetingMinDeposit(rule: BonusRule, depositAmount: Prisma.Decimal): bo
   return depositAmount.gte(min);
 }
 
-// Weekday filter via rule.meta.weekdays: ["mon","tue",...]. If absent,
-// rule applies any day.
 function isMatchingWeekday(rule: BonusRule, at: Date): boolean {
   const meta = (rule.meta ?? null) as { weekdays?: unknown } | null;
   if (!meta || !Array.isArray(meta.weekdays) || meta.weekdays.length === 0) return true;
@@ -94,9 +93,6 @@ async function creditBonus(tx: Tx, userId: string, amount: Prisma.Decimal): Prom
 }
 
 async function releaseBonus(tx: Tx, userId: string, amount: Prisma.Decimal): Promise<void> {
-  // Locked funds become spendable: locked -= amount, main += amount.
-  // bonusBalance stays (it tracks lifetime granted bonus, not just
-  // the locked portion - keeps accounting simple for reports).
   await tx.wallet.update({
     where: { userId },
     data: {
@@ -107,8 +103,6 @@ async function releaseBonus(tx: Tx, userId: string, amount: Prisma.Decimal): Pro
 }
 
 async function clawbackBonus(tx: Tx, userId: string, amount: Prisma.Decimal): Promise<void> {
-  // Used on expire / cancel. Decrements both bonusBalance and
-  // lockedBalance so the funds simply disappear (never reach main).
   await tx.wallet.update({
     where: { userId },
     data: {
@@ -171,9 +165,6 @@ export async function grantBonusInTx(tx: Tx, opts: GrantOpts): Promise<{ grantId
     },
   });
 
-  // Turnover requirement = 0 means the bonus is free (no wagering
-  // required) and should release immediately so the user sees it in
-  // main balance straight away.
   if (turnoverRequired.lte(0)) {
     await releaseBonus(tx, opts.userId, amount);
     await tx.userBonus.update({
@@ -187,106 +178,246 @@ export async function grantBonusInTx(tx: Tx, opts: GrantOpts): Promise<{ grantId
 
 // ---------- Deposit hook ----------
 
-// Called from /api/admin/deposits/[id]/approve after the main wallet
-// credit lands. Picks the most appropriate rule for each trigger
-// (highest priority + most-specific match) and grants it. Skips
-// rules the user already has open grants for (idempotency).
-
+export interface DepositGrantSummary {
+  ruleId: string;
+  ruleName: string;
+  ruleType: BonusType;
+  ruleCode: string | null;
+  grantId: string;
+  amount: number;
+  turnoverRequired: number;
+}
+export interface DepositSkipSummary {
+  ruleId: string;
+  ruleName: string;
+  ruleType: BonusType;
+  ruleCode: string | null;
+  reason: string;
+}
 export interface ApplyDepositResult {
-  granted: Array<{ ruleId: string; ruleName: string; ruleType: BonusType; grantId: string; amount: number }>;
-  skipped: Array<{ ruleId: string; reason: string }>;
+  granted: DepositGrantSummary[];
+  skipped: DepositSkipSummary[];
+  candidateCount: number;
+  error: string | null;
+  isFirstDeposit: boolean;
 }
 
-export async function applyDepositBonuses(
-  tx: Tx,
+// Pure evaluation: returns the per-rule decision for a given deposit
+// without actually granting. Shared by applyDepositBonuses and the
+// /diagnose endpoint.
+async function evaluateDepositCandidates(
   userId: string,
-  depositId: string,
+  depositId: string | null,
   depositAmount: Prisma.Decimal,
-): Promise<ApplyDepositResult> {
-  const result: ApplyDepositResult = { granted: [], skipped: [] };
+): Promise<{ rule: BonusRule; payout: Prisma.Decimal; eligible: boolean; reason: string | null; isFirstDeposit: boolean; candidateCount: number }[]> {
   const at = new Date();
 
-  // Is this the user's first ever approved deposit? Count includes
-  // the current one (it has just been updated to status=approved in
-  // the same transaction).
-  const approvedCount = await tx.deposit.count({
+  // approvedCount counts deposits the user has had approved INCLUDING
+  // the current one, since the approve route updates the deposit row
+  // before calling the engine (engine runs after the deposit
+  // transaction commits in the hotfixed flow).
+  const approvedCount = await db.deposit.count({
     where: { userId, status: 'approved' },
   });
   const isFirstDeposit = approvedCount <= 1;
 
-  // Triggers we evaluate, in order. Each maps to a BonusType in the
-  // schema. We grant at most one rule per trigger to avoid stacking
-  // 5 welcome bonuses if an admin made multiple rules.
-  const triggers: BonusType[] = isFirstDeposit
-    ? ['first_deposit', 'reload']
-    : ['reload'];
-
-  // Generic deposit-match rules use 'promo' type with a meta flag.
-  // We treat 'promo' rules with meta.trigger = 'deposit' as
-  // recurring deposit match and evaluate them on every deposit.
-  triggers.push('promo');
-
-  const allCandidates = await tx.bonusRule.findMany({
+  // Pull every potentially-relevant rule in one go and decide in JS.
+  // Keeps the SQL simple and the diagnostics easy to surface.
+  const triggers: BonusType[] = ['first_deposit', 'reload', 'promo'];
+  const all = await db.bonusRule.findMany({
     where: { type: { in: triggers }, status: 'active' as ContentStatus },
     orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }],
   });
 
-  // De-dupe by trigger family so we only grant one rule per kind.
-  const grantedTypes = new Set<BonusType>();
+  // De-dupe by trigger type within the same call so two welcome
+  // bonuses do not both fire.
+  const seenTypes = new Set<BonusType>();
+  const results: { rule: BonusRule; payout: Prisma.Decimal; eligible: boolean; reason: string | null; isFirstDeposit: boolean; candidateCount: number }[] = [];
 
-  for (const rule of allCandidates) {
-    if (grantedTypes.has(rule.type)) continue;
-    if (!ruleIsActiveNow(rule, at)) continue;
-    if (!isMatchingWeekday(rule, at)) continue;
-    if (!isMeetingMinDeposit(rule, depositAmount)) continue;
+  for (const rule of all) {
+    const reasons: string[] = [];
 
-    // promo rules that are not explicitly a deposit trigger should
-    // be skipped here (they are admin/manual grants on the public
-    // promotions page).
+    if (!ruleIsActiveNow(rule, at)) reasons.push('rule_window_inactive');
+    if (!isMatchingWeekday(rule, at)) reasons.push('weekday_mismatch');
+    if (!isMeetingMinDeposit(rule, depositAmount)) reasons.push(`min_deposit_${Number(rule.minDeposit)}_not_met`);
+
+    if (rule.type === 'first_deposit' && !isFirstDeposit) {
+      reasons.push('not_first_deposit');
+    }
+    if (rule.type === 'first_deposit') {
+      const existing = await db.userBonus.count({
+        where: { userId, bonusRule: { type: 'first_deposit' }, ...(depositId ? { NOT: { sourceId: depositId } } : {}) },
+      });
+      if (existing > 0) reasons.push('first_deposit_already_used');
+    }
     if (rule.type === 'promo') {
       const meta = (rule.meta ?? null) as { trigger?: string } | null;
-      if (!meta || meta.trigger !== 'deposit') continue;
+      if (!meta || meta.trigger !== 'deposit') reasons.push('promo_not_deposit_triggered');
     }
-
-    // first_deposit guard: skip if user already has a granted
-    // first_deposit bonus from any prior path (defensive - the
-    // approvedCount check above usually catches this).
-    if (rule.type === 'first_deposit') {
-      const existing = await tx.userBonus.count({
-        where: { userId, bonusRule: { type: 'first_deposit' } },
-      });
-      if (existing > 0) {
-        result.skipped.push({ ruleId: rule.id, reason: 'FIRST_DEPOSIT_ALREADY_USED' });
-        continue;
-      }
+    if (rule.type === 'reload' && rule.startsAt == null && rule.endsAt == null) {
+      // Reload rules without a window apply every deposit - this is
+      // intentional, no extra check needed.
     }
 
     const payout = computeDepositPayout(rule, depositAmount);
-    if (payout.lte(0)) {
-      result.skipped.push({ ruleId: rule.id, reason: 'PAYOUT_ZERO' });
+    if (payout.lte(0)) reasons.push('computed_payout_zero');
+
+    if (seenTypes.has(rule.type)) reasons.push('lower_priority_of_same_type');
+
+    const eligible = reasons.length === 0;
+    if (eligible) seenTypes.add(rule.type);
+
+    results.push({
+      rule,
+      payout,
+      eligible,
+      reason: eligible ? null : reasons.join('|'),
+      isFirstDeposit,
+      candidateCount: all.length,
+    });
+  }
+
+  return results;
+}
+
+export async function applyDepositBonuses(
+  userId: string,
+  depositId: string,
+  depositAmount: Prisma.Decimal,
+): Promise<ApplyDepositResult> {
+  const result: ApplyDepositResult = {
+    granted: [],
+    skipped: [],
+    candidateCount: 0,
+    error: null,
+    isFirstDeposit: false,
+  };
+
+  let evaluated: Awaited<ReturnType<typeof evaluateDepositCandidates>>;
+  try {
+    evaluated = await evaluateDepositCandidates(userId, depositId, depositAmount);
+  } catch (err) {
+    const msg = err instanceof Error ? `${err.message}\n${err.stack ?? ''}` : String(err);
+    console.error('[bonus] evaluation failed', msg);
+    result.error = `eval_failed: ${msg.slice(0, 500)}`;
+    return result;
+  }
+
+  result.candidateCount = evaluated.length;
+  result.isFirstDeposit = evaluated[0]?.isFirstDeposit ?? false;
+
+  if (evaluated.length === 0) {
+    console.info('[bonus] no active rules found for deposit', { userId, depositId });
+  }
+
+  for (const ev of evaluated) {
+    if (!ev.eligible) {
+      result.skipped.push({
+        ruleId: ev.rule.id,
+        ruleName: ev.rule.name,
+        ruleType: ev.rule.type,
+        ruleCode: ev.rule.code ?? null,
+        reason: ev.reason ?? 'unknown',
+      });
+      console.info('[bonus] skip', { ruleId: ev.rule.id, ruleName: ev.rule.name, reason: ev.reason });
       continue;
     }
 
-    const granted = await grantBonusInTx(tx, {
-      userId,
-      rule,
-      amount: payout,
-      sourceType: 'deposit',
-      sourceId: depositId,
-    });
-    if (granted) {
-      result.granted.push({
-        ruleId: rule.id,
-        ruleName: rule.name,
-        ruleType: rule.type,
-        grantId: granted.grantId,
-        amount: Number(granted.amount),
+    try {
+      const grant = await db.$transaction(async (tx) => {
+        return grantBonusInTx(tx, {
+          userId,
+          rule: ev.rule,
+          amount: ev.payout,
+          sourceType: 'deposit',
+          sourceId: depositId,
+        });
       });
-      grantedTypes.add(rule.type);
+
+      if (grant) {
+        const turnoverRequired = ev.payout.mul(new Prisma.Decimal(ev.rule.turnoverX ?? 0));
+        result.granted.push({
+          ruleId: ev.rule.id,
+          ruleName: ev.rule.name,
+          ruleType: ev.rule.type,
+          ruleCode: ev.rule.code ?? null,
+          grantId: grant.grantId,
+          amount: Number(grant.amount),
+          turnoverRequired: Number(turnoverRequired),
+        });
+        console.info('[bonus] granted', {
+          ruleId: ev.rule.id,
+          ruleName: ev.rule.name,
+          userId,
+          amount: Number(grant.amount),
+          turnoverRequired: Number(turnoverRequired),
+        });
+      } else {
+        result.skipped.push({
+          ruleId: ev.rule.id,
+          ruleName: ev.rule.name,
+          ruleType: ev.rule.type,
+          ruleCode: ev.rule.code ?? null,
+          reason: 'grant_returned_null',
+        });
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? `${err.message}\n${err.stack ?? ''}` : String(err);
+      console.error('[bonus] grant failed', { ruleId: ev.rule.id, ruleName: ev.rule.name }, msg);
+      result.skipped.push({
+        ruleId: ev.rule.id,
+        ruleName: ev.rule.name,
+        ruleType: ev.rule.type,
+        ruleCode: ev.rule.code ?? null,
+        reason: `grant_failed: ${msg.slice(0, 300)}`,
+      });
+      result.error = result.error ?? `grant_failed: ${msg.slice(0, 300)}`;
     }
   }
 
   return result;
+}
+
+// Dry-run for the diagnose endpoint. Returns the same shape as
+// evaluateDepositCandidates plus a serializable summary.
+export async function diagnoseDeposit(
+  userId: string,
+  depositAmount: number,
+): Promise<{
+  isFirstDeposit: boolean;
+  candidateCount: number;
+  evaluated: Array<{
+    ruleId: string;
+    ruleName: string;
+    ruleType: BonusType;
+    ruleCode: string | null;
+    status: string;
+    eligible: boolean;
+    reason: string | null;
+    payout: number;
+    turnoverRequired: number;
+  }>;
+  walletExists: boolean;
+}> {
+  const amount = new Prisma.Decimal(depositAmount);
+  const evaluated = await evaluateDepositCandidates(userId, null, amount);
+  const wallet = await db.wallet.findUnique({ where: { userId }, select: { id: true } });
+  return {
+    isFirstDeposit: evaluated[0]?.isFirstDeposit ?? true,
+    candidateCount: evaluated.length,
+    walletExists: !!wallet,
+    evaluated: evaluated.map((e) => ({
+      ruleId: e.rule.id,
+      ruleName: e.rule.name,
+      ruleType: e.rule.type,
+      ruleCode: e.rule.code ?? null,
+      status: e.rule.status,
+      eligible: e.eligible,
+      reason: e.reason,
+      payout: Number(e.payout),
+      turnoverRequired: Number(e.payout.mul(new Prisma.Decimal(e.rule.turnoverX ?? 0))),
+    })),
+  };
 }
 
 // ---------- Manual grant ----------
@@ -333,10 +464,6 @@ export interface AddTurnoverOpts {
   meta?: Prisma.JsonObject;
 }
 
-// Distributes a wager amount across the user's active grants in
-// FIFO order (oldest first). Releases any grant whose requirement is
-// met. Returns the per-grant breakdown so callers can surface what
-// changed.
 export async function addTurnover(opts: AddTurnoverOpts): Promise<{
   applied: Array<{ grantId: string; appliedAmount: number; progressAfter: number; required: number; released: boolean }>;
   unallocated: number;
@@ -397,8 +524,6 @@ export async function addTurnover(opts: AddTurnoverOpts): Promise<{
       });
     }
 
-    // Unallocated wager (no active grants OR all already satisfied)
-    // gets logged as a userId-only event for auditability.
     if (remaining.gt(0)) {
       await tx.turnoverEvent.create({
         data: {
@@ -449,9 +574,6 @@ export async function cancelGrant(grantId: string, actorNote?: string): Promise<
 
 // ---------- Expiry sweep ----------
 
-// Called from a cron / admin tool. Forfeits any active grants whose
-// expiresAt is in the past. Returns the count of grants expired so
-// the caller can surface it in the audit log.
 export async function sweepExpiredGrants(): Promise<{ expired: number }> {
   const now = new Date();
   const candidates = await db.userBonus.findMany({

@@ -21,7 +21,7 @@ import { Switch } from '@/components/ui/Switch';
 import { Modal } from '@/components/ui/Modal';
 import { Chip } from '@/components/ui/Chip';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/Tabs';
-import { Gift, Plus, Pencil, Trash2, RefreshCw, AlertCircle, Settings2, BadgePlus, Ban, ListChecks, Filter } from 'lucide-react';
+import { Gift, Plus, Pencil, Trash2, RefreshCw, AlertCircle, Settings2, BadgePlus, Ban, ListChecks, Filter, Stethoscope, CheckCircle2, XCircle } from 'lucide-react';
 import { formatBDT } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 
@@ -115,6 +115,7 @@ export default function AdminBonusesPage() {
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [grantQuery, setGrantQuery] = useState('');
   const [manualOpen, setManualOpen] = useState(false);
+  const [diagnoseOpen, setDiagnoseOpen] = useState(false);
   const [sweeping, setSweeping] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -278,6 +279,9 @@ export default function AdminBonusesPage() {
             <Button variant="ghost" leftIcon={<RefreshCw className={cn('h-3.5 w-3.5', (rulesLoading || grantsLoading) && 'animate-spin')} />} onClick={() => (tab === 'rules' ? loadRules() : loadGrants())}>
               Reload
             </Button>
+            <Button variant="ghost" leftIcon={<Stethoscope className="h-3.5 w-3.5" />} onClick={() => setDiagnoseOpen(true)}>
+              Diagnose
+            </Button>
             {tab === 'rules' ? (
               <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setEditor({ ...EMPTY_RULE })}>New Rule</Button>
             ) : (
@@ -439,6 +443,10 @@ export default function AdminBonusesPage() {
           }}
         />
       </Modal>
+
+      <Modal open={diagnoseOpen} onOpenChange={setDiagnoseOpen} title="Bonus Engine Diagnose" size="lg">
+        <DiagnoseForm />
+      </Modal>
     </>
   );
 }
@@ -517,6 +525,106 @@ function RuleEditor({
         <Button type="submit" loading={saving}>Save</Button>
       </div>
     </form>
+  );
+}
+
+interface DiagnoseResult {
+  isFirstDeposit: boolean;
+  candidateCount: number;
+  walletExists: boolean;
+  evaluated: Array<{
+    ruleId: string;
+    ruleName: string;
+    ruleType: string;
+    ruleCode: string | null;
+    status: string;
+    eligible: boolean;
+    reason: string | null;
+    payout: number;
+    turnoverRequired: number;
+  }>;
+}
+
+function DiagnoseForm() {
+  const [userId, setUserId] = useState('');
+  const [amount, setAmount] = useState(1000);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [result, setResult] = useState<DiagnoseResult | null>(null);
+
+  const run = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErr(null);
+    setBusy(true);
+    setResult(null);
+    try {
+      const res = await fetch('/api/admin/bonus-grants/diagnose', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ userId: userId.trim(), amount: Number(amount) }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message ?? data?.code ?? 'Diagnose failed');
+      setResult(data);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Diagnose failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-ink-mid">Dry-run the bonus engine for a user + deposit amount. Nothing is granted. Useful to check why a rule fired or did not fire.</p>
+      <form className="grid gap-3 md:grid-cols-2" onSubmit={run}>
+        <FormField label="User id" required>
+          <Input value={userId} onChange={(e) => setUserId(e.target.value)} placeholder="cuid..." />
+        </FormField>
+        <FormField label="Deposit amount (BDT)" required>
+          <Input type="number" min={1} value={amount} onChange={(e) => setAmount(Number(e.target.value))} />
+        </FormField>
+        <div className="md:col-span-2 flex justify-end">
+          <Button type="submit" loading={busy} disabled={!userId.trim() || amount <= 0}>Run diagnose</Button>
+        </div>
+      </form>
+
+      {err ? <p className="text-sm text-signal-danger">{err}</p> : null}
+
+      {result ? (
+        <div className="space-y-3">
+          <div className="grid grid-cols-3 gap-2 text-xs">
+            <Field label="Wallet exists" value={result.walletExists ? 'yes' : 'no'} />
+            <Field label="First deposit" value={result.isFirstDeposit ? 'yes' : 'no'} />
+            <Field label="Candidate rules" value={String(result.candidateCount)} />
+          </div>
+          {result.evaluated.length === 0 ? (
+            <Card padding="md"><p className="text-sm text-ink-mid">No active first_deposit / reload / promo rules in DB. Create one in the Rules tab.</p></Card>
+          ) : (
+            <ul className="space-y-2">
+              {result.evaluated.map((e) => (
+                <li key={e.ruleId} className={cn('rounded-lg border p-3', e.eligible ? 'border-signal-ok/30 bg-signal-ok/5' : 'border-neon/10 bg-base-deep/40')}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-ink-hi">{e.ruleName} <span className="text-xs text-ink-lo">({e.ruleType}{e.ruleCode ? ` / ${e.ruleCode}` : ''})</span></p>
+                      {e.eligible ? (
+                        <p className="mt-0.5 inline-flex items-center gap-1 text-xs text-signal-ok">
+                          <CheckCircle2 className="h-3 w-3" /> Would grant {formatBDT(e.payout)} (turnover {formatBDT(e.turnoverRequired)})
+                        </p>
+                      ) : (
+                        <p className="mt-0.5 inline-flex items-center gap-1 text-xs text-signal-warn">
+                          <XCircle className="h-3 w-3" /> Skipped: {e.reason}
+                        </p>
+                      )}
+                    </div>
+                    <Chip tone={e.status === 'active' ? 'ok' : 'neutral'}>{e.status}</Chip>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
+    </div>
   );
 }
 

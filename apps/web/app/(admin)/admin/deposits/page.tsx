@@ -75,12 +75,17 @@ export default function AdminDepositsPage() {
       if (!res.ok) throw new Error(data?.message ?? data?.code ?? 'Action failed');
       if (action === 'approve') {
         const generated = data?.accrual?.generated ?? 0;
-        setToast({
-          kind: 'ok',
-          text: generated > 0
-            ? `Approved ${formatBDT(item.amount)} for ${item.username}. ${generated} lottery ticket${generated === 1 ? '' : 's'} generated.`
-            : `Approved ${formatBDT(item.amount)} for ${item.username}.`,
-        });
+        const bonus = data?.bonuses ?? null;
+        const parts: string[] = [`Approved ${formatBDT(item.amount)} for ${item.username}.`];
+        if (generated > 0) parts.push(`${generated} lottery ticket${generated === 1 ? '' : 's'}.`);
+        if (bonus?.bonusApplied) {
+          parts.push(`Bonus +${formatBDT(Number(bonus.bonusAmount ?? 0))} (${bonus.bonusRuleName ?? bonus.bonusRuleCode ?? 'rule'}).`);
+        } else if (bonus && bonus.candidateCount > 0) {
+          parts.push(`No bonus: ${bonus.bonusSkippedReason ?? 'no_eligible_rule'}.`);
+        } else if (bonus) {
+          parts.push('No bonus rules configured.');
+        }
+        setToast({ kind: 'ok', text: parts.join(' ') });
       } else {
         setToast({ kind: 'ok', text: `Rejected ${item.username} ${formatBDT(item.amount)}.` });
       }
