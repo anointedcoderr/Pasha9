@@ -358,6 +358,17 @@ model BonusRule {
   startsAt    DateTime?
   endsAt      DateTime?
   turnoverX   Decimal       @default(0) @db.Decimal(6, 2)
+  // M2D: optional stable lookup key so engine code can trigger a
+  // rule (e.g. 'welcome', 'deposit_match', 'reload_weekend') without
+  // depending on a row id. Unique when set.
+  code         String?      @unique
+  // Bonus expires N days after grant. 0 = never expires.
+  validityDays Int          @default(30)
+  // Higher priority rules win when multiple rules of the same trigger
+  // type are eligible for the same deposit.
+  priority     Int          @default(0)
+  // Free-form rule config (e.g. weekday filter, vip tier required).
+  meta         Json?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
@@ -371,11 +382,48 @@ model UserBonus {
   amount      Decimal   @db.Decimal(14, 2)
   claimedAt   DateTime  @default(now())
   expiresAt   DateTime?
+  // M2D: lifecycle. active = wagering in progress (locked), completed
+  // = turnover satisfied + funds released, expired = past expiresAt
+  // and forfeited, cancelled = admin cancel.
+  status           String   @default("active")
+  // Wager requirement = amount * BonusRule.turnoverX. Locked until
+  // progress catches up.
+  turnoverRequired Decimal  @default(0) @db.Decimal(14, 2)
+  turnoverProgress Decimal  @default(0) @db.Decimal(14, 2)
+  releasedAt       DateTime?
+  cancelledAt      DateTime?
+  // Where the grant came from. Lets admin trace a granted bonus back
+  // to its trigger (deposit row, manual admin action, referral, etc).
+  sourceType       String?
+  sourceId         String?
+  note             String?
 
-  user      User      @relation(fields: [userId], references: [id])
-  bonusRule BonusRule @relation(fields: [bonusRuleId], references: [id])
+  user           User             @relation(fields: [userId], references: [id])
+  bonusRule      BonusRule        @relation(fields: [bonusRuleId], references: [id])
+  turnoverEvents TurnoverEvent[]
 
   @@index([userId])
+  @@index([status])
+  @@index([sourceType, sourceId])
+}
+
+// M2D: per-event ledger of wager activity that contributed turnover
+// to a specific UserBonus grant. Lets the dashboard show the user
+// where their progress came from and lets admins audit a grant.
+model TurnoverEvent {
+  id           String   @id @default(cuid())
+  userId       String
+  bonusGrantId String?
+  amount       Decimal  @db.Decimal(14, 2)
+  kind         String   // bet|win|adjust|manual
+  reference    String?
+  meta         Json?
+  createdAt    DateTime @default(now())
+
+  bonusGrant UserBonus? @relation(fields: [bonusGrantId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([bonusGrantId])
 }
 
 // ---------- Editable content (CMS) ----------

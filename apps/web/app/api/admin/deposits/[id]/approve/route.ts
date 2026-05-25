@@ -18,6 +18,7 @@ import { db } from '@/lib/db/client';
 import { withAuth, ensurePermission, recordActivity } from '@/lib/auth/guard';
 import { jsonOk, jsonError } from '@/lib/auth/errors';
 import { accrueLotteryTickets } from '@/lib/lotto/tickets';
+import { applyDepositBonuses, type ApplyDepositResult } from '@/lib/bonuses/engine';
 
 const schema = z.object({
   adminNote: z.string().max(500).optional(),
@@ -40,6 +41,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
 
     const amount = new Prisma.Decimal(deposit.amount);
+
+    let bonusResult: ApplyDepositResult = { granted: [], skipped: [] };
 
     const updated = await db.$transaction(async (tx) => {
       const d = await tx.deposit.update({
@@ -77,6 +80,16 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         },
       });
 
+      // M2D bonus engine: welcome / deposit-match / reload triggers
+      // run inside the same transaction as the deposit credit so a
+      // failure rolls everything back. Engine logs Transaction rows
+      // for each grant (type=bonus) so the user ledger reflects them.
+      try {
+        bonusResult = await applyDepositBonuses(tx, deposit.userId, deposit.id, amount);
+      } catch (err) {
+        console.error('bonus engine failed during deposit approve', err);
+      }
+
       return d;
     });
 
@@ -103,9 +116,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         amount: Number(amount),
         ticketsGenerated: accrual.generated,
         targetTotalTickets: accrual.targetTotal,
+        bonusesGranted: bonusResult.granted.length,
+        bonusGrantIds: bonusResult.granted.map((g) => g.grantId),
       },
     });
 
-    return jsonOk({ deposit: updated, accrual });
+    return jsonOk({ deposit: updated, accrual, bonuses: bonusResult });
   });
 }
