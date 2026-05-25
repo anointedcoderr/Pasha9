@@ -70,12 +70,11 @@ export async function requirePermission(permission: string): Promise<AccessClaim
   if (s.role === 'super_admin') return s;
   if (s.perms?.includes(permission)) return s;
 
-  // Fall back to DB check if the claim is missing the perms array.
-  const user = await db.user.findUnique({
-    where: { id: s.sub },
-    select: { role: { include: { permissions: { include: { permission: true } } } } },
-  });
-  const keys = user?.role.permissions.map((rp) => rp.permission.key) ?? [];
+  // Fall back to DB check if the claim is missing the perms array
+  // OR if an admin granted a new permission AFTER this session was
+  // minted (so it never made it into the JWT). M2G: also merges in
+  // per-user permission overrides from UserPermission.
+  const keys = await loadEffectivePermissions(s.sub);
   if (keys.includes(permission)) return s;
 
   throw new AuthError('FORBIDDEN');
@@ -87,4 +86,25 @@ export async function loadPermissionsForRole(roleId: string): Promise<string[]> 
     include: { permission: true },
   });
   return rows.map((r) => r.permission.key);
+}
+
+/**
+ * M2G: returns the union of role permissions and per-user permission
+ * grants for one user, deduped. Use this when computing the JWT
+ * `perms` claim at login + refresh, and as the fallback check inside
+ * requirePermission. Super admins are not handled here - their bypass
+ * lives in requirePermission directly.
+ */
+export async function loadEffectivePermissions(userId: string): Promise<string[]> {
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: {
+      role: { include: { permissions: { include: { permission: true } } } },
+      extraPermissions: { include: { permission: true } },
+    },
+  });
+  if (!user) return [];
+  const fromRole = user.role.permissions.map((rp) => rp.permission.key);
+  const fromUser = user.extraPermissions.map((up) => up.permission.key);
+  return Array.from(new Set([...fromRole, ...fromUser]));
 }

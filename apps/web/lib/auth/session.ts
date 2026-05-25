@@ -5,7 +5,7 @@ import { cookies, headers } from 'next/headers';
 import { createHash, randomBytes } from 'node:crypto';
 import { db } from '@/lib/db/client';
 import { signAccessToken, signRefreshToken, verifyAccessToken, verifyRefreshToken, type AccessClaims } from './jwt';
-import { loadPermissionsForRole } from './rbac';
+import { loadEffectivePermissions } from './rbac';
 
 export const ACCESS_COOKIE = 'pasha9_session';
 export const REFRESH_COOKIE = 'pasha9_refresh';
@@ -169,7 +169,10 @@ export async function refreshSession(): Promise<AccessClaims | null> {
   });
   if (!user || user.status === 'blocked') return null;
 
-  const perms = await loadPermissionsForRole(user.roleId);
+  // M2G: include per-user permission grants in the refreshed JWT
+  // so admin grants take effect on the next refresh, not just the
+  // next login.
+  const perms = await loadEffectivePermissions(user.id);
   // Reissue both cookies (rotates the refresh secret so a stolen
   // refresh token has a smaller usable window). The DB session row
   // is replaced via setAuthCookies' insert, which is fine for M1

@@ -121,6 +121,7 @@ model Permission {
   createdAt DateTime @default(now())
 
   roles RolePermission[]
+  users UserPermission[]
 }
 
 model RolePermission {
@@ -131,6 +132,26 @@ model RolePermission {
   permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
 
   @@id([roleId, permissionId])
+  @@index([permissionId])
+}
+
+// M2G: per-staff additive permission grants. The user's effective
+// permission set is union(role.permissions, user.permissions). There
+// is no deny flag - if you need to revoke a role-granted permission
+// for a specific staff member, move them to a more restricted role
+// instead. Created by super_admin / staff.manage holders from the
+// /admin/staff page.
+model UserPermission {
+  userId       String
+  permissionId String
+  grantedById  String?
+  grantedAt    DateTime @default(now())
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([userId, permissionId])
+  @@index([userId])
   @@index([permissionId])
 }
 
@@ -177,6 +198,8 @@ model User {
   affiliateApplication AffiliateApplication?
   lotteryTickets      LotteryTicket[]
   lotteryWinnings     LotteryWinning[]
+  // M2G per-staff permission grants (additive, beyond role baseline).
+  extraPermissions    UserPermission[]
 
   @@index([referredById])
   @@index([roleId])

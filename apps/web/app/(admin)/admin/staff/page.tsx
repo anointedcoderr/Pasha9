@@ -1,115 +1,535 @@
 // Built by Anointed Coder.
 //
-// Staff / Sub-admin management. M1 surfaces the seeded role + permission
-// matrix read-only. Creating new staff accounts, suspending or rotating
-// permissions through the UI ships in M2 once provider hooks (audit
-// alerts + OTP for staff actions) land.
+// M2G admin staff console:
+//   - List every super_admin / admin / staff user (search by
+//     username / phone / email)
+//   - Create new staff (Modal)
+//   - Per-staff Drawer to change role, suspend/reactivate, reset
+//     password, add or remove extra permission grants beyond the
+//     role baseline
+//   - Reference cards showing role catalog + permission catalog
+//     (read-only, seeded from packages/database/prisma/seed.ts)
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { PageHeader } from '@/components/site/PageHeader';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Chip } from '@/components/ui/Chip';
-import { Users, Lock, Shield, KeyRound, UserPlus } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
+import { Modal, Drawer } from '@/components/ui/Modal';
+import { FormField, Input, Textarea } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
+import { Users, ShieldCheck, Plus, Pencil, Ban, Sparkles, KeyRound, RefreshCw, ListFilter } from 'lucide-react';
+import { cn } from '@/lib/utils/cn';
 
 interface RoleSnapshot {
+  id: string;
   key: string;
   label: string;
-  permissions: { key: string; label: string; group: string }[];
+  permissions: PermissionRef[];
+}
+interface PermissionRef {
+  id: string;
+  key: string;
+  label: string;
+  group: string;
+}
+interface StaffRow {
+  id: string;
+  username: string;
+  phone: string;
+  email: string | null;
+  role: { id: string; key: string; label: string };
+  status: 'active' | 'blocked' | 'pending';
+  blockedReason: string | null;
+  blockedAt: string | null;
+  lastLoginAt: string | null;
+  lastLoginIp: string | null;
+  createdAt: string;
+  extraPermissions: PermissionRef[];
+}
+
+const ROLE_KEYS = ['super_admin', 'admin', 'staff'] as const;
+
+function statusTone(s: string): 'ok' | 'warn' | 'danger' | 'neutral' {
+  if (s === 'active') return 'ok';
+  if (s === 'pending') return 'warn';
+  if (s === 'blocked') return 'danger';
+  return 'neutral';
+}
+
+function roleTone(key: string): 'gold' | 'info' | 'neutral' {
+  if (key === 'super_admin') return 'gold';
+  if (key === 'admin') return 'info';
+  return 'neutral';
 }
 
 export default function AdminStaffPage() {
-  const [roles, setRoles] = useState<RoleSnapshot[] | null>(null);
+  const [staff, setStaff] = useState<StaffRow[]>([]);
+  const [roles, setRoles] = useState<RoleSnapshot[]>([]);
+  const [permissions, setPermissions] = useState<PermissionRef[]>([]);
+  const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetch('/api/admin/staff/snapshot', { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (data?.roles) setRoles(data.roles as RoleSnapshot[]);
-      })
-      .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load roles'));
+  const [createOpen, setCreateOpen] = useState(false);
+  const [drawerStaff, setDrawerStaff] = useState<StaffRow | null>(null);
+
+  const loadStaff = useCallback(async () => {
+    setError(null);
+    try {
+      const url = search.trim()
+        ? `/api/admin/staff?q=${encodeURIComponent(search.trim())}`
+        : '/api/admin/staff';
+      const res = await fetch(url, { cache: 'no-store' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message ?? data?.code ?? 'Failed to load');
+      setStaff(data.staff as StaffRow[]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load staff');
+    } finally {
+      setLoading(false);
+    }
+  }, [search]);
+
+  const loadSnapshot = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/staff/snapshot', { cache: 'no-store' });
+      const data = await res.json();
+      if (res.ok) {
+        setRoles((data.roles ?? []) as RoleSnapshot[]);
+        setPermissions((data.permissions ?? []) as PermissionRef[]);
+      }
+    } catch { /* ignore */ }
   }, []);
+
+  useEffect(() => { loadStaff(); }, [loadStaff]);
+  useEffect(() => { loadSnapshot(); }, [loadSnapshot]);
+
+  const permsByGroup = useMemo(() => {
+    const map = new Map<string, PermissionRef[]>();
+    for (const p of permissions) {
+      const arr = map.get(p.group) ?? [];
+      arr.push(p);
+      map.set(p.group, arr);
+    }
+    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
+  }, [permissions]);
+
+  const flashToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 5000);
+  };
 
   return (
     <>
       <PageHeader
-        title="Staff & Sub-admins"
-        subtitle="Role + permission matrix, read-only in M1"
+        title="Staff Management"
+        subtitle="Create staff accounts, change roles, grant per-staff permissions, suspend or reset access"
         icon={<Users className="h-5 w-5" />}
+        action={
+          <div className="flex gap-2">
+            <Link href="/admin/activity"><Button variant="ghost" leftIcon={<ListFilter className="h-3.5 w-3.5" />}>Activity log</Button></Link>
+            <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setCreateOpen(true)}>New staff</Button>
+          </div>
+        }
       />
 
+      {toast ? <Card padding="md" className="mb-4"><p className="text-sm text-signal-ok">{toast}</p></Card> : null}
+      {error ? <Card padding="md" className="mb-4"><p className="text-sm text-signal-danger">{error}</p></Card> : null}
+
       <Card padding="md" className="mb-4">
-        <div className="flex items-start gap-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500/15 text-amber-700">
-            <Lock className="h-4 w-4" />
-          </span>
-          <div className="text-sm">
-            <p className="font-semibold text-ink-hi">Read-only in Milestone 1</p>
-            <p className="mt-0.5 text-xs text-ink-mid">
-              The role + permission table below is the live seed used by the auth guard. New staff accounts,
-              suspending an existing staff member, rotating per-role permissions and granular per-staff overrides
-              are scheduled for Milestone 2 (the schema is already in place via Role + Permission + RolePermission).
-            </p>
-          </div>
+        <div className="flex flex-wrap items-end gap-3">
+          <FormField label="Search">
+            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="username, phone, email" />
+          </FormField>
+          <Button leftIcon={<RefreshCw className="h-3.5 w-3.5" />} onClick={loadStaff}>Apply</Button>
         </div>
       </Card>
 
-      {error ? (
-        <Card padding="md" className="mb-4"><p className="text-sm text-signal-danger">{error}</p></Card>
-      ) : null}
-
-      {!roles ? (
-        <Card padding="lg">Loading roles...</Card>
+      {loading ? (
+        <p className="text-sm text-ink-mid">Loading staff...</p>
+      ) : staff.length === 0 ? (
+        <Card padding="lg"><p className="text-sm text-ink-mid">No staff match the current filter. Click <b>New staff</b> to create one.</p></Card>
       ) : (
-        <div className="space-y-4">
-          {roles.map((r) => (
-            <Card key={r.key} padding="lg">
-              <CardHeader
-                title={r.label}
-                subtitle={`role key: ${r.key} · ${r.permissions.length} permission(s)`}
-                action={<Chip tone={r.key === 'super_admin' ? 'ok' : r.key === 'admin' ? 'warn' : 'info'}>{r.key}</Chip>}
-              />
-              {r.permissions.length === 0 ? (
-                <p className="text-sm text-ink-mid">No permissions assigned.</p>
-              ) : (
-                <div className="flex flex-wrap gap-1.5">
-                  {r.permissions.map((p) => (
-                    <span key={p.key} className="inline-flex items-center gap-1 rounded-md border border-neon/15 bg-base-deep/40 px-2 py-0.5 text-[11px] text-ink-mid">
-                      <KeyRound className="h-3 w-3 text-gold-300" />
-                      <span className="font-mono">{p.key}</span>
-                    </span>
-                  ))}
-                </div>
-              )}
-            </Card>
-          ))}
-        </div>
+        <Card padding="md" className="mb-6 overflow-x-auto">
+          <table className="w-full min-w-[900px] text-sm">
+            <thead className="text-xs uppercase tracking-wider text-ink-lo">
+              <tr>
+                <th className="px-2 py-2 text-left">User</th>
+                <th className="px-2 py-2 text-left">Role</th>
+                <th className="px-2 py-2 text-left">Status</th>
+                <th className="px-2 py-2 text-left">Extra perms</th>
+                <th className="px-2 py-2 text-left">Last login</th>
+                <th className="px-2 py-2 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {staff.map((s) => (
+                <tr key={s.id} className="border-t border-neon/10 align-top">
+                  <td className="px-2 py-2">
+                    <p className="font-semibold text-ink-hi">{s.username}</p>
+                    <p className="text-xs text-ink-lo">{s.phone}{s.email ? ` . ${s.email}` : ''}</p>
+                  </td>
+                  <td className="px-2 py-2"><Chip tone={roleTone(s.role.key)}>{s.role.label}</Chip></td>
+                  <td className="px-2 py-2">
+                    <Chip tone={statusTone(s.status)}>{s.status}</Chip>
+                    {s.blockedReason ? <p className="mt-1 text-[10px] text-ink-lo">{s.blockedReason}</p> : null}
+                  </td>
+                  <td className="px-2 py-2">
+                    {s.extraPermissions.length === 0 ? (
+                      <span className="text-xs text-ink-lo">none</span>
+                    ) : (
+                      <span className="text-xs text-ink-mid">{s.extraPermissions.length} granted</span>
+                    )}
+                  </td>
+                  <td className="px-2 py-2 text-xs text-ink-lo">
+                    {s.lastLoginAt ? new Date(s.lastLoginAt).toLocaleString() : 'never'}
+                    {s.lastLoginIp ? <p className="mt-0.5 font-mono">{s.lastLoginIp}</p> : null}
+                  </td>
+                  <td className="px-2 py-2 text-right">
+                    <Button size="sm" variant="ghost" leftIcon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setDrawerStaff(s)}>Edit</Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
       )}
 
-      <Card padding="lg" className="mt-6">
-        <CardHeader
-          title="Coming in Milestone 2"
-          subtitle="Wired-for-M2 surfaces"
-          action={<Chip tone="warn">Ready for M2</Chip>}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card padding="lg">
+          <CardHeader title="Role catalog" subtitle="Seeded baseline permissions per role" />
+          <div className="space-y-3">
+            {roles.map((r) => (
+              <div key={r.key} className="rounded-xl border border-neon/10 bg-base-deep/40 p-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold text-ink-hi">{r.label} <span className="text-xs text-ink-lo">({r.key})</span></p>
+                  <Chip tone={roleTone(r.key)}>{r.permissions.length} perms</Chip>
+                </div>
+                <p className="mt-1 flex flex-wrap gap-1 text-[10px] font-mono text-ink-lo">
+                  {r.permissions.map((p) => p.key).join(' ; ') || '(no permissions)'}
+                </p>
+              </div>
+            ))}
+          </div>
+        </Card>
+        <Card padding="lg">
+          <CardHeader title="Permission catalog" subtitle="Master list seeded in the DB; used by the per-staff override drawer" />
+          <div className="space-y-3">
+            {permsByGroup.map(([group, perms]) => (
+              <div key={group} className="rounded-xl border border-neon/10 bg-base-deep/40 p-3">
+                <p className="text-xs uppercase tracking-wider text-gold-300">{group}</p>
+                <p className="mt-1 font-mono text-[11px] text-ink-mid">{perms.map((p) => p.key).join(' ; ')}</p>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+
+      <Modal open={createOpen} onOpenChange={setCreateOpen} title="Create staff account" size="lg">
+        <CreateStaffForm
+          roles={roles}
+          permissions={permissions}
+          onDone={(msg) => {
+            setCreateOpen(false);
+            flashToast(msg);
+            loadStaff();
+          }}
         />
-        <ul className="grid gap-2 sm:grid-cols-2">
-          <ScaffoldRow icon={UserPlus} label="Create staff account (super admin only)" />
-          <ScaffoldRow icon={Shield} label="Suspend / reactivate staff" />
-          <ScaffoldRow icon={KeyRound} label="Override per-staff permission grants" />
-          <ScaffoldRow icon={Users} label="Staff activity log (filter by actor)" />
-        </ul>
-      </Card>
+      </Modal>
+
+      <Drawer
+        open={!!drawerStaff}
+        onOpenChange={(v) => { if (!v) setDrawerStaff(null); }}
+        title={drawerStaff ? drawerStaff.username : ''}
+        description="Edit role, status, password, or per-staff permission grants."
+        width="560px"
+      >
+        {drawerStaff ? (
+          <EditStaffPanel
+            row={drawerStaff}
+            roles={roles}
+            permissionsByGroup={permsByGroup}
+            onDone={(msg) => {
+              setDrawerStaff(null);
+              flashToast(msg);
+              loadStaff();
+            }}
+            onClose={() => setDrawerStaff(null)}
+          />
+        ) : null}
+      </Drawer>
     </>
   );
 }
 
-function ScaffoldRow({ icon: Icon, label }: { icon: React.ComponentType<{ className?: string }>; label: string }) {
+function CreateStaffForm({ roles, permissions, onDone }: { roles: RoleSnapshot[]; permissions: PermissionRef[]; onDone: (msg: string) => void }) {
+  const [username, setUsername] = useState('');
+  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [roleKey, setRoleKey] = useState<string>('staff');
+  const [extras, setExtras] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const groups = useMemo(() => {
+    const map = new Map<string, PermissionRef[]>();
+    for (const p of permissions) {
+      const arr = map.get(p.group) ?? [];
+      arr.push(p);
+      map.set(p.group, arr);
+    }
+    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
+  }, [permissions]);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErr(null);
+    setBusy(true);
+    try {
+      const res = await fetch('/api/admin/staff', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          username: username.trim(),
+          phone: phone.trim(),
+          email: email.trim() || undefined,
+          password,
+          roleKey,
+          extraPermissionIds: Array.from(extras),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        const code = typeof data?.code === 'string' ? data.code : null;
+        if (code === 'DUPLICATE_USERNAME') throw new Error('Username already taken.');
+        if (code === 'DUPLICATE_PHONE') throw new Error('Phone already in use.');
+        if (code === 'DUPLICATE_EMAIL') throw new Error('Email already in use.');
+        if (code === 'ROLE_NOT_ALLOWED') throw new Error(data?.message ?? 'Role not permitted by your account.');
+        throw new Error(data?.message ?? code ?? 'Create failed');
+      }
+      onDone(`Created ${username} as ${roleKey}.`);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Create failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggle = (id: string) => {
+    const next = new Set(extras);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    setExtras(next);
+  };
+
   return (
-    <li className="flex items-center gap-3 rounded-xl border border-neon/10 bg-base-deep/40 p-3 text-sm text-ink-mid">
-      <Icon className="h-4 w-4 text-gold-300" />
-      <span>{label}</span>
-    </li>
+    <form className="space-y-4" onSubmit={submit}>
+      <div className="grid gap-3 md:grid-cols-2">
+        <FormField label="Username" required>
+          <Input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="login name" />
+        </FormField>
+        <FormField label="Phone" required>
+          <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="01XXXXXXXXX" />
+        </FormField>
+        <FormField label="Email">
+          <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="optional" />
+        </FormField>
+        <FormField label="Role" required>
+          <Select value={roleKey} onChange={(e) => setRoleKey(e.target.value)}>
+            {roles
+              .filter((r) => (ROLE_KEYS as readonly string[]).includes(r.key))
+              .map((r) => (<option key={r.key} value={r.key}>{r.label} ({r.key})</option>))}
+          </Select>
+        </FormField>
+        <FormField label="Password" required hint="Minimum 8 characters. Never stored in plain text.">
+          <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+        </FormField>
+      </div>
+
+      <div>
+        <p className="text-sm font-semibold text-ink-hi">Extra permissions <span className="text-xs text-ink-lo">(beyond the role baseline)</span></p>
+        <p className="mt-1 text-xs text-ink-mid">Use this to grant a single permission without changing the staff member&apos;s role.</p>
+        <div className="mt-3 grid gap-3 md:grid-cols-2">
+          {groups.map(([group, perms]) => (
+            <div key={group} className="rounded-lg border border-neon/10 bg-base-deep/40 p-3">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-gold-300">{group}</p>
+              <div className="mt-2 space-y-1.5">
+                {perms.map((p) => (
+                  <label key={p.id} className="flex items-start gap-2 text-xs text-ink-mid">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={extras.has(p.id)}
+                      onChange={() => toggle(p.id)}
+                    />
+                    <span><code className="font-mono text-[11px] text-ink-hi">{p.key}</code> <span className="text-ink-lo">. {p.label}</span></span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {err ? <p className="text-sm text-signal-danger">{err}</p> : null}
+      <div className="flex justify-end gap-2 pt-2">
+        <Button type="submit" variant="gold" loading={busy} disabled={!username.trim() || !phone.trim() || password.length < 8}>
+          Create staff
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+function EditStaffPanel({
+  row,
+  roles,
+  permissionsByGroup,
+  onDone,
+  onClose,
+}: {
+  row: StaffRow;
+  roles: RoleSnapshot[];
+  permissionsByGroup: Array<[string, PermissionRef[]]>;
+  onDone: (msg: string) => void;
+  onClose: () => void;
+}) {
+  const [roleKey, setRoleKey] = useState(row.role.key);
+  const [status, setStatus] = useState(row.status);
+  const [blockedReason, setBlockedReason] = useState(row.blockedReason ?? '');
+  const [password, setPassword] = useState('');
+  const [extras, setExtras] = useState<Set<string>>(new Set(row.extraPermissions.map((p) => p.id)));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const toggle = (id: string) => {
+    const next = new Set(extras);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    setExtras(next);
+  };
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErr(null);
+    setBusy(true);
+    const body: Record<string, unknown> = {
+      roleKey,
+      status,
+      extraPermissionIds: Array.from(extras),
+    };
+    if (status === 'blocked' && blockedReason.trim()) body.blockedReason = blockedReason.trim();
+    if (password) body.password = password;
+    try {
+      const res = await fetch(`/api/admin/staff/${row.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        const code = typeof data?.code === 'string' ? data.code : null;
+        if (code === 'SELF_EDIT_FORBIDDEN') throw new Error('You cannot edit your own staff account here.');
+        if (code === 'ROLE_NOT_ALLOWED') throw new Error(data?.message ?? 'Role change not permitted.');
+        throw new Error(data?.message ?? code ?? 'Save failed');
+      }
+      const changes = Array.isArray(data?.changes) && data.changes.length > 0
+        ? ` (${data.changes.join(', ')})`
+        : '';
+      onDone(`Updated ${row.username}${changes}.`);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Save failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form className="space-y-4" onSubmit={submit}>
+      <div className="rounded-lg border border-neon/10 bg-base-deep/40 p-3 text-sm">
+        <p className="text-ink-mid">User <span className="font-semibold text-ink-hi">{row.username}</span> . phone <span className="font-mono">{row.phone}</span></p>
+        <p className="text-xs text-ink-lo">Last login: {row.lastLoginAt ? new Date(row.lastLoginAt).toLocaleString() : 'never'}{row.lastLoginIp ? ` . ${row.lastLoginIp}` : ''}</p>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2">
+        <FormField label="Role" hint="Promotion to super_admin or admin requires super_admin.">
+          <Select value={roleKey} onChange={(e) => setRoleKey(e.target.value)}>
+            {roles.filter((r) => (ROLE_KEYS as readonly string[]).includes(r.key)).map((r) => (
+              <option key={r.key} value={r.key}>{r.label} ({r.key})</option>
+            ))}
+          </Select>
+        </FormField>
+        <FormField label="Status">
+          <Select value={status} onChange={(e) => setStatus(e.target.value as StaffRow['status'])}>
+            <option value="active">active</option>
+            <option value="blocked">blocked (suspended)</option>
+            <option value="pending">pending</option>
+          </Select>
+        </FormField>
+      </div>
+
+      {status === 'blocked' ? (
+        <FormField label="Blocked reason (optional)" hint="Visible on the suspended-staff banner.">
+          <Textarea rows={2} value={blockedReason} onChange={(e) => setBlockedReason(e.target.value)} placeholder="e.g. fraud investigation, awaiting KYC reapproval" />
+        </FormField>
+      ) : null}
+
+      <FormField label="New password (optional)" hint="Set only to force a reset. Existing sessions will be revoked.">
+        <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="leave blank to keep current" />
+      </FormField>
+
+      <div>
+        <p className="text-sm font-semibold text-ink-hi">Extra permissions <span className="text-xs text-ink-lo">(beyond the role baseline)</span></p>
+        <p className="mt-1 text-xs text-ink-mid">Effective permissions = role permissions UNION ticked here. Changes apply immediately - active sessions are revoked.</p>
+        <div className="mt-3 grid gap-3">
+          {permissionsByGroup.map(([group, perms]) => (
+            <div key={group} className="rounded-lg border border-neon/10 bg-base-deep/40 p-3">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-gold-300">{group}</p>
+              <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
+                {perms.map((p) => (
+                  <label key={p.id} className="flex items-start gap-2 text-xs text-ink-mid">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={extras.has(p.id)}
+                      onChange={() => toggle(p.id)}
+                    />
+                    <span><code className="font-mono text-[11px] text-ink-hi">{p.key}</code></span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {err ? <p className="text-sm text-signal-danger">{err}</p> : null}
+
+      <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+        <div className="flex flex-wrap gap-2">
+          {row.status === 'active' ? (
+            <Chip tone="ok"><span className="inline-flex items-center gap-1"><Sparkles className="h-3 w-3" /> active</span></Chip>
+          ) : row.status === 'blocked' ? (
+            <Chip tone="danger"><span className="inline-flex items-center gap-1"><Ban className="h-3 w-3" /> blocked</span></Chip>
+          ) : (
+            <Chip tone="warn">pending</Chip>
+          )}
+          {password ? <Chip tone="warn"><span className="inline-flex items-center gap-1"><KeyRound className="h-3 w-3" /> will reset password</span></Chip> : null}
+        </div>
+        <div className="flex gap-2">
+          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="submit" variant="gold" loading={busy}>Save changes</Button>
+        </div>
+      </div>
+
+      <p className={cn('mt-2 text-[11px]', status === 'blocked' ? 'text-signal-warn' : 'text-ink-lo')}>
+        <ShieldCheck className="mr-1 inline h-3 w-3" />
+        Privilege-changing actions (role / status / password / permissions) revoke active sessions so the new RBAC takes effect immediately.
+      </p>
+    </form>
   );
 }

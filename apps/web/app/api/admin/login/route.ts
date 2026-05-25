@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db/client';
 import { verifyPassword } from '@/lib/auth/password';
 import { setAuthCookies, getClientIp, getUserAgent } from '@/lib/auth/session';
-import { loadPermissionsForRole } from '@/lib/auth/rbac';
+import { loadEffectivePermissions } from '@/lib/auth/rbac';
 import { rateLimit } from '@/lib/auth/rate-limit';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 
@@ -50,7 +50,9 @@ export async function POST(req: NextRequest) {
     data: { lastLoginAt: new Date(), lastLoginIp: ip },
   });
 
-  const perms = await loadPermissionsForRole(user.roleId);
+  // M2G: merge role + per-user permission grants so JWT reflects the
+  // staff member's effective permissions (not just their role baseline).
+  const perms = await loadEffectivePermissions(user.id);
   await setAuthCookies(user.id, user.role.key, perms, {
     ip,
     userAgent: getUserAgent(),
