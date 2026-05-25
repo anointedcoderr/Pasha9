@@ -155,7 +155,20 @@ export default function AffiliatePayoutsPage() {
       {loading ? (
         <p className="text-sm text-ink-mid">Loading payouts...</p>
       ) : rows.length === 0 ? (
-        <Card padding="lg"><p className="text-sm text-ink-mid">No {tab} payout requests.</p></Card>
+        <Card padding="lg">
+          <p className="text-sm text-ink-mid">No {tab} payout requests.</p>
+          <p className="mt-2 text-xs text-ink-lo">
+            Payout requests appear here only after three steps complete in order:
+          </p>
+          <ol className="mt-2 list-decimal pl-5 text-xs text-ink-lo">
+            <li>An affiliate is approved AND assigned an active commission tier (managed from <Link href="/admin/affiliate" className="underline">Affiliate Management</Link>).</li>
+            <li>One of their downline users makes a deposit, and an admin approves it. Commission accrues automatically. Without a tier, commission is zero.</li>
+            <li>The affiliate clicks Request Payout on their dashboard with at least 500 BDT withdrawable.</li>
+          </ol>
+          <p className="mt-3 text-xs text-ink-lo">
+            If you expected a request here but do not see one, open <Link href="/admin/affiliate" className="underline">Affiliate Management</Link>, click Diagnose, and verify the upline chain + tier rate for the user who made the deposit. Use <Link href="/admin/deposits" className="underline">Deposits . Backfill commission</Link> on any approved deposit that pre-dated the tier assignment.
+          </p>
+        </Card>
       ) : (
         <Card padding="md" className="overflow-x-auto">
           <table className="w-full min-w-[900px] text-sm">

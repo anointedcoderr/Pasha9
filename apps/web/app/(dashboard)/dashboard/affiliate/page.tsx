@@ -267,8 +267,10 @@ export default function DashboardAffiliateCenter() {
               <p className="flex items-center justify-between"><span className="text-ink-lo">Level 3</span><span className="font-bold text-ink-hi">{Number(me.user.tier.level3Pct)}%</span></p>
             </div>
           ) : (
-            <p className="text-sm text-ink-lo">
-              {lang === 'bn' ? 'টিয়ার এখনো বরাদ্দ হয়নি, অ্যাডমিনের সাথে যোগাযোগ করুন।' : 'No tier assigned yet, contact admin for tier assignment.'}
+            <p className="text-sm text-signal-warn">
+              {lang === 'bn'
+                ? 'টিয়ার এখনো বরাদ্দ হয়নি। টিয়ার না থাকলে আপনার ডাউনলাইনের ডিপোজিট থেকে কোনো কমিশন জমা হবে না। দয়া করে সাপোর্টে যোগাযোগ করুন।'
+                : 'No tier assigned yet. Without a tier, NO commission accrues from your downline deposits. Please contact support to be placed on a tier.'}
             </p>
           )}
         </Card>

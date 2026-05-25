@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { formatBDT, formatDateTime } from '@/lib/utils/format';
 import { useLang } from '@/lib/i18n/context';
-import { ArrowDownToLine, CheckCircle2, XCircle, Ticket } from 'lucide-react';
+import { ArrowDownToLine, CheckCircle2, XCircle, Ticket, BadgeDollarSign } from 'lucide-react';
 import type { ColumnDef } from '@tanstack/react-table';
 
 interface DepositRow {
@@ -103,6 +103,32 @@ export default function AdminDepositsPage() {
     }
   };
 
+  const backfillCommission = async (row: DepositRow) => {
+    if (!confirm(`Backfill affiliate commission for this deposit (${formatBDT(row.amount)} from ${row.username})? This walks the referral chain and writes commission rows at the current tier rates. Refuses if commissions already exist.`)) return;
+    try {
+      const res = await fetch(`/api/admin/affiliate/backfill/${row.id}`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        if (data?.code === 'ALREADY_ACCRUED') {
+          throw new Error(data.message ?? 'Commissions already exist for this deposit.');
+        }
+        if (data?.code === 'DEPOSIT_NOT_APPROVED') {
+          throw new Error(data.message ?? 'Deposit is not approved.');
+        }
+        throw new Error(data?.message ?? data?.code ?? 'Backfill failed');
+      }
+      const c = data?.commissions ?? { count: 0, total: 0, chainDepth: 0 };
+      const msg = c.count > 0
+        ? `Backfilled ${c.count} commission row${c.count === 1 ? '' : 's'} totalling ${formatBDT(Number(c.total ?? 0))}.`
+        : `No commission accrued. Upline depth=${c.chainDepth}. ${c.error ?? 'See activity log for skip reasons.'}`;
+      setToast({ kind: 'ok', text: msg });
+      setTimeout(() => setToast(null), 6000);
+    } catch (e) {
+      setToast({ kind: 'err', text: e instanceof Error ? e.message : 'Backfill failed' });
+      setTimeout(() => setToast(null), 5000);
+    }
+  };
+
   const columns = useMemo<ColumnDef<DepositRow>[]>(
     () => [
       { header: 'User', accessorKey: 'username', cell: ({ row }) => (
@@ -128,11 +154,24 @@ export default function AdminDepositsPage() {
               <Button size="sm" leftIcon={<CheckCircle2 className="h-3.5 w-3.5" />} onClick={() => { setItem(row.original); setAction('approve'); setOpen(true); }}>Approve</Button>
               <Button size="sm" variant="danger" leftIcon={<XCircle className="h-3.5 w-3.5" />} onClick={() => { setItem(row.original); setAction('reject'); setOpen(true); }}>Reject</Button>
             </div>
+          ) : row.original.status === 'approved' ? (
+            <div className="flex justify-end">
+              <Button
+                size="sm"
+                variant="ghost"
+                leftIcon={<BadgeDollarSign className="h-3.5 w-3.5" />}
+                title="Retro-accrue affiliate commission for this deposit. Use after fixing the upline tier."
+                onClick={() => backfillCommission(row.original)}
+              >
+                Backfill commission
+              </Button>
+            </div>
           ) : (
-            <span className="text-xs text-ink-lo">Resolved</span>
+            <span className="text-xs text-ink-lo">Rejected</span>
           ),
       },
     ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [lang],
   );
 
