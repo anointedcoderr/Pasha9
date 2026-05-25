@@ -57,5 +57,8 @@ export const ROUTES = {
     marketing: '/admin/marketing',
     payments: '/admin/payments',
     paymentsReconciliation: '/admin/payments/reconciliation',
+    payouts: '/admin/payouts',
+    paymentMethods: '/admin/payment-methods',
+    withdrawalLimits: '/admin/withdrawal-limits',
   },
 } as const;

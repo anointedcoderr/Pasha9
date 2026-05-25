@@ -300,16 +300,47 @@ model Withdrawal {
   accountNumber String
   accountName   String
   status        RequestStatus @default(pending)
+  // M2C: sub-state inside an approved row tracking the payout side.
+  // Values: 'on_hold' | 'payout_initiated' | 'paid' (null otherwise).
+  processingState String?
+  // Outbound payout provider + reference once a real payout gateway
+  // is wired. Null for M2 manual payouts.
+  providerKey    String?
+  providerRef    String?
+  paidAt         DateTime?
   adminNote     String?
   reviewerId    String?
   reviewedAt    DateTime?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
-  user User @relation(fields: [userId], references: [id])
+  user   User              @relation(fields: [userId], references: [id])
+  events WithdrawalEvent[]
 
   @@index([status])
   @@index([userId])
+  @@index([providerRef])
+  @@index([processingState])
+}
+
+// Append-only timeline of every state change on a Withdrawal. Lets
+// admin + support see exactly who did what when, and lets the user
+// dashboard render a "status timeline" without reverse-engineering
+// from ActivityLog.
+model WithdrawalEvent {
+  id           String   @id @default(cuid())
+  withdrawalId String
+  kind         String   // submitted | reviewed | held | released | approved | payout_initiated | paid | rejected | note
+  actorId      String?
+  actorRole    String?
+  note         String?
+  meta         Json?
+  createdAt    DateTime @default(now())
+
+  withdrawal Withdrawal @relation(fields: [withdrawalId], references: [id], onDelete: Cascade)
+
+  @@index([withdrawalId, createdAt])
+  @@index([kind])
 }
 
 // ---------- Bonuses ----------
@@ -584,8 +615,13 @@ model LottoDraw {
 model PaymentGatewayTx {
   id              String   @id @default(cuid())
   provider        String   // manual | test | bkash | nagad | rocket | ...
+  // M2C: distinguishes incoming deposit verification (inbound) from
+  // outgoing payout status callbacks (outbound). Defaults to inbound
+  // so existing M2B rows do not change meaning.
+  direction       String   @default("inbound") // inbound | outbound
   providerTxId    String?
   depositId       String?
+  withdrawalId    String?
   userId          String?
   amount          Decimal? @db.Decimal(14, 2)
   currency        String   @default("BDT")
@@ -599,8 +635,10 @@ model PaymentGatewayTx {
 
   @@index([provider, providerTxId])
   @@index([depositId])
+  @@index([withdrawalId])
   @@index([userId])
   @@index([status])
+  @@index([direction, status])
   @@index([receivedAt])
 }
 
@@ -742,6 +780,17 @@ model PaymentMethod {
   number      String
   instruction String        @db.Text
   position    Int           @default(0)
+  // M2C: per-method enable flags + amount caps. depositEnabled keeps
+  // backwards compatibility (existing rows treated as deposit-enabled);
+  // payoutEnabled defaults to false so a method must be explicitly
+  // allowed for withdrawals.
+  depositEnabled  Boolean  @default(true)
+  payoutEnabled   Boolean  @default(false)
+  minDeposit      Decimal? @db.Decimal(14, 2)
+  maxDeposit      Decimal? @db.Decimal(14, 2)
+  minWithdrawal   Decimal? @db.Decimal(14, 2)
+  maxWithdrawal   Decimal? @db.Decimal(14, 2)
+  payoutInstruction String? @db.Text
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 

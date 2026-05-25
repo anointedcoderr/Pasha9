@@ -50,6 +50,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         where: { id: withdrawal.id },
         data: {
           status: 'approved',
+          processingState: 'payout_initiated',
           reviewerId: session.sub,
           reviewedAt: new Date(),
           adminNote: parsed.data.adminNote ?? withdrawal.adminNote,
@@ -68,6 +69,15 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           reference: `WD-${withdrawal.id.slice(-8)}`,
           description: `Withdrawal ${withdrawal.method}`,
           meta: { withdrawalId: withdrawal.id } as Prisma.JsonObject,
+        },
+      });
+      await tx.withdrawalEvent.create({
+        data: {
+          withdrawalId: withdrawal.id,
+          kind: 'approved',
+          actorId: session.sub,
+          actorRole: session.role,
+          note: parsed.data.adminNote || 'Approved by admin. Wallet debited; payout initiated.',
         },
       });
       return w;

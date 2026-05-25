@@ -26,14 +26,27 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return jsonError(409, 'ALREADY_APPROVED');
     }
 
-    const updated = await db.withdrawal.update({
-      where: { id: withdrawal.id },
-      data: {
-        status: 'rejected',
-        reviewerId: session.sub,
-        reviewedAt: new Date(),
-        adminNote: parsed.data.adminNote ?? withdrawal.adminNote,
-      },
+    const updated = await db.$transaction(async (tx) => {
+      const w = await tx.withdrawal.update({
+        where: { id: withdrawal.id },
+        data: {
+          status: 'rejected',
+          processingState: null,
+          reviewerId: session.sub,
+          reviewedAt: new Date(),
+          adminNote: parsed.data.adminNote ?? withdrawal.adminNote,
+        },
+      });
+      await tx.withdrawalEvent.create({
+        data: {
+          withdrawalId: withdrawal.id,
+          kind: 'rejected',
+          actorId: session.sub,
+          actorRole: session.role,
+          note: parsed.data.adminNote || 'Rejected by admin.',
+        },
+      });
+      return w;
     });
 
     await recordActivity({

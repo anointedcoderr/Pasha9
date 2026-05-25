@@ -33,6 +33,9 @@ import {
   BarChart3,
   Sparkles,
   FileCheck,
+  Banknote,
+  CreditCard,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { Logo } from '@/components/site/Logo';
 import { ROUTES } from '@/lib/constants/routes';
@@ -54,6 +57,9 @@ const GROUPS = [
       { key: 'withdrawals', href: ROUTES.admin.withdrawals, icon: ArrowUpToLine },
       { key: 'transactions', href: ROUTES.admin.transactions, icon: ReceiptText },
       { key: 'payments', href: ROUTES.admin.payments, icon: Wallet },
+      { key: 'payouts', href: ROUTES.admin.payouts, icon: Banknote },
+      { key: 'paymentMethods', href: ROUTES.admin.paymentMethods, icon: CreditCard },
+      { key: 'withdrawalLimits', href: ROUTES.admin.withdrawalLimits, icon: SlidersHorizontal },
       { key: 'paymentsReconciliation', href: ROUTES.admin.paymentsReconciliation, icon: FileCheck },
     ],
   },

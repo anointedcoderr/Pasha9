@@ -13,14 +13,17 @@ export async function GET(req: NextRequest) {
     const url = new URL(req.url);
     const provider = url.searchParams.get('provider')?.trim();
     const status = url.searchParams.get('status')?.trim();
+    const direction = url.searchParams.get('direction')?.trim();
     const take = Math.min(200, Number(url.searchParams.get('take') ?? 100));
 
     const where: {
       provider?: string;
       status?: string;
+      direction?: string;
     } = {};
     if (provider) where.provider = provider;
     if (status) where.status = status;
+    if (direction === 'inbound' || direction === 'outbound') where.direction = direction;
 
     const rows = await db.paymentGatewayTx.findMany({
       where,
@@ -32,8 +35,10 @@ export async function GET(req: NextRequest) {
       rows: rows.map((r) => ({
         id: r.id,
         provider: r.provider,
+        direction: r.direction,
         providerTxId: r.providerTxId,
         depositId: r.depositId,
+        withdrawalId: r.withdrawalId,
         userId: r.userId,
         amount: r.amount ? Number(r.amount) : null,
         currency: r.currency,

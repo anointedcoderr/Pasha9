@@ -23,11 +23,24 @@ import { jsonError, jsonOk } from '@/lib/auth/errors';
 import { rateLimit } from '@/lib/auth/rate-limit';
 
 const schema = z.object({
-  amount: z.coerce.number().min(500).max(200_000),
+  amount: z.coerce.number().min(1).max(10_000_000),
   method: z.string().trim().min(1).max(60),
   accountNumber: z.string().trim().min(6).max(40),
   accountName: z.string().trim().min(2).max(60),
 });
+
+const DEFAULT_MIN = 500;
+const DEFAULT_MAX = 200_000;
+
+async function resolveGlobalLimits(): Promise<{ min: number; max: number }> {
+  const rows = await db.systemSetting.findMany({
+    where: { key: { in: ['withdrawal_min_amount', 'withdrawal_max_amount'] } },
+  });
+  const map = new Map(rows.map((r) => [r.key, r.value]));
+  const min = Number(map.get('withdrawal_min_amount') ?? DEFAULT_MIN) || DEFAULT_MIN;
+  const max = Number(map.get('withdrawal_max_amount') ?? DEFAULT_MAX) || DEFAULT_MAX;
+  return { min, max };
+}
 
 export async function POST(req: NextRequest) {
   return withAuth(async () => {
@@ -39,6 +52,37 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const parsed = schema.safeParse(body);
     if (!parsed.success) return jsonError(400, 'VALIDATION', undefined, { issues: parsed.error.issues });
+
+    // Global admin-configurable limits live in SystemSetting.
+    const { min: globalMin, max: globalMax } = await resolveGlobalLimits();
+    if (parsed.data.amount < globalMin) {
+      return jsonError(400, 'BELOW_MIN', `Minimum withdrawal is ${globalMin} BDT.`);
+    }
+    if (parsed.data.amount > globalMax) {
+      return jsonError(400, 'ABOVE_MAX', `Maximum withdrawal is ${globalMax} BDT per request.`);
+    }
+
+    // Per-method limits live on PaymentMethod. If the user picked a
+    // method name that maps to a real PaymentMethod row, enforce its
+    // payoutEnabled flag + min/max. Backwards-compatible for the old
+    // mock method names that have no row in DB yet.
+    const method = await db.paymentMethod.findFirst({
+      where: { name: parsed.data.method, status: 'active' },
+      select: { name: true, payoutEnabled: true, minWithdrawal: true, maxWithdrawal: true },
+    });
+    if (method) {
+      if (!method.payoutEnabled) {
+        return jsonError(400, 'METHOD_PAYOUT_DISABLED', `${method.name} is not available for withdrawals right now.`);
+      }
+      const methodMin = method.minWithdrawal == null ? null : Number(method.minWithdrawal);
+      const methodMax = method.maxWithdrawal == null ? null : Number(method.maxWithdrawal);
+      if (methodMin != null && parsed.data.amount < methodMin) {
+        return jsonError(400, 'METHOD_BELOW_MIN', `Minimum withdrawal via ${method.name} is ${methodMin} BDT.`);
+      }
+      if (methodMax != null && parsed.data.amount > methodMax) {
+        return jsonError(400, 'METHOD_ABOVE_MAX', `Maximum withdrawal via ${method.name} is ${methodMax} BDT.`);
+      }
+    }
 
     const wallet = await db.wallet.findUnique({ where: { userId: session.sub } });
     const available = wallet ? Number(wallet.balance) - Number(wallet.lockedBalance) : 0;
@@ -54,6 +98,14 @@ export async function POST(req: NextRequest) {
         accountNumber: parsed.data.accountNumber,
         accountName: parsed.data.accountName,
         status: 'pending',
+        events: {
+          create: {
+            kind: 'submitted',
+            actorId: session.sub,
+            actorRole: session.role,
+            note: 'Submitted by user.',
+          },
+        },
       },
     });
 

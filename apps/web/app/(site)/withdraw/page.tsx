@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
@@ -11,19 +11,34 @@ import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { withdrawalSchema, type WithdrawalInput } from '@/lib/utils/validation';
-import { mockPaymentMethods } from '@/lib/mock/payment-methods';
 import { useT } from '@/lib/i18n/context';
 import { triggerWalletRefresh } from '@/components/site/WalletStrip';
 import { AlertTriangle, ArrowUpToLine, CheckCircle2, Lock, LogIn, ShieldCheck } from 'lucide-react';
 import { formatBDT } from '@/lib/utils/format';
 
 const QUICK = [500, 1000, 2500, 5000, 10000];
-const DEFAULT_METHOD = mockPaymentMethods[0]?.name ?? '';
 
 type AuthState =
   | { kind: 'checking' }
   | { kind: 'guest' }
   | { kind: 'authed'; username: string; balance: number };
+
+interface PayoutMethod {
+  id: string;
+  name: string;
+  type: string;
+  payoutInstruction: string | null;
+  minWithdrawal: number | null;
+  maxWithdrawal: number | null;
+}
+
+interface GlobalLimits {
+  min: number;
+  max: number;
+  policy: string;
+}
+
+const DEFAULT_LIMITS: GlobalLimits = { min: 500, max: 200000, policy: '' };
 
 export default function WithdrawPage() {
   const t = useT();
@@ -34,6 +49,9 @@ export default function WithdrawPage() {
   const [serverDetail, setServerDetail] = useState<string | null>(null);
   const [submittedId, setSubmittedId] = useState<string | null>(null);
   const [auth, setAuth] = useState<AuthState>({ kind: 'checking' });
+  const [methods, setMethods] = useState<PayoutMethod[]>([]);
+  const [methodsLoading, setMethodsLoading] = useState(true);
+  const [limits, setLimits] = useState<GlobalLimits>(DEFAULT_LIMITS);
 
   useEffect(() => {
     let alive = true;
@@ -63,16 +81,59 @@ export default function WithdrawPage() {
     };
   }, []);
 
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/content/payment-methods', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!alive) return;
+        const payout = Array.isArray(data?.payout) ? (data.payout as PayoutMethod[]) : [];
+        setMethods(payout);
+      })
+      .catch(() => { if (alive) setMethods([]); })
+      .finally(() => { if (alive) setMethodsLoading(false); });
+
+    fetch('/api/content/withdrawal-limits', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!alive) return;
+        if (data && typeof data === 'object') {
+          setLimits({
+            min: Number(data.min ?? DEFAULT_LIMITS.min) || DEFAULT_LIMITS.min,
+            max: Number(data.max ?? DEFAULT_LIMITS.max) || DEFAULT_LIMITS.max,
+            policy: typeof data.policy === 'string' ? data.policy : '',
+          });
+        }
+      })
+      .catch(() => { /* keep defaults */ });
+
+    return () => { alive = false; };
+  }, []);
+
   const {
     register,
     handleSubmit,
     setValue,
+    watch,
     reset,
     formState: { errors, isSubmitted },
   } = useForm<WithdrawalInput>({
     resolver: zodResolver(withdrawalSchema),
-    defaultValues: { amount: 0, method: DEFAULT_METHOD, account: '', holder: '' },
+    defaultValues: { amount: 0, method: '', account: '', holder: '' },
   });
+
+  // Once live methods load, default the form to the first one so the
+  // user does not have to manually open the dropdown.
+  useEffect(() => {
+    if (methods.length > 0 && !watch('method')) {
+      setValue('method', methods[0].name, { shouldValidate: false });
+    }
+  }, [methods, setValue, watch]);
+
+  const selectedMethod = useMemo(
+    () => methods.find((m) => m.name === watch('method')) ?? null,
+    [methods, watch],
+  );
 
   const errorEntries = Object.entries(errors).map(([field, e]) => ({
     field,
@@ -119,16 +180,21 @@ export default function WithdrawPage() {
         }
         if (code === 'INSUFFICIENT_FUNDS') {
           setServerError('Withdrawable balance is lower than the requested amount.');
-          setServerDetail(`HTTP 400 · INSUFFICIENT_FUNDS`);
+          setServerDetail('HTTP 400 . INSUFFICIENT_FUNDS');
+          return;
+        }
+        if (code === 'BELOW_MIN' || code === 'ABOVE_MAX' || code === 'METHOD_BELOW_MIN' || code === 'METHOD_ABOVE_MAX' || code === 'METHOD_PAYOUT_DISABLED') {
+          setServerError(message ?? 'Amount or method is not allowed.');
+          setServerDetail(`HTTP 400 . ${code}`);
           return;
         }
         if (code === 'VALIDATION') {
           setServerError('Please check the amount, method and account fields.');
-          setServerDetail(`HTTP 400 · VALIDATION`);
+          setServerDetail('HTTP 400 . VALIDATION');
           return;
         }
         setServerError(message ?? code ?? 'Could not submit withdrawal.');
-        setServerDetail(`HTTP ${res.status}${code ? ` · ${code}` : ''}`);
+        setServerDetail(`HTTP ${res.status}${code ? ` . ${code}` : ''}`);
         return;
       }
 
@@ -155,11 +221,18 @@ export default function WithdrawPage() {
     setSubmittedId(null);
     setServerError(null);
     setServerDetail(null);
-    reset({ amount: 0, method: DEFAULT_METHOD, account: '', holder: '' });
+    reset({ amount: 0, method: methods[0]?.name ?? '', account: '', holder: '' });
   };
 
   const balanceLabel = auth.kind === 'authed' ? formatBDT(auth.balance) : '-';
-  const canSubmit = auth.kind === 'authed' && !loading;
+  const canSubmit = auth.kind === 'authed' && !loading && methods.length > 0;
+
+  const effectiveMin = selectedMethod?.minWithdrawal != null
+    ? Math.max(limits.min, selectedMethod.minWithdrawal)
+    : limits.min;
+  const effectiveMax = selectedMethod?.maxWithdrawal != null
+    ? Math.min(limits.max, selectedMethod.maxWithdrawal)
+    : limits.max;
 
   return (
     <>
@@ -207,24 +280,36 @@ export default function WithdrawPage() {
                     onClick={() => setValue('amount', q, { shouldValidate: true })}
                     className="rounded-pill border border-neon/15 bg-base-deep/40 px-4 py-1.5 text-sm text-ink-mid transition hover:border-neon/40 hover:text-ink-hi"
                   >
-                    ৳ {q.toLocaleString()}
+                    {`৳ ${q.toLocaleString()}`}
                   </button>
                 ))}
               </div>
-              <FormField label={t('withdraw.amount')} required error={errors.amount?.message}>
-                <Input type="number" min={500} step={100} {...register('amount')} placeholder="500" invalid={!!errors.amount} />
+              <FormField
+                label={t('withdraw.amount')}
+                required
+                hint={`Allowed for this method: ৳ ${effectiveMin.toLocaleString()} - ৳ ${effectiveMax.toLocaleString()}`}
+                error={errors.amount?.message}
+              >
+                <Input type="number" min={effectiveMin} max={effectiveMax} step={100} {...register('amount')} placeholder={String(effectiveMin)} invalid={!!errors.amount} />
               </FormField>
             </Card>
 
             <Card padding="lg">
-              <CardHeader title={t('withdraw.method')} />
+              <CardHeader title={t('withdraw.method')} subtitle={methodsLoading ? 'Loading payout channels...' : `${methods.length} active payout channel${methods.length === 1 ? '' : 's'}`} />
               <FormField label={t('withdraw.method')} required error={errors.method?.message}>
-                <Select {...register('method')} invalid={!!errors.method}>
-                  {mockPaymentMethods.map((m) => (
-                    <option key={m.id} value={m.name}>{m.name}</option>
-                  ))}
+                <Select {...register('method')} invalid={!!errors.method} disabled={methods.length === 0}>
+                  {methods.length === 0 ? (
+                    <option value="">No payout channels available</option>
+                  ) : (
+                    methods.map((m) => (
+                      <option key={m.id} value={m.name}>{m.name}</option>
+                    ))
+                  )}
                 </Select>
               </FormField>
+              {selectedMethod?.payoutInstruction ? (
+                <p className="mt-2 text-xs text-ink-mid">{selectedMethod.payoutInstruction}</p>
+              ) : null}
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 <FormField label={t('withdraw.account')} required error={errors.account?.message}>
                   <Input placeholder="01XXXXXXXXX" {...register('account')} invalid={!!errors.account} />
@@ -270,11 +355,27 @@ export default function WithdrawPage() {
             <Card padding="md">
               <h4 className="text-sm font-semibold text-ink-hi">Limits</h4>
               <ul className="mt-2 space-y-1.5 text-xs text-ink-mid">
-                <li>Minimum withdrawal: ৳ 500</li>
-                <li>Maximum per request: ৳ 200,000</li>
+                <li>{`Minimum withdrawal: ৳ ${limits.min.toLocaleString()}`}</li>
+                <li>{`Maximum per request: ৳ ${limits.max.toLocaleString()}`}</li>
                 <li>Standard review window: under 30 minutes</li>
               </ul>
+              {limits.policy ? (
+                <p className="mt-3 border-t border-neon/10 pt-3 text-xs text-ink-mid">{limits.policy}</p>
+              ) : null}
             </Card>
+            {selectedMethod && (selectedMethod.minWithdrawal != null || selectedMethod.maxWithdrawal != null) ? (
+              <Card padding="md">
+                <h4 className="text-sm font-semibold text-ink-hi">{selectedMethod.name} limits</h4>
+                <ul className="mt-2 space-y-1.5 text-xs text-ink-mid">
+                  {selectedMethod.minWithdrawal != null ? (
+                    <li>{`Minimum: ৳ ${selectedMethod.minWithdrawal.toLocaleString()}`}</li>
+                  ) : null}
+                  {selectedMethod.maxWithdrawal != null ? (
+                    <li>{`Maximum: ৳ ${selectedMethod.maxWithdrawal.toLocaleString()}`}</li>
+                  ) : null}
+                </ul>
+              </Card>
+            ) : null}
           </aside>
         </div>
       )}
