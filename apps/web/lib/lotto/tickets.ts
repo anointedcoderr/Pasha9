@@ -466,6 +466,84 @@ export async function diagnoseSettlement(drawId: string, winningNumber: string, 
   };
 }
 
+// M2F hotfix: the spec for the default lottery draw. Used by the
+// seed endpoint AND by rolloverDraws() when it cannot find any
+// active draw at all, so the platform is never left in a "nothing
+// to settle" state. Ticket price + multipliers are intentionally
+// the canonical M1 defaults so existing reports / docs stay valid.
+export const DEFAULT_DAILY_DRAW = {
+  name: 'Daily 4D',
+  schedule: 'Daily 19:30 BST',
+  digitsCount: 4,
+  ticketPrice: 20,
+  prizePool: 100_000,
+  accent: 'yellow' as const,
+  position: 1,
+  // Prize multipliers documented next to the schedule. These match
+  // the public lotto page copy. Used as the default body of the
+  // settle modal, NOT stored on LottoDraw (the schema holds them on
+  // LotteryDrawResult so historical settlements stay accurate).
+  defaultMultipliers: {
+    first: 2000,
+    second: 800,
+    third: 300,
+    special: 150,
+    consolation: 30,
+  },
+};
+
+// Computes the next 19:30 server-local timestamp. If 19:30 has not
+// passed yet today, returns today at 19:30; otherwise returns
+// tomorrow at 19:30.
+function nextDailyDrawAt(): Date {
+  const next = new Date();
+  next.setHours(19, 30, 0, 0);
+  if (next <= new Date()) {
+    next.setDate(next.getDate() + 1);
+  }
+  return next;
+}
+
+/**
+ * Idempotent default-draw seeder. If an active, non-closed,
+ * non-settled draw with the canonical name already exists, returns
+ * it. Otherwise creates one for the next 7:30 PM slot.
+ *
+ * Used by:
+ *   - the admin "Create Daily 4D Draw" empty-state button
+ *   - rolloverDraws(), so a misconfigured deploy self-heals on the
+ *     first cron tick
+ */
+export async function ensureDefaultDailyDraw(): Promise<{ draw: { id: string; name: string; drawsAt: Date | null }; created: boolean }> {
+  const existing = await db.lottoDraw.findFirst({
+    where: {
+      name: DEFAULT_DAILY_DRAW.name,
+      status: 'active',
+      result: { is: null },
+      closedAt: null,
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+  if (existing) {
+    return { draw: { id: existing.id, name: existing.name, drawsAt: existing.drawsAt }, created: false };
+  }
+  const drawsAt = nextDailyDrawAt();
+  const created = await db.lottoDraw.create({
+    data: {
+      name: DEFAULT_DAILY_DRAW.name,
+      schedule: DEFAULT_DAILY_DRAW.schedule,
+      drawsAt,
+      digitsCount: DEFAULT_DAILY_DRAW.digitsCount,
+      ticketPrice: new Prisma.Decimal(DEFAULT_DAILY_DRAW.ticketPrice),
+      prizePool: new Prisma.Decimal(DEFAULT_DAILY_DRAW.prizePool),
+      accent: DEFAULT_DAILY_DRAW.accent,
+      position: DEFAULT_DAILY_DRAW.position,
+      status: 'active',
+    },
+  });
+  return { draw: { id: created.id, name: created.name, drawsAt: created.drawsAt }, created: true };
+}
+
 /**
  * Rollover sweep, intended to be triggered by a daily cron at the
  * cut-off time (7:30 PM by default).
@@ -480,13 +558,20 @@ export async function diagnoseSettlement(drawId: string, winningNumber: string, 
  *     hour/minute. This means the public lotto page always has a
  *     forward-looking active draw to attach new tickets to.
  *
- * Returns counts for the cron caller to log.
+ * M2F hotfix: when the sweep finds zero past-due draws AND zero
+ * active draws exist at all, it calls ensureDefaultDailyDraw() so
+ * the platform is never silently empty. The response carries a
+ * defaultSeeded flag for the admin UI / cron log.
  */
 export async function rolloverDraws(): Promise<{
   closed: number;
   seeded: number;
   closedIds: string[];
   seededIds: string[];
+  activeAfter: number;
+  defaultSeeded: boolean;
+  defaultDrawId: string | null;
+  message: string;
 }> {
   const now = new Date();
   const closedIds: string[] = [];
@@ -535,5 +620,37 @@ export async function rolloverDraws(): Promise<{
     seededIds.push(seeded.id);
   }
 
-  return { closed: closedIds.length, seeded: seededIds.length, closedIds, seededIds };
+  // Safety net: if the sweep was a no-op AND no active draw exists
+  // anywhere, seed the canonical Daily 4D so accrual + settlement
+  // always have a target. Idempotent (returns existing if present).
+  let defaultSeeded = false;
+  let defaultDrawId: string | null = null;
+  let activeAfter = await db.lottoDraw.count({
+    where: { status: 'active', result: { is: null }, closedAt: null },
+  });
+  if (activeAfter === 0) {
+    const ensured = await ensureDefaultDailyDraw();
+    defaultSeeded = ensured.created;
+    defaultDrawId = ensured.draw.id;
+    activeAfter = 1;
+  }
+
+  const messageParts: string[] = [];
+  if (closedIds.length) messageParts.push(`closed ${closedIds.length}`);
+  if (seededIds.length) messageParts.push(`seeded ${seededIds.length} next-day`);
+  if (defaultSeeded) messageParts.push('seeded canonical Daily 4D (no active draw existed)');
+  if (!closedIds.length && !seededIds.length && !defaultSeeded) {
+    messageParts.push('no past-due draws found; nothing to close or seed');
+  }
+
+  return {
+    closed: closedIds.length,
+    seeded: seededIds.length,
+    closedIds,
+    seededIds,
+    activeAfter,
+    defaultSeeded,
+    defaultDrawId,
+    message: messageParts.join(' . '),
+  };
 }

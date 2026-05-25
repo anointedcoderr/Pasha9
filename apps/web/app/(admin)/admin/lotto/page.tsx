@@ -11,7 +11,7 @@ import { FormField, Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Switch } from '@/components/ui/Switch';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { Ticket, Pencil, Trash2, Plus, Crown, CheckCircle2, Stethoscope, RefreshCcw } from 'lucide-react';
+import { Ticket, Pencil, Trash2, Plus, Crown, CheckCircle2, Stethoscope, RefreshCcw, Sparkles } from 'lucide-react';
 import { formatBDT, formatDateTime } from '@/lib/utils/format';
 import { useLang } from '@/lib/i18n/context';
 
@@ -91,6 +91,7 @@ export default function AdminLottoPage() {
   const [diagnose, setDiagnose] = useState<DiagnoseResult | null>(null);
   const [diagnoseBusy, setDiagnoseBusy] = useState(false);
   const [rolloverBusy, setRolloverBusy] = useState(false);
+  const [seedBusy, setSeedBusy] = useState(false);
 
   const refresh = useCallback(async () => {
     setError(null);
@@ -234,13 +235,34 @@ export default function AdminLottoPage() {
       const res = await fetch('/api/cron/lotto-rollover', { method: 'POST' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message ?? data.code ?? 'Rollover failed');
-      setToast(`Rollover: closed ${data.closed ?? 0}, seeded ${data.seeded ?? 0} next-day draw(s).`);
-      setTimeout(() => setToast(null), 6000);
+      const summary = typeof data.message === 'string' && data.message.length
+        ? data.message
+        : `closed ${data.closed ?? 0}, seeded ${data.seeded ?? 0}`;
+      const after = typeof data.activeAfter === 'number' ? ` Active draws now: ${data.activeAfter}.` : '';
+      setToast(`Rollover: ${summary}.${after}`);
+      setTimeout(() => setToast(null), 8000);
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Rollover failed');
     } finally {
       setRolloverBusy(false);
+    }
+  };
+
+  const seedDefault = async () => {
+    setSeedBusy(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/admin/lotto/seed-default', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message ?? data.code ?? 'Seed failed');
+      setToast(String(data.message ?? 'Default Daily 4D draw is ready.'));
+      setTimeout(() => setToast(null), 6500);
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Seed failed');
+    } finally {
+      setSeedBusy(false);
     }
   };
 
@@ -254,6 +276,9 @@ export default function AdminLottoPage() {
         icon={<Ticket className="h-5 w-5" />}
         action={
           <div className="flex gap-2">
+            <Button variant="ghost" leftIcon={<Sparkles className="h-3.5 w-3.5" />} loading={seedBusy} onClick={seedDefault} title="Idempotently create the canonical Daily 4D draw for the next 7:30 PM slot.">
+              Seed default
+            </Button>
             <Button variant="ghost" leftIcon={<RefreshCcw className={`h-3.5 w-3.5 ${rolloverBusy ? 'animate-spin' : ''}`} />} onClick={runRollover} loading={rolloverBusy}>
               Run rollover
             </Button>
@@ -289,7 +314,22 @@ export default function AdminLottoPage() {
       {loading ? (
         <Card padding="lg">Loading...</Card>
       ) : draws.length === 0 ? (
-        <Card padding="lg"><EmptyState title="No lotto draws" description="Create the first draw to populate the public lotto page." /></Card>
+        <Card padding="lg">
+          <EmptyState
+            title="No lotto draws yet"
+            description="The lottery pipeline needs at least one active draw. Click the button below to create the canonical Daily 4D draw (name: Daily 4D, schedule: 19:30 BST, 4 digits, base ticket 20 BDT, multipliers 2000/800/300/150/30). Idempotent - calling it twice is safe."
+            action={
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button variant="gold" leftIcon={<Sparkles className="h-4 w-4" />} loading={seedBusy} onClick={seedDefault}>
+                  Create Daily 4D Draw
+                </Button>
+                <Button variant="neon" leftIcon={<Plus className="h-4 w-4" />} onClick={() => setEditor({ ...BLANK, position: 1 })}>
+                  New Custom Draw
+                </Button>
+              </div>
+            }
+          />
+        </Card>
       ) : (
         <div className="space-y-3">
           {draws.map((d) => {
