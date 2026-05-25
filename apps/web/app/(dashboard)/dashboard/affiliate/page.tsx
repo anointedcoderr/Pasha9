@@ -9,9 +9,12 @@ import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { Modal } from '@/components/ui/Modal';
+import { FormField, Input } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
 import { useLang } from '@/lib/i18n/context';
 import { formatBDT, formatDate } from '@/lib/utils/format';
-import { Briefcase, Copy, Check, Wallet, Users, Share2, Send, MessageCircle, Lock, Sparkles, ImageIcon, Link2 } from 'lucide-react';
+import { Briefcase, Copy, Check, Wallet, Users, Share2, Send, MessageCircle, Lock, Sparkles, ImageIcon, Link2, Banknote } from 'lucide-react';
 
 interface Me {
   user: {
@@ -23,7 +26,9 @@ interface Me {
   };
   application: { id: string; status: 'pending' | 'approved' | 'rejected' } | null;
   downline: { level1: number; level2: number; level3: number; active: number };
-  commissions: { totalAll: number; pending: number; approved: number; paid: number; cancelled: number };
+  commissions: { totalAll: number; pending: number; approved: number; paid: number; cancelled: number; withdrawable: number; inFlightPayouts: number };
+  payouts: Array<{ id: string; amount: number; method: string; accountNumber: string; accountName: string; status: string; adminNote: string | null; reviewedAt: string | null; paidAt: string | null; createdAt: string }>;
+  recentCommissions: Array<{ id: string; level: number; amount: number; status: string; basis: string; ratePct: number | null; createdAt: string; payoutId: string | null }>;
 }
 
 interface DownlineRow {
@@ -45,6 +50,14 @@ export default function DashboardAffiliateCenter() {
   const [level, setLevel] = useState<1 | 2 | 3>(1);
   const [rows, setRows] = useState<DownlineRow[]>([]);
   const [rowsLoading, setRowsLoading] = useState(true);
+  const [payoutOpen, setPayoutOpen] = useState(false);
+  const [payoutAmount, setPayoutAmount] = useState(0);
+  const [payoutMethod, setPayoutMethod] = useState<'bkash' | 'nagad' | 'rocket' | 'bank'>('bkash');
+  const [payoutAccount, setPayoutAccount] = useState('');
+  const [payoutAccountName, setPayoutAccountName] = useState('');
+  const [payoutBusy, setPayoutBusy] = useState(false);
+  const [payoutError, setPayoutError] = useState<string | null>(null);
+  const [payoutToast, setPayoutToast] = useState<string | null>(null);
 
   const fetchMe = useCallback(async () => {
     setError(null);
@@ -85,6 +98,44 @@ export default function DashboardAffiliateCenter() {
       await navigator.clipboard.writeText(value);
       setCopied(key);
       setTimeout(() => setCopied((c) => (c === key ? null : c)), 1600);
+    }
+  };
+
+  const submitPayout = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPayoutError(null);
+    setPayoutBusy(true);
+    try {
+      const res = await fetch('/api/affiliate/payouts', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          amount: Number(payoutAmount),
+          method: payoutMethod,
+          accountNumber: payoutAccount.trim(),
+          accountName: payoutAccountName.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        const code = typeof data?.code === 'string' ? data.code : null;
+        const message = typeof data?.message === 'string' ? data.message : null;
+        if (code === 'INSUFFICIENT_BALANCE') throw new Error(message ?? 'Insufficient commission balance.');
+        if (code === 'BELOW_MIN') throw new Error(message ?? 'Below minimum payout.');
+        if (code === 'NOT_AFFILIATE') throw new Error('Your affiliate account is not active.');
+        throw new Error(message ?? code ?? 'Request failed');
+      }
+      setPayoutOpen(false);
+      setPayoutAmount(0);
+      setPayoutAccount('');
+      setPayoutAccountName('');
+      setPayoutToast(lang === 'bn' ? 'পেআউট অনুরোধ গৃহীত। অ্যাডমিন পর্যালোচনা করবে।' : 'Payout request submitted. Admin review pending.');
+      setTimeout(() => setPayoutToast(null), 5000);
+      fetchMe();
+    } catch (e) {
+      setPayoutError(e instanceof Error ? e.message : 'Request failed');
+    } finally {
+      setPayoutBusy(false);
     }
   };
 
@@ -142,11 +193,23 @@ export default function DashboardAffiliateCenter() {
         subtitle={lang === 'bn' ? 'আপনার অ্যাফিলিয়েট পরিসংখ্যান এবং কমিশন' : 'Your affiliate stats and commission balance'}
         icon={<Briefcase className="h-5 w-5" />}
         action={
-          <Button variant="ghost" disabled title={lang === 'bn' ? 'পেআউট মাইলস্টোন ২-এ যুক্ত হবে' : 'Payout pipeline ships in Milestone 2'} leftIcon={<Lock className="h-4 w-4" />}>
+          <Button
+            variant="gold"
+            leftIcon={<Banknote className="h-4 w-4" />}
+            disabled={me.commissions.withdrawable <= 0}
+            title={me.commissions.withdrawable <= 0 ? (lang === 'bn' ? 'কোনো উইথড্রয়েবল কমিশন নেই' : 'No withdrawable commission yet') : undefined}
+            onClick={() => {
+              setPayoutError(null);
+              setPayoutAmount(Math.min(me.commissions.withdrawable, me.commissions.withdrawable));
+              setPayoutOpen(true);
+            }}
+          >
             {lang === 'bn' ? 'পেআউট অনুরোধ' : 'Request Payout'}
           </Button>
         }
       />
+
+      {payoutToast ? <Card padding="md" className="mb-4"><p className="text-sm text-signal-ok">{payoutToast}</p></Card> : null}
 
       <Card padding="lg" className="mb-6">
         <div className="grid gap-4 md:grid-cols-2">
@@ -235,15 +298,48 @@ export default function DashboardAffiliateCenter() {
       <Card padding="lg" className="mb-6">
         <CardHeader
           title={lang === 'bn' ? 'কমিশন সারাংশ' : 'Commission summary'}
-          subtitle={lang === 'bn' ? 'কমিশন অটো-গণনা মাইলস্টোন ২-এ চালু হবে' : 'Automatic commission accrual launches in Milestone 2'}
+          subtitle={lang === 'bn' ? 'প্রতিটি অনুমোদিত ডিপোজিটে আপলাইন কমিশন অটো-গণনা হয়।' : 'Commission accrues automatically on every approved deposit in your downline.'}
         />
-        <div className="grid gap-3 sm:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-5">
           <CommissionStat label={lang === 'bn' ? 'মোট' : 'Total'} value={formatBDT(me.commissions.totalAll)} />
-          <CommissionStat label={lang === 'bn' ? 'পেন্ডিং' : 'Pending'} value={formatBDT(me.commissions.pending)} accent="warn" />
+          <CommissionStat label={lang === 'bn' ? 'উইথড্রয়েবল' : 'Withdrawable'} value={formatBDT(me.commissions.withdrawable)} accent="ok" />
           <CommissionStat label={lang === 'bn' ? 'অনুমোদিত' : 'Approved'} value={formatBDT(me.commissions.approved)} accent="ok" />
+          <CommissionStat label={lang === 'bn' ? 'বকেয়া পেআউট' : 'In payout'} value={formatBDT(me.commissions.inFlightPayouts)} accent="warn" />
           <CommissionStat label={lang === 'bn' ? 'পরিশোধিত' : 'Paid'} value={formatBDT(me.commissions.paid)} accent="info" />
         </div>
       </Card>
+
+      {me.payouts.length > 0 ? (
+        <Card padding="lg" className="mb-6">
+          <CardHeader title={lang === 'bn' ? 'পেআউট ইতিহাস' : 'Payout history'} subtitle={lang === 'bn' ? 'সর্বশেষ ২০টি অনুরোধ' : 'Last 20 requests'} />
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="border-b border-neon/10 text-left text-xs font-semibold uppercase tracking-wider text-ink-lo">
+                  <th className="py-2 pr-3">{lang === 'bn' ? 'তারিখ' : 'Date'}</th>
+                  <th className="py-2 pr-3">{lang === 'bn' ? 'পরিমাণ' : 'Amount'}</th>
+                  <th className="py-2 pr-3">{lang === 'bn' ? 'মেথড' : 'Method'}</th>
+                  <th className="py-2 pr-3">{lang === 'bn' ? 'অ্যাকাউন্ট' : 'Account'}</th>
+                  <th className="py-2 pr-3">{lang === 'bn' ? 'অবস্থা' : 'Status'}</th>
+                  <th className="py-2 pr-3">{lang === 'bn' ? 'নোট' : 'Note'}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {me.payouts.map((p) => (
+                  <tr key={p.id} className="border-b border-neon/10 last:border-0">
+                    <td className="py-2.5 pr-3 text-ink-lo">{formatDate(p.createdAt, lang)}</td>
+                    <td className="py-2.5 pr-3 tabular-nums font-semibold text-ink-hi">{formatBDT(p.amount)}</td>
+                    <td className="py-2.5 pr-3 uppercase text-ink-mid">{p.method}</td>
+                    <td className="py-2.5 pr-3 font-mono text-xs text-ink-mid">{p.accountNumber}</td>
+                    <td className="py-2.5 pr-3"><Chip tone={p.status === 'paid' ? 'ok' : p.status === 'approved' ? 'info' : p.status === 'rejected' ? 'danger' : 'warn'}>{p.status}</Chip></td>
+                    <td className="py-2.5 pr-3 text-xs text-ink-lo">{p.adminNote ?? '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      ) : null}
 
       <Card padding="none" className="overflow-hidden">
         <div className="border-b border-neon/10 px-5 py-3">
@@ -302,6 +398,45 @@ export default function DashboardAffiliateCenter() {
           </Tabs>
         </div>
       </Card>
+
+      <Modal open={payoutOpen} onOpenChange={setPayoutOpen} title={lang === 'bn' ? 'পেআউট অনুরোধ' : 'Request Payout'} size="md">
+        <form className="space-y-4" onSubmit={submitPayout}>
+          <div className="rounded-lg border border-neon/10 bg-base-deep/40 p-3 text-sm">
+            <p className="text-ink-mid">
+              {lang === 'bn' ? 'উইথড্রয়েবল কমিশন' : 'Withdrawable commission'}: <span className="font-semibold text-ink-hi">{formatBDT(me.commissions.withdrawable)}</span>
+            </p>
+            <p className="mt-1 text-xs text-ink-lo">
+              {lang === 'bn' ? 'সর্বনিম্ন ৫০০ টাকা। অনুমোদিত হওয়ার পর কমিশন রেকর্ড লক হয়ে যাবে।' : 'Minimum 500 BDT. Approved commission rows are reserved until admin marks the payout paid.'}
+            </p>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <FormField label={lang === 'bn' ? 'পরিমাণ' : 'Amount'} required>
+              <Input type="number" min={500} max={me.commissions.withdrawable} step={100} value={payoutAmount} onChange={(e) => setPayoutAmount(Number(e.target.value))} />
+            </FormField>
+            <FormField label={lang === 'bn' ? 'মেথড' : 'Payout method'} required>
+              <Select value={payoutMethod} onChange={(e) => setPayoutMethod(e.target.value as typeof payoutMethod)}>
+                <option value="bkash">bKash</option>
+                <option value="nagad">Nagad</option>
+                <option value="rocket">Rocket</option>
+                <option value="bank">Bank</option>
+              </Select>
+            </FormField>
+            <FormField label={lang === 'bn' ? 'অ্যাকাউন্ট নম্বর' : 'Account number'} required>
+              <Input value={payoutAccount} onChange={(e) => setPayoutAccount(e.target.value)} placeholder="01XXXXXXXXX" />
+            </FormField>
+            <FormField label={lang === 'bn' ? 'অ্যাকাউন্ট নাম' : 'Account name'} required>
+              <Input value={payoutAccountName} onChange={(e) => setPayoutAccountName(e.target.value)} placeholder={lang === 'bn' ? 'অ্যাকাউন্টে দেওয়া নাম' : 'Full name on the account'} />
+            </FormField>
+          </div>
+          {payoutError ? <p className="text-sm text-signal-danger">{payoutError}</p> : null}
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="ghost" type="button" onClick={() => setPayoutOpen(false)}>{lang === 'bn' ? 'বাতিল' : 'Cancel'}</Button>
+            <Button type="submit" variant="gold" loading={payoutBusy} disabled={payoutAmount <= 0 || !payoutAccount.trim() || !payoutAccountName.trim()}>
+              {lang === 'bn' ? 'অনুরোধ পাঠান' : 'Submit request'}
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </>
   );
 }

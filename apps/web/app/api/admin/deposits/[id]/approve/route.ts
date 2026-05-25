@@ -27,6 +27,7 @@ import { withAuth, ensurePermission, recordActivity } from '@/lib/auth/guard';
 import { jsonOk, jsonError } from '@/lib/auth/errors';
 import { accrueLotteryTickets } from '@/lib/lotto/tickets';
 import { applyDepositBonuses, type ApplyDepositResult } from '@/lib/bonuses/engine';
+import { accrueCommissionsOnDeposit, type AccrualResult as CommissionAccrualResult } from '@/lib/affiliate/engine';
 
 const schema = z.object({
   adminNote: z.string().max(500).optional(),
@@ -120,6 +121,23 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       bonusResult.error = `engine_threw: ${msg.slice(0, 300)}`;
     }
 
+    // M2E affiliate commission engine. Same after-transaction pattern.
+    // Walks the referral chain up to 3 levels and writes an
+    // AffiliateCommission row at the appropriate tier rate per level.
+    let commissionResult: CommissionAccrualResult = {
+      accrued: [],
+      skipped: [],
+      chainDepth: 0,
+      error: null,
+    };
+    try {
+      commissionResult = await accrueCommissionsOnDeposit(deposit.userId, deposit.id, amount);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[deposit-approve] commission engine threw unexpectedly', err);
+      commissionResult.error = `engine_threw: ${msg.slice(0, 300)}`;
+    }
+
     // Headline ActivityLog row (existing M1 behaviour).
     await recordActivity({
       actorId: session.sub,
@@ -134,6 +152,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         bonusesGranted: bonusResult.granted.length,
         bonusGrantIds: bonusResult.granted.map((g) => g.grantId),
         bonusEngineError: bonusResult.error,
+        commissionsAccrued: commissionResult.accrued.length,
+        commissionTotal: commissionResult.accrued.reduce((acc, c) => acc + c.amount, 0),
+        commissionEngineError: commissionResult.error,
       },
     });
 
@@ -164,9 +185,42 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       },
     });
 
+    // Separate dedicated COMMISSION_ACCRUED / COMMISSION_NONE row so
+    // the audit feed is filterable by commission events.
+    const commissionDetail = commissionResult.accrued.length > 0
+      ? commissionResult.accrued.map((c) => `L${c.level}:${c.tierName ?? '?'}@${c.ratePct}%=${c.amount}`).join(' ; ')
+      : commissionResult.error
+        ? `ERROR ${commissionResult.error}`
+        : commissionResult.skipped.length > 0
+          ? commissionResult.skipped.map((s) => `L${s.level}:${s.reason}`).slice(0, 4).join(' ; ')
+          : `no_upline (chainDepth=${commissionResult.chainDepth})`;
+    await recordActivity({
+      actorId: session.sub,
+      actorRole: session.role,
+      action: commissionResult.accrued.length > 0 ? 'COMMISSION_ACCRUED' : 'COMMISSION_NONE',
+      target: deposit.id,
+      detail: commissionDetail.slice(0, 480),
+      meta: {
+        userId: deposit.userId,
+        depositAmount: Number(amount),
+        chainDepth: commissionResult.chainDepth,
+        accrued: commissionResult.accrued,
+        skipped: commissionResult.skipped,
+        error: commissionResult.error,
+      },
+    });
+
     return jsonOk({
       deposit: updated,
       accrual,
+      commissions: {
+        accrued: commissionResult.accrued,
+        skipped: commissionResult.skipped,
+        chainDepth: commissionResult.chainDepth,
+        error: commissionResult.error,
+        total: commissionResult.accrued.reduce((acc, c) => acc + c.amount, 0),
+        count: commissionResult.accrued.length,
+      },
       bonuses: {
         granted: bonusResult.granted,
         skipped: bonusResult.skipped,

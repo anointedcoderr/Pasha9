@@ -175,7 +175,12 @@ export default function AdminAffiliatePage() {
         title="Affiliate Management"
         subtitle="Applications, approvals, status and tier assignment"
         icon={<Briefcase className="h-5 w-5" />}
-        action={<Link href="/admin/affiliate/tiers"><Button variant="ghost">Manage tiers</Button></Link>}
+        action={
+          <div className="flex gap-2">
+            <Link href="/admin/affiliate/payouts"><Button variant="ghost">Payout requests</Button></Link>
+            <Link href="/admin/affiliate/tiers"><Button variant="ghost">Manage tiers</Button></Link>
+          </div>
+        }
       />
 
       <div className="mb-4 flex flex-wrap items-center gap-2">

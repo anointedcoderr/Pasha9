@@ -627,6 +627,49 @@ model AffiliateCommission {
   status       String   @default("pending") // pending, approved, paid, cancelled
   meta         Json?
   createdAt    DateTime @default(now())
+  // M2E additions: trace each commission back to the deposit that
+  // triggered it (null for manual / signup grants), the tier and
+  // rate used at accrual time so historical reports stay correct
+  // even after an admin rebalances the tier rates, and a link to
+  // the payout that settled it.
+  depositId    String?
+  tierId       String?
+  ratePct      Decimal? @db.Decimal(5, 2)
+  payoutId     String?
+
+  payout       CommissionPayout? @relation(fields: [payoutId], references: [id], onDelete: SetNull)
+
+  @@index([affiliateId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([depositId])
+  @@index([payoutId])
+}
+
+// M2E: an affiliate's request to cash out approved commissions.
+// Lifecycle: pending -> approved (admin confirmed, payout in flight)
+// -> paid (manual or automated payout cleared) | rejected (admin
+// declined with note). On approve, the engine flips every linked
+// AffiliateCommission to status=paid and stamps payoutId so the
+// commission rows cannot be double-spent into another request.
+model CommissionPayout {
+  id            String   @id @default(cuid())
+  affiliateId   String
+  amount        Decimal  @db.Decimal(14, 2)
+  method        String   // bkash | nagad | rocket | bank
+  accountNumber String
+  accountName   String
+  status        String   @default("pending") // pending | approved | rejected | paid
+  adminNote     String?
+  reviewerId    String?
+  reviewedAt    DateTime?
+  paidAt        DateTime?
+  providerKey   String?  // future payout-provider auto-pay reference
+  providerRef   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  commissions AffiliateCommission[]
 
   @@index([affiliateId])
   @@index([status])

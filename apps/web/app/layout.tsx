@@ -32,6 +32,20 @@ export const viewport: Viewport = {
 // This is what guarantees no English-to-Bangla flash.
 export const dynamic = 'force-dynamic';
 
+// Pre-hydration theme classifier. Runs synchronously as the first
+// child of <body> so the correct theme-* class is on the element
+// before the browser paints any body content. Without this, the
+// nested layouts apply the class in a useEffect that fires AFTER
+// hydration, briefly showing the dark CSS defaults (a "dark flash"
+// most visible on /admin/login and on cold-load of the login modal).
+const THEME_BOOTSTRAP_SCRIPT = `
+(function(){try{
+  var p=window.location.pathname;
+  var cls=p.indexOf('/admin')===0?'theme-admin':'theme-light';
+  document.body.classList.add(cls);
+}catch(e){}})();
+`;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const initialLang = resolveLang();
   const bodyFont = initialLang === 'bn' ? 'font-bn' : 'font-en';
@@ -39,6 +53,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang={initialLang} data-lang={initialLang} className={`${fontBn.variable} ${fontEn.variable} ${fontAdmin.variable}`}>
       <body className={`${bodyFont} antialiased`}>
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
         <DynamicFavicon />
         <Providers initialLang={initialLang}>{children}</Providers>
       </body>

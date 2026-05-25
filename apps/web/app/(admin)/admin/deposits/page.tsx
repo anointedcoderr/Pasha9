@@ -85,6 +85,12 @@ export default function AdminDepositsPage() {
         } else if (bonus) {
           parts.push('No bonus rules configured.');
         }
+        const comm = data?.commissions ?? null;
+        if (comm?.count > 0) {
+          parts.push(`Commissions ${formatBDT(Number(comm.total ?? 0))} across ${comm.count} affiliate${comm.count === 1 ? '' : 's'}.`);
+        } else if (comm?.chainDepth > 0) {
+          parts.push('No commission: upline not an active affiliate.');
+        }
         setToast({ kind: 'ok', text: parts.join(' ') });
       } else {
         setToast({ kind: 'ok', text: `Rejected ${item.username} ${formatBDT(item.amount)}.` });

@@ -6,6 +6,7 @@ import { db } from '@/lib/db/client';
 import { requireUser } from '@/lib/auth/rbac';
 import { withAuth } from '@/lib/auth/guard';
 import { jsonOk } from '@/lib/auth/errors';
+import { getAffiliateBalance } from '@/lib/affiliate/engine';
 
 export async function GET() {
   return withAuth(async () => {
@@ -62,6 +63,20 @@ export async function GET() {
       totalAll += n;
     }
 
+    const balance = await getAffiliateBalance(user.id);
+
+    const payouts = await db.commissionPayout.findMany({
+      where: { affiliateId: user.id },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    });
+
+    const recentCommissions = await db.affiliateCommission.findMany({
+      where: { affiliateId: user.id },
+      orderBy: { createdAt: 'desc' },
+      take: 25,
+    });
+
     return jsonOk({
       user: {
         id: user.id,
@@ -83,7 +98,31 @@ export async function GET() {
         approved: sumByStatus.approved ?? 0,
         paid: sumByStatus.paid ?? 0,
         cancelled: sumByStatus.cancelled ?? 0,
+        withdrawable: balance.withdrawable,
+        inFlightPayouts: balance.inFlightPayouts,
       },
+      payouts: payouts.map((p) => ({
+        id: p.id,
+        amount: Number(p.amount),
+        method: p.method,
+        accountNumber: p.accountNumber,
+        accountName: p.accountName,
+        status: p.status,
+        adminNote: p.adminNote,
+        reviewedAt: p.reviewedAt,
+        paidAt: p.paidAt,
+        createdAt: p.createdAt,
+      })),
+      recentCommissions: recentCommissions.map((c) => ({
+        id: c.id,
+        level: c.level,
+        amount: Number(c.amount),
+        status: c.status,
+        basis: c.basis,
+        ratePct: c.ratePct ? Number(c.ratePct) : null,
+        createdAt: c.createdAt,
+        payoutId: c.payoutId,
+      })),
     });
   });
 }
