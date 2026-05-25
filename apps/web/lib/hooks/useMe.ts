@@ -79,3 +79,13 @@ export function walletBonus(me: MeUser | null): number {
 export function walletLocked(me: MeUser | null): number {
   return Number(me?.wallet?.lockedBalance ?? 0);
 }
+export function walletLotto(me: MeUser | null): number {
+  return Number(me?.wallet?.lottoBalance ?? 0);
+}
+
+/** Emit the shared wallet-refresh event so the Header / WalletStrip / useMe hook all re-fetch. */
+export function triggerWalletRefresh() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('pasha9:wallet-refresh'));
+  }
+}

@@ -689,6 +689,12 @@ model LottoDraw {
   accent      String        @default("yellow") // yellow, blue, red, royal
   position    Int           @default(0)
   status      ContentStatus @default(active)
+  // M2F: lifecycle markers for the rollover cron. closedAt is set
+  // when ticket sales are frozen for this draw (typically the moment
+  // the rollover fires - 7:30 PM cutoff). settledAt is set when the
+  // result row is published. Both null = still accepting tickets.
+  closedAt    DateTime?
+  settledAt   DateTime?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
@@ -782,16 +788,18 @@ model LotteryDrawResult {
 }
 
 // Per-ticket winning record. Created during settlement for every
-// ticket that matched (exact match or permutation/iBox). status moves
-// from pending_credit to credited when the user's Wallet.lottoBalance
-// is bumped.
+// ticket that matched a prize tier. status moves from pending_credit
+// to credited when the user's Wallet.lottoBalance is bumped.
+// M2F: prizeTier values expanded to first_exact | first_ibox |
+// second | third | special | consolation. Each ticket gets at most
+// ONE winning row (highest-paying tier wins).
 model LotteryWinning {
   id           String   @id @default(cuid())
   userId       String
   resultId     String
   ticketId     String?
   ticketNumber String
-  prizeTier    String   // first_exact | first_ibox
+  prizeTier    String   // first_exact | first_ibox | second | third | special | consolation
   amount       Decimal  @db.Decimal(14, 2)
   status       String   @default("credited") // pending_credit | credited | cancelled
   createdAt    DateTime @default(now())
@@ -802,6 +810,7 @@ model LotteryWinning {
 
   @@index([userId])
   @@index([resultId])
+  @@index([prizeTier])
 }
 
 model RewardItem {

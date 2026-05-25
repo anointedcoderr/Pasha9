@@ -11,7 +11,7 @@ import { FormField, Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Switch } from '@/components/ui/Switch';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { Ticket, Pencil, Trash2, Plus, Crown, CheckCircle2 } from 'lucide-react';
+import { Ticket, Pencil, Trash2, Plus, Crown, CheckCircle2, Stethoscope, RefreshCcw } from 'lucide-react';
 import { formatBDT, formatDateTime } from '@/lib/utils/format';
 import { useLang } from '@/lib/i18n/context';
 
@@ -53,6 +53,18 @@ interface SettleDraft {
   prizeConsoMult: string;
 }
 
+interface TierRow { tier: string; label: string; count: number; paid: number }
+interface DiagnoseResult {
+  drawName: string;
+  ticketCount: number;
+  alreadySettled: boolean;
+  totalWinners: number;
+  totalPaid: number;
+  uniqueWinners: number;
+  breakdown: TierRow[];
+  samples: Array<{ ticket: string; tier: string; amount: number }>;
+}
+
 const BLANK: Draw = {
   id: '',
   name: '',
@@ -76,6 +88,9 @@ export default function AdminLottoPage() {
   const [settling, setSettling] = useState<SettleDraft | null>(null);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [diagnose, setDiagnose] = useState<DiagnoseResult | null>(null);
+  const [diagnoseBusy, setDiagnoseBusy] = useState(false);
+  const [rolloverBusy, setRolloverBusy] = useState(false);
 
   const refresh = useCallback(async () => {
     setError(null);
@@ -167,14 +182,65 @@ export default function AdminLottoPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message ?? data.code ?? 'Settle failed');
-      setToast(`Published ${settling.winningNumber}. ${data.totalWinners} winner(s), ${formatBDT(Number(data.totalPaid))} paid.`);
-      setTimeout(() => setToast(null), 5500);
+      const breakdownText = Array.isArray(data.breakdown)
+        ? data.breakdown.filter((b: TierRow) => b.count > 0).map((b: TierRow) => `${b.label}: ${b.count} (${formatBDT(b.paid)})`).join(' . ')
+        : '';
+      setToast(
+        `Published ${settling.winningNumber}. ${data.totalWinners} winner(s), ${formatBDT(Number(data.totalPaid))} paid` +
+          (breakdownText ? ` . ${breakdownText}` : '.'),
+      );
+      setTimeout(() => setToast(null), 8000);
       setSettling(null);
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Settle failed');
     } finally {
       setBusy(false);
+    }
+  };
+
+  const runDiagnose = async () => {
+    if (!settling) return;
+    setDiagnoseBusy(true);
+    setError(null);
+    try {
+      const payload = {
+        winningNumber: settling.winningNumber,
+        ticketBaseValue: Number(settling.ticketBaseValue) || undefined,
+        prize1xMult: Number(settling.prize1xMult) || undefined,
+        prize2xMult: Number(settling.prize2xMult) || undefined,
+        prize3xMult: Number(settling.prize3xMult) || undefined,
+        prizeSpecialMult: Number(settling.prizeSpecialMult) || undefined,
+        prizeConsoMult: Number(settling.prizeConsoMult) || undefined,
+      };
+      const res = await fetch(`/api/admin/lotto/${settling.draw.id}/diagnose`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message ?? data.code ?? 'Diagnose failed');
+      setDiagnose(data as DiagnoseResult);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Diagnose failed');
+    } finally {
+      setDiagnoseBusy(false);
+    }
+  };
+
+  const runRollover = async () => {
+    setRolloverBusy(true);
+    try {
+      const res = await fetch('/api/cron/lotto-rollover', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message ?? data.code ?? 'Rollover failed');
+      setToast(`Rollover: closed ${data.closed ?? 0}, seeded ${data.seeded ?? 0} next-day draw(s).`);
+      setTimeout(() => setToast(null), 6000);
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Rollover failed');
+    } finally {
+      setRolloverBusy(false);
     }
   };
 
@@ -186,7 +252,14 @@ export default function AdminLottoPage() {
         title="Lotto Draws"
         subtitle="Daily 4D lottery + settlement"
         icon={<Ticket className="h-5 w-5" />}
-        action={<Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setEditor({ ...BLANK, position: draws.length + 1 })}>New Draw</Button>}
+        action={
+          <div className="flex gap-2">
+            <Button variant="ghost" leftIcon={<RefreshCcw className={`h-3.5 w-3.5 ${rolloverBusy ? 'animate-spin' : ''}`} />} onClick={runRollover} loading={rolloverBusy}>
+              Run rollover
+            </Button>
+            <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setEditor({ ...BLANK, position: draws.length + 1 })}>New Draw</Button>
+          </div>
+        }
       />
 
       {toast ? (
@@ -201,11 +274,15 @@ export default function AdminLottoPage() {
 
       <Card padding="md" className="mb-4">
         <p className="text-xs text-ink-mid">
-          Settling a draw publishes the winning 4-digit number, evaluates every ticket attached to that draw
-          (exact match wins the full first prize; any permutation wins
-          <span className="font-semibold text-ink-hi"> first prize / unique-permutation-count </span>
-          under iBox rules) and credits each user&apos;s Lotto Balance immediately. Second / Third / Special /
-          Consolation tier automation ships in Milestone 2.
+          Settling a draw publishes the winning 4-digit number and pays out across six tiers, no double-pay
+          (each ticket gets one tier - the highest it qualifies for): <span className="font-semibold text-ink-hi">1st exact</span> (full first-prize multiplier),
+          <span className="font-semibold text-ink-hi"> 1st iBox</span> (first / unique-permutation-count for any other order),
+          <span className="font-semibold text-ink-hi"> Special</span> (first 2 digits exact),
+          <span className="font-semibold text-ink-hi"> 2nd</span> (last 3 digits exact),
+          <span className="font-semibold text-ink-hi"> 3rd</span> (last 2 digits exact),
+          <span className="font-semibold text-ink-hi"> Consolation</span> (winning number +/- 1 with wraparound).
+          Use <span className="font-semibold text-ink-hi">Run rollover</span> daily at 7:30 PM (or via the cron endpoint
+          POST /api/cron/lotto-rollover with Authorization: Bearer $CRON_SECRET) to close past-due draws and seed the next day.
         </p>
       </Card>
 
@@ -333,7 +410,7 @@ export default function AdminLottoPage() {
         ) : null}
       </Modal>
 
-      <Modal open={!!settling} onOpenChange={(v) => !v && setSettling(null)} title="Settle Draw" size="md">
+      <Modal open={!!settling} onOpenChange={(v) => { if (!v) { setSettling(null); setDiagnose(null); } }} title="Settle Draw" size="md">
         {settling ? (
           <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); void settle(); }}>
             <div className="rounded-xl border border-neon/10 bg-base-deep/50 p-3 text-sm">
@@ -371,12 +448,41 @@ export default function AdminLottoPage() {
               </FormField>
             </div>
             <p className="text-xs text-brand-inkMute">
-              M1 settles 1st prize (exact match + iBox permutations) and credits each user&apos;s Lotto Balance.
-              2nd / 3rd / Special / Consolation multipliers are saved to the result record for display and are
-              wired for full automation in Milestone 2.
+              M2F settles all 6 tiers. Each ticket is paid at most once, highest tier wins. Click <span className="font-semibold text-brand-ink">Diagnose</span> below
+              to dry-run the result before publishing. Once published, the wallet credits cannot be undone (re-settling the same draw is blocked).
             </p>
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="ghost" type="button" onClick={() => setSettling(null)}>Cancel</Button>
+
+            {diagnose ? (
+              <div className="rounded-xl border border-neon/15 bg-base-deep/60 p-3 text-sm">
+                <p className="text-xs uppercase tracking-wider text-ink-lo">Dry-run preview</p>
+                <p className="mt-1 text-ink-mid">
+                  {diagnose.ticketCount} ticket{diagnose.ticketCount === 1 ? '' : 's'} in draw . <span className="font-semibold text-ink-hi">{diagnose.totalWinners}</span> winner{diagnose.totalWinners === 1 ? '' : 's'} across <span className="font-semibold text-ink-hi">{diagnose.uniqueWinners}</span> user{diagnose.uniqueWinners === 1 ? '' : 's'} . total payout <span className="font-semibold text-gradient-gold">{formatBDT(diagnose.totalPaid)}</span>
+                </p>
+                <ul className="mt-2 grid gap-1 text-xs sm:grid-cols-2">
+                  {diagnose.breakdown.map((b) => (
+                    <li key={b.tier} className={b.count > 0 ? 'text-ink-hi' : 'text-ink-lo'}>
+                      <span className="font-mono">{b.label}</span>: {b.count} ({formatBDT(b.paid)})
+                    </li>
+                  ))}
+                </ul>
+                {diagnose.alreadySettled ? (
+                  <p className="mt-2 text-xs text-signal-warn">This draw is already settled. The Publish + Settle button will fail.</p>
+                ) : null}
+              </div>
+            ) : null}
+
+            <div className="flex flex-wrap justify-end gap-2 pt-2">
+              <Button variant="ghost" type="button" onClick={() => { setSettling(null); setDiagnose(null); }}>Cancel</Button>
+              <Button
+                type="button"
+                variant="neon"
+                leftIcon={<Stethoscope className="h-3.5 w-3.5" />}
+                loading={diagnoseBusy}
+                disabled={!/^\d{4}$/.test(settling.winningNumber)}
+                onClick={runDiagnose}
+              >
+                Diagnose
+              </Button>
               <Button type="submit" variant="gold" loading={busy} disabled={!/^\d{4}$/.test(settling.winningNumber)}>
                 Publish + Settle
               </Button>

@@ -1,9 +1,16 @@
 // Built by Anointed Coder.
 //
 // Admin settles a draw by publishing the winning 4-digit number.
-// Tickets attached to that draw are evaluated (exact + iBox), each
-// winning ticket gets a LotteryWinning row, and the user's
-// Wallet.lottoBalance is incremented in the same transaction.
+// M2F: settlement now evaluates 6 tiers (1st exact / 1st iBox /
+// special / 2nd / 3rd / consolation) with no-double-pay precedence.
+// Each ticket gets at most one LotteryWinning row at the highest
+// tier it qualifies for.
+//
+// Response carries a per-tier `breakdown` array so the admin UI can
+// render the same shape the diagnose modal produces. The settle
+// itself is wrapped in the existing transaction inside lib/lotto/
+// tickets.ts - failure returns SETTLE_FAILED + the engine error
+// (e.g. DRAW_ALREADY_SETTLED).
 
 export const dynamic = 'force-dynamic';
 

@@ -1,20 +1,37 @@
 // Built by Anointed Coder.
 //
-// Lottery service module. Two surfaces:
+// Lottery service module. Three surfaces:
 //
 //   accrueLotteryTickets(userId) - run after a deposit is approved.
 //     Idempotently brings the user's ticket count up to
 //     floor(totalApprovedDeposits / 1200) * 2.
 //
-//   settleDraw(drawId, winningNumber, ...) - admin publishes the
-//     winning number. Tickets attached to that draw are scored:
-//       exact match    -> first prize        (base * 2000)
-//       permutation    -> first prize / uniquePermCount  (iBox)
-//     Winnings are written to LotteryWinning and the user's
-//     Wallet.lottoBalance is incremented in the same transaction.
+//   settleDraw(input)           - admin publishes the winning number.
+//     Tickets attached to that draw are scored across 6 prize tiers:
+//       1st exact      4-digit exact match (full first multiplier)
+//       1st iBox       same digits, any non-exact order
+//                      (first multiplier / unique permutation count)
+//       2nd            last 3 digits exact
+//       3rd            last 2 digits exact
+//       Special        first 2 digits exact
+//       Consolation    numbers immediately adjacent to the winning
+//                      number (winningNumber +/- 1, with 0000 <-> 9999
+//                      wraparound)
+//     Each ticket receives at MOST one winning row (highest-paying
+//     tier wins; precedence: 1st_exact > 1st_ibox > special > 2nd
+//     > 3rd > consolation).
+//     Idempotency guard: throws DRAW_ALREADY_SETTLED if the draw
+//     already has a result row.
 //
-// Pure helpers (uniquePermutations, isPermutation, computeFirstPrize)
-// are exported so the public lotto page and tests can use the same
+//   rolloverDraws()             - cron-triggered.
+//     Closes every draw whose drawsAt is in the past and has no
+//     result yet (sets closedAt). Optionally seeds the next draw
+//     when a draw with the same name + schedule does not exist
+//     for the upcoming slot. Returns counts for observability.
+//
+// Pure helpers (uniquePermutations, isPermutation, computeFirstPrize,
+// computePrizeForTicket, adjacentNumbers) are exported so the public
+// lotto page, the admin diagnose modal, and tests can use the same
 // math the settlement uses.
 
 import { Prisma } from '@prisma/client';
@@ -30,6 +47,33 @@ export const LOTTERY_RULES = {
   drawTimeLabel: 'Daily 19:30 BST',
 } as const;
 
+export type PrizeTier =
+  | 'first_exact'
+  | 'first_ibox'
+  | 'second'
+  | 'third'
+  | 'special'
+  | 'consolation'
+  | 'none';
+
+export const PRIZE_TIER_ORDER: PrizeTier[] = [
+  'first_exact',
+  'first_ibox',
+  'special',
+  'second',
+  'third',
+  'consolation',
+];
+
+export const PRIZE_TIER_LABELS: Record<Exclude<PrizeTier, 'none'>, string> = {
+  first_exact: '1st prize (exact)',
+  first_ibox: '1st prize (iBox)',
+  second: '2nd prize (last 3 digits)',
+  third: '3rd prize (last 2 digits)',
+  special: 'Special (first 2 digits)',
+  consolation: 'Consolation (adjacent number)',
+};
+
 /** Generate a random 4-digit string with leading zeros preserved. */
 export function randomTicketNumber(digits = 4): string {
   const max = 10 ** digits;
@@ -41,7 +85,6 @@ export function uniquePermutations(digits: string): number {
   const counts = new Map<string, number>();
   for (const d of digits) counts.set(d, (counts.get(d) ?? 0) + 1);
   const n = digits.length;
-  // n! / (count1! * count2! * ...)
   let result = factorial(n);
   for (const c of counts.values()) result /= factorial(c);
   return result;
@@ -61,26 +104,78 @@ export function isPermutation(a: string, b: string): boolean {
   return ka === kb;
 }
 
+/** Returns the two adjacent 4-digit strings (winning-1 and winning+1) with wraparound. */
+export function adjacentNumbers(winning: string, digits = 4): string[] {
+  const mod = 10 ** digits;
+  const n = parseInt(winning, 10);
+  if (Number.isNaN(n)) return [];
+  const minus = ((n - 1) + mod) % mod;
+  const plus = (n + 1) % mod;
+  return [minus.toString().padStart(digits, '0'), plus.toString().padStart(digits, '0')];
+}
+
 export interface PrizeCalc {
-  tier: 'first_exact' | 'first_ibox' | 'none';
+  tier: PrizeTier;
   amount: number;
 }
 
-/**
- * Compute the prize for one ticket against a winning number.
- *
- * - exact match: full first-prize value
- * - any other permutation (iBox): first-prize value / uniquePermutationCount
- * - everything else: zero (other tiers ship in M2 with multi-number draws)
- */
+/** Back-compat: returns only the 1st-prize portion (exact + iBox). */
 export function computeFirstPrize(ticket: string, winning: string, baseValue: number, firstMult: number): PrizeCalc {
-  if (ticket === winning) {
-    return { tier: 'first_exact', amount: round2(baseValue * firstMult) };
-  }
+  if (ticket === winning) return { tier: 'first_exact', amount: round2(baseValue * firstMult) };
   if (isPermutation(ticket, winning)) {
     const unique = uniquePermutations(winning);
     if (unique <= 1) return { tier: 'none', amount: 0 };
     return { tier: 'first_ibox', amount: round2((baseValue * firstMult) / unique) };
+  }
+  return { tier: 'none', amount: 0 };
+}
+
+export interface PrizeStructure {
+  baseValue: number;
+  firstMult: number;
+  secondMult: number;
+  thirdMult: number;
+  specialMult: number;
+  consoMult: number;
+}
+
+/**
+ * Score one ticket against the winning number across all 6 tiers.
+ * Returns the single highest-paying tier (no double-pay across tiers).
+ * Precedence: 1st_exact > 1st_ibox > special > 2nd > 3rd > consolation.
+ */
+export function computePrizeForTicket(ticket: string, winning: string, prizes: PrizeStructure): PrizeCalc {
+  if (ticket.length !== winning.length) return { tier: 'none', amount: 0 };
+
+  // 1st exact
+  if (ticket === winning) {
+    return { tier: 'first_exact', amount: round2(prizes.baseValue * prizes.firstMult) };
+  }
+  // 1st iBox (same multiset, different order)
+  if (isPermutation(ticket, winning)) {
+    const unique = uniquePermutations(winning);
+    if (unique > 1) {
+      return { tier: 'first_ibox', amount: round2((prizes.baseValue * prizes.firstMult) / unique) };
+    }
+  }
+  // Special: first 2 digits exact (and not already qualified above)
+  if (prizes.specialMult > 0 && ticket.slice(0, 2) === winning.slice(0, 2)) {
+    return { tier: 'special', amount: round2(prizes.baseValue * prizes.specialMult) };
+  }
+  // 2nd: last 3 digits exact
+  if (prizes.secondMult > 0 && ticket.slice(-3) === winning.slice(-3)) {
+    return { tier: 'second', amount: round2(prizes.baseValue * prizes.secondMult) };
+  }
+  // 3rd: last 2 digits exact
+  if (prizes.thirdMult > 0 && ticket.slice(-2) === winning.slice(-2)) {
+    return { tier: 'third', amount: round2(prizes.baseValue * prizes.thirdMult) };
+  }
+  // Consolation: numbers immediately adjacent to the winning number
+  if (prizes.consoMult > 0) {
+    const neighbors = adjacentNumbers(winning, winning.length);
+    if (neighbors.includes(ticket)) {
+      return { tier: 'consolation', amount: round2(prizes.baseValue * prizes.consoMult) };
+    }
   }
   return { tier: 'none', amount: 0 };
 }
@@ -97,12 +192,12 @@ function round2(n: number): number {
 async function findOpenDraw() {
   const now = new Date();
   const future = await db.lottoDraw.findFirst({
-    where: { status: 'active', result: { is: null }, drawsAt: { gte: now } },
+    where: { status: 'active', result: { is: null }, drawsAt: { gte: now }, closedAt: null },
     orderBy: { drawsAt: 'asc' },
   });
   if (future) return future;
   return db.lottoDraw.findFirst({
-    where: { status: 'active', result: { is: null } },
+    where: { status: 'active', result: { is: null }, closedAt: null },
     orderBy: { createdAt: 'desc' },
   });
 }
@@ -157,19 +252,28 @@ export interface SettleInput {
   prizeConsoMult?: number;
 }
 
+export interface TierBreakdown {
+  tier: Exclude<PrizeTier, 'none'>;
+  label: string;
+  count: number;
+  paid: number;
+}
+
 export interface SettleResult {
   resultId: string;
   totalWinners: number;
   totalPaid: number;
+  breakdown: TierBreakdown[];
+  uniqueWinners: number;
 }
 
 /**
  * Publish the winning number for a draw and credit winnings.
- * Idempotent guard: throws if the draw already has a result.
+ * Throws Error('DRAW_ALREADY_SETTLED') if the draw already has a result.
  */
 export async function settleDraw(input: SettleInput): Promise<SettleResult> {
   if (!/^\d{4}$/.test(input.winningNumber)) {
-    throw new Error('Winning number must be exactly 4 digits');
+    throw new Error('WINNING_NUMBER_INVALID');
   }
 
   const draw = await db.lottoDraw.findUniqueOrThrow({
@@ -177,26 +281,44 @@ export async function settleDraw(input: SettleInput): Promise<SettleResult> {
     include: { result: true },
   });
   if (draw.result) {
-    throw new Error('Draw is already settled');
+    throw new Error('DRAW_ALREADY_SETTLED');
   }
 
-  const baseValue = input.ticketBaseValue ?? Number(draw.ticketPrice);
-  const firstMult = input.prize1xMult ?? 2000;
-  const secondMult = input.prize2xMult ?? 800;
-  const thirdMult = input.prize3xMult ?? 300;
-  const specialMult = input.prizeSpecialMult ?? 150;
-  const consoMult = input.prizeConsoMult ?? 30;
+  const prizes: PrizeStructure = {
+    baseValue: input.ticketBaseValue ?? Number(draw.ticketPrice),
+    firstMult: input.prize1xMult ?? 2000,
+    secondMult: input.prize2xMult ?? 800,
+    thirdMult: input.prize3xMult ?? 300,
+    specialMult: input.prizeSpecialMult ?? 150,
+    consoMult: input.prizeConsoMult ?? 30,
+  };
 
   const tickets = await db.lotteryTicket.findMany({
     where: { drawId: draw.id, status: 'issued' },
   });
 
   const winningCalcs = tickets
-    .map((t) => ({ ticket: t, calc: computeFirstPrize(t.number, input.winningNumber, baseValue, firstMult) }))
+    .map((t) => ({ ticket: t, calc: computePrizeForTicket(t.number, input.winningNumber, prizes) }))
     .filter((row) => row.calc.tier !== 'none');
 
   const totalPaid = winningCalcs.reduce((sum, row) => sum + row.calc.amount, 0);
   const totalWinners = winningCalcs.length;
+
+  // Per-tier breakdown for the admin UI + ActivityLog.
+  const breakdownMap = new Map<Exclude<PrizeTier, 'none'>, { count: number; paid: number }>();
+  for (const row of winningCalcs) {
+    const tier = row.calc.tier as Exclude<PrizeTier, 'none'>;
+    const cur = breakdownMap.get(tier) ?? { count: 0, paid: 0 };
+    cur.count += 1;
+    cur.paid += row.calc.amount;
+    breakdownMap.set(tier, cur);
+  }
+  const breakdown: TierBreakdown[] = PRIZE_TIER_ORDER
+    .filter((t): t is Exclude<PrizeTier, 'none'> => t !== 'none')
+    .map((tier) => {
+      const m = breakdownMap.get(tier) ?? { count: 0, paid: 0 };
+      return { tier, label: PRIZE_TIER_LABELS[tier], count: m.count, paid: round2(m.paid) };
+    });
 
   // Group winnings per user so each user's wallet is bumped once.
   const perUser = new Map<string, number>();
@@ -209,12 +331,12 @@ export async function settleDraw(input: SettleInput): Promise<SettleResult> {
       data: {
         drawId: draw.id,
         winningNumber: input.winningNumber,
-        ticketBaseValue: new Prisma.Decimal(baseValue),
-        prize1xMult: new Prisma.Decimal(firstMult),
-        prize2xMult: new Prisma.Decimal(secondMult),
-        prize3xMult: new Prisma.Decimal(thirdMult),
-        prizeSpecialMult: new Prisma.Decimal(specialMult),
-        prizeConsoMult: new Prisma.Decimal(consoMult),
+        ticketBaseValue: new Prisma.Decimal(prizes.baseValue),
+        prize1xMult: new Prisma.Decimal(prizes.firstMult),
+        prize2xMult: new Prisma.Decimal(prizes.secondMult),
+        prize3xMult: new Prisma.Decimal(prizes.thirdMult),
+        prizeSpecialMult: new Prisma.Decimal(prizes.specialMult),
+        prizeConsoMult: new Prisma.Decimal(prizes.consoMult),
         publishedById: input.publishedById,
         totalWinners,
         totalPaid: new Prisma.Decimal(totalPaid),
@@ -251,7 +373,6 @@ export async function settleDraw(input: SettleInput): Promise<SettleResult> {
 
     // Credit user lotto wallets in one shot per user.
     for (const [userId, amount] of perUser.entries()) {
-      // Wallet may not exist yet; ensure it does.
       const wallet = await tx.wallet.findUnique({ where: { userId } });
       if (wallet) {
         await tx.wallet.update({
@@ -265,8 +386,154 @@ export async function settleDraw(input: SettleInput): Promise<SettleResult> {
       }
     }
 
+    // Stamp the draw with settledAt so the rollover cron can leave it alone.
+    await tx.lottoDraw.update({
+      where: { id: draw.id },
+      data: { settledAt: new Date(), closedAt: draw.closedAt ?? new Date() },
+    });
+
     return created;
   });
 
-  return { resultId: result.id, totalWinners, totalPaid };
+  return {
+    resultId: result.id,
+    totalWinners,
+    totalPaid: round2(totalPaid),
+    uniqueWinners: perUser.size,
+    breakdown,
+  };
+}
+
+/**
+ * Dry-run scorer for the admin diagnose modal. Same logic as
+ * settleDraw but writes nothing. Useful to verify a winning number
+ * + multipliers before pulling the trigger on real wallet credits.
+ */
+export async function diagnoseSettlement(drawId: string, winningNumber: string, overrides?: Partial<PrizeStructure>): Promise<{
+  drawName: string;
+  ticketCount: number;
+  alreadySettled: boolean;
+  totalWinners: number;
+  totalPaid: number;
+  uniqueWinners: number;
+  breakdown: TierBreakdown[];
+  samples: Array<{ ticket: string; tier: PrizeTier; amount: number }>;
+}> {
+  const draw = await db.lottoDraw.findUniqueOrThrow({ where: { id: drawId }, include: { result: true } });
+  const prizes: PrizeStructure = {
+    baseValue: overrides?.baseValue ?? Number(draw.ticketPrice),
+    firstMult: overrides?.firstMult ?? 2000,
+    secondMult: overrides?.secondMult ?? 800,
+    thirdMult: overrides?.thirdMult ?? 300,
+    specialMult: overrides?.specialMult ?? 150,
+    consoMult: overrides?.consoMult ?? 30,
+  };
+
+  const tickets = await db.lotteryTicket.findMany({
+    where: { drawId, status: 'issued' },
+    select: { id: true, userId: true, number: true },
+  });
+
+  const calcs = tickets.map((t) => ({ ticket: t, calc: computePrizeForTicket(t.number, winningNumber, prizes) }));
+  const winning = calcs.filter((r) => r.calc.tier !== 'none');
+
+  const perUser = new Set<string>();
+  const breakdownMap = new Map<Exclude<PrizeTier, 'none'>, { count: number; paid: number }>();
+  for (const w of winning) {
+    perUser.add(w.ticket.userId);
+    const tier = w.calc.tier as Exclude<PrizeTier, 'none'>;
+    const cur = breakdownMap.get(tier) ?? { count: 0, paid: 0 };
+    cur.count += 1;
+    cur.paid += w.calc.amount;
+    breakdownMap.set(tier, cur);
+  }
+  const breakdown: TierBreakdown[] = PRIZE_TIER_ORDER
+    .filter((t): t is Exclude<PrizeTier, 'none'> => t !== 'none')
+    .map((tier) => {
+      const m = breakdownMap.get(tier) ?? { count: 0, paid: 0 };
+      return { tier, label: PRIZE_TIER_LABELS[tier], count: m.count, paid: round2(m.paid) };
+    });
+
+  return {
+    drawName: draw.name,
+    ticketCount: tickets.length,
+    alreadySettled: !!draw.result,
+    totalWinners: winning.length,
+    totalPaid: round2(winning.reduce((s, r) => s + r.calc.amount, 0)),
+    uniqueWinners: perUser.size,
+    breakdown,
+    samples: winning.slice(0, 10).map((r) => ({ ticket: r.ticket.number, tier: r.calc.tier, amount: r.calc.amount })),
+  };
+}
+
+/**
+ * Rollover sweep, intended to be triggered by a daily cron at the
+ * cut-off time (7:30 PM by default).
+ *
+ * For every active draw with drawsAt in the past and no result yet:
+ *   - sets closedAt = now() so accrueLotteryTickets() will no longer
+ *     attach new tickets to that draw
+ *
+ * For every active draw that is now closed without a successor:
+ *   - schedules the next instance the day after (same name, schedule,
+ *     ticket price, accent) with drawsAt = now() + 1 day at the same
+ *     hour/minute. This means the public lotto page always has a
+ *     forward-looking active draw to attach new tickets to.
+ *
+ * Returns counts for the cron caller to log.
+ */
+export async function rolloverDraws(): Promise<{
+  closed: number;
+  seeded: number;
+  closedIds: string[];
+  seededIds: string[];
+}> {
+  const now = new Date();
+  const closedIds: string[] = [];
+  const seededIds: string[] = [];
+
+  const due = await db.lottoDraw.findMany({
+    where: {
+      status: 'active',
+      result: { is: null },
+      closedAt: null,
+      drawsAt: { lt: now, not: null },
+    },
+  });
+
+  for (const d of due) {
+    await db.lottoDraw.update({
+      where: { id: d.id },
+      data: { closedAt: now },
+    });
+    closedIds.push(d.id);
+
+    // Schedule next instance (24h later, same time-of-day) if there
+    // is no other open draw with the same name already.
+    const existingOpen = await db.lottoDraw.findFirst({
+      where: { name: d.name, status: 'active', result: { is: null }, closedAt: null, id: { not: d.id } },
+    });
+    if (existingOpen) continue;
+
+    const nextDrawsAt = d.drawsAt
+      ? new Date(d.drawsAt.getTime() + 24 * 60 * 60 * 1000)
+      : new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+    const seeded = await db.lottoDraw.create({
+      data: {
+        name: d.name,
+        schedule: d.schedule,
+        drawsAt: nextDrawsAt,
+        digitsCount: d.digitsCount,
+        ticketPrice: d.ticketPrice,
+        prizePool: d.prizePool,
+        accent: d.accent,
+        position: d.position,
+        status: 'active',
+      },
+    });
+    seededIds.push(seeded.id);
+  }
+
+  return { closed: closedIds.length, seeded: seededIds.length, closedIds, seededIds };
 }
