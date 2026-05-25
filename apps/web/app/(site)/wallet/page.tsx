@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { PageHeader } from '@/components/site/PageHeader';
-import { currentUser } from '@/lib/mock/users';
+import { useMe, walletBalance, walletBonus, walletLocked } from '@/lib/hooks/useMe';
 import { userTransactions } from '@/lib/mock/transactions';
 import { useT, useLang } from '@/lib/i18n/context';
 import { formatBDT, formatDateTime } from '@/lib/utils/format';
@@ -13,16 +13,17 @@ import { Chip } from '@/components/ui/Chip';
 export default function WalletPage() {
   const t = useT();
   const { lang } = useLang();
-  const txs = userTransactions(currentUser.id).slice(0, 8);
+  const { me } = useMe();
+  const txs = userTransactions(me?.id ?? 'u_demo').slice(0, 8);
 
   return (
     <>
       <PageHeader title={t('wallet.title')} subtitle="Balance, bonus, locked funds, recent activity" icon={<Wallet className="h-5 w-5" />} />
 
       <div className="grid gap-4 md:grid-cols-3">
-        <BalanceTile icon={<Wallet className="h-5 w-5" />} label={t('wallet.available')} value={formatBDT(currentUser.balance)} accent="gold" />
-        <BalanceTile icon={<Sparkles className="h-5 w-5" />} label={t('wallet.bonus')} value={formatBDT(currentUser.bonusBalance)} accent="neon" />
-        <BalanceTile icon={<Lock className="h-5 w-5" />} label={t('wallet.locked')} value={formatBDT(currentUser.lockedBalance)} accent="cool" />
+        <BalanceTile icon={<Wallet className="h-5 w-5" />} label={t('wallet.available')} value={formatBDT(walletBalance(me))} accent="gold" />
+        <BalanceTile icon={<Sparkles className="h-5 w-5" />} label={t('wallet.bonus')} value={formatBDT(walletBonus(me))} accent="neon" />
+        <BalanceTile icon={<Lock className="h-5 w-5" />} label={t('wallet.locked')} value={formatBDT(walletLocked(me))} accent="cool" />
       </div>
 
       <div className="mt-6 grid gap-3 md:grid-cols-2">

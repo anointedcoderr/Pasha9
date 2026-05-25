@@ -6,27 +6,30 @@
 
 import { useEffect, useState } from 'react';
 import { Megaphone } from 'lucide-react';
-import { mockPromoTexts } from '@/lib/mock/banners';
 
 interface PromoItem { message: string }
 
 export function PromoTicker() {
-  const [items, setItems] = useState<PromoItem[]>(
-    mockPromoTexts.filter((p) => p.status === 'active').map((p) => ({ message: p.message })),
-  );
+  // Start empty until the live fetch resolves. We deliberately do not
+  // seed with mock copy so the admin-saved text wins on first paint
+  // and there is no stale-text flash. M2A also fixes the API route to
+  // disable ISR caching.
+  const [items, setItems] = useState<PromoItem[]>([]);
 
   useEffect(() => {
     let alive = true;
-    fetch('/api/content/promo-text')
+    fetch('/api/content/promo-text', { cache: 'no-store' })
       .then((r) => r.json())
       .then((data) => {
         if (!alive) return;
         const next: PromoItem[] = (data.items ?? []).map((i: { message: string }) => ({ message: i.message }));
-        if (next.length) setItems(next);
+        setItems(next);
       })
       .catch(() => {});
     return () => { alive = false; };
   }, []);
+
+  if (items.length === 0) return null;
 
   const messages = [...items, ...items];
 

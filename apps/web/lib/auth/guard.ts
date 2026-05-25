@@ -2,7 +2,7 @@
 // Shared route-handler guards. Returns a NextResponse when access is denied.
 
 import { NextResponse } from 'next/server';
-import { AuthError, requireAdmin, requirePermission, requireStaff, requireSuperAdmin, requireUser } from './rbac';
+import { AuthError, requireAdmin, requirePermission, requireStaff, requireSuperAdmin, requireUser, requireActiveUser } from './rbac';
 import { jsonError } from './errors';
 import { db } from '@/lib/db/client';
 import { getClientIp, getUserAgent } from './session';
@@ -13,7 +13,7 @@ export async function withAuth<T>(handler: () => Promise<T>) {
   } catch (err) {
     if (err instanceof AuthError) {
       const status = err.code === 'UNAUTHENTICATED' ? 401 : 403;
-      return jsonError(status, err.code);
+      return jsonError(status, err.code, err.message);
     }
     console.error(err);
     return jsonError(500, 'SERVER_ERROR');
@@ -21,6 +21,7 @@ export async function withAuth<T>(handler: () => Promise<T>) {
 }
 
 export async function ensureUser() { return requireUser(); }
+export async function ensureActiveUser() { return requireActiveUser(); }
 export async function ensureStaff() { return requireStaff(); }
 export async function ensureAdmin() { return requireAdmin(); }
 export async function ensureSuperAdmin() { return requireSuperAdmin(); }

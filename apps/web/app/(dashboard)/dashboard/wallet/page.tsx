@@ -6,23 +6,26 @@ import { Card, CardHeader } from '@/components/ui/Card';
 import { Chip } from '@/components/ui/Chip';
 import { useT, useLang } from '@/lib/i18n/context';
 import { Wallet, Sparkles, Lock } from 'lucide-react';
-import { currentUser } from '@/lib/mock/users';
+import { useMe, walletBalance, walletBonus, walletLocked } from '@/lib/hooks/useMe';
 import { userTransactions } from '@/lib/mock/transactions';
 import { formatBDT, formatDateTime } from '@/lib/utils/format';
 
 export default function DashboardWalletPage() {
   const t = useT();
   const { lang } = useLang();
-  const txs = userTransactions(currentUser.id).slice(0, 10);
+  const { me } = useMe();
+  // Transaction history list is M2A-stub. The /Transaction/ ledger
+  // already exists in the DB; the public read endpoint ships in M2B.
+  const txs = userTransactions(me?.id ?? 'u_demo').slice(0, 10);
 
   return (
     <>
       <PageHeader title={t('wallet.title')} subtitle="Wallet balances and recent activity" icon={<Wallet className="h-5 w-5" />} />
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <StatTile label={t('wallet.available')} value={formatBDT(currentUser.balance)} icon={<Wallet className="h-5 w-5 text-neon" />} accent="gold" />
-        <StatTile label={t('wallet.bonus')} value={formatBDT(currentUser.bonusBalance)} icon={<Sparkles className="h-5 w-5 text-gold-300" />} />
-        <StatTile label={t('wallet.locked')} value={formatBDT(currentUser.lockedBalance)} icon={<Lock className="h-5 w-5 text-gold-300" />} />
+        <StatTile label={t('wallet.available')} value={formatBDT(walletBalance(me))} icon={<Wallet className="h-5 w-5 text-neon" />} accent="gold" />
+        <StatTile label={t('wallet.bonus')} value={formatBDT(walletBonus(me))} icon={<Sparkles className="h-5 w-5 text-gold-300" />} />
+        <StatTile label={t('wallet.locked')} value={formatBDT(walletLocked(me))} icon={<Lock className="h-5 w-5 text-gold-300" />} />
       </div>
 
       <Card className="mt-6 p-0" padding="none">

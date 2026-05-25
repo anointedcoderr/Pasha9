@@ -68,6 +68,44 @@ export async function setAuthCookies(userId: string, role: string, perms: string
   });
 }
 
+/**
+ * Mark every non-revoked Session row for this user as revoked. Call
+ * before issuing a fresh access cookie on register / login so a
+ * previous device's refresh cookie can no longer mint new access
+ * tokens, AND when an admin blocks a user so they cannot transparently
+ * refresh while blocked.
+ */
+export async function revokePriorSessionsForUser(userId: string): Promise<number> {
+  const result = await db.session.updateMany({
+    where: { userId, revokedAt: null },
+    data: { revokedAt: new Date() },
+  });
+  return result.count;
+}
+
+/**
+ * Best-effort revoke of the specific session row whose secret matches
+ * the current pasha9_refresh cookie in the request. Used inside
+ * register so a previously-logged-in account's session is invalidated
+ * before the new account's cookies take over.
+ */
+export async function revokeRefreshFromCurrentCookie(): Promise<void> {
+  const raw = cookies().get(REFRESH_COOKIE)?.value;
+  if (!raw) return;
+  const split = raw.split('.');
+  if (split.length < 2) return;
+  const secret = split[split.length - 1];
+  if (!secret) return;
+  try {
+    await db.session.updateMany({
+      where: { tokenHash: hashToken(secret), revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+  } catch {
+    // best-effort, do not block the register/login flow
+  }
+}
+
 export async function clearAuthCookies(opts: { revoke?: boolean } = { revoke: true }) {
   const jar = cookies();
   const refresh = jar.get(REFRESH_COOKIE)?.value;

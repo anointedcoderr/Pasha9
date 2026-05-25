@@ -36,6 +36,8 @@ export interface AdminUserDetail {
   email?: string | null;
   role: { key: string; label: string };
   status: 'active' | 'blocked' | 'pending';
+  blockedReason?: string | null;
+  blockedAt?: string | null;
   country: string;
   language: 'bn' | 'en';
   referralCode: string;
@@ -70,7 +72,7 @@ interface Props {
   loading: boolean;
   error: string | null;
   onAdjustBalance: (u: AdminUserSummary) => void;
-  onStatusChange: (next: 'active' | 'blocked') => void;
+  onStatusChange: (next: 'active' | 'blocked', reason?: string) => void;
 }
 
 export function UserDetailDrawer({ open, onOpenChange, detail, loading, error, onAdjustBalance, onStatusChange }: Props) {
@@ -95,20 +97,50 @@ export function UserDetailDrawer({ open, onOpenChange, detail, loading, error, o
       ) : (
         <div className="space-y-5">
           {/* Account status + lock/unlock */}
-          <div className="flex items-center justify-between rounded-xl border border-neon/10 bg-base-deep/40 p-3">
-            <div className="flex items-center gap-2">
-              {detail.status === 'blocked' ? <Lock className="h-4 w-4 text-red-600" /> : <Unlock className="h-4 w-4 text-emerald-500" />}
-              <div>
-                <p className="text-xs text-ink-lo">Account status</p>
-                <p className="text-sm font-bold capitalize text-ink-hi">{detail.status}</p>
+          <div className="rounded-xl border border-neon/10 bg-base-deep/40 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                {detail.status === 'blocked' ? <Lock className="h-4 w-4 text-red-600" /> : <Unlock className="h-4 w-4 text-emerald-500" />}
+                <div>
+                  <p className="text-xs text-ink-lo">Account status</p>
+                  <p className="text-sm font-bold capitalize text-ink-hi">{detail.status}</p>
+                </div>
               </div>
+              <Switch
+                tone={detail.status === 'blocked' ? 'danger' : 'brand'}
+                checked={detail.status === 'active'}
+                onChange={(next) => {
+                  if (next) {
+                    onStatusChange('active');
+                  } else {
+                    // Lightweight prompt for the block reason. Empty
+                    // value still blocks; admin can leave it blank.
+                    const reason = window.prompt(
+                      'Reason for blocking this account (shown to the user):',
+                      detail.blockedReason ?? '',
+                    );
+                    if (reason === null) return; // cancelled
+                    onStatusChange('blocked', reason.trim());
+                  }
+                }}
+                label={detail.status === 'active' ? 'Block account' : 'Unblock account'}
+              />
             </div>
-            <Switch
-              tone={detail.status === 'blocked' ? 'danger' : 'brand'}
-              checked={detail.status === 'active'}
-              onChange={(next) => onStatusChange(next ? 'active' : 'blocked')}
-              label={detail.status === 'active' ? 'Block account' : 'Unblock account'}
-            />
+            {detail.status === 'blocked' && (detail.blockedReason || detail.blockedAt) ? (
+              <div className="mt-3 space-y-1 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                {detail.blockedReason ? (
+                  <p>
+                    <span className="font-bold">Reason: </span>
+                    {detail.blockedReason}
+                  </p>
+                ) : null}
+                {detail.blockedAt ? (
+                  <p className="text-red-700/80">
+                    Blocked at {formatDateTime(detail.blockedAt, lang)}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
           </div>
 
           {/* Identity */}

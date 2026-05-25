@@ -6,7 +6,7 @@ import { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db/client';
 import { verifyPassword } from '@/lib/auth/password';
-import { setAuthCookies, getClientIp, getUserAgent } from '@/lib/auth/session';
+import { setAuthCookies, getClientIp, getUserAgent, revokePriorSessionsForUser, revokeRefreshFromCurrentCookie } from '@/lib/auth/session';
 import { loadPermissionsForRole } from '@/lib/auth/rbac';
 import { rateLimit } from '@/lib/auth/rate-limit';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
@@ -48,6 +48,9 @@ export async function POST(req: NextRequest) {
     return jsonError(401, 'INVALID_CREDENTIALS', 'Invalid username or password.');
   }
   if (user.status === 'blocked') {
+    // Make sure any leftover refresh session row from before the block
+    // is also revoked so the user cannot transparently refresh.
+    await revokePriorSessionsForUser(user.id);
     return jsonError(403, 'USER_BLOCKED', 'This account is suspended. Contact support.');
   }
 
@@ -60,6 +63,14 @@ export async function POST(req: NextRequest) {
     where: { id: user.id },
     data: { lastLoginAt: new Date(), lastLoginIp: ip },
   });
+
+  // Kill any prior sessions for this user (other devices and this
+  // device's previous account) AND specifically revoke whatever session
+  // row the existing pasha9_refresh cookie points to before issuing
+  // fresh cookies. Prevents cross-account state leakage in the same
+  // browser.
+  await revokePriorSessionsForUser(user.id);
+  await revokeRefreshFromCurrentCookie();
 
   const perms = await loadPermissionsForRole(user.roleId);
   await setAuthCookies(user.id, user.role.key, perms, {

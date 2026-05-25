@@ -136,12 +136,12 @@ export function MobileDrawer({ open, onClose, isLoggedIn, onRequestLogin, onRequ
         <nav className="flex-1 overflow-y-auto px-3 py-4">
           <Section label={t('drawer.main')}>
             {MAIN.map((item) => (
-              <DrawerLink key={item.key} item={item} t={t} pathname={pathname} />
+              <DrawerLink key={item.key} item={item} t={t} pathname={pathname} onClose={onClose} />
             ))}
           </Section>
           <Section label={t('drawer.games')}>
             {GAMES.map((item) => (
-              <DrawerLink key={item.key} item={item} t={t} pathname={pathname} />
+              <DrawerLink key={item.key} item={item} t={t} pathname={pathname} onClose={onClose} />
             ))}
           </Section>
           <Section label={t('drawer.others')}>
@@ -160,6 +160,7 @@ export function MobileDrawer({ open, onClose, isLoggedIn, onRequestLogin, onRequ
             </button>
             <Link
               href="/faq"
+              onClick={onClose}
               className="drawer-link"
               data-active={pathname === '/faq'}
             >
@@ -170,6 +171,7 @@ export function MobileDrawer({ open, onClose, isLoggedIn, onRequestLogin, onRequ
             </Link>
             <Link
               href="/support"
+              onClick={onClose}
               className="drawer-link"
               data-active={pathname === '/support'}
             >
@@ -182,6 +184,7 @@ export function MobileDrawer({ open, onClose, isLoggedIn, onRequestLogin, onRequ
               href={apkUrl ?? '/apk'}
               target={apkUrl ? '_blank' : undefined}
               rel={apkUrl ? 'noreferrer' : undefined}
+              onClick={onClose}
               className="drawer-link"
             >
               <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-brand-yellow-500/10 text-brand-yellow-700">
@@ -280,11 +283,11 @@ function Section({ label, children }: { label: string; children: React.ReactNode
   );
 }
 
-function DrawerLink({ item, t, pathname }: { item: Item; t: (k: string) => string; pathname: string }) {
+function DrawerLink({ item, t, pathname, onClose }: { item: Item; t: (k: string) => string; pathname: string; onClose: () => void }) {
   const active = pathname === item.href;
   const Icon = item.icon;
   return (
-    <Link href={item.href} className="drawer-link" data-active={active}>
+    <Link href={item.href} onClick={onClose} className="drawer-link" data-active={active}>
       <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-brand-yellow-500/10 text-brand-yellow-700">
         <Icon className="h-3.5 w-3.5" />
       </span>

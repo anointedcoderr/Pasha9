@@ -11,6 +11,7 @@ import { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db/client';
 import { withAuth, ensurePermission, recordActivity } from '@/lib/auth/guard';
+import { revokePriorSessionsForUser } from '@/lib/auth/session';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
@@ -45,6 +46,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
         email: user.email,
         role: user.role,
         status: user.status,
+        blockedReason: user.blockedReason,
+        blockedAt: user.blockedAt,
         country: user.country,
         language: user.language,
         referralCode: user.referralCode,
@@ -77,6 +80,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 
 const patchSchema = z.object({
   status: z.enum(['active', 'blocked', 'pending']).optional(),
+  blockedReason: z.string().trim().max(240).optional().nullable(),
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
@@ -86,18 +90,41 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const parsed = patchSchema.safeParse(body);
     if (!parsed.success) return jsonError(400, 'VALIDATION', undefined, { issues: parsed.error.issues });
 
+    // Status flip drives whether we set or clear blockedReason / blockedAt.
+    const nextStatus = parsed.data.status;
+    const data: {
+      status?: 'active' | 'blocked' | 'pending';
+      blockedReason?: string | null;
+      blockedAt?: Date | null;
+    } = {};
+    if (nextStatus) data.status = nextStatus;
+    if (nextStatus === 'blocked') {
+      data.blockedReason = parsed.data.blockedReason?.trim() || null;
+      data.blockedAt = new Date();
+    } else if (nextStatus === 'active' || nextStatus === 'pending') {
+      data.blockedReason = null;
+      data.blockedAt = null;
+    }
+
     const updated = await db.user.update({
       where: { id: params.id },
-      data: parsed.data,
-      select: { id: true, status: true, username: true },
+      data,
+      select: { id: true, status: true, username: true, blockedReason: true, blockedAt: true },
     });
+
+    // When blocking, immediately revoke every active session row for
+    // the user so their refresh cookie cannot mint new access tokens.
+    if (nextStatus === 'blocked') {
+      await revokePriorSessionsForUser(params.id);
+    }
 
     await recordActivity({
       actorId: session.sub,
       actorRole: session.role,
-      action: parsed.data.status === 'blocked' ? 'USER_BLOCK' : 'USER_UPDATE',
+      action: nextStatus === 'blocked' ? 'USER_BLOCK' : nextStatus === 'active' ? 'USER_UNBLOCK' : 'USER_UPDATE',
       target: updated.id,
-      detail: parsed.data.status,
+      detail: nextStatus ?? undefined,
+      meta: nextStatus === 'blocked' ? { reason: data.blockedReason ?? undefined } : undefined,
     });
 
     return jsonOk({ user: updated });

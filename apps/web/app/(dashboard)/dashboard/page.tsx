@@ -4,10 +4,10 @@ import { PageHeader } from '@/components/site/PageHeader';
 import { StatTile } from '@/components/ui/StatTile';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Chip } from '@/components/ui/Chip';
-import { currentUser } from '@/lib/mock/users';
 import { userTransactions } from '@/lib/mock/transactions';
 import { formatBDT, formatDateTime, relativeTime } from '@/lib/utils/format';
 import { useT, useLang } from '@/lib/i18n/context';
+import { useMe, walletBalance } from '@/lib/hooks/useMe';
 import { Wallet, Sparkles, TrendingUp, ArrowDownToLine, ArrowUpToLine, Gift, Users } from 'lucide-react';
 import Link from 'next/link';
 import { ROUTES } from '@/lib/constants/routes';
@@ -15,12 +15,16 @@ import { ROUTES } from '@/lib/constants/routes';
 export default function DashboardOverview() {
   const t = useT();
   const { lang } = useLang();
-  const txs = userTransactions(currentUser.id).slice(0, 6);
+  const { me } = useMe();
+  // Recent-activity list is mock-seeded for M2A; real transaction
+  // ledger ships in M2B. Stable id so the demo rows are deterministic.
+  const txs = userTransactions(me?.id ?? 'u_demo').slice(0, 6);
+  const username = me?.username ?? '...';
 
   return (
     <>
       <PageHeader
-        title={`${t('dashboard.welcome')}, ${currentUser.username}`}
+        title={`${t('dashboard.welcome')}, ${username}`}
         subtitle="Your account at a glance"
         icon={<Wallet className="h-5 w-5" />}
         action={
@@ -40,10 +44,10 @@ export default function DashboardOverview() {
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatTile label={t('dashboard.balance')} value={formatBDT(currentUser.balance)} icon={<Wallet className="h-5 w-5 text-neon" />} accent="gold" />
-        <StatTile label={t('dashboard.todayProfit')} value={formatBDT(2150, { sign: true })} icon={<TrendingUp className="h-5 w-5 text-neon" />} hint="vs yesterday" />
-        <StatTile label={t('dashboard.totalDeposit')} value={formatBDT(currentUser.totalDeposit)} icon={<ArrowDownToLine className="h-5 w-5 text-gold-300" />} />
-        <StatTile label={t('dashboard.totalWithdraw')} value={formatBDT(currentUser.totalWithdraw)} icon={<ArrowUpToLine className="h-5 w-5 text-gold-300" />} />
+        <StatTile label={t('dashboard.balance')} value={formatBDT(walletBalance(me))} icon={<Wallet className="h-5 w-5 text-neon" />} accent="gold" />
+        <StatTile label={t('dashboard.todayProfit')} value={formatBDT(0, { sign: true })} icon={<TrendingUp className="h-5 w-5 text-neon" />} hint="Live P&L ships in M2" />
+        <StatTile label={t('dashboard.totalDeposit')} value={formatBDT(0)} icon={<ArrowDownToLine className="h-5 w-5 text-gold-300" />} hint="Aggregates ship in M2" />
+        <StatTile label={t('dashboard.totalWithdraw')} value={formatBDT(0)} icon={<ArrowUpToLine className="h-5 w-5 text-gold-300" />} hint="Aggregates ship in M2" />
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-3">

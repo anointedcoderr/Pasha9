@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { PageHeader } from '@/components/site/PageHeader';
 import { userTransactions } from '@/lib/mock/transactions';
-import { currentUser } from '@/lib/mock/users';
+import { useMe } from '@/lib/hooks/useMe';
 import { formatBDT, formatDateTime } from '@/lib/utils/format';
 import { useT, useLang } from '@/lib/i18n/context';
 import { Chip } from '@/components/ui/Chip';
@@ -15,13 +15,15 @@ const TYPES = ['all', 'deposit', 'withdraw', 'bonus', 'referral', 'bet', 'win', 
 export default function TransactionsPage() {
   const t = useT();
   const { lang } = useLang();
+  const { me } = useMe();
   const [type, setType] = useState<(typeof TYPES)[number]>('all');
-  const all = userTransactions(currentUser.id);
+  // M2A-stub: read endpoint for the real Transaction ledger ships in M2B.
+  const all = userTransactions(me?.id ?? 'u_demo');
   const filtered = type === 'all' ? all : all.filter((tx) => tx.type === type);
 
   return (
     <>
-      <PageHeader title={t('wallet.history')} subtitle={`${all.length} entries`} icon={<ReceiptText className="h-5 w-5" />} />
+      <PageHeader title={t('wallet.history')} subtitle={`${all.length} entries (live ledger ships in M2)`} icon={<ReceiptText className="h-5 w-5" />} />
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <div className="w-44">

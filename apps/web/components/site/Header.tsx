@@ -31,6 +31,7 @@ import { MobileTopBar } from './MobileTopBar';
 import { StickyBottomNav } from './StickyBottomNav';
 import { CategoryNav } from './CategoryNav';
 import { NotificationDrawer } from './NotificationDrawer';
+import { BlockedAccountBanner } from './BlockedAccountBanner';
 import { triggerWalletRefresh } from './WalletStrip';
 import { useT } from '@/lib/i18n/context';
 import { useDisclosure } from '@/lib/utils/disclosure';
@@ -41,6 +42,9 @@ interface Me {
   id: string;
   username: string;
   role: { key: string; label: string };
+  status?: 'active' | 'blocked' | 'pending';
+  blockedReason?: string | null;
+  blockedAt?: string | null;
   wallet?: { balance: number | string; bonusBalance?: number | string };
 }
 
@@ -205,6 +209,10 @@ export function Header() {
           </div>
         </div>
       </header>
+
+      {me?.status === 'blocked' ? (
+        <BlockedAccountBanner username={me.username} reason={me.blockedReason ?? null} at={me.blockedAt ?? null} />
+      ) : null}
 
       <CategoryNav />
 

@@ -167,15 +167,27 @@ export default function AdminUsersPage() {
         loading={detailLoading}
         error={detailError}
         onAdjustBalance={(u) => { setBalanceUser(u); setBalanceOpen(true); setDrawerOpen(false); }}
-        onStatusChange={(nextStatus) => {
+        onStatusChange={(nextStatus, reason) => {
           if (!detail) return;
           fetch(`/api/admin/users/${detail.id}`, {
             method: 'PATCH',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ status: nextStatus }),
+            body: JSON.stringify({
+              status: nextStatus,
+              blockedReason: nextStatus === 'blocked' ? (reason ?? null) : null,
+            }),
           })
             .then((r) => r.json())
-            .then(() => { setDetail({ ...detail, status: nextStatus }); load(); })
+            .then((body) => {
+              const updated = body?.user as { blockedReason?: string | null; blockedAt?: string | null } | undefined;
+              setDetail({
+                ...detail,
+                status: nextStatus,
+                blockedReason: nextStatus === 'blocked' ? (updated?.blockedReason ?? reason ?? null) : null,
+                blockedAt: nextStatus === 'blocked' ? (updated?.blockedAt ?? new Date().toISOString()) : null,
+              });
+              load();
+            })
             .catch(() => {});
         }}
       />

@@ -6,7 +6,7 @@ import { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db/client';
 import { hashPassword } from '@/lib/auth/password';
-import { setAuthCookies, getClientIp, getUserAgent } from '@/lib/auth/session';
+import { setAuthCookies, getClientIp, getUserAgent, revokeRefreshFromCurrentCookie } from '@/lib/auth/session';
 import { generateUniqueReferralCode } from '@/lib/auth/referral';
 import { loadPermissionsForRole } from '@/lib/auth/rbac';
 import { rateLimit } from '@/lib/auth/rate-limit';
@@ -74,6 +74,11 @@ export async function POST(req: NextRequest) {
     },
     select: { id: true, username: true, phone: true, referralCode: true, role: { select: { key: true } } },
   });
+
+  // If a previous account was logged in on this device, revoke that
+  // session row before issuing the new user's cookies. setAuthCookies
+  // below overwrites both cookies so there is no cross-account leakage.
+  await revokeRefreshFromCurrentCookie();
 
   const perms = await loadPermissionsForRole(role.id);
   await setAuthCookies(user.id, user.role.key, perms, {

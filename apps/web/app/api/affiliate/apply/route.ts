@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db/client';
-import { requireUser } from '@/lib/auth/rbac';
+import { requireActiveUser } from '@/lib/auth/rbac';
 import { withAuth, recordActivity } from '@/lib/auth/guard';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 import { rateLimit } from '@/lib/auth/rate-limit';
@@ -18,7 +18,7 @@ const schema = z.object({
 
 export async function POST(req: NextRequest) {
   return withAuth(async () => {
-    const session = await requireUser();
+    const session = await requireActiveUser();
     const limit = rateLimit(`affiliate-apply:${session.sub}`, 3, 60_000);
     if (!limit.ok) return jsonError(429, 'RATE_LIMITED');
 

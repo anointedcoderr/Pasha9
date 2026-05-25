@@ -24,12 +24,14 @@ export async function GET() {
       referralCode: true,
       referredById: true,
       status: true,
+      blockedReason: true,
+      blockedAt: true,
       language: true,
       country: true,
       lastLoginAt: true,
       phoneVerifiedAt: true,
       role: { select: { key: true, label: true } },
-      wallet: { select: { balance: true, bonusBalance: true, lockedBalance: true, currency: true } },
+      wallet: { select: { balance: true, bonusBalance: true, lockedBalance: true, lottoBalance: true, currency: true } },
     },
   });
 
