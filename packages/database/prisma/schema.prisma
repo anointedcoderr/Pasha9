@@ -272,6 +272,11 @@ model Deposit {
   amount        Decimal       @db.Decimal(14, 2)
   method        String
   transactionId String
+  // Provider reference + key let an automated webhook (M2B+) match an
+  // incoming gateway transaction to a pending Deposit row. Null for
+  // the original M1 manual flow.
+  providerRef   String?
+  providerKey   String?
   proofUrl      String?
   status        RequestStatus @default(pending)
   adminNote     String?
@@ -284,6 +289,7 @@ model Deposit {
 
   @@index([status])
   @@index([userId])
+  @@index([providerRef])
 }
 
 model Withdrawal {
@@ -568,6 +574,34 @@ model LottoDraw {
   result      LotteryDrawResult?
 
   @@index([status, position])
+}
+
+// Reconciliation log for incoming payment gateway events (M2B). Every
+// webhook hit lands here even if the signature is invalid or no
+// matching Deposit exists, so support can investigate after the fact.
+// Status moves: initiated -> verified -> credited (success) OR
+// failed / duplicate / unmatched / signature_invalid.
+model PaymentGatewayTx {
+  id              String   @id @default(cuid())
+  provider        String   // manual | test | bkash | nagad | rocket | ...
+  providerTxId    String?
+  depositId       String?
+  userId          String?
+  amount          Decimal? @db.Decimal(14, 2)
+  currency        String   @default("BDT")
+  status          String   @default("initiated")
+  signatureValid  Boolean  @default(false)
+  raw             Json?
+  note            String?
+  meta            Json?
+  receivedAt      DateTime @default(now())
+  processedAt     DateTime?
+
+  @@index([provider, providerTxId])
+  @@index([depositId])
+  @@index([userId])
+  @@index([status])
+  @@index([receivedAt])
 }
 
 // 4D lottery ticket. Generated automatically when admin approves a

@@ -367,6 +367,8 @@
     "reports": "Reports & Analytics",
     "security": "Security Center",
     "marketing": "Marketing Center",
+    "payments": "Payment Providers",
+    "paymentsReconciliation": "Reconciliation Log",
     "groupOverview": "Overview",
     "groupOperations": "Operations",
     "groupUsersAndMoney": "Users & Money",

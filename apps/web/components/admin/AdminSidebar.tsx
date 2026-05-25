@@ -32,6 +32,7 @@ import {
   ShieldCheck,
   BarChart3,
   Sparkles,
+  FileCheck,
 } from 'lucide-react';
 import { Logo } from '@/components/site/Logo';
 import { ROUTES } from '@/lib/constants/routes';
@@ -52,6 +53,8 @@ const GROUPS = [
       { key: 'deposits', href: ROUTES.admin.deposits, icon: ArrowDownToLine },
       { key: 'withdrawals', href: ROUTES.admin.withdrawals, icon: ArrowUpToLine },
       { key: 'transactions', href: ROUTES.admin.transactions, icon: ReceiptText },
+      { key: 'payments', href: ROUTES.admin.payments, icon: Wallet },
+      { key: 'paymentsReconciliation', href: ROUTES.admin.paymentsReconciliation, icon: FileCheck },
     ],
   },
   {

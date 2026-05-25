@@ -55,5 +55,7 @@ export const ROUTES = {
     reports: '/admin/reports',
     security: '/admin/security',
     marketing: '/admin/marketing',
+    payments: '/admin/payments',
+    paymentsReconciliation: '/admin/payments/reconciliation',
   },
 } as const;
