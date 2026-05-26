@@ -9,7 +9,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { Button } from '@/components/ui/Button';
 import { FormField, Input, PasswordInput } from '@/components/ui/Input';
-import { Phone, Lock, KeyRound, UserPlus, User as UserIcon, Gift } from 'lucide-react';
+import { Phone, Lock, KeyRound, UserPlus, User as UserIcon, Gift, Smartphone, ArrowLeft } from 'lucide-react';
 import { loginSchema, signupSchema, type LoginInput, type SignupInput } from '@/lib/utils/validation';
 import { useT } from '@/lib/i18n/context';
 import { triggerWalletRefresh } from './WalletStrip';
@@ -68,12 +68,24 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
   const params = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState<ApiError | null>(null);
+  // M2K 2FA challenge state
+  const [challenge, setChallenge] = useState<{ challengeToken: string; identifier: string } | null>(null);
+  const [code, setCode] = useState('');
+  const [useRecovery, setUseRecovery] = useState(false);
 
   const {
     register,
     handleSubmit,
     formState: { errors },
   } = useForm<LoginInput>({ resolver: zodResolver(loginSchema), defaultValues: { identifier: '', password: '' } });
+
+  const completeSuccess = () => {
+    onSuccess();
+    triggerWalletRefresh();
+    const next = params.get('next') ?? '/dashboard';
+    router.push(next);
+    router.refresh();
+  };
 
   const onSubmit = async (values: LoginInput) => {
     setApiError(null);
@@ -89,20 +101,104 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
         setApiError({ code: data.code ?? 'ERROR', message: data.message });
         return;
       }
-      onSuccess();
-      // Notify Header + WalletStrip so they re-fetch /api/auth/me. Without
-      // this, navigating back to a route that already mounted the Header
-      // (eg the same /dashboard) leaves the header showing guest UI.
-      triggerWalletRefresh();
-      const next = params.get('next') ?? '/dashboard';
-      router.push(next);
-      router.refresh();
+      if (data?.challenge === true && typeof data.challengeToken === 'string') {
+        setChallenge({ challengeToken: data.challengeToken, identifier: values.identifier });
+        setCode('');
+        setUseRecovery(false);
+        return;
+      }
+      completeSuccess();
     } catch {
       setApiError({ code: 'NETWORK_ERROR', message: 'Could not reach server' });
     } finally {
       setLoading(false);
     }
   };
+
+  const onSubmitChallenge = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!challenge) return;
+    setApiError(null);
+    setLoading(true);
+    try {
+      const res = await fetch('/api/auth/2fa/challenge', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ challengeToken: challenge.challengeToken, code: code.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (data?.code === 'CHALLENGE_INVALID') {
+          setApiError({ code: 'CHALLENGE_INVALID', message: 'The verification window expired. Please log in again.' });
+          setChallenge(null);
+          setCode('');
+          return;
+        }
+        setApiError({ code: data.code ?? 'ERROR', message: data.message ?? '2FA verification failed.' });
+        return;
+      }
+      completeSuccess();
+    } catch {
+      setApiError({ code: 'NETWORK_ERROR', message: 'Could not reach server' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (challenge) {
+    return (
+      <form onSubmit={onSubmitChallenge} className="space-y-4">
+        <div className="rounded-lg border border-neon/15 bg-base-deep/40 p-3 text-sm">
+          <p className="font-semibold text-ink-hi">Two-factor verification</p>
+          <p className="mt-1 text-xs text-ink-mid">
+            Signing in as <span className="font-semibold text-ink-hi">{challenge.identifier}</span>.{' '}
+            {useRecovery
+              ? 'Enter a single-use recovery code.'
+              : 'Enter the 6-digit code from your authenticator app.'}
+          </p>
+        </div>
+        <FormField
+          label={useRecovery ? 'Recovery code' : 'Authenticator code'}
+          required
+          hint={useRecovery
+            ? 'Each recovery code works exactly ONCE. Used codes are removed automatically.'
+            : 'Open Google Authenticator / Authy / 1Password and copy the current 6-digit code.'}
+        >
+          <Input
+            leftIcon={useRecovery ? <KeyRound className="h-4 w-4" /> : <Smartphone className="h-4 w-4" />}
+            placeholder={useRecovery ? 'ABCDEFGHIJ' : '123456'}
+            value={code}
+            onChange={(e) => setCode(useRecovery ? e.target.value.toUpperCase() : e.target.value.replace(/\D/g, ''))}
+            inputMode={useRecovery ? 'text' : 'numeric'}
+            maxLength={useRecovery ? 12 : 6}
+            autoFocus
+          />
+        </FormField>
+        {apiError ? (
+          <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{apiError.message ?? apiError.code}</p>
+        ) : null}
+        <Button full type="submit" size="lg" variant="gold" loading={loading} disabled={!code.trim() || (!useRecovery && code.length !== 6)}>
+          Verify + sign in
+        </Button>
+        <div className="flex items-center justify-between text-sm">
+          <button
+            type="button"
+            onClick={() => { setUseRecovery((v) => !v); setCode(''); setApiError(null); }}
+            className="font-semibold text-brand-blue-600 hover:text-brand-blue-700"
+          >
+            {useRecovery ? 'Use authenticator code instead' : 'Use recovery code instead'}
+          </button>
+          <button
+            type="button"
+            onClick={() => { setChallenge(null); setCode(''); setUseRecovery(false); setApiError(null); }}
+            className="inline-flex items-center gap-1 text-ink-mid hover:text-ink-hi"
+          >
+            <ArrowLeft className="h-3 w-3" /> Back to login
+          </button>
+        </div>
+      </form>
+    );
+  }
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">

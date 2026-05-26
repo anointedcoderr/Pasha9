@@ -16,7 +16,7 @@ import { FormField, Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
 import { Modal } from '@/components/ui/Modal';
-import { ShieldCheck, Smartphone, History, RefreshCw, LogOut, KeyRound, ScanLine } from 'lucide-react';
+import { ShieldCheck, Smartphone, RefreshCw, LogOut, KeyRound, ScanLine, AlertTriangle, Copy, Download, Check } from 'lucide-react';
 import { useMe } from '@/lib/hooks/useMe';
 import { cn } from '@/lib/utils/cn';
 
@@ -54,9 +54,40 @@ export default function SecurityPage() {
   const [verifyCode, setVerifyCode] = useState('');
   const [verifying, setVerifying] = useState(false);
   const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
+  const [recoveryCopied, setRecoveryCopied] = useState(false);
   const [disableModal, setDisableModal] = useState(false);
   const [disableCode, setDisableCode] = useState('');
   const [disabling, setDisabling] = useState(false);
+
+  const copyRecovery = async () => {
+    if (!recoveryCodes) return;
+    try {
+      await navigator.clipboard.writeText(recoveryCodes.join('\n'));
+      setRecoveryCopied(true);
+      setTimeout(() => setRecoveryCopied(false), 3000);
+    } catch {
+      flashToast('Could not copy. Select the codes manually.');
+    }
+  };
+
+  const downloadRecovery = () => {
+    if (!recoveryCodes) return;
+    const stamp = new Date().toISOString().slice(0, 10);
+    const blob = new Blob(
+      [
+        `Pasha 9 - 2FA recovery codes\nUser: ${me?.username ?? ''}\nGenerated: ${new Date().toUTCString()}\n\n`,
+        recoveryCodes.join('\n'),
+        '\n\nEach code works exactly once. Store securely. Lose them and you lose access if your authenticator app is gone.\n',
+      ],
+      { type: 'text/plain' },
+    );
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `pasha9-2fa-recovery-${stamp}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const flashToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 5000); };
 
@@ -176,9 +207,20 @@ export default function SecurityPage() {
           action={<Chip tone={totpEnabled ? 'ok' : 'warn'}>{totpEnabled ? 'enabled' : 'disabled'}</Chip>}
         />
         {!totpEnabled && !qrDataUrl ? (
-          <Button variant="gold" leftIcon={<Smartphone className="h-4 w-4" />} loading={enrolling} onClick={startEnroll}>
-            Enable 2FA
-          </Button>
+          <div className="space-y-3">
+            <div className="rounded-xl border border-signal-warn/30 bg-signal-warn/5 p-3 text-sm">
+              <p className="inline-flex items-center gap-2 font-semibold text-ink-hi">
+                <AlertTriangle className="h-4 w-4 text-signal-warn" /> Before you enable
+              </p>
+              <p className="mt-1 text-xs text-ink-mid">
+                After 2FA is on, every login requires the 6-digit code from your authenticator app OR a one-time recovery code.
+                <b className="ml-1 text-ink-hi">Save the recovery codes shown after setup</b> - if you lose your authenticator and your codes, you lose access until support resets it manually.
+              </p>
+            </div>
+            <Button variant="gold" leftIcon={<Smartphone className="h-4 w-4" />} loading={enrolling} onClick={startEnroll}>
+              Enable 2FA
+            </Button>
+          </div>
         ) : null}
         {qrDataUrl ? (
           <div className="grid gap-4 md:grid-cols-[220px_1fr]">
@@ -203,6 +245,14 @@ export default function SecurityPage() {
             <p className="mt-1 text-xs text-ink-mid">Each code works exactly once if you lose your authenticator. Store them in a password manager or a printed copy. They are <b>never shown again</b>.</p>
             <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
               {recoveryCodes.map((c) => <code key={c} className="rounded-lg border border-neon/10 bg-base-deep/60 px-2 py-1.5 text-center font-mono text-sm text-ink-hi">{c}</code>)}
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button size="sm" variant="neon" leftIcon={recoveryCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />} onClick={copyRecovery}>
+                {recoveryCopied ? 'Copied' : 'Copy all'}
+              </Button>
+              <Button size="sm" variant="ghost" leftIcon={<Download className="h-3.5 w-3.5" />} onClick={downloadRecovery}>
+                Download .txt
+              </Button>
             </div>
           </div>
         ) : null}

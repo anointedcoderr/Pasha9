@@ -272,12 +272,17 @@ export default function AdminSecurityPage() {
 
         <TabsContent value="docs">
           <Card padding="lg">
-            <CardHeader title="2FA / TOTP enrollment" subtitle="Each admin enrolls their own authenticator from /dashboard/security. The login flow then asks for the 6-digit code after password." />
+            <CardHeader
+              title="2FA / TOTP enrollment"
+              subtitle="Fully wired end-to-end. /admin/login and the player auth modal both render a two-step UI: password first, then a 6-digit code input (or recovery code) when the account has 2FA enabled."
+              action={<Chip tone="ok">UI live</Chip>}
+            />
             <ol className="ml-5 list-decimal space-y-1 text-sm text-ink-mid">
-              <li>Open /dashboard/security and click <b>Enable 2FA</b>.</li>
+              <li>Open /dashboard/security and click <b>Enable 2FA</b>. A safety banner explains the lock-out risk before any enrollment happens.</li>
               <li>Scan the QR with Google Authenticator / Authy / 1Password.</li>
-              <li>Enter the 6-digit code to confirm. <b>Recovery codes</b> are shown ONCE - copy and store offline.</li>
-              <li>On the next /admin/login, you will be asked for the code before the session is issued.</li>
+              <li>Enter the 6-digit code to confirm. <b>10 recovery codes</b> are shown ONCE with <b>Copy all</b> and <b>Download .txt</b> buttons - save them offline.</li>
+              <li>On the next /admin/login or auth modal login, after your password the UI prompts for the 6-digit code with a toggle to use a recovery code instead, and a Back-to-login button if you change your mind.</li>
+              <li>Disable from /dashboard/security at any time (requires a current 6-digit OR an unused recovery code so a stolen session alone cannot turn it off).</li>
             </ol>
           </Card>
 
