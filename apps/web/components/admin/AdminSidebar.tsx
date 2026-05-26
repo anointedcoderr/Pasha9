@@ -176,7 +176,17 @@ export function AdminSidebar() {
       </nav>
 
       <div className="border-t border-brand-divider px-5 py-4">
-        <p className="text-[11px] text-brand-inkMute">{BRAND.developer.label}</p>
+        <p className="text-[11px] text-brand-inkMute">
+          Built by{' '}
+          <a
+            href={BRAND.developer.website}
+            target="_blank"
+            rel="noreferrer"
+            className="font-semibold text-brand-inkSoft underline-offset-2 hover:text-brand-ink hover:underline"
+          >
+            {BRAND.developer.name}
+          </a>
+        </p>
         <p className="mt-1 text-xs text-brand-inkSoft">
           <a href={`mailto:${BRAND.developer.email}`} className="hover:text-brand-ink">{BRAND.developer.email}</a>
         </p>

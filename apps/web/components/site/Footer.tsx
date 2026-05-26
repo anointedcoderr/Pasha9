@@ -176,7 +176,17 @@ export function Footer() {
 
         <div className="mt-10 border-t border-white/10 pt-5">
           <p className="inline-flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-white/45">
-            <span>{BRAND.developer.label}</span>
+            <span>
+              Built by{' '}
+              <a
+                href={BRAND.developer.website}
+                target="_blank"
+                rel="noreferrer"
+                className="font-semibold text-white/70 underline-offset-2 hover:text-white hover:underline"
+              >
+                {BRAND.developer.name}
+              </a>
+            </span>
             <a href={`mailto:${BRAND.developer.email}`} className="inline-flex items-center gap-1.5 hover:text-white">
               <Mail className="h-3 w-3" />
               {BRAND.developer.email}

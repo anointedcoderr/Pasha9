@@ -6,6 +6,12 @@
 // subsystem, and a one-click "handover CSV" export for client
 // lock-down audits.
 //
+// HARDENED: every shape from the snapshot endpoint is defaulted to
+// an empty array / zero / safe object before render. Missing
+// categories surface an empty-state card instead of crashing the
+// page. The snapshot endpoint itself wraps each subsystem in a
+// safeRun so one provider misconfiguration cannot break the page.
+//
 // Categories (each is a card grid):
 //   Inbound payments    (M2B)  -> /admin/payments
 //   Outbound payouts    (M2C)  -> /admin/payouts
@@ -13,9 +19,6 @@
 //   Tracking            (M2I)  -> /admin/notifications
 //   Cron                (M2F + M2H)
 //   Security            (M2K)  -> /admin/security
-//
-// Bottom panel shows the last 30 credential-edit activity rows so
-// admins can audit who changed what.
 
 'use client';
 
@@ -31,42 +34,69 @@ import { cn } from '@/lib/utils/cn';
 interface ProviderCard {
   key: string;
   label: string;
-  status: 'live' | 'requires_credentials' | 'manual' | 'disabled';
+  status: string;
   description: string;
   configureHref: string;
   fieldCount: number;
   isActive?: boolean;
 }
 
-interface Snapshot {
-  categories: {
-    payments: ProviderCard[];
-    payouts: ProviderCard[];
-    sms: ProviderCard[];
-    tracking: ProviderCard[];
-  };
-  platform: {
-    activeSmsProvider: string;
-    cronSecretConfigured: boolean;
-    cronRoutes: Array<{ key: string; label: string; path: string; requiresSecret: boolean; deepLink: string }>;
-    paymentMethodsHref: string;
-    securityHref: string;
-  };
-  security: {
-    ipBlockCount: number;
-    totpEnabledUserCount: number;
-    activeStaffCount: number;
-  };
-  recentEdits: Array<{
-    id: string;
-    action: string;
-    target: string | null;
-    detail: string | null;
-    actorUsername: string | null;
-    actorRole: string | null;
-    createdAt: string;
-  }>;
+interface CronRoute {
+  key: string;
+  label: string;
+  path: string;
+  requiresSecret: boolean;
+  deepLink: string;
 }
+
+interface EditRow {
+  id: string;
+  action: string;
+  target: string | null;
+  detail: string | null;
+  actorUsername: string | null;
+  actorRole: string | null;
+  createdAt: string;
+}
+
+interface Snapshot {
+  categories?: {
+    payments?: ProviderCard[];
+    payouts?: ProviderCard[];
+    sms?: ProviderCard[];
+    tracking?: ProviderCard[];
+  };
+  platform?: {
+    activeSmsProvider?: string;
+    cronSecretConfigured?: boolean;
+    cronRoutes?: CronRoute[];
+    paymentMethodsHref?: string;
+    securityHref?: string;
+  };
+  security?: {
+    ipBlockCount?: number;
+    totpEnabledUserCount?: number;
+    activeStaffCount?: number;
+  };
+  recentEdits?: EditRow[];
+}
+
+const EMPTY_SNAP: Required<Snapshot> & {
+  categories: Required<NonNullable<Snapshot['categories']>>;
+  platform: Required<NonNullable<Snapshot['platform']>>;
+  security: Required<NonNullable<Snapshot['security']>>;
+} = {
+  categories: { payments: [], payouts: [], sms: [], tracking: [] },
+  platform: {
+    activeSmsProvider: 'manual',
+    cronSecretConfigured: false,
+    cronRoutes: [],
+    paymentMethodsHref: '/admin/payment-methods',
+    securityHref: '/admin/security',
+  },
+  security: { ipBlockCount: 0, totpEnabledUserCount: 0, activeStaffCount: 0 },
+  recentEdits: [],
+};
 
 function statusTone(s: string): 'ok' | 'warn' | 'neutral' | 'danger' {
   if (s === 'live') return 'ok';
@@ -81,7 +111,11 @@ function statusLabel(s: string): string {
   if (s === 'manual') return 'Manual';
   if (s === 'requires_credentials') return 'Needs credentials';
   if (s === 'disabled') return 'Disabled';
-  return s;
+  return s || 'Unknown';
+}
+
+function safeArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
 }
 
 export default function AdminIntegrationsPage() {
@@ -96,11 +130,12 @@ export default function AdminIntegrationsPage() {
     setError(null);
     try {
       const res = await fetch('/api/admin/integrations/snapshot', { cache: 'no-store' });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.message ?? data?.code ?? 'Failed to load');
-      setSnap(data as Snapshot);
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error((data && (data.message || data.code)) || `HTTP ${res.status}`);
+      setSnap((data && typeof data === 'object') ? (data as Snapshot) : {});
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load');
+      setSnap({});
     } finally {
       setRefreshing(false);
       setLoading(false);
@@ -120,6 +155,18 @@ export default function AdminIntegrationsPage() {
       flashToast('Could not copy. Select the line manually.');
     }
   };
+
+  // Defensive defaults: every shape access goes through these so a
+  // partial response from the API cannot crash the render tree.
+  const categories = snap?.categories ?? EMPTY_SNAP.categories;
+  const platform = snap?.platform ?? EMPTY_SNAP.platform;
+  const security = snap?.security ?? EMPTY_SNAP.security;
+  const recentEdits = safeArray<EditRow>(snap?.recentEdits);
+  const paymentsCards = safeArray<ProviderCard>(categories.payments);
+  const payoutsCards = safeArray<ProviderCard>(categories.payouts);
+  const smsCards = safeArray<ProviderCard>(categories.sms);
+  const trackingCards = safeArray<ProviderCard>(categories.tracking);
+  const cronRoutes = safeArray<CronRoute>(platform.cronRoutes);
 
   return (
     <>
@@ -142,63 +189,79 @@ export default function AdminIntegrationsPage() {
       {toast ? <Card padding="md" className="mb-4"><p className="text-sm text-signal-ok">{toast}</p></Card> : null}
       {error ? <Card padding="md" className="mb-4"><p className="text-sm text-signal-danger">{error}</p></Card> : null}
 
-      {loading ? <p className="text-sm text-ink-mid">Loading...</p> : !snap ? null : (
+      {loading ? (
+        <p className="text-sm text-ink-mid">Loading...</p>
+      ) : (
         <>
           <CategorySection
             title="Inbound payments"
-            subtitle={`Deposit gateways. Active credentials are stored in SystemSetting and never returned by this snapshot.`}
+            subtitle="Deposit gateways. Active credentials are stored in SystemSetting and never returned by this snapshot."
             icon={<Wallet className="h-4 w-4 text-gold-300" />}
-            providers={snap.categories.payments}
+            providers={paymentsCards}
+            emptyHref="/admin/payments"
+            emptyLabel="No payment adapters loaded yet. Open Payment Providers to configure."
           />
 
           <CategorySection
             title="Outbound payouts"
             subtitle="Withdrawal gateways. Many providers reuse the deposit-side merchant credentials."
             icon={<Send className="h-4 w-4 text-gold-300" />}
-            providers={snap.categories.payouts}
+            providers={payoutsCards}
+            emptyHref="/admin/payouts"
+            emptyLabel="No payout adapters loaded yet. Open Payout Providers to configure."
           />
 
           <CategorySection
             title="SMS"
-            subtitle={`Active provider: ${snap.platform.activeSmsProvider}. OTP, deposit + withdrawal notifications all route here.`}
+            subtitle={`Active provider: ${platform.activeSmsProvider || 'manual'}. OTP, deposit + withdrawal notifications all route here.`}
             icon={<Wifi className="h-4 w-4 text-gold-300" />}
-            providers={snap.categories.sms}
+            providers={smsCards}
+            emptyHref="/admin/notifications"
+            emptyLabel="No SMS adapters loaded yet. Open Notifications to configure."
           />
 
           <CategorySection
             title="Tracking pixels"
             subtitle="Conversion events fan out to every platform with a configured id (browser pixel) + token (server-side CAPI / Events API)."
             icon={<Wifi className="h-4 w-4 text-gold-300" />}
-            providers={snap.categories.tracking}
+            providers={trackingCards}
+            emptyHref="/admin/notifications"
+            emptyLabel="No tracking platforms loaded yet. Open Notifications to configure."
           />
 
           <Card padding="lg" className="mb-6">
             <CardHeader
               title="Scheduled jobs (cron)"
-              subtitle={`CRON_SECRET environment variable is ${snap.platform.cronSecretConfigured ? 'set' : 'NOT set'}. Without it, cron POSTs are rejected and the equivalent admin buttons must be clicked manually.`}
+              subtitle={`CRON_SECRET environment variable is ${platform.cronSecretConfigured ? 'set' : 'NOT set'}. Without it, cron POSTs are rejected and the equivalent admin buttons must be clicked manually.`}
             />
             <div className="mb-3 flex flex-wrap gap-2">
-              <Chip tone={snap.platform.cronSecretConfigured ? 'ok' : 'warn'}>
-                CRON_SECRET {snap.platform.cronSecretConfigured ? 'configured' : 'missing'}
+              <Chip tone={platform.cronSecretConfigured ? 'ok' : 'warn'}>
+                CRON_SECRET {platform.cronSecretConfigured ? 'configured' : 'missing'}
               </Chip>
             </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              {snap.platform.cronRoutes.map((r) => (
-                <div key={r.key} className="rounded-xl border border-neon/10 bg-base-deep/40 p-3">
-                  <p className="text-sm font-semibold text-ink-hi">{r.label}</p>
-                  <code className="mt-1 block break-all font-mono text-[11px] text-ink-mid">POST {r.path}</code>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <Button size="sm" variant="ghost" leftIcon={<Copy className="h-3.5 w-3.5" />} onClick={() => copyCronCmd(r.path)}>
-                      Copy curl
-                    </Button>
-                    <Link href={r.deepLink}>
-                      <Button size="sm" variant="neon" leftIcon={<ArrowRight className="h-3.5 w-3.5" />}>Configure</Button>
-                    </Link>
+            {cronRoutes.length === 0 ? (
+              <p className="text-sm text-ink-mid">No scheduled jobs declared.</p>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2">
+                {cronRoutes.map((r) => (
+                  <div key={r.key} className="rounded-xl border border-neon/10 bg-base-deep/40 p-3">
+                    <p className="text-sm font-semibold text-ink-hi">{r.label}</p>
+                    <code className="mt-1 block break-all font-mono text-[11px] text-ink-mid">POST {r.path}</code>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button size="sm" variant="ghost" leftIcon={<Copy className="h-3.5 w-3.5" />} onClick={() => copyCronCmd(r.path)}>
+                        Copy curl
+                      </Button>
+                      {r.deepLink ? (
+                        <Link href={r.deepLink}>
+                          <Button size="sm" variant="neon" leftIcon={<ArrowRight className="h-3.5 w-3.5" />}>Configure</Button>
+                        </Link>
+                      ) : null}
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-            {!snap.platform.cronSecretConfigured ? (
+                ))}
+              </div>
+            )}
+            {!platform.cronSecretConfigured ? (
               <p className="mt-3 inline-flex items-start gap-2 text-xs text-signal-warn">
                 <AlertCircle className="mt-0.5 h-3 w-3" />
                 Set CRON_SECRET in your VPS .env to a long random value, then add the curl commands above to crontab.
@@ -209,12 +272,12 @@ export default function AdminIntegrationsPage() {
           <Card padding="lg" className="mb-6">
             <CardHeader title="Security posture" subtitle="Read-only KPIs from M2K. Edit at /admin/security and /dashboard/security." />
             <div className="grid gap-3 md:grid-cols-3">
-              <Kpi icon={<ShieldCheck className="h-4 w-4 text-signal-ok" />} label="2FA-enabled users" value={snap.security.totpEnabledUserCount} hint="Users with TOTP active. Push admins to enroll." />
-              <Kpi icon={<Wifi className="h-4 w-4 text-signal-warn" />} label="IP blocks" value={snap.security.ipBlockCount} hint="Active IP block rules (expired ones auto-skip)." />
-              <Kpi icon={<ShieldCheck className="h-4 w-4 text-ink-mid" />} label="Active staff" value={snap.security.activeStaffCount} hint="Non-blocked super_admin + admin + staff accounts." />
+              <Kpi icon={<ShieldCheck className="h-4 w-4 text-signal-ok" />} label="2FA-enabled users" value={security.totpEnabledUserCount ?? 0} hint="Users with TOTP active. Push admins to enroll." />
+              <Kpi icon={<Wifi className="h-4 w-4 text-signal-warn" />} label="IP blocks" value={security.ipBlockCount ?? 0} hint="Active IP block rules (expired ones auto-skip)." />
+              <Kpi icon={<ShieldCheck className="h-4 w-4 text-ink-mid" />} label="Active staff" value={security.activeStaffCount ?? 0} hint="Non-blocked super_admin + admin + staff accounts." />
             </div>
             <div className="mt-4">
-              <Link href={snap.platform.securityHref}>
+              <Link href={platform.securityHref || '/admin/security'}>
                 <Button variant="neon" leftIcon={<ArrowRight className="h-3.5 w-3.5" />}>Open Security Center</Button>
               </Link>
             </div>
@@ -226,14 +289,14 @@ export default function AdminIntegrationsPage() {
               subtitle="Last 30 admin actions that changed provider settings, payment methods, IP blocks, or 2FA state. Pulled live from ActivityLog."
               action={<Clock className="h-4 w-4 text-ink-mid" />}
             />
-            {snap.recentEdits.length === 0 ? (
+            {recentEdits.length === 0 ? (
               <p className="text-sm text-ink-mid">No credential edits on file yet.</p>
             ) : (
               <ul className="divide-y divide-neon/10">
-                {snap.recentEdits.map((e) => (
+                {recentEdits.map((e) => (
                   <li key={e.id} className="flex flex-wrap items-center gap-3 py-2 text-sm">
                     <Chip tone="info">{e.action}</Chip>
-                    <span className="text-xs text-ink-lo">{new Date(e.createdAt).toLocaleString()}</span>
+                    <span className="text-xs text-ink-lo">{e.createdAt ? new Date(e.createdAt).toLocaleString() : '-'}</span>
                     <span className="text-ink-mid">
                       {e.actorUsername ?? '(system)'} <span className="text-ink-lo">. {e.actorRole ?? '?'}</span>
                     </span>
@@ -256,30 +319,51 @@ export default function AdminIntegrationsPage() {
   );
 }
 
-function CategorySection({ title, subtitle, icon, providers }: { title: string; subtitle: string; icon: React.ReactNode; providers: ProviderCard[] }) {
+function CategorySection({ title, subtitle, icon, providers, emptyHref, emptyLabel }: {
+  title: string;
+  subtitle: string;
+  icon: React.ReactNode;
+  providers: ProviderCard[];
+  emptyHref?: string;
+  emptyLabel?: string;
+}) {
   return (
     <Card padding="lg" className="mb-6">
       <CardHeader title={title} subtitle={subtitle} action={icon} />
-      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-        {providers.map((p) => (
-          <div key={p.key} className={cn('rounded-xl border p-3', p.isActive ? 'border-signal-ok/40 bg-signal-ok/5' : 'border-neon/10 bg-base-deep/40')}>
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-ink-hi">{p.label}</p>
-                <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-ink-lo">{p.key}</p>
+      {providers.length === 0 ? (
+        <div className="rounded-xl border border-neon/10 bg-base-deep/40 p-4 text-sm text-ink-mid">
+          {emptyLabel ?? 'Nothing here yet.'}
+          {emptyHref ? (
+            <>
+              {' '}
+              <Link href={emptyHref} className="text-gold-300 hover:underline">Open settings</Link>.
+            </>
+          ) : null}
+        </div>
+      ) : (
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+          {providers.map((p) => (
+            <div key={p.key} className={cn('rounded-xl border p-3', p.isActive ? 'border-signal-ok/40 bg-signal-ok/5' : 'border-neon/10 bg-base-deep/40')}>
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-ink-hi">{p.label}</p>
+                  <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-ink-lo">{p.key}</p>
+                </div>
+                <Chip tone={statusTone(p.status)}>{statusLabel(p.status)}</Chip>
               </div>
-              <Chip tone={statusTone(p.status)}>{statusLabel(p.status)}</Chip>
+              <p className="mt-2 text-xs text-ink-mid line-clamp-3">{p.description || 'No description.'}</p>
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                <span className="text-[11px] text-ink-lo">{p.fieldCount} field{p.fieldCount === 1 ? '' : 's'}{p.isActive ? ' . active' : ''}</span>
+                {p.configureHref ? (
+                  <Link href={p.configureHref}>
+                    <Button size="sm" variant="ghost" leftIcon={<ArrowRight className="h-3.5 w-3.5" />}>Configure</Button>
+                  </Link>
+                ) : null}
+              </div>
             </div>
-            <p className="mt-2 text-xs text-ink-mid line-clamp-3">{p.description}</p>
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-              <span className="text-[11px] text-ink-lo">{p.fieldCount} field{p.fieldCount === 1 ? '' : 's'}{p.isActive ? ' . active' : ''}</span>
-              <Link href={p.configureHref}>
-                <Button size="sm" variant="ghost" leftIcon={<ArrowRight className="h-3.5 w-3.5" />}>Configure</Button>
-              </Link>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </Card>
   );
 }
@@ -291,7 +375,7 @@ function Kpi({ icon, label, value, hint }: { icon: React.ReactNode; label: strin
         {icon}
         <p className="text-xs uppercase tracking-wider text-ink-lo">{label}</p>
       </div>
-      <p className="mt-1 text-2xl font-bold text-ink-hi">{value.toLocaleString()}</p>
+      <p className="mt-1 text-2xl font-bold text-ink-hi">{Number(value || 0).toLocaleString()}</p>
       <p className="mt-1 text-[11px] text-ink-mid">{hint}</p>
     </div>
   );

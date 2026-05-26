@@ -9,6 +9,11 @@
 //   - lotto cron + recovery cron (CRON_SECRET env)
 //   - security (totp counts, IP block count)
 //
+// HARDENED: every loader is wrapped so one subsystem failing cannot
+// break the whole snapshot. Missing fields are returned as empty
+// arrays / zero counts so the page can render an empty-state card
+// rather than crash.
+//
 // Read-only: no credential values are returned. The page deep-links
 // to the existing per-area admin pages for editing.
 
@@ -30,17 +35,36 @@ const LOTTO_HREF = '/admin/lotto';
 const RECOVERY_HREF = '/admin/recovery';
 const PAYMENT_METHODS_HREF = '/admin/payment-methods';
 
+interface ProviderCard {
+  key: string;
+  label: string;
+  status: string;
+  description: string;
+  configureHref: string;
+  fieldCount: number;
+  isActive?: boolean;
+}
+
+async function safeRun<T>(label: string, fn: () => Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await fn();
+  } catch (err) {
+    console.error(`[integrations-snapshot] ${label} failed`, err);
+    return fallback;
+  }
+}
+
 export async function GET() {
   return withAuth(async () => {
     await ensurePermission('activity.read');
 
-    // Load every snapshot in parallel. Each helper is shaped slightly
-    // differently because each subsystem evolved at its own pace; we
-    // normalise them here so the page renders one consistent card grid.
+    // Pull every subsystem in parallel, but wrap each one so a single
+    // failure (e.g. a future adapter mis-config, a DB row that does
+    // not match the expected shape) cannot collapse the whole page.
     const [
       payments,
       payouts,
-      smsAdapters,
+      smsAdaptersRaw,
       trackingPlatforms,
       smsProviderRow,
       ipBlockCount,
@@ -48,78 +72,107 @@ export async function GET() {
       activeStaffCount,
       recentEdits,
     ] = await Promise.all([
-      listProviderSummaries(),
-      listPayoutSummaries(),
-      Promise.resolve(listSmsAdapters().map((a) => a.describe())),
-      platformsStatus(),
-      db.systemSetting.findUnique({ where: { key: 'sms_provider' }, select: { value: true } }),
-      db.ipBlockRule.count(),
-      db.user.count({ where: { totpEnabled: true } }),
-      db.user.count({ where: { role: { key: { in: ['super_admin', 'admin', 'staff'] } }, status: 'active' } }),
-      db.activityLog.findMany({
-        where: {
-          action: {
-            in: [
-              'PAYMENT_SETTINGS_UPDATE',
-              'PAYOUT_SETTINGS_UPDATE',
-              'NOTIFICATIONS_SETTINGS_UPDATE',
-              'IP_BLOCK_ADD',
-              'IP_BLOCK_REMOVE',
-              'TOTP_ENABLE',
-              'TOTP_DISABLE',
-              'PAYMENT_METHOD_CREATE',
-              'PAYMENT_METHOD_UPDATE',
-              'PAYMENT_METHOD_DELETE',
-            ],
-          },
+      safeRun('listProviderSummaries', () => listProviderSummaries(), [] as Awaited<ReturnType<typeof listProviderSummaries>>),
+      safeRun('listPayoutSummaries', () => listPayoutSummaries(), [] as Awaited<ReturnType<typeof listPayoutSummaries>>),
+      safeRun('listSmsAdapters', async () => listSmsAdapters().map((a) => a.describe()), [] as ReturnType<ReturnType<typeof listSmsAdapters>[number]['describe']>[]),
+      safeRun('platformsStatus', () => platformsStatus(), [] as Awaited<ReturnType<typeof platformsStatus>>),
+      safeRun('smsProviderRow', () => db.systemSetting.findUnique({ where: { key: 'sms_provider' }, select: { value: true } }), null as { value: string } | null),
+      safeRun('ipBlockCount', () => db.ipBlockRule.count(), 0),
+      safeRun('totpEnabledCount', () => db.user.count({ where: { totpEnabled: true } }), 0),
+      safeRun('activeStaffCount', () => db.user.count({ where: { role: { key: { in: ['super_admin', 'admin', 'staff'] } }, status: 'active' } }), 0),
+      safeRun(
+        'recentEdits',
+        async () => {
+          const rows = await db.activityLog.findMany({
+            where: {
+              action: {
+                in: [
+                  'PAYMENT_SETTINGS_UPDATE',
+                  'PAYOUT_SETTINGS_UPDATE',
+                  'NOTIFICATIONS_SETTINGS_UPDATE',
+                  'IP_BLOCK_ADD',
+                  'IP_BLOCK_REMOVE',
+                  'TOTP_ENABLE',
+                  'TOTP_DISABLE',
+                  'PAYMENT_METHOD_CREATE',
+                  'PAYMENT_METHOD_UPDATE',
+                  'PAYMENT_METHOD_DELETE',
+                ],
+              },
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 30,
+            include: { actor: { select: { username: true } } },
+          });
+          return rows;
         },
-        orderBy: { createdAt: 'desc' },
-        take: 30,
-        include: { actor: { select: { username: true } } },
-      }),
+        // Empty fallback typed loose so we can still .map() with the
+        // actor relation in scope.
+        [] as Array<{
+          id: string;
+          action: string;
+          target: string | null;
+          detail: string | null;
+          actorId: string | null;
+          actorRole: string | null;
+          createdAt: Date;
+          actor?: { username: string } | null;
+        }>,
+      ),
     ]);
 
     const activeSmsKey = (smsProviderRow?.value ?? 'manual').trim() || 'manual';
     const cronSecretConfigured = Boolean(process.env.CRON_SECRET?.trim());
 
+    // Helper to safely shape provider cards even if a future adapter
+    // returns unexpected nulls. Loose unknown-cast on input keeps it
+    // working across the payment + payout adapter shapes which use
+    // their own status enums (AdapterConfigStatus / PayoutConfigStatus).
+    const toPaymentCard = (raw: unknown, href: string): ProviderCard => {
+      const p = (raw ?? {}) as { key?: unknown; label?: unknown; status?: unknown; description?: unknown; fields?: unknown };
+      return {
+        key: String(p.key ?? 'unknown'),
+        label: String(p.label ?? 'Unknown provider'),
+        status: String(p.status ?? 'requires_credentials'),
+        description: String(p.description ?? ''),
+        configureHref: href,
+        fieldCount: Array.isArray(p.fields) ? (p.fields as unknown[]).length : 0,
+      };
+    };
+
+    const paymentsCards: ProviderCard[] = (Array.isArray(payments) ? payments : []).map((p) => toPaymentCard(p, PAYMENT_GATEWAY_HREF));
+    const payoutsCards: ProviderCard[] = (Array.isArray(payouts) ? payouts : []).map((p) => toPaymentCard(p, PAYOUT_GATEWAY_HREF));
+    const smsCards: ProviderCard[] = (Array.isArray(smsAdaptersRaw) ? smsAdaptersRaw : []).map((raw) => {
+      const a = (raw ?? {}) as { key?: unknown; label?: unknown; status?: unknown; description?: unknown; settingKeys?: unknown };
+      return {
+        key: String(a.key ?? 'unknown'),
+        label: String(a.label ?? 'Unknown provider'),
+        status: String(a.status ?? 'requires_credentials'),
+        description: String(a.description ?? ''),
+        configureHref: NOTIFICATIONS_HREF,
+        fieldCount: Array.isArray(a.settingKeys) ? (a.settingKeys as unknown[]).length : 0,
+        isActive: String(a.key ?? '') === activeSmsKey,
+      };
+    });
+    const trackingCards: ProviderCard[] = (Array.isArray(trackingPlatforms) ? trackingPlatforms : []).map((raw) => {
+      const p = (raw ?? {}) as { key?: unknown; label?: unknown; live?: unknown; settingKeys?: unknown };
+      const settingKeys = Array.isArray(p.settingKeys) ? (p.settingKeys as unknown[]).map(String) : [];
+      return {
+        key: String(p.key ?? 'unknown'),
+        label: String(p.label ?? 'Unknown platform'),
+        status: p.live ? 'live' : 'requires_credentials',
+        description: settingKeys.length > 0 ? `Settings: ${settingKeys.join(', ')}` : '',
+        configureHref: NOTIFICATIONS_HREF,
+        fieldCount: settingKeys.length,
+      };
+    });
+
     return jsonOk({
       categories: {
-        // Each category surface is normalised to { key, label, status,
-        // description, configureHref, testHref }. status is one of
-        // 'live' | 'requires_credentials' | 'manual' | 'disabled'.
-        payments: payments.map((p) => ({
-          key: p.key,
-          label: p.label,
-          status: p.status,
-          description: p.description,
-          configureHref: PAYMENT_GATEWAY_HREF,
-          fieldCount: p.fields.length,
-        })),
-        payouts: payouts.map((p) => ({
-          key: p.key,
-          label: p.label,
-          status: p.status,
-          description: p.description,
-          configureHref: PAYOUT_GATEWAY_HREF,
-          fieldCount: p.fields.length,
-        })),
-        sms: smsAdapters.map((a) => ({
-          key: a.key,
-          label: a.label,
-          status: a.status,
-          description: a.description,
-          configureHref: NOTIFICATIONS_HREF,
-          fieldCount: a.settingKeys.length,
-          isActive: a.key === activeSmsKey,
-        })),
-        tracking: trackingPlatforms.map((p) => ({
-          key: p.key,
-          label: p.label,
-          status: p.live ? 'live' : 'requires_credentials',
-          description: `Settings: ${p.settingKeys.join(', ')}`,
-          configureHref: NOTIFICATIONS_HREF,
-          fieldCount: p.settingKeys.length,
-        })),
+        payments: paymentsCards,
+        payouts: payoutsCards,
+        sms: smsCards,
+        tracking: trackingCards,
       },
       platform: {
         activeSmsProvider: activeSmsKey,
@@ -132,11 +185,11 @@ export async function GET() {
         securityHref: SECURITY_HREF,
       },
       security: {
-        ipBlockCount,
-        totpEnabledUserCount: totpEnabledCount,
-        activeStaffCount,
+        ipBlockCount: Number(ipBlockCount ?? 0),
+        totpEnabledUserCount: Number(totpEnabledCount ?? 0),
+        activeStaffCount: Number(activeStaffCount ?? 0),
       },
-      recentEdits: recentEdits.map((e) => ({
+      recentEdits: (Array.isArray(recentEdits) ? recentEdits : []).map((e) => ({
         id: e.id,
         action: e.action,
         target: e.target,

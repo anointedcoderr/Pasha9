@@ -27,8 +27,10 @@ export const BRAND = {
   developer: {
     label: 'Built by Anointed Coder',
     name: 'Anointed Coder',
+    /** Public site for the developer; the "Anointed Coder" label in the footer links here. */
+    website: 'https://anointedcoder.com',
     email: 'info@anointedcoder.com',
-    telegram: 'https://t.me/anointedcoder',
+    telegram: 'https://t.me/AnointedCoder',
     whatsapp: 'https://wa.link/fi5z8a',
   },
   /** Copyright holder for the platform. */

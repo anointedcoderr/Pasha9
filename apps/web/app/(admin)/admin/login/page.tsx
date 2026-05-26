@@ -213,7 +213,17 @@ export default function AdminLoginPage() {
           )}
 
           <div className="mt-6 border-t border-neon/10 pt-4 text-center text-[11px] text-ink-lo">
-            <p>{BRAND.developer.label}</p>
+            <p>
+              Built by{' '}
+              <a
+                href={BRAND.developer.website}
+                target="_blank"
+                rel="noreferrer"
+                className="font-semibold text-ink-mid underline-offset-2 hover:text-ink-hi hover:underline"
+              >
+                {BRAND.developer.name}
+              </a>
+            </p>
             <p className="mt-1">
               <a href={`mailto:${BRAND.developer.email}`} className="hover:text-ink-hi">{BRAND.developer.email}</a>
             </p>
