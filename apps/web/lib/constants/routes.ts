@@ -62,5 +62,6 @@ export const ROUTES = {
     withdrawalLimits: '/admin/withdrawal-limits',
     recovery: '/admin/recovery',
     notifications: '/admin/notifications',
+    integrations: '/admin/integrations',
   },
 } as const;
