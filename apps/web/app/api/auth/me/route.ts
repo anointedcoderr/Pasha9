@@ -30,6 +30,7 @@ export async function GET() {
       country: true,
       lastLoginAt: true,
       phoneVerifiedAt: true,
+      totpEnabled: true,
       role: { select: { key: true, label: true } },
       wallet: { select: { balance: true, bonusBalance: true, lockedBalance: true, lottoBalance: true, currency: true } },
     },

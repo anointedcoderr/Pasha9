@@ -10,6 +10,10 @@ import { setAuthCookies, getClientIp, getUserAgent, revokePriorSessionsForUser, 
 import { loadEffectivePermissions } from '@/lib/auth/rbac';
 import { rateLimit } from '@/lib/auth/rate-limit';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
+import { isIpBlocked } from '@/lib/security/ip-block';
+import { recordLoginAttempt } from '@/lib/security/login-attempts';
+import { scoreLoginContext } from '@/lib/security/heuristics';
+import { signChallengeToken } from '@/lib/security/challenge-token';
 
 const schema = z.object({
   identifier: z.string().trim().min(3, 'Enter your phone or username').max(64),
@@ -24,8 +28,19 @@ function normalisePhone(input: string): string {
 
 export async function POST(req: NextRequest) {
   const ip = getClientIp() ?? 'unknown';
+  const ua = getUserAgent() ?? '';
   const limit = rateLimit(`login:${ip}`, 10, 60_000);
-  if (!limit.ok) return jsonError(429, 'RATE_LIMITED', 'Too many attempts. Try again in a minute.');
+  if (!limit.ok) {
+    await recordLoginAttempt({ identifier: '<unknown>', surface: 'user', ip, userAgent: ua, success: false, reason: 'rate_limited' });
+    return jsonError(429, 'RATE_LIMITED', 'Too many attempts. Try again in a minute.');
+  }
+
+  // M2K IP block list check.
+  const blocked = await isIpBlocked(ip);
+  if (blocked.blocked) {
+    await recordLoginAttempt({ identifier: '<unknown>', surface: 'user', ip, userAgent: ua, success: false, reason: 'ip_blocked', flags: ['ip_blocked'] });
+    return jsonError(403, 'IP_BLOCKED', 'Your IP is blocked. Contact support.');
+  }
 
   let body: unknown;
   try { body = await req.json(); } catch { return jsonError(400, 'BAD_JSON'); }
@@ -45,18 +60,32 @@ export async function POST(req: NextRequest) {
   });
 
   if (!user) {
+    await recordLoginAttempt({ identifier, surface: 'user', ip, userAgent: ua, success: false, reason: 'unknown_user' });
     return jsonError(401, 'INVALID_CREDENTIALS', 'Invalid username or password.');
   }
   if (user.status === 'blocked') {
-    // Make sure any leftover refresh session row from before the block
-    // is also revoked so the user cannot transparently refresh.
+    await recordLoginAttempt({ identifier, userId: user.id, surface: 'user', ip, userAgent: ua, success: false, reason: 'blocked' });
     await revokePriorSessionsForUser(user.id);
     return jsonError(403, 'USER_BLOCKED', 'This account is suspended. Contact support.');
   }
 
   const ok = await verifyPassword(password, user.passwordHash);
   if (!ok) {
+    await recordLoginAttempt({ identifier, userId: user.id, surface: 'user', ip, userAgent: ua, success: false, reason: 'bad_password' });
     return jsonError(401, 'INVALID_CREDENTIALS', 'Invalid username or password.');
+  }
+
+  const score = await scoreLoginContext({ userId: user.id, surface: 'user', ip, userAgent: ua });
+
+  // M2K: if TOTP is enabled, hold off issuing cookies and ask the
+  // client to complete via /api/auth/2fa/challenge.
+  if (user.totpEnabled) {
+    await recordLoginAttempt({
+      identifier, userId: user.id, surface: 'user', ip, userAgent: ua,
+      success: false, reason: '2fa_required', flags: score.flags,
+    });
+    const challengeToken = await signChallengeToken({ sub: user.id, surface: 'user' });
+    return jsonOk({ challenge: true, challengeToken, flags: score.flags });
   }
 
   await db.user.update({
@@ -85,8 +114,14 @@ export async function POST(req: NextRequest) {
       action: 'USER_LOGIN',
       target: user.id,
       ip,
-      userAgent: getUserAgent(),
+      userAgent: ua,
+      detail: score.flags.length > 0 ? score.flags.join(',') : null,
     },
+  });
+
+  await recordLoginAttempt({
+    identifier, userId: user.id, surface: 'user', ip, userAgent: ua,
+    success: true, reason: 'ok', flags: score.flags,
   });
 
   return jsonOk({
@@ -97,5 +132,6 @@ export async function POST(req: NextRequest) {
       role: user.role.key,
       status: user.status,
     },
+    flags: score.flags,
   });
 }

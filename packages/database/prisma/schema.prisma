@@ -202,6 +202,15 @@ model User {
   extraPermissions    UserPermission[]
   // M2H recovery tasks where this user is the target (NOT the staff).
   recoveryTasks       RecoveryTask[]   @relation("RecoveryTargetUser")
+  // M2K TOTP / 2FA. totpSecret is AES-GCM encrypted by
+  // lib/crypto/aead.ts before storage; never returned to the client.
+  // recoveryCodesHash is a JSON array of sha256-hashed single-use
+  // backup codes - consumed codes are removed in place.
+  totpSecret          String?
+  totpEnabled         Boolean   @default(false)
+  totpEnrolledAt      DateTime?
+  recoveryCodesHash   String?   @db.Text
+  loginAttempts       LoginAttempt[]    @relation("LoginAttemptUser")
 
   @@index([referredById])
   @@index([roleId])
@@ -1036,6 +1045,54 @@ model TrackingEvent {
 
   @@index([event, createdAt])
   @@index([userId, createdAt])
+}
+
+// ---------- M2K Security ----------
+
+// Append-only ledger of every login attempt (success + failure).
+// Powers the suspicious-activity heuristics, the per-user device
+// history on /dashboard/security, and the admin /admin/security
+// login-attempt feed. Failed attempts also accumulate here so the
+// rate-limit bucket is no longer the only signal of brute force.
+model LoginAttempt {
+  id           String   @id @default(cuid())
+  // identifier the user typed (username or phone). Useful for failed
+  // attempts where we never resolved a userId.
+  identifier   String
+  userId       String?
+  surface      String   // 'user' | 'admin'
+  ip           String?
+  userAgent    String?  @db.Text
+  success      Boolean  @default(false)
+  reason       String?  // 'ok' | 'bad_password' | 'unknown_user' | 'blocked' | 'rate_limited' | '2fa_required' | '2fa_failed' | 'ip_blocked'
+  // Heuristic flags surfaced at login time, comma-joined for cheap
+  // filtering (eg 'new_ip,foreign_country').
+  flags        String?
+  createdAt    DateTime @default(now())
+
+  user User? @relation("LoginAttemptUser", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([identifier, createdAt])
+  @@index([ip, createdAt])
+  @@index([success, createdAt])
+}
+
+// Admin-managed IP block list. Middleware consults this BEFORE the
+// JWT check so a blocked IP cannot probe admin or auth surfaces.
+// Supports both single IPs and CIDR ranges. The cron sweep clears
+// rows past expiresAt so temp blocks self-heal.
+model IpBlockRule {
+  id            String   @id @default(cuid())
+  ip            String   // either a single ip or a CIDR (10.0.0.0/24)
+  reason        String?
+  expiresAt     DateTime?
+  createdById   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([ip])
+  @@index([expiresAt])
 }
 
 model SystemSetting {

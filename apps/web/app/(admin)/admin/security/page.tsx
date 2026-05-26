@@ -1,124 +1,316 @@
 // Built by Anointed Coder.
 //
-// Security Center. M1 surfaces what is already implemented honestly:
-// bcrypt hashing, JWT cookies, rate-limited auth endpoints, session
-// revocation on logout/refresh. Everything else (2FA, IP block, login
-// alerts, suspicious-activity detection) is clearly marked as Ready
-// for M2 since it needs a provider or extra schema.
+// M2K Security Center. Three tabs:
+//   Login attempts   filterable feed from LoginAttempt
+//   IP block list    CRUD over IpBlockRule
+//   Tooling notes    docs for 2FA enrollment + cron-secret + SMS
+//                    alert + heuristic flag glossary
 
 'use client';
 
+import { useCallback, useEffect, useState } from 'react';
 import { PageHeader } from '@/components/site/PageHeader';
 import { Card, CardHeader } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
-import { ShieldCheck, Lock, KeyRound, Smartphone, Wifi, AlertOctagon, Bell, History, Network } from 'lucide-react';
+import { FormField, Input } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/Tabs';
+import { ShieldCheck, RefreshCw, Ban, Plus, ListChecks, Wifi, Info } from 'lucide-react';
+import { cn } from '@/lib/utils/cn';
 
-interface Row {
-  icon: React.ComponentType<{ className?: string }>;
-  title: string;
-  body: string;
-  status: 'live' | 'm2' | 'provider';
+interface AttemptRow {
+  id: string;
+  identifier: string;
+  userId: string | null;
+  username: string | null;
+  surface: string;
+  ip: string | null;
+  userAgent: string | null;
+  success: boolean;
+  reason: string | null;
+  flags: string[];
+  createdAt: string;
 }
 
-const ROWS: Row[] = [
-  {
-    icon: Lock,
-    title: 'Password hashing',
-    body: 'bcrypt cost 12 on every register / password change. Already live.',
-    status: 'live',
-  },
-  {
-    icon: KeyRound,
-    title: 'Session tokens',
-    body: 'JWT access cookie (8h) + 30-day refresh cookie with DB-tracked sessions. Refresh rotates the secret on every renewal and revokes the previous session row.',
-    status: 'live',
-  },
-  {
-    icon: Bell,
-    title: 'Login alerts (email / SMS)',
-    body: 'Each successful login already writes to ActivityLog. Notifying the user out-of-band needs the M2 email / SMS provider hookup.',
-    status: 'provider',
-  },
-  {
-    icon: Smartphone,
-    title: 'Two-factor (TOTP)',
-    body: 'OtpCode schema is already in place. Enforcing TOTP at login + UI to enrol the secret ships in M2 alongside the SMS provider.',
-    status: 'm2',
-  },
-  {
-    icon: Wifi,
-    title: 'IP block list',
-    body: 'Schema addition + middleware check. M2 deliverable.',
-    status: 'm2',
-  },
-  {
-    icon: AlertOctagon,
-    title: 'Suspicious activity heuristics',
-    body: 'Velocity rules on deposit / withdraw / login flag-and-hold. M2 deliverable, depends on the M2 reports cohort engine.',
-    status: 'm2',
-  },
-  {
-    icon: History,
-    title: 'Login history per user',
-    body: 'Activity log records every USER_LOGIN; the user dashboard already shows recent device activity. A per-user filtered view in admin ships in M2.',
-    status: 'm2',
-  },
-  {
-    icon: Network,
-    title: 'Brute-force protection',
-    body: 'Per-IP rate limit on login / register / reset / OTP. Already live (10 attempts / 60s).',
-    status: 'live',
-  },
-];
-
-function chipFor(status: Row['status']) {
-  if (status === 'live') return <Chip tone="ok">Live</Chip>;
-  if (status === 'provider') return <Chip tone="warn">Requires provider</Chip>;
-  return <Chip tone="info">Ready for M2</Chip>;
+interface IpRule {
+  id: string;
+  ip: string;
+  reason: string | null;
+  expiresAt: string | null;
+  createdAt: string;
 }
 
 export default function AdminSecurityPage() {
+  const [tab, setTab] = useState<'attempts' | 'ip' | 'docs'>('attempts');
+
+  // Attempts
+  const [attempts, setAttempts] = useState<AttemptRow[]>([]);
+  const [attemptsLoading, setAttemptsLoading] = useState(true);
+  const [surface, setSurface] = useState('');
+  const [successFilter, setSuccessFilter] = useState('');
+  const [query, setQuery] = useState('');
+  const [ipFilter, setIpFilter] = useState('');
+
+  // IP rules
+  const [rules, setRules] = useState<IpRule[]>([]);
+  const [ipDraft, setIpDraft] = useState('');
+  const [ipReason, setIpReason] = useState('');
+  const [ipExpiry, setIpExpiry] = useState('');
+  const [creatingRule, setCreatingRule] = useState(false);
+
+  const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const flashToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 4500); };
+
+  const loadAttempts = useCallback(async () => {
+    setAttemptsLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams();
+      if (surface) params.set('surface', surface);
+      if (successFilter) params.set('success', successFilter);
+      if (query.trim()) params.set('q', query.trim());
+      if (ipFilter.trim()) params.set('ip', ipFilter.trim());
+      params.set('take', '150');
+      const res = await fetch(`/api/admin/security/login-attempts?${params.toString()}`, { cache: 'no-store' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message ?? data?.code);
+      setAttempts(data.attempts as AttemptRow[]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load');
+    } finally { setAttemptsLoading(false); }
+  }, [surface, successFilter, query, ipFilter]);
+
+  const loadRules = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/security/ip-blocks', { cache: 'no-store' });
+      const data = await res.json();
+      if (res.ok) setRules(data.rules as IpRule[]);
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => { loadAttempts(); loadRules(); }, [loadAttempts, loadRules]);
+
+  const addRule = async () => {
+    const ip = ipDraft.trim();
+    if (!ip) return;
+    setCreatingRule(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/admin/security/ip-blocks', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          ip,
+          reason: ipReason.trim() || undefined,
+          expiresAt: ipExpiry ? new Date(ipExpiry).toISOString() : undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message ?? data?.code ?? 'Add failed');
+      setIpDraft(''); setIpReason(''); setIpExpiry('');
+      flashToast(`Blocked ${ip}. Takes effect within ~60s as the cache refreshes (or immediately on the API that wrote it).`);
+      loadRules();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Add failed');
+    } finally { setCreatingRule(false); }
+  };
+
+  const removeRule = async (r: IpRule) => {
+    if (!confirm(`Unblock ${r.ip}?`)) return;
+    try {
+      const res = await fetch(`/api/admin/security/ip-blocks/${r.id}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.message ?? data?.code);
+      flashToast(`Unblocked ${r.ip}.`);
+      loadRules();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Remove failed');
+    }
+  };
+
   return (
     <>
       <PageHeader
-        title="Security Center"
-        subtitle="Live protections + the M2 / provider-gated roadmap"
+        title="Security"
+        subtitle="Login audit, IP block list, 2FA / TOTP enrollment, suspicious-activity flags"
         icon={<ShieldCheck className="h-5 w-5" />}
+        action={
+          <Button variant="ghost" leftIcon={<RefreshCw className={cn('h-3.5 w-3.5', attemptsLoading && 'animate-spin')} />} onClick={() => { loadAttempts(); loadRules(); }}>
+            Reload
+          </Button>
+        }
       />
 
-      <Card padding="md" className="mb-4">
-        <p className="text-xs text-ink-mid">
-          This page shows the current state of every security-related control on the platform. Items marked
-          <span className="mx-1 inline-flex items-center"><Chip tone="ok">Live</Chip></span>
-          are enforced in M1. Items marked
-          <span className="mx-1 inline-flex items-center"><Chip tone="info">Ready for M2</Chip></span>
-          have the schema or call site reserved and ship in Milestone 2. Items marked
-          <span className="mx-1 inline-flex items-center"><Chip tone="warn">Requires provider</Chip></span>
-          depend on the client supplying an SMS / email / IP-intel provider key first.
-        </p>
-      </Card>
+      {toast ? <Card padding="md" className="mb-4"><p className="text-sm text-signal-ok">{toast}</p></Card> : null}
+      {error ? <Card padding="md" className="mb-4"><p className="text-sm text-signal-danger">{error}</p></Card> : null}
 
-      <div className="grid gap-3 md:grid-cols-2">
-        {ROWS.map((r) => {
-          const Icon = r.icon;
-          return (
-            <Card key={r.title} padding="lg">
-              <div className="flex items-start gap-3">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gold-500/10 text-gold-300">
-                  <Icon className="h-5 w-5" />
-                </span>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-extrabold text-ink-hi">{r.title}</p>
-                    {chipFor(r.status)}
-                  </div>
-                  <p className="mt-1 text-xs leading-snug text-ink-mid">{r.body}</p>
-                </div>
-              </div>
+      <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
+        <TabsList>
+          <TabsTrigger value="attempts"><ListChecks className="mr-1.5 h-3.5 w-3.5" /> Login attempts</TabsTrigger>
+          <TabsTrigger value="ip"><Wifi className="mr-1.5 h-3.5 w-3.5" /> IP block list</TabsTrigger>
+          <TabsTrigger value="docs"><Info className="mr-1.5 h-3.5 w-3.5" /> Tooling</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="attempts">
+          <Card padding="md" className="mb-3">
+            <div className="flex flex-wrap items-end gap-3">
+              <FormField label="Surface">
+                <Select value={surface} onChange={(e) => setSurface(e.target.value)}>
+                  <option value="">All</option>
+                  <option value="admin">Admin</option>
+                  <option value="user">Player</option>
+                </Select>
+              </FormField>
+              <FormField label="Result">
+                <Select value={successFilter} onChange={(e) => setSuccessFilter(e.target.value)}>
+                  <option value="">All</option>
+                  <option value="true">Success only</option>
+                  <option value="false">Failed only</option>
+                </Select>
+              </FormField>
+              <FormField label="Identifier contains">
+                <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="username or phone" />
+              </FormField>
+              <FormField label="IP contains">
+                <Input value={ipFilter} onChange={(e) => setIpFilter(e.target.value)} placeholder="103.21.59" />
+              </FormField>
+              <Button leftIcon={<RefreshCw className="h-3.5 w-3.5" />} onClick={loadAttempts}>Apply</Button>
+            </div>
+          </Card>
+
+          {attemptsLoading ? <p className="text-sm text-ink-mid">Loading...</p> : attempts.length === 0 ? (
+            <Card padding="lg"><p className="text-sm text-ink-mid">No login attempts match the current filter.</p></Card>
+          ) : (
+            <Card padding="md" className="overflow-x-auto">
+              <table className="w-full min-w-[1000px] text-sm">
+                <thead className="text-xs uppercase tracking-wider text-ink-lo">
+                  <tr>
+                    <th className="px-2 py-2 text-left">When</th>
+                    <th className="px-2 py-2 text-left">Surface</th>
+                    <th className="px-2 py-2 text-left">Identifier</th>
+                    <th className="px-2 py-2 text-left">User</th>
+                    <th className="px-2 py-2 text-left">IP</th>
+                    <th className="px-2 py-2 text-left">Result</th>
+                    <th className="px-2 py-2 text-left">Reason</th>
+                    <th className="px-2 py-2 text-left">Flags</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {attempts.map((a) => (
+                    <tr key={a.id} className="border-t border-neon/10 align-top">
+                      <td className="px-2 py-2 text-xs text-ink-lo">{new Date(a.createdAt).toLocaleString()}</td>
+                      <td className="px-2 py-2"><Chip tone={a.surface === 'admin' ? 'info' : 'neutral'}>{a.surface}</Chip></td>
+                      <td className="px-2 py-2 font-mono text-xs">{a.identifier}</td>
+                      <td className="px-2 py-2 text-xs">{a.username ?? <span className="text-ink-lo">-</span>}</td>
+                      <td className="px-2 py-2 font-mono text-xs">{a.ip ?? '-'}</td>
+                      <td className="px-2 py-2"><Chip tone={a.success ? 'ok' : 'danger'}>{a.success ? 'ok' : 'fail'}</Chip></td>
+                      <td className="px-2 py-2 text-xs text-ink-mid">{a.reason ?? '-'}</td>
+                      <td className="px-2 py-2 text-xs">
+                        {a.flags.length === 0 ? <span className="text-ink-lo">-</span> : a.flags.map((f) => <Chip key={f} tone="warn" className="mr-1">{f}</Chip>)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </Card>
-          );
-        })}
-      </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="ip">
+          <Card padding="md" className="mb-3">
+            <CardHeader title="Block a new IP or range" subtitle="IPv4 or CIDR (e.g. 10.0.0.0/24). Optional expiry auto-clears the rule." />
+            <form
+              className="flex flex-wrap items-end gap-3"
+              onSubmit={(e) => { e.preventDefault(); void addRule(); }}
+            >
+              <FormField label="IP / CIDR" required>
+                <Input value={ipDraft} onChange={(e) => setIpDraft(e.target.value)} placeholder="103.21.59.42 or 103.21.59.0/24" />
+              </FormField>
+              <FormField label="Reason">
+                <Input value={ipReason} onChange={(e) => setIpReason(e.target.value)} placeholder="e.g. brute-force attempts" />
+              </FormField>
+              <FormField label="Expires (optional)">
+                <Input type="datetime-local" value={ipExpiry} onChange={(e) => setIpExpiry(e.target.value)} />
+              </FormField>
+              <Button type="submit" leftIcon={<Plus className="h-4 w-4" />} loading={creatingRule}>Block</Button>
+            </form>
+          </Card>
+
+          {rules.length === 0 ? (
+            <Card padding="lg"><p className="text-sm text-ink-mid">No IPs are currently blocked.</p></Card>
+          ) : (
+            <Card padding="md" className="overflow-x-auto">
+              <table className="w-full min-w-[700px] text-sm">
+                <thead className="text-xs uppercase tracking-wider text-ink-lo">
+                  <tr>
+                    <th className="px-2 py-2 text-left">IP / CIDR</th>
+                    <th className="px-2 py-2 text-left">Reason</th>
+                    <th className="px-2 py-2 text-left">Expires</th>
+                    <th className="px-2 py-2 text-left">Added</th>
+                    <th className="px-2 py-2 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rules.map((r) => (
+                    <tr key={r.id} className="border-t border-neon/10">
+                      <td className="px-2 py-2 font-mono text-sm text-ink-hi">{r.ip}</td>
+                      <td className="px-2 py-2 text-xs text-ink-mid">{r.reason ?? '-'}</td>
+                      <td className="px-2 py-2 text-xs text-ink-lo">{r.expiresAt ? new Date(r.expiresAt).toLocaleString() : 'never'}</td>
+                      <td className="px-2 py-2 text-xs text-ink-lo">{new Date(r.createdAt).toLocaleString()}</td>
+                      <td className="px-2 py-2 text-right">
+                        <Button size="sm" variant="ghost" leftIcon={<Ban className="h-3.5 w-3.5" />} onClick={() => removeRule(r)}>Unblock</Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Card>
+          )}
+        </TabsContent>
+
+        <TabsContent value="docs">
+          <Card padding="lg">
+            <CardHeader title="2FA / TOTP enrollment" subtitle="Each admin enrolls their own authenticator from /dashboard/security. The login flow then asks for the 6-digit code after password." />
+            <ol className="ml-5 list-decimal space-y-1 text-sm text-ink-mid">
+              <li>Open /dashboard/security and click <b>Enable 2FA</b>.</li>
+              <li>Scan the QR with Google Authenticator / Authy / 1Password.</li>
+              <li>Enter the 6-digit code to confirm. <b>Recovery codes</b> are shown ONCE - copy and store offline.</li>
+              <li>On the next /admin/login, you will be asked for the code before the session is issued.</li>
+            </ol>
+          </Card>
+
+          <Card padding="lg" className="mt-4">
+            <CardHeader title="Heuristic flag glossary" subtitle="Flags written to LoginAttempt.flags and surfaced in the table above." />
+            <dl className="grid grid-cols-1 gap-2 text-sm md:grid-cols-2">
+              <Glossary k="admin_surface" v="The attempt targeted /admin/login." />
+              <Glossary k="multiple_recent_failures" v="3+ failed attempts for this user in the last 15 minutes." />
+              <Glossary k="ip_repeated_failures" v="3+ failed attempts from this IP in the last 15 minutes (anonymous)." />
+              <Glossary k="new_ip" v="First time this user has logged in successfully from this IP." />
+              <Glossary k="ip_blocked" v="Request rejected because the IP is on the block list." />
+              <Glossary k="2fa" v="Attempt involved the 2FA challenge step." />
+              <Glossary k="recovery_used" v="A single-use recovery code completed the 2FA challenge." />
+            </dl>
+          </Card>
+
+          <Card padding="lg" className="mt-4">
+            <CardHeader title="Encryption + alerts" subtitle="TOTP secrets are AES-256-GCM encrypted before storage. Admin login alerts dispatch via the M2I SMS provider configured at /admin/notifications." />
+            <p className="text-sm text-ink-mid">
+              Set <code className="font-mono text-xs text-ink-hi">SECRETS_KEY</code> in your VPS .env to a 64-char hex string so encrypted blobs survive a JWT secret rotation. Without it the wrapper falls back to a key derived from <code className="font-mono text-xs text-ink-hi">JWT_SECRET</code>.
+            </p>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </>
+  );
+}
+
+function Glossary({ k, v }: { k: string; v: string }) {
+  return (
+    <div className="rounded-lg border border-neon/10 bg-base-deep/40 p-3">
+      <dt className="font-mono text-xs text-ink-hi">{k}</dt>
+      <dd className="mt-1 text-xs text-ink-mid">{v}</dd>
+    </div>
   );
 }
