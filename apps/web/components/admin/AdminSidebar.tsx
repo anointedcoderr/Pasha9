@@ -36,6 +36,7 @@ import {
   Banknote,
   CreditCard,
   SlidersHorizontal,
+  HeartHandshake,
 } from 'lucide-react';
 import { Logo } from '@/components/site/Logo';
 import { ROUTES } from '@/lib/constants/routes';
@@ -69,6 +70,7 @@ const GROUPS = [
       { key: 'users', href: ROUTES.admin.users, icon: Users },
       { key: 'balance', href: ROUTES.admin.balance, icon: Wallet },
       { key: 'referrals', href: ROUTES.admin.referrals, icon: Network },
+      { key: 'recovery', href: ROUTES.admin.recovery, icon: HeartHandshake },
     ],
   },
   {

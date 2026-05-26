@@ -200,6 +200,8 @@ model User {
   lotteryWinnings     LotteryWinning[]
   // M2G per-staff permission grants (additive, beyond role baseline).
   extraPermissions    UserPermission[]
+  // M2H recovery tasks where this user is the target (NOT the staff).
+  recoveryTasks       RecoveryTask[]   @relation("RecoveryTargetUser")
 
   @@index([referredById])
   @@index([roleId])
@@ -884,6 +886,100 @@ model SupportTicket {
   user User? @relation(fields: [userId], references: [id])
 
   @@index([status])
+}
+
+// ---------- M2H Player Recovery CRM ----------
+
+// Admin-configurable inactivity rule. Drives both the read-only
+// segment preview (which users currently match) and the automatic
+// task spawner (when autoCreateTasks=true the cron sweep creates a
+// RecoveryTask for every matching user that does not already have an
+// open task).
+//
+// kind values:
+//   no_login        threshold = days since lastLoginAt
+//   no_deposit      threshold = days since last approved deposit
+//   no_bet          threshold = days since last Transaction(type=bet|win)
+//                                (proxy until the live wager engine ships)
+//   balance_below   threshold = BDT, matches users with wallet.balance < threshold
+model RecoveryRule {
+  id              String        @id @default(cuid())
+  key             String?       @unique           // optional stable lookup key
+  name            String
+  kind            String        // see comment above
+  threshold       Decimal       @default(0) @db.Decimal(14, 2)
+  segmentLabel    String?
+  priority        Int           @default(0)
+  status          ContentStatus @default(active)
+  autoCreateTasks Boolean       @default(false)
+  meta            Json?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  tasks RecoveryTask[]
+
+  @@index([status])
+  @@index([kind])
+}
+
+// One CRM follow-up on one user, assigned to (or worked by) one staff
+// member. Lifecycle:
+//   open          newly materialized, not yet claimed
+//   in_progress   claimed by a staff (lockedByStaffId set, lockedUntil
+//                  set to now + claim TTL). Two staff cannot work the
+//                  same task while the lock is live.
+//   won           staff converted the player (deposited, called back,
+//                  etc.). Recorded on close.
+//   lost          staff exhausted attempts, no conversion.
+//   abandoned     admin manually cancelled.
+model RecoveryTask {
+  id                  String   @id @default(cuid())
+  userId              String
+  ruleId              String?
+  assignedToStaffId   String?
+  status              String   @default("open")
+  lockedByStaffId     String?
+  lockedUntil         DateTime?
+  lastAttemptAt       DateTime?
+  lastAttemptOutcome  String?
+  attemptCount        Int      @default(0)
+  closeReason         String?
+  closedAt            DateTime?
+  closedByStaffId     String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  user       User                  @relation("RecoveryTargetUser", fields: [userId], references: [id], onDelete: Cascade)
+  rule       RecoveryRule?         @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+  attempts   RecoveryContactLog[]
+
+  // Idempotency: we only allow one open/in_progress task per (user, rule)
+  // pair. Closed tasks are kept for audit.
+  @@index([userId])
+  @@index([status])
+  @@index([assignedToStaffId])
+  @@index([lockedByStaffId])
+  @@index([ruleId])
+}
+
+// Per-attempt audit ledger. Every call / sms / whatsapp / note logged
+// here. Powers the staff performance report and the timeline a
+// supervisor sees on a task. Channel + outcome are free strings so
+// the admin can add new outreach methods without a schema change.
+model RecoveryContactLog {
+  id           String   @id @default(cuid())
+  taskId       String
+  staffId      String
+  channel      String   // call | sms | whatsapp | email | other
+  outcome      String   // no_answer | callback | not_interested | converted | wrong_number | other
+  notes        String?  @db.Text
+  meta         Json?
+  attemptedAt  DateTime @default(now())
+
+  task RecoveryTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, attemptedAt])
+  @@index([staffId, attemptedAt])
 }
 
 model SystemSetting {
