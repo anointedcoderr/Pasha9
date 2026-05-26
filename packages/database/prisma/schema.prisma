@@ -207,6 +207,9 @@ model User {
   @@index([roleId])
   @@index([status])
   @@index([isAffiliate])
+  // M2J reports: cohort + signup time-series scan this column on
+  // every dashboard load. Cheap index, big win.
+  @@index([createdAt])
 }
 
 model Session {
@@ -315,6 +318,8 @@ model Deposit {
   @@index([status])
   @@index([userId])
   @@index([providerRef])
+  // M2J: time-series + cohort reports filter by createdAt range.
+  @@index([createdAt])
 }
 
 model Withdrawal {
@@ -346,6 +351,8 @@ model Withdrawal {
   @@index([userId])
   @@index([providerRef])
   @@index([processingState])
+  // M2J: time-series + cohort reports filter by createdAt range.
+  @@index([createdAt])
 }
 
 // Append-only timeline of every state change on a Withdrawal. Lets
