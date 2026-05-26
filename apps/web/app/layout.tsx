@@ -3,6 +3,7 @@ import { fontAdmin, fontBn, fontEn } from '@/styles/fonts';
 import { Providers } from './providers';
 import { resolveLang } from '@/lib/i18n/server';
 import { DynamicFavicon } from '@/components/site/DynamicFavicon';
+import { TrackingScripts } from '@/components/site/TrackingScripts';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -55,6 +56,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className={`${bodyFont} antialiased`}>
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
         <DynamicFavicon />
+        <TrackingScripts />
         <Providers initialLang={initialLang}>{children}</Providers>
       </body>
     </html>

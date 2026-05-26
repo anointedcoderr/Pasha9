@@ -28,6 +28,8 @@ import { jsonOk, jsonError } from '@/lib/auth/errors';
 import { accrueLotteryTickets } from '@/lib/lotto/tickets';
 import { applyDepositBonuses, type ApplyDepositResult } from '@/lib/bonuses/engine';
 import { accrueCommissionsOnDeposit, type AccrualResult as CommissionAccrualResult } from '@/lib/affiliate/engine';
+import { sendSms } from '@/lib/sms/service';
+import { fireEvent } from '@/lib/tracking/dispatcher';
 
 const schema = z.object({
   adminNote: z.string().max(500).optional(),
@@ -209,6 +211,36 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         error: commissionResult.error,
       },
     });
+
+    // M2I: notify the user + fire conversion event. Both fail safe -
+    // wrapped in try/catch and logged. Never blocks the approve
+    // response. Both go through NotificationLog / TrackingEvent so
+    // /admin/notifications shows what happened.
+    try {
+      const user = await db.user.findUnique({ where: { id: deposit.userId }, select: { phone: true, email: true } });
+      if (user?.phone) {
+        await sendSms({
+          phone: user.phone,
+          userId: deposit.userId,
+          template: 'deposit_approved',
+          triggerKey: `deposit:approved:${deposit.id}`,
+          body: `Pasha 9: Your deposit of ${Number(amount).toLocaleString()} BDT has been approved and credited to your wallet.`,
+        });
+      }
+      await fireEvent({
+        event: 'deposit',
+        source: 'server',
+        userId: deposit.userId,
+        value: Number(amount),
+        currency: 'BDT',
+        reference: deposit.id,
+        emailLowercase: user?.email?.toLowerCase() ?? null,
+        phoneE164: user?.phone ?? null,
+        payload: { method: deposit.method, isFirstDeposit: bonusResult.isFirstDeposit },
+      });
+    } catch (err) {
+      console.error('[deposit-approve] notify/track failed', err);
+    }
 
     return jsonOk({
       deposit: updated,

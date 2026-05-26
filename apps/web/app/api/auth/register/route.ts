@@ -97,6 +97,22 @@ export async function POST(req: NextRequest) {
     },
   });
 
+  // M2I: fire signup conversion event (fail-safe).
+  try {
+    const { fireEvent } = await import('@/lib/tracking/dispatcher');
+    await fireEvent({
+      event: 'signup',
+      source: 'server',
+      userId: user.id,
+      reference: user.id,
+      phoneE164: user.phone,
+      ip,
+      userAgent: getUserAgent() ?? null,
+    });
+  } catch (err) {
+    console.error('[register] tracking fire failed', err);
+  }
+
   return jsonOk({
     user: {
       id: user.id,

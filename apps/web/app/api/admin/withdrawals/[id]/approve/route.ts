@@ -18,6 +18,8 @@ import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db/client';
 import { withAuth, ensurePermission, recordActivity } from '@/lib/auth/guard';
 import { jsonOk, jsonError } from '@/lib/auth/errors';
+import { sendSms } from '@/lib/sms/service';
+import { fireEvent } from '@/lib/tracking/dispatcher';
 
 const schema = z.object({ adminNote: z.string().max(500).optional() });
 
@@ -90,6 +92,33 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       target: withdrawal.id,
       meta: { userId: withdrawal.userId, amount: Number(amount) },
     });
+
+    // M2I notify + track (never blocks the response).
+    try {
+      const user = await db.user.findUnique({ where: { id: withdrawal.userId }, select: { phone: true, email: true } });
+      if (user?.phone) {
+        await sendSms({
+          phone: user.phone,
+          userId: withdrawal.userId,
+          template: 'withdrawal_approved',
+          triggerKey: `withdrawal:approved:${withdrawal.id}`,
+          body: `Pasha 9: Your withdrawal of ${Number(amount).toLocaleString()} BDT has been approved. The payout will reach your ${withdrawal.method} account shortly.`,
+        });
+      }
+      await fireEvent({
+        event: 'withdrawal',
+        source: 'server',
+        userId: withdrawal.userId,
+        value: Number(amount),
+        currency: 'BDT',
+        reference: withdrawal.id,
+        emailLowercase: user?.email?.toLowerCase() ?? null,
+        phoneE164: user?.phone ?? null,
+        payload: { method: withdrawal.method },
+      });
+    } catch (err) {
+      console.error('[withdrawal-approve] notify/track failed', err);
+    }
 
     return jsonOk({ withdrawal: updated });
   });

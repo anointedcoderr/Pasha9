@@ -45,6 +45,7 @@ import {
   CreditCard,
   SlidersHorizontal,
   HeartHandshake,
+  Bell,
 } from 'lucide-react';
 import { Logo } from '@/components/site/Logo';
 import { ROUTES } from '@/lib/constants/routes';
@@ -118,6 +119,7 @@ const GROUPS = [
     items: [
       { key: 'reports', href: ROUTES.admin.reports, icon: BarChart3 },
       { key: 'marketing', href: ROUTES.admin.marketing, icon: Sparkles },
+      { key: 'notifications', href: ROUTES.admin.notifications, icon: Bell },
     ],
   },
   {

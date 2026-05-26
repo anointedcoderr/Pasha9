@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { randomInt, createHash } from 'node:crypto';
 import { db } from '@/lib/db/client';
 import { rateLimit } from '@/lib/auth/rate-limit';
-import { getOtpProvider } from '@/lib/otp';
+import { sendOtpSms } from '@/lib/sms/service';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 
 const schema = z.object({
@@ -54,16 +54,25 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  const provider = getOtpProvider();
-  const send = await provider.send(phone, code, purpose);
+  const send = await sendOtpSms(phone, code, purpose);
 
-  if (!send.ok) {
-    return jsonError(503, 'OTP_PROVIDER_NOT_CONFIGURED', 'OTP delivery is not configured yet. Please contact support.');
+  // M2I: a 'manual' provider counts as ok=true (the code lands in
+  // NotificationLog so admin can read + relay). A real provider
+  // returning ok=false is a soft failure - the OtpCode row already
+  // exists so the user can still complete verification if the admin
+  // hand-delivers the code.
+  if (!send.ok && send.provider !== 'manual' && send.provider !== 'test') {
+    console.error('[otp] SMS provider failed', { provider: send.provider, code: send.errorCode });
+    return jsonError(503, 'OTP_DELIVERY_FAILED', 'OTP could not be delivered right now. Please try again or contact support.');
   }
 
   return jsonOk({
-    delivered: provider.name,
+    delivered: send.provider,
     expiresInMinutes: TTL_MIN,
-    devCode: send.devCode,
+    // dev-only convenience: return the bare code in dev so the QA
+    // panel can fill it in automatically. Never returned in
+    // production (admin must read the code from NotificationLog
+    // when the manual adapter is in use).
+    devCode: process.env.NODE_ENV !== 'production' ? code : undefined,
   });
 }

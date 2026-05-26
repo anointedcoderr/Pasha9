@@ -982,6 +982,55 @@ model RecoveryContactLog {
   @@index([staffId, attemptedAt])
 }
 
+// ---------- M2I Notifications + Tracking ----------
+
+// Per-send audit ledger for outbound SMS / WhatsApp / email. Captures
+// who triggered it, which adapter handled the send, success/failure
+// and the provider reference for support follow-up. Used by the
+// /admin/notifications history view and by retry/dedupe logic so a
+// retry attempt can find the prior failed send.
+model NotificationLog {
+  id          String   @id @default(cuid())
+  channel     String   // sms | whatsapp | email | other
+  provider    String?  // adapter key actually used (sslwireless, twilio, manual, test, ...)
+  recipient   String   // phone or email - kept plain text for support; never logged in app logs
+  template    String?  // otp_request | deposit_approved | withdrawal_paid | recovery_message | custom
+  body        String   @db.Text
+  userId      String?
+  triggerKey  String?  // optional dedupe key (e.g. otp:<phone>:<purpose>)
+  ok          Boolean  @default(false)
+  ref         String?  // provider message id
+  errorCode   String?
+  errorBody   String?  @db.Text
+  meta        Json?
+  createdAt   DateTime @default(now())
+
+  @@index([channel, createdAt])
+  @@index([userId, createdAt])
+  @@index([triggerKey])
+}
+
+// Per-fire audit ledger for tracking pixel + conversion events.
+// Each row is one canonical event that may fan out to multiple
+// platforms (FB, TikTok, GA4, Google Ads). Status is recorded per
+// platform inside `meta.results`. Powers the admin tracking page so
+// the operator can verify a pixel actually fired.
+model TrackingEvent {
+  id          String   @id @default(cuid())
+  event       String   // signup | login | deposit | withdrawal | lotto_bet | bonus_claim | custom
+  source      String   @default("server") // server | client
+  userId      String?
+  value       Decimal? @db.Decimal(14, 2)
+  currency    String?  @default("BDT")
+  reference   String?  // depositId, withdrawalId, etc
+  payload     Json?
+  results     Json?    // per-platform { fb: 'ok' | 'skipped:no_id' | 'error:...' }
+  createdAt   DateTime @default(now())
+
+  @@index([event, createdAt])
+  @@index([userId, createdAt])
+}
+
 model SystemSetting {
   id        String          @id @default(cuid())
   key       String          @unique
