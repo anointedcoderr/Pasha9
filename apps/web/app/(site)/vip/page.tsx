@@ -44,6 +44,12 @@ export default function VipPage() {
         title={t('vip.title')}
         description={t('vip.subtitle')}
         accent="royal"
+        category="vip"
+        chips={[
+          { label: 'Elite', tone: 'gold' },
+          { label: 'Invite Only', tone: 'rose' },
+          { label: 'Higher Limits', tone: 'sky' },
+        ]}
       />
 
       <section className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">

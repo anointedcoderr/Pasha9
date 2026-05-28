@@ -168,6 +168,12 @@ export default function LottoPage() {
             : 'Draws every day at 7:30 PM BST. Tickets are earned automatically from approved deposits.'
         }
         accent="yellow"
+        category="lotto"
+        chips={[
+          { label: 'Daily', tone: 'gold' },
+          { label: '4D Draw', tone: 'rose' },
+          { label: 'Deposit Earn', tone: 'sky' },
+        ]}
       />
 
       {/* Top strip: next draw + draw timing */}

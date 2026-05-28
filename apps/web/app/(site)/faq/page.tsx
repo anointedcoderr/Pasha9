@@ -71,6 +71,11 @@ export default function FaqPage() {
             : 'Everything you need to know to play on Pasha 9.'
         }
         accent="yellow"
+        category="faq"
+        chips={[
+          { label: 'Help', tone: 'gold' },
+          { label: '24/7', tone: 'emerald' },
+        ]}
       />
 
       <section className="space-y-2">

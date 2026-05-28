@@ -7,6 +7,7 @@ import { CategoryCatalog } from '@/components/site/CategoryCatalog';
 import { mockGames, gamesByCategory } from '@/lib/mock/games';
 import { mockCategories } from '@/lib/mock/categories';
 import { useT, useLang } from '@/lib/i18n/context';
+import type { CategoryCode } from '@/components/site/CategoryHeroArt';
 
 type Accent = 'yellow' | 'blue' | 'royal' | 'red' | 'green' | 'navy';
 type SyntheticSlug = 'crash' | 'table' | 'fast';
@@ -23,6 +24,22 @@ const ACCENT_BY_SLUG: Record<string, Accent> = {
   crash: 'red',
   table: 'navy',
   fast: 'red',
+};
+
+// Map category page slug to the CategoryHeroArt code so each
+// /games/<slug> page surfaces game-specific artwork.
+const CATEGORY_BY_SLUG: Record<string, CategoryCode> = {
+  hot: 'hotGames',
+  slots: 'slots',
+  'live-casino': 'liveCasino',
+  fishing: 'fishing',
+  sports: 'sportsbook',
+  lottery: 'lotto',
+  poker: 'tableGames',
+  esports: 'sportsbook',
+  crash: 'crash',
+  table: 'tableGames',
+  fast: 'fast',
 };
 
 function isSyntheticSlug(s: string): s is SyntheticSlug {
@@ -62,10 +79,18 @@ export default function CategoryPage() {
     : t('home.sectionHotDesc');
 
   const accent = ACCENT_BY_SLUG[slug] ?? 'navy';
+  const categoryCode = CATEGORY_BY_SLUG[slug] ?? 'default';
 
   return (
     <div className="space-y-6">
-      <CategoryHero kicker={title} title={title} description={description} accent={accent} />
+      <CategoryHero
+        kicker={title}
+        title={title}
+        description={description}
+        accent={accent}
+        category={categoryCode}
+        chips={[{ label: 'Wallet Connected', tone: 'sky' }, { label: 'Featured', tone: 'gold' }]}
+      />
       <CategoryCatalog games={games} />
     </div>
   );

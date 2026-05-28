@@ -16,6 +16,12 @@ export default function LiveCasinoPage() {
         title={t('home.sectionLive')}
         description={t('home.sectionLiveDesc')}
         accent="royal"
+        category="liveCasino"
+        chips={[
+          { label: 'Live', tone: 'rose' },
+          { label: 'Dealer Tables', tone: 'gold' },
+          { label: 'Wallet Connected', tone: 'sky' },
+        ]}
       />
       <CategoryCatalog games={games} />
     </div>

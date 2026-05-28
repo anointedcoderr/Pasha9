@@ -103,6 +103,12 @@ export default function AffiliatePage() {
         title={lang === 'bn' ? 'বন্ধু আমন্ত্রণ করুন, লাইফটাইম কমিশন' : 'Invite your network, earn lifetime commission'}
         description={lang === 'bn' ? 'তিন স্তরে কমিশন, স্বচ্ছ ট্র্যাকিং এবং প্রতিদিন পেআউটের সুযোগ।' : 'Three-level commission, transparent tracking and daily payout potential.'}
         accent="navy"
+        category="affiliate"
+        chips={[
+          { label: 'Lifetime', tone: 'gold' },
+          { label: '3 Levels', tone: 'emerald' },
+          { label: 'Daily Payout', tone: 'sky' },
+        ]}
       />
 
       <section className="grid gap-3 md:grid-cols-4">

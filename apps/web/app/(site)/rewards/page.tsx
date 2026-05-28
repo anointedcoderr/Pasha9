@@ -81,6 +81,11 @@ export default function RewardsPage() {
         title={t('rewards.title')}
         description={t('rewards.subtitle')}
         accent="yellow"
+        category="rewards"
+        chips={[
+          { label: 'Loyalty', tone: 'gold' },
+          { label: 'Coin Shop', tone: 'sky' },
+        ]}
       />
 
       <section className="flex flex-col items-start justify-between gap-3 rounded-2xl border border-brand-divider bg-brand-paper px-5 py-4 sm:flex-row sm:items-center">

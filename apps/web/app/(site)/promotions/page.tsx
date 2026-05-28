@@ -93,6 +93,11 @@ export default function PromotionsPage() {
         title={t('promotions.title')}
         description={t('promotions.subtitle')}
         accent="yellow"
+        category="promotions"
+        chips={[
+          { label: 'Bonus', tone: 'gold' },
+          { label: 'Wallet Connected', tone: 'sky' },
+        ]}
       />
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

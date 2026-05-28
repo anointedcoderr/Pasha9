@@ -26,6 +26,11 @@ export default function BettingPassPage() {
         title={t('bp.title')}
         description={t('bp.subtitle')}
         accent="blue"
+        category="bettingPass"
+        chips={[
+          { label: 'Hot', tone: 'rose' },
+          { label: 'Tier Rewards', tone: 'gold' },
+        ]}
       />
 
       <section className="grid gap-3 md:grid-cols-3">

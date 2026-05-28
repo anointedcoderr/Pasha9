@@ -17,6 +17,11 @@ export default function IplBettingPassPage() {
         title={lang === 'bn' ? 'আইপিএল ২০২৬ বেটিং পাস' : 'IPL 2026 Betting Pass'}
         description={lang === 'bn' ? 'সিজনে বেট করুন, পয়েন্ট জমান, এক্সক্লুসিভ পুরস্কার জিতুন।' : 'Bet through the season, build pass points, unlock exclusive rewards.'}
         accent="red"
+        category="cricket"
+        chips={[
+          { label: 'Season Pass', tone: 'gold' },
+          { label: 'Live Markets', tone: 'rose' },
+        ]}
       />
 
       <section className="grid gap-3 md:grid-cols-3">

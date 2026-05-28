@@ -94,10 +94,16 @@ export default function GamesPage() {
   return (
     <div className="space-y-6">
       <CategoryHero
-        kicker={t('navx.slots').replace(/.*/, t('home.sectionHot').toUpperCase())}
+        kicker={t('home.sectionHot')}
         title={t('home.sectionHot')}
         description={t('home.sectionHotDesc')}
         accent="navy"
+        category="hotGames"
+        chips={[
+          { label: 'Hot', tone: 'rose' },
+          { label: 'Trending', tone: 'gold' },
+          { label: 'Wallet Connected', tone: 'sky' },
+        ]}
       />
 
       {nativesEnabled && natives.length > 0 ? (

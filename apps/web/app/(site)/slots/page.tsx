@@ -16,6 +16,12 @@ export default function SlotsPage() {
         title={t('home.sectionSlots')}
         description={t('home.sectionSlotsDesc')}
         accent="yellow"
+        category="slots"
+        chips={[
+          { label: 'Hot', tone: 'rose' },
+          { label: 'Featured', tone: 'gold' },
+          { label: 'Wallet Connected', tone: 'sky' },
+        ]}
       />
       <CategoryCatalog games={games} />
     </div>

@@ -16,6 +16,11 @@ export default function FishingPage() {
         title={t('home.sectionFish')}
         description={t('home.sectionFishDesc')}
         accent="blue"
+        category="fishing"
+        chips={[
+          { label: 'Arcade', tone: 'sky' },
+          { label: 'Instant Play', tone: 'gold' },
+        ]}
       />
       <CategoryCatalog games={games} />
     </div>
