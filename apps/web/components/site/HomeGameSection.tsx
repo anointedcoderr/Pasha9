@@ -26,17 +26,23 @@ export function HomeGameSection({ title, description, href, games, icon: Icon, l
       <div className="flex items-end justify-between gap-3">
         <div className="flex items-center gap-3">
           {Icon ? (
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-yellow-500 text-brand-ink">
+            <span className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-b from-amber-300 to-amber-500 text-[#3A1F00] shadow-[inset_0_1px_0_rgba(255,255,255,0.55),0_6px_14px_-6px_rgba(245,180,0,0.7)]">
               <Icon className="h-4 w-4" />
             </span>
           ) : null}
-          <div>
-            <h2 className="text-lg font-extrabold text-brand-ink md:text-xl">{title}</h2>
+          <div className="min-w-0">
+            <h2 className="inline-flex items-baseline gap-2 truncate text-lg font-extrabold text-brand-ink md:text-xl">
+              <span>{title}</span>
+              <span aria-hidden className="h-[2px] w-10 rounded-full bg-gradient-to-r from-brand-yellow-500/80 to-transparent" />
+            </h2>
             {description ? <p className="text-xs text-brand-inkMute">{description}</p> : null}
           </div>
         </div>
         {href ? (
-          <Link href={href} className="inline-flex items-center gap-1 text-xs font-semibold text-brand-ink hover:text-brand-yellow-600">
+          <Link
+            href={href}
+            className="inline-flex h-9 items-center gap-1 rounded-full border border-brand-divider bg-brand-paper px-3 text-xs font-bold uppercase tracking-wider text-brand-ink transition hover:border-brand-yellow-500 hover:bg-brand-surface"
+          >
             View All <ChevronRight className="h-3.5 w-3.5" />
           </Link>
         ) : null}

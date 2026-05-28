@@ -835,6 +835,12 @@ body.theme-light input[type="checkbox"].accent-neon { accent-color: #1E73E8; }
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0);   }
 }
+@keyframes png-shine-sweep {
+  0%   { transform: translateX(-120%) skewX(-18deg); opacity: 0; }
+  20%  { opacity: 0.65; }
+  60%  { opacity: 0.65; }
+  100% { transform: translateX(220%)  skewX(-18deg); opacity: 0; }
+}
 
 .png-win        { animation: png-win-pulse 0.9s ease-out 1; }
 .png-loss       { animation: png-loss-shake 0.5s ease-in-out 1; }
@@ -845,6 +851,48 @@ body.theme-light input[type="checkbox"].accent-neon { accent-color: #1E73E8; }
 .png-curve-draw { animation: png-curve-draw 1.0s ease-out 1 forwards; stroke-dasharray: 600; }
 .png-glow       { animation: png-glow-breathe 2.4s ease-in-out infinite; }
 .png-fade-up    { animation: png-fade-up 0.35s ease-out 1 both; }
+
+/* Premium game card shine sweep: a soft diagonal highlight that
+ * passes left-to-right on hover. Combined with .png-card the gold
+ * inner border + outer glow + lift add up to a casino-grade thumb. */
+.png-card {
+  position: relative;
+  isolation: isolate;
+  transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
+}
+.png-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: linear-gradient(135deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0) 35%);
+  z-index: 1;
+}
+.png-card::after {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0;
+  left: -40%;
+  width: 30%;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.45) 50%, rgba(255,255,255,0) 100%);
+  transform: translateX(-120%) skewX(-18deg);
+  opacity: 0;
+  mix-blend-mode: screen;
+  z-index: 2;
+}
+.png-card:hover::after,
+.png-card:focus-visible::after {
+  animation: png-shine-sweep 0.9s ease-out 1;
+}
+.png-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 36px -16px rgba(245, 180, 0, 0.35), 0 0 0 1px rgba(255, 213, 84, 0.35) inset;
+}
+@media (max-width: 640px) {
+  .png-card:hover { transform: none; }
+}
 
 @layer utilities {
   .mask-fade-r {
