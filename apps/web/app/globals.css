@@ -786,6 +786,66 @@ body.theme-light input[type="checkbox"].accent-neon { accent-color: #1E73E8; }
   }
 }
 
+/* Pasha Native Games premium UI animations.
+ * Pure CSS keyframes, scoped via class names so each game page can
+ * trigger them without an extra runtime dep. Reused across Dice,
+ * Mines, Keno, Roulette, Slots, Crash.
+ */
+@keyframes png-win-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(255, 200, 69, 0.55); }
+  60%  { box-shadow: 0 0 0 14px rgba(255, 200, 69, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 200, 69, 0); }
+}
+@keyframes png-loss-shake {
+  0%, 100% { transform: translateX(0); }
+  15%      { transform: translateX(-6px); }
+  30%      { transform: translateX(5px); }
+  45%      { transform: translateX(-4px); }
+  60%      { transform: translateX(3px); }
+  75%      { transform: translateX(-2px); }
+}
+@keyframes png-tile-flip {
+  0%   { transform: rotateY(0deg)   scale(1);    }
+  50%  { transform: rotateY(90deg)  scale(0.92); }
+  100% { transform: rotateY(0deg)   scale(1);    }
+}
+@keyframes png-reel-spin {
+  0%   { transform: translateY(0);       filter: blur(0px); }
+  60%  { transform: translateY(-22px);   filter: blur(2px); }
+  100% { transform: translateY(0);       filter: blur(0px); }
+}
+@keyframes png-ball-drop {
+  0%   { transform: translateY(-30px) scale(0.6); opacity: 0; }
+  60%  { transform: translateY(6px)   scale(1.08); opacity: 1; }
+  100% { transform: translateY(0)     scale(1);    opacity: 1; }
+}
+@keyframes png-wheel-spin {
+  from { transform: rotate(0deg);   }
+  to   { transform: rotate(1080deg); }
+}
+@keyframes png-curve-draw {
+  from { stroke-dashoffset: 600; }
+  to   { stroke-dashoffset: 0;   }
+}
+@keyframes png-glow-breathe {
+  0%, 100% { opacity: 0.5; }
+  50%      { opacity: 1;   }
+}
+@keyframes png-fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+
+.png-win        { animation: png-win-pulse 0.9s ease-out 1; }
+.png-loss       { animation: png-loss-shake 0.5s ease-in-out 1; }
+.png-tile-flip  { animation: png-tile-flip 0.35s ease-in-out 1; }
+.png-reel       { animation: png-reel-spin 0.6s ease-in-out 1; }
+.png-ball       { animation: png-ball-drop 0.5s cubic-bezier(0.22, 1, 0.36, 1) 1; }
+.png-wheel      { animation: png-wheel-spin 1.4s cubic-bezier(0.22, 1, 0.36, 1) 1; }
+.png-curve-draw { animation: png-curve-draw 1.0s ease-out 1 forwards; stroke-dasharray: 600; }
+.png-glow       { animation: png-glow-breathe 2.4s ease-in-out infinite; }
+.png-fade-up    { animation: png-fade-up 0.35s ease-out 1 both; }
+
 @layer utilities {
   .mask-fade-r {
     -webkit-mask-image: linear-gradient(to right, black 80%, transparent);

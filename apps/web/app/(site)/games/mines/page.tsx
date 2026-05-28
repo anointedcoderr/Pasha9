@@ -1,47 +1,24 @@
 // Built by Anointed Coder.
 //
-// Pasha Mines play page. 5x5 grid by default. Player sets a bet and
-// mine count, presses Start (debits the bet), then reveals tiles one
-// at a time. Safe picks raise the cashout multiplier; a mine ends the
-// round for a loss. Cashout any time after one safe pick to claim
-// bet * currentMultiplier.
+// Pasha Mines - premium 5x5 game page. Three calls power the round:
+//   POST /api/native-games/mines/bet           start round (debit bet)
+//   POST /api/native-games/mines/action reveal flip a tile
+//   POST /api/native-games/mines/action cashout claim payout
+// UI handles the tile flip/glow + grid layout; the result + mine
+// positions always come from the server.
 
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import Link from 'next/link';
-import { BackBar } from '@/components/site/BackBar';
-import { CategoryHero } from '@/components/site/CategoryHero';
+import { useState } from 'react';
 import { useLang } from '@/lib/i18n/context';
-import { Bomb, Gem, ShieldCheck, RefreshCw, Sparkles, Wallet as WalletIcon, Play, ArrowDown, Trophy } from 'lucide-react';
+import { useNativeGame } from '@/lib/native-games/use-native-game';
+import { GameShell, GamePanel, GamePanelTitle } from '@/components/native-games/GameShell';
+import { BetCard } from '@/components/native-games/BetCard';
 import { formatBDT } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
+import { Bomb, Gem, Trophy, RefreshCw } from 'lucide-react';
 
-interface GameConfig {
-  gameCode: string;
-  displayName: string;
-  isActive: boolean;
-  houseEdgeBps: number;
-  minBet: number;
-  maxBet: number;
-  config: { gridSize?: number; minMines?: number; maxMines?: number } | null;
-}
-
-interface SessionView {
-  id: string;
-  gameCode: string;
-  serverSeedHash: string;
-  clientSeed: string;
-  nonce: number;
-  status: string;
-  createdAt: string;
-}
-
-interface MeResponse {
-  user?: { wallet?: { balance?: number | string } | null } | null;
-}
-
-interface MinesStartResult {
+interface MinesStart {
   roundId: string;
   outcome: 'PENDING';
   mineCount: number;
@@ -51,8 +28,7 @@ interface MinesStartResult {
   newBalance: number;
   nonce: number;
 }
-
-interface MinesRevealResult {
+interface MinesReveal {
   roundId: string;
   outcome: 'PENDING' | 'LOSS';
   tile: number;
@@ -63,8 +39,7 @@ interface MinesRevealResult {
   newBalance: number;
   minePositions?: number[];
 }
-
-interface MinesCashoutResult {
+interface MinesCashout {
   roundId: string;
   outcome: 'CASHOUT';
   payout: number;
@@ -79,129 +54,58 @@ type Round =
   | { kind: 'loss'; roundId: string; mineCount: number; totalTiles: number; revealed: number[]; minePositions: number[]; hitTile: number; bet: number }
   | { kind: 'cashout'; roundId: string; mineCount: number; totalTiles: number; revealed: number[]; minePositions: number[]; payout: number; multiplier: number; bet: number };
 
+const MINE_PRESETS = [1, 3, 5, 10, 15, 20, 24];
+
 export default function MinesPage() {
   const { lang } = useLang();
-  const [game, setGame] = useState<GameConfig | null>(null);
-  const [enabled, setEnabled] = useState<boolean>(true);
-  const [session, setSession] = useState<SessionView | null>(null);
-  const [balance, setBalance] = useState<number | null>(null);
+  const ng = useNativeGame('mines');
+  const game = ng.game;
+  const cfg = (game?.config ?? {}) as { gridSize?: number; minMines?: number; maxMines?: number };
+  const fallbackTotal = Number(cfg.gridSize ?? 25);
+  const minMines = Number(cfg.minMines ?? 1);
+  const maxMines = Number(cfg.maxMines ?? 24);
+
   const [bet, setBet] = useState<string>('10');
   const [mineCount, setMineCount] = useState<number>(3);
   const [round, setRound] = useState<Round | null>(null);
-  const [loading, setLoading] = useState<boolean>(false);
+  const [loading, setLoading] = useState(false);
   const [revealing, setRevealing] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [authError, setAuthError] = useState<boolean>(false);
 
-  const refreshBalance = useCallback(async () => {
-    try {
-      const res = await fetch('/api/auth/me', { cache: 'no-store' });
-      if (res.status === 401) { setAuthError(true); return; }
-      if (!res.ok) return;
-      const data = (await res.json()) as MeResponse;
-      const v = data?.user?.wallet?.balance;
-      if (v != null) setBalance(Number(v));
-    } catch { /* ignore */ }
-  }, []);
-
-  const openSession = useCallback(async () => {
-    setError(null);
-    try {
-      const res = await fetch('/api/native-games/mines/sessions', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({}),
-      });
-      const data = await res.json().catch(() => null);
-      if (res.status === 401) { setAuthError(true); return; }
-      if (!res.ok) {
-        setError(data?.message ?? data?.code ?? 'Could not open session');
-        return;
-      }
-      setSession(data?.session ?? null);
-    } catch {
-      setError('Could not open session');
-    }
-  }, []);
-
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const res = await fetch('/api/native-games/mines', { cache: 'no-store' });
-        const data = await res.json().catch(() => null);
-        if (alive && data?.game) {
-          setGame(data.game as GameConfig);
-          setEnabled(Boolean(data.enabled));
-          if (typeof data.game.minBet === 'number') setBet(String(Math.max(data.game.minBet, 10)));
-          const max = Number(data.game?.config?.maxMines ?? 24);
-          if (mineCount > max) setMineCount(Math.min(3, max));
-        }
-      } catch { /* leave defaults */ }
-    })();
-    refreshBalance();
-    return () => { alive = false; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshBalance]);
-
-  useEffect(() => {
-    if (!enabled || !game || !game.isActive || authError) return;
-    if (session) return;
-    openSession();
-  }, [enabled, game, session, openSession, authError]);
-
-  const totalTiles = round?.totalTiles ?? Number(game?.config?.gridSize ?? 25);
+  const totalTiles = round?.totalTiles ?? fallbackTotal;
   const gridSide = Math.max(2, Math.round(Math.sqrt(totalTiles)));
-  const minMines = Number(game?.config?.minMines ?? 1);
-  const maxMines = Number(game?.config?.maxMines ?? 24);
+  const isPending = round?.kind === 'pending';
 
   const onStart = async () => {
-    if (!session) { await openSession(); return; }
+    if (!ng.session) return;
     const amount = Number(bet);
     if (!Number.isFinite(amount) || amount <= 0) {
       setError(lang === 'bn' ? 'বেট পরিমাণ অবৈধ' : 'Bet amount is invalid');
       return;
     }
-    setError(null);
-    setLoading(true);
+    setError(null); setLoading(true);
     try {
       const res = await fetch('/api/native-games/mines/bet', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          sessionId: session.id,
-          mineCount,
-          betAmount: amount,
-        }),
+        body: JSON.stringify({ sessionId: ng.session.id, mineCount, betAmount: amount }),
       });
       const data = await res.json().catch(() => null);
-      if (res.status === 401) { setAuthError(true); return; }
       if (!res.ok) {
         setError(data?.message ?? data?.code ?? 'Start failed');
-        if (data?.code === 'SESSION_INACTIVE') setSession(null);
+        if (data?.code === 'SESSION_INACTIVE') ng.newSession();
         return;
       }
-      const result = data as MinesStartResult;
-      setBalance(result.newBalance);
-      setRound({
-        kind: 'pending',
-        roundId: result.roundId,
-        mineCount: result.mineCount,
-        totalTiles: result.totalTiles,
-        revealed: result.revealedTiles,
-        multiplier: result.currentMultiplier,
-      });
-    } catch {
-      setError('Could not reach server');
-    } finally {
-      setLoading(false);
-    }
+      const r = data as MinesStart;
+      setRound({ kind: 'pending', roundId: r.roundId, mineCount: r.mineCount, totalTiles: r.totalTiles, revealed: r.revealedTiles, multiplier: r.currentMultiplier });
+      ng.refreshBalance();
+    } catch { setError('Could not reach server'); }
+    finally { setLoading(false); }
   };
 
   const onReveal = async (tile: number) => {
     if (!round || round.kind !== 'pending' || revealing != null) return;
-    setError(null);
-    setRevealing(tile);
+    setError(null); setRevealing(tile);
     try {
       const res = await fetch('/api/native-games/mines/action', {
         method: 'POST',
@@ -209,47 +113,22 @@ export default function MinesPage() {
         body: JSON.stringify({ action: 'reveal', roundId: round.roundId, tile }),
       });
       const data = await res.json().catch(() => null);
-      if (res.status === 401) { setAuthError(true); return; }
-      if (!res.ok) {
-        setError(data?.message ?? data?.code ?? 'Reveal failed');
-        return;
-      }
-      const r = data as MinesRevealResult;
-      setBalance(r.newBalance);
+      if (!res.ok) { setError(data?.message ?? data?.code ?? 'Reveal failed'); return; }
+      const r = data as MinesReveal;
       if (r.hitMine) {
-        setRound({
-          kind: 'loss',
-          roundId: round.roundId,
-          mineCount: round.mineCount,
-          totalTiles: round.totalTiles,
-          revealed: r.revealedTiles,
-          minePositions: r.minePositions ?? [],
-          hitTile: r.tile,
-          bet: Number(bet),
-        });
-        // Mines round terminated -> session nonce was advanced server-side.
-        setSession((prev) => (prev ? { ...prev, nonce: prev.nonce + 1 } : prev));
-        return;
+        setRound({ kind: 'loss', roundId: round.roundId, mineCount: round.mineCount, totalTiles: round.totalTiles, revealed: r.revealedTiles, minePositions: r.minePositions ?? [], hitTile: r.tile, bet: Number(bet) });
+        ng.bumpNonce();
+      } else {
+        setRound({ kind: 'pending', roundId: round.roundId, mineCount: round.mineCount, totalTiles: round.totalTiles, revealed: r.revealedTiles, multiplier: r.currentMultiplier });
       }
-      setRound({
-        kind: 'pending',
-        roundId: round.roundId,
-        mineCount: round.mineCount,
-        totalTiles: round.totalTiles,
-        revealed: r.revealedTiles,
-        multiplier: r.currentMultiplier,
-      });
-    } catch {
-      setError('Could not reach server');
-    } finally {
-      setRevealing(null);
-    }
+      ng.refreshBalance();
+    } catch { setError('Could not reach server'); }
+    finally { setRevealing(null); }
   };
 
   const onCashout = async () => {
     if (!round || round.kind !== 'pending') return;
-    setError(null);
-    setLoading(true);
+    setError(null); setLoading(true);
     try {
       const res = await fetch('/api/native-games/mines/action', {
         method: 'POST',
@@ -257,286 +136,186 @@ export default function MinesPage() {
         body: JSON.stringify({ action: 'cashout', roundId: round.roundId }),
       });
       const data = await res.json().catch(() => null);
-      if (res.status === 401) { setAuthError(true); return; }
-      if (!res.ok) {
-        setError(data?.message ?? data?.code ?? 'Cashout failed');
-        return;
-      }
-      const r = data as MinesCashoutResult;
-      setBalance(r.newBalance);
-      setRound({
-        kind: 'cashout',
-        roundId: round.roundId,
-        mineCount: round.mineCount,
-        totalTiles: round.totalTiles,
-        revealed: r.revealedTiles,
-        minePositions: r.minePositions,
-        payout: r.payout,
-        multiplier: r.multiplier,
-        bet: Number(bet),
-      });
-      setSession((prev) => (prev ? { ...prev, nonce: prev.nonce + 1 } : prev));
-    } catch {
-      setError('Could not reach server');
-    } finally {
-      setLoading(false);
-    }
+      if (!res.ok) { setError(data?.message ?? data?.code ?? 'Cashout failed'); return; }
+      const r = data as MinesCashout;
+      setRound({ kind: 'cashout', roundId: round.roundId, mineCount: round.mineCount, totalTiles: round.totalTiles, revealed: r.revealedTiles, minePositions: r.minePositions, payout: r.payout, multiplier: r.multiplier, bet: Number(bet) });
+      ng.bumpNonce();
+      ng.refreshBalance();
+    } catch { setError('Could not reach server'); }
+    finally { setLoading(false); }
   };
 
   const onNewRound = () => { setRound(null); setError(null); };
 
-  const onCloseSession = async () => {
-    if (!session) return;
-    setError(null);
-    try {
-      const res = await fetch(`/api/native-games/sessions/${session.id}/verify`, { method: 'POST' });
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        setError(data?.message ?? data?.code ?? 'Could not close session');
-        return;
-      }
-      window.location.href = `/api/native-games/sessions/${session.id}/verify`;
-    } catch {
-      setError('Could not reach server');
-    }
-  };
-
-  const isPending = round?.kind === 'pending';
+  const minBet = game?.minBet ?? 10;
+  const maxBet = game?.maxBet ?? 10_000;
+  const currentMultiplier = round?.kind === 'pending' ? round.multiplier : round?.kind === 'cashout' ? round.multiplier : 0;
+  const potential = Number(bet) * (currentMultiplier || 1);
 
   return (
-    <div className="space-y-6">
-      <BackBar title={lang === 'bn' ? 'পাশা মাইনস' : 'Pasha Mines'} />
+    <GameShell
+      code="mines"
+      titleEn="Pasha Mines"
+      titleBn="পাশা মাইনস"
+      taglineEn="Reveal safe tiles, cash out before the mine."
+      taglineBn="নিরাপদ টাইল উন্মোচন করুন, মাইনের আগে ক্যাশআউট করুন।"
+      accent="red"
+      ng={ng}
+      rules={<MinesRules lang={lang} />}
+    >
+      {/* Multiplier strip */}
+      <GamePanel>
+        <div className="grid grid-cols-3 gap-3 text-center">
+          <Stat label={lang === 'bn' ? 'গুণিতক' : 'Multiplier'} value={round?.kind !== null && currentMultiplier > 0 ? `${currentMultiplier.toFixed(4)}x` : '-'} />
+          <Stat label={lang === 'bn' ? 'সম্ভাব্য জয়' : 'Potential win'} value={round?.kind === 'cashout' ? formatBDT(round.payout) : isPending ? formatBDT(potential) : '-'} accent />
+          <Stat label={lang === 'bn' ? 'মাইন' : 'Mines'} value={String(round?.mineCount ?? mineCount)} />
+        </div>
+      </GamePanel>
 
-      <CategoryHero
-        kicker={lang === 'bn' ? 'পাশা নেটিভ গেমস' : 'Pasha Native Games'}
-        title={lang === 'bn' ? 'পাশা মাইনস' : 'Pasha Mines'}
-        description={
-          lang === 'bn'
-            ? 'বেট দিন, মাইনের সংখ্যা বাছাই করুন, এক এক করে টাইল উন্মোচন করুন। সঠিক টাইলে গুণিতক বাড়ে - যেকোনো সময় ক্যাশআউট করুন।'
-            : 'Set a bet and mine count, reveal tiles one at a time. Every safe tile raises the multiplier - cash out whenever.'
-        }
-        accent="red"
-      />
+      {/* Mine count picker */}
+      <GamePanel>
+        <GamePanelTitle hint={`${minMines} - ${maxMines}`}>
+          {lang === 'bn' ? 'মাইন সংখ্যা' : 'Mine count'}
+        </GamePanelTitle>
+        <div className="-mx-1 flex flex-wrap gap-1.5 px-1">
+          {MINE_PRESETS.filter((m) => m >= minMines && m <= maxMines).map((m) => (
+            <button
+              key={m}
+              type="button"
+              disabled={isPending}
+              onClick={() => setMineCount(m)}
+              className={cn(
+                'min-w-[44px] rounded-lg border px-3 py-2 text-sm font-extrabold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300/60',
+                m === mineCount
+                  ? 'border-rose-300 bg-gradient-to-b from-rose-400 to-rose-600 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.45),0_6px_18px_-6px_rgba(244,63,94,0.6)]'
+                  : 'border-white/15 bg-white/5 text-white/80 hover:border-white/30 hover:bg-white/10',
+                isPending && 'opacity-50 cursor-not-allowed',
+              )}
+            >
+              {m}
+            </button>
+          ))}
+        </div>
+      </GamePanel>
 
-      {!enabled || !game?.isActive ? (
-        <section className="card-light p-5">
-          <p className="text-sm text-brand-inkSoft">
-            {lang === 'bn'
-              ? 'এই গেমটি বর্তমানে সাময়িকভাবে অনুপলব্ধ।'
-              : 'This game is temporarily unavailable.'}
-          </p>
-        </section>
-      ) : null}
-
-      {authError ? (
-        <section className="card-light p-5">
-          <p className="text-sm text-brand-inkSoft">{lang === 'bn' ? 'খেলতে লগইন করুন।' : 'Log in to play.'}</p>
-          <div className="mt-3 flex gap-2">
-            <Link href="/?login=1" className="btn-yellow inline-flex h-10 items-center rounded-lg px-4 text-sm">
-              {lang === 'bn' ? 'লগইন' : 'Log in'}
-            </Link>
-            <Link href="/?signup=1" className="inline-flex h-10 items-center rounded-lg border border-brand-divider bg-brand-surface px-4 text-sm font-semibold text-brand-ink hover:bg-brand-paper">
-              {lang === 'bn' ? 'রেজিস্টার' : 'Register'}
-            </Link>
-          </div>
-        </section>
-      ) : (
-        <>
-          <section className="card-light grid gap-3 p-4 sm:grid-cols-3">
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">{lang === 'bn' ? 'মেইন ব্যালেন্স' : 'Main balance'}</p>
-              <p className="mt-1 inline-flex items-baseline gap-1 text-2xl font-extrabold text-brand-ink">
-                <WalletIcon className="h-4 w-4 text-brand-yellow-600" />
-                {balance != null ? formatBDT(balance) : '-'}
-              </p>
-            </div>
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">{lang === 'bn' ? 'গুণিতক' : 'Multiplier'}</p>
-              <p className="mt-1 text-2xl font-extrabold text-brand-ink">{round?.kind === 'pending' ? `${round.multiplier.toFixed(4)}x` : round?.kind === 'cashout' ? `${round.multiplier.toFixed(4)}x` : '-'}</p>
-            </div>
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">{lang === 'bn' ? 'সম্ভাব্য জয়' : 'Potential win'}</p>
-              <p className="mt-1 text-2xl font-extrabold text-brand-yellow-700">
-                {round?.kind === 'pending' ? formatBDT(Number(bet) * round.multiplier) : round?.kind === 'cashout' ? formatBDT(round.payout) : '-'}
-              </p>
-            </div>
-          </section>
-
-          <section className="card-light p-5 md:p-6">
-            <div className="grid gap-5 md:grid-cols-[1fr_1.2fr] md:items-start">
-              <div>
-                <label className="text-[11px] font-bold uppercase tracking-wider text-brand-inkMute">{lang === 'bn' ? 'বেট পরিমাণ' : 'Bet amount'}</label>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  min={game?.minBet ?? 10}
-                  max={game?.maxBet ?? 10_000}
-                  step="1"
-                  value={bet}
-                  onChange={(e) => setBet(e.target.value)}
-                  disabled={isPending}
-                  className="mt-1 h-11 w-full rounded-lg border border-brand-divider bg-brand-paper px-3 text-base font-semibold text-brand-ink focus:border-brand-blue-500 focus:outline-none disabled:opacity-60"
-                />
-                <p className="mt-1 text-[11px] text-brand-inkMute">{game ? `${formatBDT(game.minBet)} - ${formatBDT(game.maxBet)} BDT` : ''}</p>
-
-                <label className="mt-4 block text-[11px] font-bold uppercase tracking-wider text-brand-inkMute">{lang === 'bn' ? 'মাইন সংখ্যা' : 'Mines'}: {mineCount}</label>
-                <input
-                  type="range"
-                  min={minMines}
-                  max={maxMines}
-                  step={1}
-                  value={mineCount}
-                  onChange={(e) => setMineCount(Number(e.target.value))}
-                  disabled={isPending}
-                  className="mt-2 w-full accent-brand-yellow-500"
-                />
-                <div className="mt-1 flex justify-between text-[10px] text-brand-inkMute">
-                  <span>{minMines}</span>
-                  <span>{Math.round((minMines + maxMines) / 2)}</span>
-                  <span>{maxMines}</span>
-                </div>
-
-                <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                  <button
-                    type="button"
-                    onClick={onStart}
-                    disabled={loading || isPending || !session}
-                    className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-brand-yellow-500 text-base font-extrabold uppercase tracking-wider text-brand-ink hover:brightness-105 disabled:opacity-60"
-                  >
-                    <Play className="h-5 w-5" />
-                    {lang === 'bn' ? 'শুরু' : 'Start'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={onCashout}
-                    disabled={!isPending || loading || (round?.kind === 'pending' && round.revealed.length === 0)}
-                    className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-signal-ok/40 bg-signal-ok/10 text-base font-extrabold uppercase tracking-wider text-signal-ok hover:bg-signal-ok/20 disabled:opacity-60"
-                  >
-                    <ArrowDown className="h-5 w-5" />
-                    {lang === 'bn' ? 'ক্যাশআউট' : 'Cashout'}
-                  </button>
-                </div>
-
-                {error ? <p className="mt-3 text-sm text-signal-danger">{error}</p> : null}
-                {round?.kind === 'cashout' ? (
-                  <div className="mt-3 rounded-lg border border-signal-ok/30 bg-signal-ok/10 p-3 text-sm text-signal-ok">
-                    <p className="font-bold uppercase tracking-wider">
-                      <Trophy className="mr-1 inline h-4 w-4" />
-                      {lang === 'bn' ? 'ক্যাশআউট' : 'Cashed out'} {round.multiplier.toFixed(4)}x = {formatBDT(round.payout)}
-                    </p>
-                    <button type="button" onClick={onNewRound} className="mt-2 inline-flex h-9 items-center gap-1 rounded-lg bg-brand-surface px-3 text-xs font-semibold text-brand-ink">
-                      <RefreshCw className="h-3 w-3" />
-                      {lang === 'bn' ? 'নতুন রাউন্ড' : 'New round'}
-                    </button>
-                  </div>
-                ) : null}
-                {round?.kind === 'loss' ? (
-                  <div className="mt-3 rounded-lg border border-signal-danger/30 bg-signal-danger/10 p-3 text-sm text-signal-danger">
-                    <p className="font-bold uppercase tracking-wider">
-                      <Bomb className="mr-1 inline h-4 w-4" />
-                      {lang === 'bn' ? 'মাইনে লেগেছে - হার' : 'Hit a mine - lost'} {formatBDT(round.bet)}
-                    </p>
-                    <button type="button" onClick={onNewRound} className="mt-2 inline-flex h-9 items-center gap-1 rounded-lg bg-brand-surface px-3 text-xs font-semibold text-brand-ink">
-                      <RefreshCw className="h-3 w-3" />
-                      {lang === 'bn' ? 'নতুন রাউন্ড' : 'New round'}
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-
-              <div className="rounded-xl border border-brand-divider bg-brand-surface p-3">
-                <div
-                  className="grid gap-2"
-                  style={{ gridTemplateColumns: `repeat(${gridSide}, minmax(0, 1fr))` }}
-                >
-                  {Array.from({ length: totalTiles }).map((_, idx) => {
-                    const isRevealed = round && round.kind !== 'pending'
-                      ? round.revealed.includes(idx) || (round.kind === 'loss' && round.minePositions.includes(idx)) || (round.kind === 'cashout' && round.minePositions.includes(idx))
-                      : round?.kind === 'pending' && round.revealed.includes(idx);
-                    const isMine = (round?.kind === 'loss' || round?.kind === 'cashout') && round.minePositions.includes(idx);
-                    const isHitMine = round?.kind === 'loss' && round.hitTile === idx;
-                    const isSafe = isRevealed && !isMine;
-                    const disabled = !isPending || revealing != null || (round?.kind === 'pending' && round.revealed.includes(idx));
-                    return (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => onReveal(idx)}
-                        disabled={disabled}
-                        className={cn(
-                          'aspect-square rounded-lg border text-base font-extrabold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-yellow-500/40',
-                          // base state
-                          !isRevealed && 'border-brand-divider bg-brand-paper text-brand-inkMute hover:border-brand-yellow-500/50 hover:bg-brand-yellow-500/10',
-                          // safe revealed
-                          isSafe && 'border-signal-ok/40 bg-signal-ok/10 text-signal-ok',
-                          // mine (post-settlement)
-                          isMine && !isHitMine && 'border-signal-danger/30 bg-signal-danger/10 text-signal-danger',
-                          isHitMine && 'border-signal-danger/60 bg-signal-danger/30 text-white',
-                          revealing === idx && 'opacity-70',
-                          disabled && !isRevealed && 'opacity-60',
-                        )}
-                      >
-                        {isMine ? <Bomb className="mx-auto h-4 w-4" /> : isSafe ? <Gem className="mx-auto h-4 w-4" /> : ''}
-                      </button>
-                    );
-                  })}
-                </div>
-                <p className="mt-3 text-[11px] text-brand-inkMute">
-                  {isPending
-                    ? lang === 'bn'
-                      ? 'টাইল আনলক করুন। মাইনে লাগলে হার, না লাগলে গুণিতক বাড়ে।'
-                      : 'Tap a tile. A mine ends the round; a gem raises the multiplier.'
-                    : lang === 'bn'
-                      ? 'শুরু করতে বেট দিন।'
-                      : 'Place a bet and press Start to begin.'}
-                </p>
-              </div>
-            </div>
-          </section>
-
-          {/* Fairness panel */}
-          <section className="card-light p-5 md:p-6">
-            <div className="flex items-center gap-2 text-brand-ink">
-              <ShieldCheck className="h-4 w-4 text-brand-yellow-600" />
-              <h3 className="text-base font-extrabold">{lang === 'bn' ? 'প্রভাবলি ফেয়ার প্যানেল' : 'Provably fair'}</h3>
-            </div>
-            {session ? (
-              <div className="mt-3 grid gap-3 md:grid-cols-2">
-                <Detail label={lang === 'bn' ? 'সার্ভার সিড হ্যাশ' : 'Server seed hash'} value={session.serverSeedHash} mono />
-                <Detail label={lang === 'bn' ? 'ক্লায়েন্ট সিড' : 'Client seed'} value={session.clientSeed} mono />
-                <Detail label={lang === 'bn' ? 'বর্তমান ননস' : 'Current nonce'} value={String(session.nonce)} />
-                <Detail label={lang === 'bn' ? 'সেশন স্ট্যাটাস' : 'Session status'} value={session.status} />
-              </div>
-            ) : (
-              <p className="mt-3 text-sm text-brand-inkMute">{lang === 'bn' ? 'সেশন তৈরি হচ্ছে...' : 'Opening session...'}</p>
-            )}
-            <div className="mt-4 flex flex-wrap gap-2">
-              <button type="button" onClick={onCloseSession} disabled={!session || isPending} className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-brand-divider bg-brand-surface px-3 text-sm font-semibold text-brand-ink hover:bg-brand-paper disabled:opacity-60">
-                <RefreshCw className="h-3.5 w-3.5" />
-                {lang === 'bn' ? 'সেশন বন্ধ + যাচাই' : 'Close + verify session'}
+      {/* Grid */}
+      <GamePanel>
+        <div
+          className="mx-auto grid w-full max-w-md gap-2 sm:gap-2.5"
+          style={{ gridTemplateColumns: `repeat(${gridSide}, minmax(0, 1fr))` }}
+        >
+          {Array.from({ length: totalTiles }).map((_, idx) => {
+            const isMine = (round?.kind === 'loss' || round?.kind === 'cashout') && round.minePositions.includes(idx);
+            const isHit = round?.kind === 'loss' && round.hitTile === idx;
+            const isSafeRevealed = round?.kind === 'pending'
+              ? round.revealed.includes(idx)
+              : (round?.kind === 'loss' || round?.kind === 'cashout') ? round.revealed.includes(idx) : false;
+            const disabled = !isPending || revealing != null || (round?.kind === 'pending' && round.revealed.includes(idx));
+            const stateClass = isHit
+              ? 'border-rose-500/80 bg-gradient-to-b from-rose-500 to-rose-700 text-white'
+              : isMine
+                ? 'border-rose-400/40 bg-rose-500/15 text-rose-300'
+                : isSafeRevealed
+                  ? 'border-emerald-400/50 bg-gradient-to-b from-emerald-400/30 to-emerald-700/40 text-emerald-100 png-tile-flip'
+                  : 'border-white/15 bg-white/5 text-white/70 hover:border-amber-300/40 hover:bg-amber-300/10';
+            return (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => onReveal(idx)}
+                disabled={disabled}
+                aria-label={`Tile ${idx + 1}`}
+                className={cn(
+                  'aspect-square rounded-xl border text-base font-extrabold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/60 active:translate-y-px',
+                  stateClass,
+                  revealing === idx && 'opacity-70',
+                  disabled && !isMine && !isSafeRevealed && 'opacity-60',
+                )}
+              >
+                {isMine ? <Bomb className="mx-auto h-5 w-5" /> : isSafeRevealed ? <Gem className="mx-auto h-5 w-5" /> : ''}
               </button>
-              <button type="button" onClick={() => { if (!isPending) { setSession(null); openSession(); } }} disabled={isPending} className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-brand-divider bg-brand-surface px-3 text-sm font-semibold text-brand-inkSoft hover:bg-brand-paper disabled:opacity-60">
-                <Sparkles className="h-3.5 w-3.5" />
-                {lang === 'bn' ? 'নতুন সেশন' : 'New session'}
-              </button>
-            </div>
-            <p className="mt-3 text-[11px] text-brand-inkMute">
+            );
+          })}
+        </div>
+
+        {round?.kind === 'cashout' ? (
+          <div className="png-fade-up mt-4 rounded-xl border border-emerald-400/40 bg-emerald-500/15 px-4 py-3 text-emerald-100">
+            <p className="inline-flex items-center gap-2 text-sm font-extrabold uppercase tracking-wider">
+              <Trophy className="h-4 w-4" />
               {lang === 'bn'
-                ? 'একটি রাউন্ড চলমান থাকা অবস্থায় সেশন বন্ধ করা যাবে না - প্রথমে ক্যাশআউট অথবা শেষ পর্যন্ত খেলুন।'
-                : 'You cannot close the session mid-round - cash out or play it out first.'}
+                ? `ক্যাশআউট ${round.multiplier.toFixed(4)}x = ${formatBDT(round.payout)}`
+                : `Cashed out ${round.multiplier.toFixed(4)}x = ${formatBDT(round.payout)}`}
             </p>
-          </section>
-        </>
-      )}
+            <button type="button" onClick={onNewRound} className="mt-2 inline-flex h-9 items-center gap-1 rounded-lg bg-white/10 px-3 text-xs font-bold uppercase tracking-wider text-white hover:bg-white/15">
+              <RefreshCw className="h-3 w-3" />
+              {lang === 'bn' ? 'নতুন রাউন্ড' : 'New round'}
+            </button>
+          </div>
+        ) : null}
+        {round?.kind === 'loss' ? (
+          <div className="png-fade-up mt-4 rounded-xl border border-rose-400/40 bg-rose-500/15 px-4 py-3 text-rose-100">
+            <p className="inline-flex items-center gap-2 text-sm font-extrabold uppercase tracking-wider">
+              <Bomb className="h-4 w-4" />
+              {lang === 'bn' ? `মাইনে লেগেছে - হার ${formatBDT(round.bet)}` : `Hit a mine - lost ${formatBDT(round.bet)}`}
+            </p>
+            <button type="button" onClick={onNewRound} className="mt-2 inline-flex h-9 items-center gap-1 rounded-lg bg-white/10 px-3 text-xs font-bold uppercase tracking-wider text-white hover:bg-white/15">
+              <RefreshCw className="h-3 w-3" />
+              {lang === 'bn' ? 'নতুন রাউন্ড' : 'New round'}
+            </button>
+          </div>
+        ) : null}
+        {error ? <p className="mt-3 text-sm text-rose-300">{error}</p> : null}
+      </GamePanel>
+
+      {/* Bet card with Start / Cashout */}
+      <BetCard
+        bet={bet}
+        setBet={setBet}
+        minBet={minBet}
+        maxBet={maxBet}
+        balance={ng.balance}
+        playLabel={lang === 'bn' ? 'শুরু' : 'Start'}
+        onPlay={onStart}
+        loading={loading}
+        disabled={isPending || !ng.session}
+        hint={isPending ? (lang === 'bn' ? `ম্যাচ চলছে . ${formatBDT(potential)}` : `Round live . ${formatBDT(potential)}`) : undefined}
+        secondary={isPending ? {
+          label: lang === 'bn' ? `ক্যাশআউট ${formatBDT(potential)}` : `Cashout ${formatBDT(potential)}`,
+          onClick: onCashout,
+          disabled: !(round?.kind === 'pending' && round.revealed.length > 0),
+          loading,
+        } : undefined}
+      />
+    </GameShell>
+  );
+}
+
+function Stat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+  return (
+    <div className={cn('rounded-xl border bg-black/30 p-3', accent ? 'border-amber-400/30 bg-amber-400/10' : 'border-white/10')}>
+      <p className="text-[10px] font-bold uppercase tracking-wider text-white/55">{label}</p>
+      <p className={cn('mt-0.5 text-lg font-extrabold tabular-nums', accent ? 'text-amber-100' : 'text-white')}>{value}</p>
     </div>
   );
 }
 
-function Detail({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+function MinesRules({ lang }: { lang: 'bn' | 'en' }) {
+  if (lang === 'bn') {
+    return (
+      <ul className="list-disc space-y-2 pl-5">
+        <li>৫x৫ গ্রিডে আপনি মাইন সংখ্যা বেছে নিন (১-২৪)।</li>
+        <li>সার্ভার HMAC-SHA256 দিয়ে মাইন বসায়; মাইনের অবস্থান শুধু রাউন্ড শেষে দেখানো হয়।</li>
+        <li>প্রতিটি নিরাপদ টাইলে গুণিতক বাড়ে। যেকোনো সময় ক্যাশআউট করতে পারেন।</li>
+        <li>মাইনে লাগলে রাউন্ড শেষ; পুরো গ্রিড দেখানো হবে।</li>
+      </ul>
+    );
+  }
   return (
-    <div className="rounded-lg border border-brand-divider bg-brand-surface p-3">
-      <p className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">{label}</p>
-      <p className={cn('mt-1 break-all text-sm text-brand-ink', mono && 'font-mono')}>{value}</p>
-    </div>
+    <ul className="list-disc space-y-2 pl-5">
+      <li>Pick how many mines (1-24) to place on the 5x5 grid.</li>
+      <li>The server places mines via HMAC-SHA256. Positions stay hidden until the round ends.</li>
+      <li>Each safe pick lifts the multiplier. Cash out at any point to bank.</li>
+      <li>Hit a mine and the round ends with the full grid revealed.</li>
+    </ul>
   );
 }

@@ -1,20 +1,19 @@
 // Built by Anointed Coder.
 //
-// Pasha Keno play page. Player picks 1..10 numbers from the 1..80
-// pool, places a bet, and the server draws 20 numbers. Matches
-// against the player picks decide the multiplier.
+// Pasha Keno - premium game page. Pick numbers; server draws 20 from
+// the pool via /api/native-games/keno/bet; UI animates the draw
+// reveal but the matched set is whatever the server returned.
 
 'use client';
 
 import { useMemo, useState } from 'react';
-import Link from 'next/link';
-import { BackBar } from '@/components/site/BackBar';
-import { CategoryHero } from '@/components/site/CategoryHero';
 import { useLang } from '@/lib/i18n/context';
-import { Target, ShieldCheck, RefreshCw, Sparkles, Wallet as WalletIcon } from 'lucide-react';
+import { useNativeGame } from '@/lib/native-games/use-native-game';
+import { GameShell, GamePanel, GamePanelTitle } from '@/components/native-games/GameShell';
+import { BetCard } from '@/components/native-games/BetCard';
 import { formatBDT } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
-import { useNativeGame } from '@/lib/native-games/use-native-game';
+import { Shuffle, Trophy, X } from 'lucide-react';
 
 interface KenoResult {
   roundId: string;
@@ -27,6 +26,12 @@ interface KenoResult {
   matchCount: number;
   reused?: boolean;
 }
+
+// Multiplier preview - same numbers as the server paytable (see
+// lib/native-games/engine/keno.ts) but UI-only. Server is authoritative.
+const TOP_MULT: Record<number, number> = {
+  1: 3.6, 2: 12, 3: 42, 4: 110, 5: 800, 6: 1600, 7: 7000, 8: 10000, 9: 10000, 10: 10000,
+};
 
 export default function KenoPage() {
   const { lang } = useLang();
@@ -43,10 +48,14 @@ export default function KenoPage() {
   const [last, setLast] = useState<KenoResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [animKey, setAnimKey] = useState(0);
+
+  const playerPicks = useMemo(() => Array.from(picks).sort((a, b) => a - b), [picks]);
+  const topMult = TOP_MULT[playerPicks.length] ?? 0;
+  const projectedPayout = Number(bet) * topMult;
 
   const togglePick = (n: number) => {
-    setLast(null);
-    setError(null);
+    setLast(null); setError(null);
     setPicks((prev) => {
       const next = new Set(prev);
       if (next.has(n)) { next.delete(n); return next; }
@@ -54,21 +63,16 @@ export default function KenoPage() {
       next.add(n); return next;
     });
   };
-
   const clearPicks = () => { setPicks(new Set()); setLast(null); setError(null); };
   const quickPick = () => {
     setLast(null); setError(null);
     const n = Math.min(maxPicks, 5);
     const next = new Set<number>();
-    while (next.size < n) {
-      next.add(Math.floor(Math.random() * poolSize) + 1);
-    }
+    while (next.size < n) next.add(Math.floor(Math.random() * poolSize) + 1);
     setPicks(next);
   };
 
-  const playerPicks = useMemo(() => Array.from(picks).sort((a, b) => a - b), [picks]);
-
-  const onRoll = async () => {
+  const onDraw = async () => {
     if (!ng.session) return;
     if (playerPicks.length < minPicks) {
       setError(lang === 'bn' ? `কমপক্ষে ${minPicks}টি নম্বর বাছাই করুন` : `Pick at least ${minPicks} number(s)`);
@@ -88,246 +92,163 @@ export default function KenoPage() {
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
-        setError(data?.message ?? data?.code ?? 'Roll failed');
+        setError(data?.message ?? data?.code ?? 'Draw failed');
         if (data?.code === 'SESSION_INACTIVE') ng.newSession();
         return;
       }
-      const result = data as KenoResult;
-      setLast(result);
+      setLast(data as KenoResult);
+      setAnimKey((k) => k + 1);
       ng.bumpNonce();
       ng.refreshBalance();
-    } catch {
-      setError('Could not reach server');
-    } finally { setLoading(false); }
+    } catch { setError('Could not reach server'); }
+    finally { setLoading(false); }
   };
 
-  if (ng.authError) return <LoginGate lang={lang} />;
+  const minBet = game?.minBet ?? 10;
+  const maxBet = game?.maxBet ?? 5_000;
 
   return (
-    <div className="space-y-6">
-      <BackBar title={lang === 'bn' ? 'পাশা কেনো' : 'Pasha Keno'} />
-      <CategoryHero
-        kicker={lang === 'bn' ? 'পাশা অরিজিনালস' : 'Pasha Originals'}
-        title={lang === 'bn' ? 'পাশা কেনো' : 'Pasha Keno'}
-        description={
-          lang === 'bn'
-            ? `নম্বর বাছাই করুন। সার্ভার ${drawCount}টি ড্র করবে। মিল হলে গুণিতক জিতবেন।`
-            : `Pick numbers. The server draws ${drawCount}. Match to win the multiplier.`
-        }
-        accent="green"
-      />
-
-      {!ng.enabled || !game?.isActive ? (
-        <Unavailable lang={lang} />
-      ) : (
-        <>
-          <BalanceStrip balance={ng.balance} game={game} lang={lang} />
-
-          <section className="card-light p-5 md:p-6">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-sm font-semibold text-brand-ink">
-                {lang === 'bn' ? `${playerPicks.length} / ${maxPicks} বাছাই` : `${playerPicks.length} / ${maxPicks} picked`}
-              </p>
-              <div className="flex gap-2">
-                <button type="button" onClick={quickPick} className="h-9 rounded-lg border border-brand-divider px-3 text-xs font-semibold text-brand-inkSoft hover:bg-brand-surface">{lang === 'bn' ? 'কুইক পিক' : 'Quick pick'}</button>
-                <button type="button" onClick={clearPicks} className="h-9 rounded-lg border border-brand-divider px-3 text-xs font-semibold text-brand-inkSoft hover:bg-brand-surface">{lang === 'bn' ? 'ক্লিয়ার' : 'Clear'}</button>
-              </div>
-            </div>
-
-            <div className="mt-4 grid grid-cols-8 gap-1.5 sm:grid-cols-10">
-              {Array.from({ length: poolSize }).map((_, i) => {
-                const n = i + 1;
-                const isPicked = picks.has(n);
-                const drawn = last?.draw?.includes(n) ?? false;
-                const match = last?.matches?.includes(n) ?? false;
-                return (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => togglePick(n)}
-                    className={cn(
-                      'aspect-square rounded-md border text-xs font-bold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-yellow-500/40',
-                      !isPicked && !drawn && 'border-brand-divider bg-brand-paper text-brand-inkSoft hover:border-brand-yellow-500/50',
-                      isPicked && !drawn && 'border-brand-yellow-500 bg-brand-yellow-500 text-brand-ink',
-                      drawn && !match && 'border-brand-blue-500/50 bg-brand-blue-500/10 text-brand-blue-700',
-                      match && 'border-signal-ok bg-signal-ok/30 text-brand-ink',
-                    )}
-                  >
-                    {n}
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-
-          <BetPanel
-            bet={bet}
-            setBet={setBet}
-            game={game}
-            error={error}
-            loading={loading}
-            onPlay={onRoll}
-            playLabel={lang === 'bn' ? 'ড্র দেখুন' : 'Draw'}
-            potentialLabel={lang === 'bn' ? `বাছাই: ${playerPicks.length}` : `${playerPicks.length} picked`}
-            potentialValue={last?.win ? `+${formatBDT(last.payout)}` : ''}
-            lang={lang}
-          />
-
-          {last ? (
-            <section className={cn('card-light p-5', last.win ? 'border-l-4 border-signal-ok' : 'border-l-4 border-signal-danger')}>
-              <p className="text-sm font-bold uppercase tracking-wider text-brand-inkMute">
-                {last.win
-                  ? lang === 'bn' ? `${last.matchCount} মিল! ${last.multiplier.toFixed(4)}x = ${formatBDT(last.payout)}` : `${last.matchCount} matches! ${last.multiplier.toFixed(4)}x = ${formatBDT(last.payout)}`
-                  : lang === 'bn' ? `${last.matchCount} মিল - এই বার লাভ নেই` : `${last.matchCount} matches - no payout this round`}
-              </p>
-            </section>
-          ) : null}
-
-          <FairnessPanel ng={ng} lang={lang} />
-        </>
-      )}
-    </div>
-  );
-}
-
-// ---------- Shared sub-components reused across native-game pages ----------
-
-function BalanceStrip({ balance, game, lang }: { balance: number | null; game: { minBet: number; maxBet: number; houseEdgeBps: number }; lang: 'bn' | 'en' }) {
-  return (
-    <section className="card-light grid gap-3 p-4 sm:grid-cols-3">
-      <div>
-        <p className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">{lang === 'bn' ? 'মেইন ব্যালেন্স' : 'Main balance'}</p>
-        <p className="mt-1 inline-flex items-baseline gap-1 text-2xl font-extrabold text-brand-ink">
-          <WalletIcon className="h-4 w-4 text-brand-yellow-600" />
-          {balance != null ? formatBDT(balance) : '-'}
-        </p>
-      </div>
-      <div>
-        <p className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">{lang === 'bn' ? 'বেট সীমা' : 'Bet range'}</p>
-        <p className="mt-1 text-sm font-semibold text-brand-ink">{formatBDT(game.minBet)} - {formatBDT(game.maxBet)}</p>
-        <p className="text-[11px] text-brand-inkMute">{lang === 'bn' ? 'হাউস এজ' : 'House edge'}: {(game.houseEdgeBps / 100).toFixed(2)}%</p>
-      </div>
-      <div>
-        <p className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">{lang === 'bn' ? 'গেম মোড' : 'Game mode'}</p>
-        <p className="mt-1 text-sm font-semibold text-brand-ink">{lang === 'bn' ? 'ইনস্ট্যান্ট, প্রভাবলি ফেয়ার' : 'Instant, provably fair'}</p>
-      </div>
-    </section>
-  );
-}
-
-function BetPanel({ bet, setBet, game, error, loading, onPlay, playLabel, potentialLabel, potentialValue, lang }: {
-  bet: string;
-  setBet: (v: string) => void;
-  game: { minBet: number; maxBet: number };
-  error: string | null;
-  loading: boolean;
-  onPlay: () => void;
-  playLabel: string;
-  potentialLabel: string;
-  potentialValue: string;
-  lang: 'bn' | 'en';
-}) {
-  return (
-    <section className="card-light p-5 md:p-6">
-      <div className="grid gap-4 md:grid-cols-2">
-        <div>
-          <label className="text-[11px] font-bold uppercase tracking-wider text-brand-inkMute">{lang === 'bn' ? 'বেট পরিমাণ' : 'Bet amount'}</label>
-          <div className="mt-1 flex items-center gap-2">
-            <input
-              type="number"
-              inputMode="decimal"
-              min={game.minBet}
-              max={game.maxBet}
-              step="1"
-              value={bet}
-              onChange={(e) => setBet(e.target.value)}
-              className="h-11 w-full rounded-lg border border-brand-divider bg-brand-paper px-3 text-base font-semibold text-brand-ink focus:border-brand-blue-500 focus:outline-none"
-            />
-            <button type="button" onClick={() => setBet(String(Math.max(game.minBet, Math.floor(Number(bet) / 2))))} className="h-11 rounded-lg border border-brand-divider px-3 text-sm font-semibold text-brand-inkSoft hover:bg-brand-surface">1/2</button>
-            <button type="button" onClick={() => setBet(String(Math.min(game.maxBet, Math.floor(Number(bet) * 2))))} className="h-11 rounded-lg border border-brand-divider px-3 text-sm font-semibold text-brand-inkSoft hover:bg-brand-surface">2x</button>
-          </div>
-          <p className="mt-1 text-[11px] text-brand-inkMute">{formatBDT(game.minBet)} - {formatBDT(game.maxBet)} BDT</p>
+    <GameShell
+      code="keno"
+      titleEn="Pasha Keno"
+      titleBn="পাশা কেনো"
+      taglineEn={`Pick numbers. The server draws ${drawCount}. Match to win the multiplier.`}
+      taglineBn={`নম্বর বাছাই করুন। সার্ভার ${drawCount}টি ড্র করবে। মিল হলেই গুণিতক জিতবেন।`}
+      accent="emerald"
+      ng={ng}
+      rules={<KenoRules lang={lang} poolSize={poolSize} drawCount={drawCount} />}
+    >
+      {/* Pick summary + top multiplier */}
+      <GamePanel>
+        <div className="grid grid-cols-3 gap-3 text-center">
+          <Stat label={lang === 'bn' ? 'বাছাই' : 'Picks'} value={`${playerPicks.length} / ${maxPicks}`} />
+          <Stat label={lang === 'bn' ? 'সর্বোচ্চ গুণিতক' : 'Max multiplier'} value={topMult > 0 ? `${topMult}x` : '-'} accent />
+          <Stat label={lang === 'bn' ? 'মিল' : 'Matches'} value={last ? String(last.matchCount) : '-'} />
         </div>
-        <div className="rounded-xl border border-brand-divider bg-brand-surface p-4">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">{potentialLabel}</p>
-          <p className="mt-1 text-xl font-extrabold text-brand-yellow-700 min-h-[1.75rem]">{potentialValue || '-'}</p>
-          {error ? <p className="mt-2 text-sm text-signal-danger">{error}</p> : null}
-          <button
-            type="button"
-            onClick={onPlay}
-            disabled={loading}
-            className="mt-3 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand-yellow-500 text-base font-extrabold uppercase tracking-wider text-brand-ink hover:brightness-105 disabled:opacity-60"
-          >
-            <Target className={cn('h-5 w-5', loading && 'animate-spin')} />
-            {playLabel}
+        <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+          <button type="button" onClick={quickPick} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-3 text-xs font-bold uppercase tracking-wider text-white hover:bg-white/10">
+            <Shuffle className="h-3.5 w-3.5" />
+            {lang === 'bn' ? 'কুইক পিক' : 'Quick pick'}
+          </button>
+          <button type="button" onClick={clearPicks} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-3 text-xs font-bold uppercase tracking-wider text-white hover:bg-white/10">
+            <X className="h-3.5 w-3.5" />
+            {lang === 'bn' ? 'ক্লিয়ার' : 'Clear'}
           </button>
         </div>
-      </div>
-    </section>
-  );
-}
+      </GamePanel>
 
-function FairnessPanel({ ng, lang }: { ng: ReturnType<typeof useNativeGame>; lang: 'bn' | 'en' }) {
-  return (
-    <section className="card-light p-5 md:p-6">
-      <div className="flex items-center gap-2 text-brand-ink">
-        <ShieldCheck className="h-4 w-4 text-brand-yellow-600" />
-        <h3 className="text-base font-extrabold">{lang === 'bn' ? 'প্রভাবলি ফেয়ার প্যানেল' : 'Provably fair'}</h3>
-      </div>
-      {ng.session ? (
-        <div className="mt-3 grid gap-3 md:grid-cols-2">
-          <Detail label={lang === 'bn' ? 'সার্ভার সিড হ্যাশ' : 'Server seed hash'} value={ng.session.serverSeedHash} mono />
-          <Detail label={lang === 'bn' ? 'ক্লায়েন্ট সিড' : 'Client seed'} value={ng.session.clientSeed} mono />
-          <Detail label={lang === 'bn' ? 'বর্তমান ননস' : 'Current nonce'} value={String(ng.session.nonce)} />
-          <Detail label={lang === 'bn' ? 'সেশন স্ট্যাটাস' : 'Session status'} value={ng.session.status} />
+      {/* Number grid */}
+      <GamePanel>
+        <GamePanelTitle hint={`1 - ${poolSize}`}>
+          {lang === 'bn' ? 'নম্বর বাছাই' : 'Choose numbers'}
+        </GamePanelTitle>
+        <div className="grid grid-cols-8 gap-1.5 sm:grid-cols-10">
+          {Array.from({ length: poolSize }).map((_, i) => {
+            const n = i + 1;
+            const isPicked = picks.has(n);
+            const drawn = last?.draw?.includes(n) ?? false;
+            const match = last?.matches?.includes(n) ?? false;
+            return (
+              <button
+                key={n}
+                type="button"
+                onClick={() => togglePick(n)}
+                aria-pressed={isPicked}
+                className={cn(
+                  'aspect-square rounded-lg border text-xs font-extrabold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/60',
+                  !isPicked && !drawn && 'border-white/10 bg-white/5 text-white/75 hover:border-emerald-300/40 hover:bg-emerald-300/10',
+                  isPicked && !drawn && 'border-amber-400/60 bg-gradient-to-b from-amber-300 to-amber-500 text-[#3A1F00] shadow-[inset_0_1px_0_rgba(255,255,255,0.5)] png-glow',
+                  drawn && !match && 'border-sky-400/40 bg-sky-400/15 text-sky-100',
+                  match && 'border-emerald-300 bg-gradient-to-b from-emerald-300 to-emerald-600 text-white png-win',
+                )}
+              >
+                {n}
+              </button>
+            );
+          })}
         </div>
-      ) : (
-        <p className="mt-3 text-sm text-brand-inkMute">{lang === 'bn' ? 'সেশন তৈরি হচ্ছে...' : 'Opening session...'}</p>
-      )}
-      <div className="mt-4 flex flex-wrap gap-2">
-        <button type="button" onClick={ng.closeSessionAndReveal} disabled={!ng.session} className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-brand-divider bg-brand-surface px-3 text-sm font-semibold text-brand-ink hover:bg-brand-paper disabled:opacity-60">
-          <RefreshCw className="h-3.5 w-3.5" />
-          {lang === 'bn' ? 'সেশন বন্ধ + যাচাই' : 'Close + verify session'}
-        </button>
-        <button type="button" onClick={ng.newSession} className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-brand-divider bg-brand-surface px-3 text-sm font-semibold text-brand-inkSoft hover:bg-brand-paper">
-          <Sparkles className="h-3.5 w-3.5" />
-          {lang === 'bn' ? 'নতুন সেশন' : 'New session'}
-        </button>
-      </div>
-    </section>
+      </GamePanel>
+
+      {/* Draw reveal */}
+      {last ? (
+        <GamePanel key={animKey} className={cn(last.win && 'png-win', !last.win && 'png-loss')}>
+          <GamePanelTitle hint={lang === 'bn' ? `${drawCount}টি ড্র` : `${drawCount} drawn`}>
+            {lang === 'bn' ? 'ড্রয়ের ফলাফল' : 'Drawn numbers'}
+          </GamePanelTitle>
+          <div className="flex flex-wrap gap-1.5">
+            {last.draw.map((n, i) => {
+              const isMatch = last.matches.includes(n);
+              return (
+                <span
+                  key={n}
+                  className={cn(
+                    'inline-flex h-9 w-9 items-center justify-center rounded-full text-xs font-extrabold',
+                    isMatch
+                      ? 'bg-gradient-to-b from-amber-200 to-amber-500 text-[#3A1F00] shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]'
+                      : 'border border-white/15 bg-white/5 text-white/80',
+                    'png-ball',
+                  )}
+                  style={{ animationDelay: `${i * 35}ms` }}
+                >
+                  {n}
+                </span>
+              );
+            })}
+          </div>
+          <div className={cn('mt-3 inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-extrabold uppercase tracking-wider',
+            last.win ? 'bg-amber-400/20 text-amber-100' : 'bg-white/5 text-white/70')}>
+            <Trophy className="h-4 w-4" />
+            {last.win
+              ? lang === 'bn' ? `${last.matchCount} মিল . ${last.multiplier.toFixed(4)}x . +${formatBDT(last.payout)}` : `${last.matchCount} matches . ${last.multiplier.toFixed(4)}x . +${formatBDT(last.payout)}`
+              : lang === 'bn' ? `${last.matchCount} মিল . এই বার লাভ নেই` : `${last.matchCount} matches . no payout this round`}
+          </div>
+        </GamePanel>
+      ) : null}
+
+      {error ? <p className="rounded-lg border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{error}</p> : null}
+
+      <BetCard
+        bet={bet}
+        setBet={setBet}
+        minBet={minBet}
+        maxBet={maxBet}
+        balance={ng.balance}
+        playLabel={lang === 'bn' ? 'ড্র দেখুন' : 'Draw'}
+        onPlay={onDraw}
+        loading={loading}
+        disabled={!ng.session || playerPicks.length < minPicks}
+        hint={topMult > 0 ? `${lang === 'bn' ? 'সর্বোচ্চ' : 'Max'}: ${formatBDT(Number.isFinite(projectedPayout) ? projectedPayout : 0)}` : undefined}
+      />
+    </GameShell>
   );
 }
 
-function Detail({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+function Stat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (
-    <div className="rounded-lg border border-brand-divider bg-brand-surface p-3">
-      <p className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">{label}</p>
-      <p className={cn('mt-1 break-all text-sm text-brand-ink', mono && 'font-mono')}>{value}</p>
+    <div className={cn('rounded-xl border bg-black/30 p-3', accent ? 'border-amber-400/30 bg-amber-400/10' : 'border-white/10')}>
+      <p className="text-[10px] font-bold uppercase tracking-wider text-white/55">{label}</p>
+      <p className={cn('mt-0.5 text-lg font-extrabold tabular-nums', accent ? 'text-amber-100' : 'text-white')}>{value}</p>
     </div>
   );
 }
 
-function Unavailable({ lang }: { lang: 'bn' | 'en' }) {
+function KenoRules({ lang, poolSize, drawCount }: { lang: 'bn' | 'en'; poolSize: number; drawCount: number }) {
+  if (lang === 'bn') {
+    return (
+      <ul className="list-disc space-y-2 pl-5">
+        <li>১ থেকে {poolSize} এর মধ্যে ১ থেকে ১০টি নম্বর বাছাই করুন।</li>
+        <li>সার্ভার HMAC-SHA256 দিয়ে {drawCount}টি নম্বর ড্র করে।</li>
+        <li>আপনার বাছাই কতগুলো নম্বরের সাথে মিলেছে তার ভিত্তিতে পেআউট নির্ধারিত হয়।</li>
+        <li>প্রতিটি রাউন্ড স্বাধীন এবং প্রভাবলি ফেয়ার।</li>
+      </ul>
+    );
+  }
   return (
-    <section className="card-light p-5">
-      <p className="text-sm text-brand-inkSoft">
-        {lang === 'bn' ? 'এই গেমটি বর্তমানে সাময়িকভাবে অনুপলব্ধ।' : 'This game is temporarily unavailable.'}
-      </p>
-    </section>
-  );
-}
-
-function LoginGate({ lang }: { lang: 'bn' | 'en' }) {
-  return (
-    <div className="space-y-6">
-      <BackBar />
-      <section className="card-light p-5">
-        <p className="text-sm text-brand-inkSoft">{lang === 'bn' ? 'খেলতে লগইন করুন।' : 'Log in to play.'}</p>
-        <div className="mt-3 flex gap-2">
-          <Link href="/?login=1" className="btn-yellow inline-flex h-10 items-center rounded-lg px-4 text-sm">{lang === 'bn' ? 'লগইন' : 'Log in'}</Link>
-          <Link href="/?signup=1" className="inline-flex h-10 items-center rounded-lg border border-brand-divider bg-brand-surface px-4 text-sm font-semibold text-brand-ink hover:bg-brand-paper">{lang === 'bn' ? 'রেজিস্টার' : 'Register'}</Link>
-        </div>
-      </section>
-    </div>
+    <ul className="list-disc space-y-2 pl-5">
+      <li>Pick 1 to 10 numbers from 1 to {poolSize}.</li>
+      <li>The server HMAC-SHA256 draws {drawCount} numbers.</li>
+      <li>Your payout is set by how many of your picks the draw matched.</li>
+      <li>Every round is independent and provably fair.</li>
+    </ul>
   );
 }
