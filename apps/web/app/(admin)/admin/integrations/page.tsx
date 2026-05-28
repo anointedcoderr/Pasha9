@@ -28,7 +28,7 @@ import { PageHeader } from '@/components/site/PageHeader';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
-import { Plug, RefreshCw, Download, ArrowRight, Wallet, Send, Wifi, ShieldCheck, Clock, Copy, AlertCircle } from 'lucide-react';
+import { Plug, RefreshCw, Download, ArrowRight, Wallet, Send, Wifi, ShieldCheck, Clock, Copy, AlertCircle, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 
 interface ProviderCard {
@@ -65,6 +65,7 @@ interface Snapshot {
     payouts?: ProviderCard[];
     sms?: ProviderCard[];
     tracking?: ProviderCard[];
+    nativeGames?: ProviderCard[];
   };
   platform?: {
     activeSmsProvider?: string;
@@ -72,6 +73,8 @@ interface Snapshot {
     cronRoutes?: CronRoute[];
     paymentMethodsHref?: string;
     securityHref?: string;
+    nativeGamesEnabled?: boolean;
+    nativeGamesHref?: string;
   };
   security?: {
     ipBlockCount?: number;
@@ -86,13 +89,15 @@ const EMPTY_SNAP: Required<Snapshot> & {
   platform: Required<NonNullable<Snapshot['platform']>>;
   security: Required<NonNullable<Snapshot['security']>>;
 } = {
-  categories: { payments: [], payouts: [], sms: [], tracking: [] },
+  categories: { payments: [], payouts: [], sms: [], tracking: [], nativeGames: [] },
   platform: {
     activeSmsProvider: 'manual',
     cronSecretConfigured: false,
     cronRoutes: [],
     paymentMethodsHref: '/admin/payment-methods',
     securityHref: '/admin/security',
+    nativeGamesEnabled: true,
+    nativeGamesHref: '/admin/native-games',
   },
   security: { ipBlockCount: 0, totpEnabledUserCount: 0, activeStaffCount: 0 },
   recentEdits: [],
@@ -166,7 +171,10 @@ export default function AdminIntegrationsPage() {
   const payoutsCards = safeArray<ProviderCard>(categories.payouts);
   const smsCards = safeArray<ProviderCard>(categories.sms);
   const trackingCards = safeArray<ProviderCard>(categories.tracking);
+  const nativeGameCards = safeArray<ProviderCard>(categories.nativeGames);
   const cronRoutes = safeArray<CronRoute>(platform.cronRoutes);
+  const nativeGamesEnabled = platform.nativeGamesEnabled !== false;
+  const nativeGamesHref = platform.nativeGamesHref || '/admin/native-games';
 
   return (
     <>
@@ -227,6 +235,15 @@ export default function AdminIntegrationsPage() {
             providers={trackingCards}
             emptyHref="/admin/notifications"
             emptyLabel="No tracking platforms loaded yet. Open Notifications to configure."
+          />
+
+          <CategorySection
+            title="Native games"
+            subtitle={`Pasha Native Games - in-house provably-fair titles. Global switch is ${nativeGamesEnabled ? 'ON' : 'OFF'}. Toggle individual games from the Native Games admin.`}
+            icon={<Sparkles className="h-4 w-4 text-gold-300" />}
+            providers={nativeGameCards}
+            emptyHref={nativeGamesHref}
+            emptyLabel="No native games loaded yet. Open Native Games admin to add one."
           />
 
           <Card padding="lg" className="mb-6">

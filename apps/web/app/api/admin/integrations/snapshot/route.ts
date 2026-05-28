@@ -26,6 +26,7 @@ import { listProviderSummaries } from '@/lib/payments/registry';
 import { listPayoutSummaries } from '@/lib/payouts/registry';
 import { listSmsAdapters } from '@/lib/sms/registry';
 import { platformsStatus } from '@/lib/tracking/dispatcher';
+import { isNativeGamesEnabled } from '@/lib/native-games/flag';
 
 const PAYMENT_GATEWAY_HREF = '/admin/payments';
 const PAYOUT_GATEWAY_HREF = '/admin/payouts';
@@ -34,6 +35,7 @@ const SECURITY_HREF = '/admin/security';
 const LOTTO_HREF = '/admin/lotto';
 const RECOVERY_HREF = '/admin/recovery';
 const PAYMENT_METHODS_HREF = '/admin/payment-methods';
+const NATIVE_GAMES_HREF = '/admin/native-games';
 
 interface ProviderCard {
   key: string;
@@ -66,6 +68,8 @@ export async function GET() {
       payouts,
       smsAdaptersRaw,
       trackingPlatforms,
+      nativeGames,
+      nativeGamesEnabled,
       smsProviderRow,
       ipBlockCount,
       totpEnabledCount,
@@ -76,6 +80,8 @@ export async function GET() {
       safeRun('listPayoutSummaries', () => listPayoutSummaries(), [] as Awaited<ReturnType<typeof listPayoutSummaries>>),
       safeRun('listSmsAdapters', async () => listSmsAdapters().map((a) => a.describe()), [] as ReturnType<ReturnType<typeof listSmsAdapters>[number]['describe']>[]),
       safeRun('platformsStatus', () => platformsStatus(), [] as Awaited<ReturnType<typeof platformsStatus>>),
+      safeRun('nativeGames', () => db.nativeGameProvider.findMany({ orderBy: { displayName: 'asc' } }), [] as Awaited<ReturnType<typeof db.nativeGameProvider.findMany>>),
+      safeRun('nativeGamesEnabled', () => isNativeGamesEnabled(), true),
       safeRun('smsProviderRow', () => db.systemSetting.findUnique({ where: { key: 'sms_provider' }, select: { value: true } }), null as { value: string } | null),
       safeRun('ipBlockCount', () => db.ipBlockRule.count(), 0),
       safeRun('totpEnabledCount', () => db.user.count({ where: { totpEnabled: true } }), 0),
@@ -167,12 +173,35 @@ export async function GET() {
       };
     });
 
+    // Pasha Native Games: one card per row in NativeGameProvider. The
+    // global feature flag puts every row into 'disabled' when off so a
+    // glance at the page tells the operator the subsystem is paused.
+    const nativeGameCards: ProviderCard[] = (Array.isArray(nativeGames) ? nativeGames : []).map((raw) => {
+      const g = (raw ?? {}) as { gameCode?: unknown; displayName?: unknown; isActive?: unknown; houseEdgeBps?: unknown; minBet?: unknown; maxBet?: unknown };
+      const code = String(g.gameCode ?? 'unknown');
+      const active = Boolean(g.isActive);
+      const status = !nativeGamesEnabled ? 'disabled' : (active ? 'live' : 'disabled');
+      const min = Number(g.minBet ?? 0);
+      const max = Number(g.maxBet ?? 0);
+      const edge = Number(g.houseEdgeBps ?? 0);
+      return {
+        key: code,
+        label: String(g.displayName ?? code),
+        status,
+        description: `House edge ${edge}bps . Bet ${min}-${max} BDT`,
+        configureHref: NATIVE_GAMES_HREF,
+        fieldCount: 0,
+        isActive: nativeGamesEnabled && active,
+      };
+    });
+
     return jsonOk({
       categories: {
         payments: paymentsCards,
         payouts: payoutsCards,
         sms: smsCards,
         tracking: trackingCards,
+        nativeGames: nativeGameCards,
       },
       platform: {
         activeSmsProvider: activeSmsKey,
@@ -183,6 +212,8 @@ export async function GET() {
         ],
         paymentMethodsHref: PAYMENT_METHODS_HREF,
         securityHref: SECURITY_HREF,
+        nativeGamesEnabled: Boolean(nativeGamesEnabled),
+        nativeGamesHref: NATIVE_GAMES_HREF,
       },
       security: {
         ipBlockCount: Number(ipBlockCount ?? 0),

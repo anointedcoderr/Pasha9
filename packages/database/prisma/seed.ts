@@ -448,6 +448,50 @@ async function seedLottoDraws() {
   }
 }
 
+async function seedNativeGames() {
+  log('native games (Pasha Dice + Mines)');
+  // Two playable in-house games, kept idempotent via the unique
+  // gameCode column. Caps + house edge mirror the defaults declared in
+  // apps/web/lib/native-games/config.ts so a fresh seed matches the
+  // engine's expectations exactly.
+  const defaults = [
+    {
+      gameCode: 'dice',
+      displayName: 'Pasha Dice',
+      isActive: true,
+      houseEdgeBps: 200,
+      minBet: 10,
+      maxBet: 10_000,
+      config: { minTarget: 2, maxTarget: 98 } as Record<string, number>,
+    },
+    {
+      gameCode: 'mines',
+      displayName: 'Pasha Mines',
+      isActive: true,
+      houseEdgeBps: 200,
+      minBet: 10,
+      maxBet: 10_000,
+      config: { gridSize: 25, minMines: 1, maxMines: 24 } as Record<string, number>,
+    },
+  ];
+  for (const g of defaults) {
+    await db.nativeGameProvider.upsert({
+      where: { gameCode: g.gameCode },
+      update: {
+        displayName: g.displayName,
+        houseEdgeBps: g.houseEdgeBps,
+        config: g.config,
+      },
+      create: g,
+    });
+  }
+  await db.systemSetting.upsert({
+    where: { key: 'native_games_enabled' },
+    update: {},
+    create: { key: 'native_games_enabled', value: 'true', type: 'boolean', category: 'general' },
+  });
+}
+
 async function seedRewardItems() {
   log('reward catalog');
   const items = [
@@ -484,6 +528,7 @@ async function main() {
   await seedCommissionTiers();
   await seedLottoDraws();
   await seedRewardItems();
+  await seedNativeGames();
 
   log(`super admin id: ${admin.id}`);
   log('done');

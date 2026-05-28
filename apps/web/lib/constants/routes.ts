@@ -2,6 +2,8 @@ export const ROUTES = {
   home: '/',
   games: '/games',
   category: (slug: string) => `/games/${slug}`,
+  dice: '/games/dice',
+  mines: '/games/mines',
   sports: '/sports',
   liveCasino: '/live-casino',
   slots: '/slots',
@@ -63,5 +65,6 @@ export const ROUTES = {
     recovery: '/admin/recovery',
     notifications: '/admin/notifications',
     integrations: '/admin/integrations',
+    nativeGames: '/admin/native-games',
   },
 } as const;

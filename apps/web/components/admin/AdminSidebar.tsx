@@ -39,6 +39,7 @@ import {
   HeartHandshake,
   Bell,
   Plug,
+  Gamepad2,
 } from 'lucide-react';
 import { Logo } from '@/components/site/Logo';
 import { ROUTES } from '@/lib/constants/routes';
@@ -99,6 +100,7 @@ const GROUPS = [
     items: [
       { key: 'lotto', href: '/admin/lotto', icon: Ticket },
       { key: 'rewards', href: '/admin/rewards', icon: Trophy },
+      { key: 'nativeGames', href: ROUTES.admin.nativeGames, icon: Gamepad2 },
     ],
   },
   {
