@@ -1147,6 +1147,12 @@ model NativeGameProvider {
   gameCode      String   @unique
   displayName   String
   isActive      Boolean  @default(true)
+  // Phase 2: shown on the homepage Hot Games strip when true. Hidden
+  // rows still play if isActive and reachable directly via /games/<code>.
+  isFeatured    Boolean  @default(false)
+  // Lower values surface first on the homepage + /games lobby; ties
+  // fall back to displayName order.
+  sortOrder     Int      @default(0)
   houseEdgeBps  Int      @default(200)
   minBet        Decimal  @default(10)    @db.Decimal(14, 2)
   maxBet        Decimal  @default(10000) @db.Decimal(14, 2)

@@ -449,34 +449,110 @@ async function seedLottoDraws() {
 }
 
 async function seedNativeGames() {
-  log('native games (Pasha Dice + Mines)');
-  // Two playable in-house games, kept idempotent via the unique
-  // gameCode column. Caps + house edge mirror the defaults declared in
-  // apps/web/lib/native-games/config.ts so a fresh seed matches the
-  // engine's expectations exactly.
-  const defaults = [
+  log('native games (Dice + Mines active; Keno/Roulette/Slots/Crash inactive)');
+  // Phase 1 ships Dice + Mines live and featured on the homepage.
+  // Phase 2 lands Keno, Roulette, Slots and Crash in the catalog but
+  // every new game starts INACTIVE so it cannot be played by a real
+  // player until QA flips its `isActive` switch from
+  // /admin/native-games. Idempotent via the unique gameCode column.
+  const defaults: Array<{
+    gameCode: string;
+    displayName: string;
+    isActive: boolean;
+    isFeatured: boolean;
+    sortOrder: number;
+    houseEdgeBps: number;
+    minBet: number;
+    maxBet: number;
+    config: Record<string, unknown>;
+  }> = [
     {
       gameCode: 'dice',
       displayName: 'Pasha Dice',
       isActive: true,
+      isFeatured: true,
+      sortOrder: 10,
       houseEdgeBps: 200,
       minBet: 10,
       maxBet: 10_000,
-      config: { minTarget: 2, maxTarget: 98 } as Record<string, number>,
+      config: { minTarget: 2, maxTarget: 98 },
     },
     {
       gameCode: 'mines',
       displayName: 'Pasha Mines',
       isActive: true,
+      isFeatured: true,
+      sortOrder: 20,
       houseEdgeBps: 200,
       minBet: 10,
       maxBet: 10_000,
-      config: { gridSize: 25, minMines: 1, maxMines: 24 } as Record<string, number>,
+      config: { gridSize: 25, minMines: 1, maxMines: 24 },
+    },
+    {
+      gameCode: 'keno',
+      displayName: 'Pasha Keno',
+      isActive: false,
+      isFeatured: false,
+      sortOrder: 30,
+      houseEdgeBps: 500,
+      minBet: 10,
+      maxBet: 5_000,
+      config: { poolSize: 80, drawCount: 20, minPicks: 1, maxPicks: 10 },
+    },
+    {
+      gameCode: 'roulette',
+      displayName: 'Pasha Roulette',
+      isActive: false,
+      isFeatured: false,
+      sortOrder: 40,
+      houseEdgeBps: 270,
+      minBet: 10,
+      maxBet: 10_000,
+      config: { wheelSize: 37 },
+    },
+    {
+      gameCode: 'slots',
+      displayName: 'Pasha Slots',
+      isActive: false,
+      isFeatured: false,
+      sortOrder: 50,
+      houseEdgeBps: 400,
+      minBet: 10,
+      maxBet: 1_000,
+      config: {
+        reels: 3,
+        symbols: ['CHERRY', 'CLOVER', 'CROWN', 'DIAMOND', 'LEMON', 'NINE', 'SEVEN', 'STAR'],
+        paytable: {
+          CHERRY:  { '3': 5 },
+          LEMON:   { '3': 5 },
+          CLOVER:  { '3': 8 },
+          NINE:    { '3': 10 },
+          STAR:    { '3': 20 },
+          DIAMOND: { '3': 40 },
+          CROWN:   { '3': 80 },
+          SEVEN:   { '3': 150 },
+        },
+      },
+    },
+    {
+      gameCode: 'crash',
+      displayName: 'Pasha Crash',
+      isActive: false,
+      isFeatured: false,
+      sortOrder: 60,
+      houseEdgeBps: 200,
+      minBet: 10,
+      maxBet: 5_000,
+      config: { minTargetMultiplier: 1.01, maxTargetMultiplier: 100, maxCrashMultiplier: 1000 },
     },
   ];
   for (const g of defaults) {
     await db.nativeGameProvider.upsert({
       where: { gameCode: g.gameCode },
+      // Operator-tunable fields (active flag, caps, featured/sort) are
+      // intentionally NOT clobbered on re-seed - only the labels and
+      // payout config refresh so a re-deploy will not flip an admin's
+      // production toggles.
       update: {
         displayName: g.displayName,
         houseEdgeBps: g.houseEdgeBps,

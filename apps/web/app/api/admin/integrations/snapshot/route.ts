@@ -80,7 +80,7 @@ export async function GET() {
       safeRun('listPayoutSummaries', () => listPayoutSummaries(), [] as Awaited<ReturnType<typeof listPayoutSummaries>>),
       safeRun('listSmsAdapters', async () => listSmsAdapters().map((a) => a.describe()), [] as ReturnType<ReturnType<typeof listSmsAdapters>[number]['describe']>[]),
       safeRun('platformsStatus', () => platformsStatus(), [] as Awaited<ReturnType<typeof platformsStatus>>),
-      safeRun('nativeGames', () => db.nativeGameProvider.findMany({ orderBy: { displayName: 'asc' } }), [] as Awaited<ReturnType<typeof db.nativeGameProvider.findMany>>),
+      safeRun('nativeGames', () => db.nativeGameProvider.findMany({ orderBy: [{ sortOrder: 'asc' }, { displayName: 'asc' }] }), [] as Awaited<ReturnType<typeof db.nativeGameProvider.findMany>>),
       safeRun('nativeGamesEnabled', () => isNativeGamesEnabled(), true),
       safeRun('smsProviderRow', () => db.systemSetting.findUnique({ where: { key: 'sms_provider' }, select: { value: true } }), null as { value: string } | null),
       safeRun('ipBlockCount', () => db.ipBlockRule.count(), 0),

@@ -17,6 +17,8 @@ import { setNativeGamesEnabled, isNativeGamesEnabled } from '@/lib/native-games/
 
 const patchSchema = z.object({
   isActive: z.boolean().optional(),
+  isFeatured: z.boolean().optional(),
+  sortOrder: z.coerce.number().int().min(0).max(10_000).optional(),
   minBet: z.coerce.number().positive().max(10_000_000).optional(),
   maxBet: z.coerce.number().positive().max(10_000_000).optional(),
   houseEdgeBps: z.coerce.number().int().min(0).max(2_000).optional(),
@@ -53,6 +55,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { gameCode: 
       where: { gameCode: params.gameCode },
       data: {
         ...(parsed.data.isActive !== undefined ? { isActive: parsed.data.isActive } : {}),
+        ...(parsed.data.isFeatured !== undefined ? { isFeatured: parsed.data.isFeatured } : {}),
+        ...(parsed.data.sortOrder !== undefined ? { sortOrder: parsed.data.sortOrder } : {}),
         ...(parsed.data.minBet !== undefined ? { minBet: parsed.data.minBet } : {}),
         ...(parsed.data.maxBet !== undefined ? { maxBet: parsed.data.maxBet } : {}),
         ...(parsed.data.houseEdgeBps !== undefined ? { houseEdgeBps: parsed.data.houseEdgeBps } : {}),
@@ -68,6 +72,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { gameCode: 
       meta: {
         before: {
           isActive: existing.isActive,
+          isFeatured: existing.isFeatured,
+          sortOrder: existing.sortOrder,
           minBet: Number(existing.minBet),
           maxBet: Number(existing.maxBet),
           houseEdgeBps: existing.houseEdgeBps,
@@ -75,6 +81,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { gameCode: 
         },
         after: {
           isActive: updated.isActive,
+          isFeatured: updated.isFeatured,
+          sortOrder: updated.sortOrder,
           minBet: Number(updated.minBet),
           maxBet: Number(updated.maxBet),
           houseEdgeBps: updated.houseEdgeBps,
@@ -90,6 +98,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { gameCode: 
         gameCode: updated.gameCode,
         displayName: updated.displayName,
         isActive: updated.isActive,
+        isFeatured: updated.isFeatured,
+        sortOrder: updated.sortOrder,
         houseEdgeBps: updated.houseEdgeBps,
         minBet: Number(updated.minBet),
         maxBet: Number(updated.maxBet),

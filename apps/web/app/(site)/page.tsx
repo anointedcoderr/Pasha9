@@ -10,6 +10,7 @@ import { JackpotStrip } from '@/components/site/JackpotStrip';
 import { WalletStrip } from '@/components/site/WalletStrip';
 import { CategorySlider } from '@/components/site/CategorySlider';
 import { HomeGameSection } from '@/components/site/HomeGameSection';
+import { HomeNativeGamesSection } from '@/components/site/HomeNativeGamesSection';
 import { AmbassadorVideoSection } from '@/components/site/AmbassadorVideoSection';
 import { SportsCardsCarousel } from '@/components/site/SportsCardsCarousel';
 import { PromoPair } from '@/components/site/PromoPair';
@@ -41,6 +42,8 @@ export default function HomePage() {
       <PromoTicker />
 
       <JackpotStrip />
+
+      <HomeNativeGamesSection />
 
       <HomeGameSection
         title={t('home.sectionHot')}

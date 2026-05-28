@@ -27,6 +27,8 @@ export async function GET() {
         gameCode: a.game.gameCode,
         displayName: a.game.displayName,
         isActive: a.game.isActive,
+        isFeatured: a.game.isFeatured,
+        sortOrder: a.game.sortOrder,
         houseEdgeBps: a.game.houseEdgeBps,
         minBet: Number(a.game.minBet),
         maxBet: Number(a.game.maxBet),

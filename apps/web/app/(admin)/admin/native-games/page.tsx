@@ -29,6 +29,8 @@ interface NativeGameRow {
   gameCode: string;
   displayName: string;
   isActive: boolean;
+  isFeatured: boolean;
+  sortOrder: number;
   houseEdgeBps: number;
   minBet: number;
   maxBet: number;
@@ -221,12 +223,16 @@ export default function AdminNativeGamesPage() {
                         <p className="text-base font-extrabold text-ink-hi">{g.displayName}</p>
                         <p className="mt-1 font-mono text-[10px] uppercase tracking-wider text-ink-lo">{g.gameCode}</p>
                       </div>
-                      <Chip tone={g.isActive ? 'ok' : 'warn'}>{g.isActive ? 'Active' : 'Disabled'}</Chip>
+                      <div className="flex flex-col items-end gap-1">
+                        <Chip tone={g.isActive ? 'ok' : 'warn'}>{g.isActive ? 'Active' : 'Disabled'}</Chip>
+                        {g.isFeatured ? <Chip tone="gold">Featured</Chip> : null}
+                      </div>
                     </div>
                     <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
                       <Stat label="Min bet" value={fmtMoney(g.minBet)} />
                       <Stat label="Max bet" value={fmtMoney(g.maxBet)} />
                       <Stat label="House edge" value={`${(g.houseEdgeBps / 100).toFixed(2)}%`} />
+                      <Stat label="Sort order" value={String(g.sortOrder)} />
                       <Stat label="Total rounds" value={g.totals.rounds.toLocaleString()} />
                       <Stat label="Wagered" value={fmtMoney(g.totals.wagered)} />
                       <Stat label="Paid out" value={fmtMoney(g.totals.paid)} />
@@ -383,6 +389,8 @@ function SelectFilter({ label, value, onChange, options }: { label: string; valu
 
 function EditGameModal({ game, onClose, onSaved }: { game: NativeGameRow | null; onClose: () => void; onSaved: () => void }) {
   const [isActive, setIsActive] = useState<boolean>(true);
+  const [isFeatured, setIsFeatured] = useState<boolean>(false);
+  const [sortOrder, setSortOrder] = useState<string>('0');
   const [minBet, setMinBet] = useState<string>('');
   const [maxBet, setMaxBet] = useState<string>('');
   const [houseEdgeBps, setHouseEdgeBps] = useState<string>('');
@@ -392,6 +400,8 @@ function EditGameModal({ game, onClose, onSaved }: { game: NativeGameRow | null;
   useEffect(() => {
     if (!game) return;
     setIsActive(game.isActive);
+    setIsFeatured(game.isFeatured);
+    setSortOrder(String(game.sortOrder));
     setMinBet(String(game.minBet));
     setMaxBet(String(game.maxBet));
     setHouseEdgeBps(String(game.houseEdgeBps));
@@ -407,6 +417,8 @@ function EditGameModal({ game, onClose, onSaved }: { game: NativeGameRow | null;
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           isActive,
+          isFeatured,
+          sortOrder: Number(sortOrder),
           minBet: Number(minBet),
           maxBet: Number(maxBet),
           houseEdgeBps: Number(houseEdgeBps),
@@ -444,15 +456,25 @@ function EditGameModal({ game, onClose, onSaved }: { game: NativeGameRow | null;
           </div>
           <Switch checked={isActive} onChange={setIsActive} />
         </div>
+        <div className="flex items-center justify-between rounded-lg border border-neon/10 bg-base-panel/60 p-3">
+          <div>
+            <p className="text-sm font-semibold text-ink-hi">Featured on homepage</p>
+            <p className="text-xs text-ink-mid">When ON, this game appears in the homepage Hot Games strip.</p>
+          </div>
+          <Switch checked={isFeatured} onChange={setIsFeatured} />
+        </div>
         <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Sort order (lower first)">
+            <input type="number" min={0} max={10000} step="1" value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} className="h-10 w-full rounded-lg border border-neon/15 bg-base-panel px-3 text-sm text-ink-hi focus:outline-none" />
+          </Field>
+          <Field label="House edge (bps; 200 = 2.00%)">
+            <input type="number" min={0} max={2000} step="1" value={houseEdgeBps} onChange={(e) => setHouseEdgeBps(e.target.value)} className="h-10 w-full rounded-lg border border-neon/15 bg-base-panel px-3 text-sm text-ink-hi focus:outline-none" />
+          </Field>
           <Field label="Min bet (BDT)">
             <input type="number" min={0} step="1" value={minBet} onChange={(e) => setMinBet(e.target.value)} className="h-10 w-full rounded-lg border border-neon/15 bg-base-panel px-3 text-sm text-ink-hi focus:outline-none" />
           </Field>
           <Field label="Max bet (BDT)">
             <input type="number" min={0} step="1" value={maxBet} onChange={(e) => setMaxBet(e.target.value)} className="h-10 w-full rounded-lg border border-neon/15 bg-base-panel px-3 text-sm text-ink-hi focus:outline-none" />
-          </Field>
-          <Field label="House edge (bps; 200 = 2.00%)">
-            <input type="number" min={0} max={2000} step="1" value={houseEdgeBps} onChange={(e) => setHouseEdgeBps(e.target.value)} className="h-10 w-full rounded-lg border border-neon/15 bg-base-panel px-3 text-sm text-ink-hi focus:outline-none" />
           </Field>
         </div>
       </div>

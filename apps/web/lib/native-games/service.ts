@@ -26,6 +26,10 @@ import {
   GAME_CODES,
   type DiceConfig,
   type MinesConfig,
+  type KenoConfig,
+  type RouletteConfig,
+  type SlotsConfig,
+  type CrashConfig,
   type GameCode,
 } from './config';
 import {
@@ -39,6 +43,10 @@ import {
   generateMineGrid,
   revealTile,
 } from './engine/mines';
+import { rollKeno } from './engine/keno';
+import { rollRoulette, type RouletteBetType } from './engine/roulette';
+import { rollSlots } from './engine/slots';
+import { rollCrash } from './engine/crash';
 
 // ---------- Errors thrown to the route layer ----------
 //
@@ -327,6 +335,423 @@ export async function settleDiceBet(input: DiceBetInput): Promise<DiceBetResult>
       reused: false,
     } satisfies DiceBetResult;
   });
+}
+
+// ---------- Shared instant-settle path (Keno / Roulette / Slots / Crash) ----------
+//
+// Cuts the per-game settle method down to one engine call. The
+// outcome callback runs INSIDE the transaction so the engine sees a
+// fresh nonce and the wallet movement happens atomically with the
+// GameRound row. settleInstant guarantees:
+//   - idempotencyKey replay returns the stored row, balance unchanged
+//   - wallet pre-check for sufficient funds
+//   - session ownership + ACTIVE state + matching gameCode
+//   - bet debit + win credit + GameRound row + Transaction rows are
+//     all in one db.$transaction
+//   - session.nonce advances exactly once per settle
+
+interface InstantOutcome {
+  win: boolean;
+  multiplier: Prisma.Decimal;
+  payout: Prisma.Decimal;
+  // Gameplay-specific data persisted on GameRound.gameData. Should
+  // be JSON-serializable; do NOT include secrets here while the
+  // session is still ACTIVE (the verify endpoint reveals serverSeed
+  // separately after the session closes).
+  gameData: Prisma.JsonObject;
+  // Short label written onto the bet Transaction.description.
+  description: string;
+}
+
+interface InstantSettleInput<R extends InstantOutcome> {
+  userId: string;
+  sessionId: string;
+  expectedGameCode: GameCode;
+  betAmount: Prisma.Decimal;
+  idempotencyKey?: string;
+  produceOutcome: (ctx: { serverSeed: string; clientSeed: string; nonce: number; game: NativeGameProvider }) => R;
+}
+
+interface InstantSettleResult {
+  roundId: string;
+  outcome: 'WIN' | 'LOSS';
+  win: boolean;
+  multiplier: number;
+  payout: number;
+  newBalance: number;
+  nonce: number;
+  gameData: Prisma.JsonValue;
+  reused: boolean;
+}
+
+async function settleInstant<R extends InstantOutcome>(input: InstantSettleInput<R>): Promise<InstantSettleResult> {
+  const game = await loadGame(input.expectedGameCode);
+  if (!game.isActive) throw new Error(NATIVE_ERRORS.GAME_INACTIVE);
+  assertBetInRange(game, input.betAmount);
+
+  return await db.$transaction(async (tx) => {
+    const session = await tx.gameSession.findUnique({ where: { id: input.sessionId } });
+    if (!session) throw new Error(NATIVE_ERRORS.SESSION_NOT_FOUND);
+    if (session.userId !== input.userId) throw new Error(NATIVE_ERRORS.SESSION_NOT_OWNED);
+    if (session.status !== 'ACTIVE') throw new Error(NATIVE_ERRORS.SESSION_INACTIVE);
+    if (session.gameCode !== input.expectedGameCode) throw new Error(NATIVE_ERRORS.GAME_NOT_FOUND);
+
+    const nonce = session.nonce;
+    const idempotencyKey = (input.idempotencyKey?.trim() || `${session.id}:${nonce}`).slice(0, 128);
+
+    const prior = await tx.gameRound.findUnique({ where: { idempotencyKey } });
+    if (prior) {
+      const wallet = await tx.wallet.findUnique({ where: { userId: input.userId } });
+      const outcome = (prior.outcome === 'WIN' ? 'WIN' : 'LOSS') as 'WIN' | 'LOSS';
+      return {
+        roundId: prior.id,
+        outcome,
+        win: outcome === 'WIN',
+        multiplier: Number(prior.payoutMultiplier),
+        payout: Number(prior.payoutAmount),
+        newBalance: Number(wallet?.balance ?? 0),
+        nonce,
+        gameData: prior.gameData ?? null,
+        reused: true,
+      };
+    }
+
+    const wallet = await tx.wallet.findUnique({ where: { userId: input.userId } });
+    if (!wallet) throw new Error(NATIVE_ERRORS.WALLET_NOT_FOUND);
+    if (dec(wallet.balance).lt(input.betAmount)) throw new Error(NATIVE_ERRORS.INSUFFICIENT_FUNDS);
+
+    const serverSeed = decryptString(session.serverSeed);
+    const outcome = input.produceOutcome({ serverSeed, clientSeed: session.clientSeed, nonce, game });
+
+    // 1. Debit bet
+    await tx.wallet.update({
+      where: { userId: input.userId },
+      data: { balance: { decrement: input.betAmount } },
+    });
+
+    // 2. Persist GameRound + bet Transaction
+    const round = await tx.gameRound.create({
+      data: {
+        sessionId: session.id,
+        userId: input.userId,
+        gameCode: game.gameCode,
+        nonce,
+        betAmount: input.betAmount,
+        payoutAmount: outcome.payout,
+        payoutMultiplier: outcome.multiplier,
+        outcome: outcome.win ? 'WIN' : 'LOSS',
+        settledAt: new Date(),
+        idempotencyKey,
+        gameData: outcome.gameData,
+      },
+    });
+
+    await tx.transaction.create({
+      data: {
+        userId: input.userId,
+        type: 'bet',
+        status: 'completed',
+        amount: input.betAmount.neg(),
+        reference: round.id,
+        description: outcome.description + ' bet',
+        meta: { gameCode: game.gameCode, roundId: round.id, sessionId: session.id, nonce } as Prisma.JsonObject,
+      },
+    });
+
+    // 3. Credit win
+    if (outcome.win) {
+      await tx.wallet.update({
+        where: { userId: input.userId },
+        data: { balance: { increment: outcome.payout } },
+      });
+      await tx.transaction.create({
+        data: {
+          userId: input.userId,
+          type: 'win',
+          status: 'completed',
+          amount: outcome.payout,
+          reference: round.id,
+          description: outcome.description + ' win',
+          meta: { gameCode: game.gameCode, roundId: round.id, sessionId: session.id, nonce } as Prisma.JsonObject,
+        },
+      });
+    }
+
+    // 4. Advance nonce
+    await tx.gameSession.update({
+      where: { id: session.id },
+      data: { nonce: { increment: 1 } },
+    });
+
+    const after = await tx.wallet.findUnique({ where: { userId: input.userId }, select: { balance: true } });
+    return {
+      roundId: round.id,
+      outcome: outcome.win ? 'WIN' : 'LOSS',
+      win: outcome.win,
+      multiplier: Number(outcome.multiplier),
+      payout: Number(outcome.payout),
+      newBalance: Number(after?.balance ?? 0),
+      nonce,
+      gameData: outcome.gameData,
+      reused: false,
+    };
+  });
+}
+
+// ---------- Keno settle ----------
+
+export interface KenoBetInput {
+  userId: string;
+  sessionId: string;
+  picks: number[];
+  betAmount: number | string;
+  idempotencyKey?: string;
+}
+export interface KenoBetResult extends InstantSettleResult {
+  draw: number[];
+  matches: number[];
+  matchCount: number;
+}
+
+export async function settleKenoBet(input: KenoBetInput): Promise<KenoBetResult> {
+  const bet = dec(input.betAmount);
+  const game = await loadGame(GAME_CODES.keno);
+  const cfg = (game.config ?? {}) as Partial<KenoConfig>;
+  const poolSize = Number.isFinite(cfg.poolSize) ? Number(cfg.poolSize) : 80;
+  const drawCount = Number.isFinite(cfg.drawCount) ? Number(cfg.drawCount) : 20;
+  const minPicks = Number.isFinite(cfg.minPicks) ? Number(cfg.minPicks) : 1;
+  const maxPicks = Number.isFinite(cfg.maxPicks) ? Number(cfg.maxPicks) : 10;
+  if (!Array.isArray(input.picks) || input.picks.length < minPicks || input.picks.length > maxPicks) {
+    throw new Error('KENO_PICK_COUNT_OUT_OF_RANGE');
+  }
+
+  const base = await settleInstant({
+    userId: input.userId,
+    sessionId: input.sessionId,
+    expectedGameCode: GAME_CODES.keno,
+    betAmount: bet,
+    idempotencyKey: input.idempotencyKey,
+    produceOutcome: ({ serverSeed, clientSeed, nonce, game: g }) => {
+      const r = rollKeno({
+        serverSeed,
+        clientSeed,
+        nonce,
+        picks: input.picks,
+        poolSize,
+        drawCount,
+        betAmount: bet,
+        houseEdgeBps: g.houseEdgeBps,
+      });
+      return {
+        win: r.win,
+        multiplier: r.multiplier,
+        payout: r.payout,
+        gameData: {
+          picks: input.picks,
+          draw: r.draw,
+          matches: r.matches,
+          matchCount: r.matchCount,
+          fairMultiplier: r.fairMultiplier,
+        } as Prisma.JsonObject,
+        description: 'Pasha Keno',
+      };
+    },
+  });
+
+  const data = (base.gameData ?? {}) as { draw?: number[]; matches?: number[]; matchCount?: number };
+  return {
+    ...base,
+    draw: Array.isArray(data.draw) ? data.draw : [],
+    matches: Array.isArray(data.matches) ? data.matches : [],
+    matchCount: Number(data.matchCount ?? 0),
+  };
+}
+
+// ---------- Roulette settle ----------
+
+export interface RouletteBetInput {
+  userId: string;
+  sessionId: string;
+  betType: RouletteBetType;
+  straightNumber?: number;
+  betAmount: number | string;
+  idempotencyKey?: string;
+}
+export interface RouletteBetResult extends InstantSettleResult {
+  result: number;
+  resultColor: 'red' | 'black' | 'green';
+}
+
+export async function settleRouletteBet(input: RouletteBetInput): Promise<RouletteBetResult> {
+  const bet = dec(input.betAmount);
+  const game = await loadGame(GAME_CODES.roulette);
+  const cfg = (game.config ?? {}) as Partial<RouletteConfig>;
+  const wheelSize = Number.isFinite(cfg.wheelSize) ? Number(cfg.wheelSize) : 37;
+
+  const base = await settleInstant({
+    userId: input.userId,
+    sessionId: input.sessionId,
+    expectedGameCode: GAME_CODES.roulette,
+    betAmount: bet,
+    idempotencyKey: input.idempotencyKey,
+    produceOutcome: ({ serverSeed, clientSeed, nonce }) => {
+      const r = rollRoulette({
+        serverSeed,
+        clientSeed,
+        nonce,
+        wheelSize,
+        betType: input.betType,
+        straightNumber: input.straightNumber,
+        betAmount: bet,
+      });
+      return {
+        win: r.win,
+        multiplier: r.multiplier,
+        payout: r.payout,
+        gameData: {
+          betType: input.betType,
+          straightNumber: input.straightNumber ?? null,
+          result: r.result,
+          resultColor: r.resultColor,
+        } as Prisma.JsonObject,
+        description: 'Pasha Roulette',
+      };
+    },
+  });
+
+  const data = (base.gameData ?? {}) as { result?: number; resultColor?: 'red' | 'black' | 'green' };
+  return {
+    ...base,
+    result: Number(data.result ?? 0),
+    resultColor: data.resultColor ?? 'green',
+  };
+}
+
+// ---------- Slots settle ----------
+
+export interface SlotsBetInput {
+  userId: string;
+  sessionId: string;
+  betAmount: number | string;
+  idempotencyKey?: string;
+}
+export interface SlotsBetResult extends InstantSettleResult {
+  reelSymbols: string[];
+  matchedSymbol: string | null;
+}
+
+export async function settleSlotsBet(input: SlotsBetInput): Promise<SlotsBetResult> {
+  const bet = dec(input.betAmount);
+  const game = await loadGame(GAME_CODES.slots);
+  const cfg = (game.config ?? {}) as Partial<SlotsConfig>;
+  const reels = Number.isFinite(cfg.reels) ? Number(cfg.reels) : 3;
+  const symbols = Array.isArray(cfg.symbols) && cfg.symbols.length > 1 ? (cfg.symbols as string[]) : ['CHERRY', 'LEMON', 'CLOVER', 'STAR', 'DIAMOND', 'CROWN', 'SEVEN', 'NINE'];
+  const paytable = cfg.paytable && typeof cfg.paytable === 'object' ? (cfg.paytable as Record<string, Record<string, number>>) : {};
+
+  const base = await settleInstant({
+    userId: input.userId,
+    sessionId: input.sessionId,
+    expectedGameCode: GAME_CODES.slots,
+    betAmount: bet,
+    idempotencyKey: input.idempotencyKey,
+    produceOutcome: ({ serverSeed, clientSeed, nonce, game: g }) => {
+      const r = rollSlots({
+        serverSeed,
+        clientSeed,
+        nonce,
+        reels,
+        symbols,
+        paytable,
+        betAmount: bet,
+        houseEdgeBps: g.houseEdgeBps,
+      });
+      return {
+        win: r.win,
+        multiplier: r.multiplier,
+        payout: r.payout,
+        gameData: {
+          reelStops: r.reelStops,
+          reelSymbols: r.reelSymbols,
+          matchedSymbol: r.matchedSymbol,
+          matchedCount: r.matchedCount,
+          fairMultiplier: r.fairMultiplier,
+        } as Prisma.JsonObject,
+        description: 'Pasha Slots',
+      };
+    },
+  });
+
+  const data = (base.gameData ?? {}) as { reelSymbols?: string[]; matchedSymbol?: string | null };
+  return {
+    ...base,
+    reelSymbols: Array.isArray(data.reelSymbols) ? data.reelSymbols : [],
+    matchedSymbol: data.matchedSymbol ?? null,
+  };
+}
+
+// ---------- Crash settle ----------
+
+export interface CrashBetInput {
+  userId: string;
+  sessionId: string;
+  targetMultiplier: number;
+  betAmount: number | string;
+  idempotencyKey?: string;
+}
+export interface CrashBetResult extends InstantSettleResult {
+  crashPoint: number;
+  targetMultiplier: number;
+}
+
+export async function settleCrashBet(input: CrashBetInput): Promise<CrashBetResult> {
+  const bet = dec(input.betAmount);
+  const game = await loadGame(GAME_CODES.crash);
+  const cfg = (game.config ?? {}) as Partial<CrashConfig>;
+  const minTarget = Number.isFinite(cfg.minTargetMultiplier) ? Number(cfg.minTargetMultiplier) : 1.01;
+  const maxTarget = Number.isFinite(cfg.maxTargetMultiplier) ? Number(cfg.maxTargetMultiplier) : 100;
+  const maxCrash = Number.isFinite(cfg.maxCrashMultiplier) ? Number(cfg.maxCrashMultiplier) : 1000;
+
+  if (!Number.isFinite(input.targetMultiplier) || input.targetMultiplier < minTarget || input.targetMultiplier > maxTarget) {
+    throw new Error('CRASH_TARGET_OUT_OF_RANGE');
+  }
+
+  const base = await settleInstant({
+    userId: input.userId,
+    sessionId: input.sessionId,
+    expectedGameCode: GAME_CODES.crash,
+    betAmount: bet,
+    idempotencyKey: input.idempotencyKey,
+    produceOutcome: ({ serverSeed, clientSeed, nonce, game: g }) => {
+      const r = rollCrash({
+        serverSeed,
+        clientSeed,
+        nonce,
+        targetMultiplier: input.targetMultiplier,
+        betAmount: bet,
+        houseEdgeBps: g.houseEdgeBps,
+        maxCrashMultiplier: maxCrash,
+        minTargetMultiplier: minTarget,
+        maxTargetMultiplier: maxTarget,
+      });
+      return {
+        win: r.win,
+        multiplier: r.multiplier,
+        payout: r.payout,
+        gameData: {
+          crashPoint: r.crashPoint,
+          targetMultiplier: r.targetMultiplier,
+        } as Prisma.JsonObject,
+        description: 'Pasha Crash',
+      };
+    },
+  });
+
+  const data = (base.gameData ?? {}) as { crashPoint?: number; targetMultiplier?: number };
+  return {
+    ...base,
+    crashPoint: Number(data.crashPoint ?? 1),
+    targetMultiplier: Number(data.targetMultiplier ?? input.targetMultiplier),
+  };
 }
 
 // ---------- Mines start ----------
@@ -758,7 +1183,7 @@ export interface GameAggregate {
 }
 
 export async function listGamesWithTotals(): Promise<GameAggregate[]> {
-  const games = await db.nativeGameProvider.findMany({ orderBy: { displayName: 'asc' } });
+  const games = await db.nativeGameProvider.findMany({ orderBy: [{ sortOrder: 'asc' }, { displayName: 'asc' }] });
   const out: GameAggregate[] = [];
   for (const g of games) {
     const agg = await db.gameRound.aggregate({
