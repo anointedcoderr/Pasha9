@@ -95,6 +95,8 @@ export default function SlotsPage() {
       titleBn="পাশা স্লটস"
       taglineEn="Three reels, eight original symbols, instant payout."
       taglineBn="তিন রিল, আটটি মৌলিক চিহ্ন, সাথে সাথে পেআউট।"
+      ctaLabelEn="Pull the Lever"
+      ctaLabelBn="লিভার টানুন"
       accent="amber"
       ng={ng}
       rules={<SlotsRules lang={lang} paytable={cfg.paytable ?? {}} />}

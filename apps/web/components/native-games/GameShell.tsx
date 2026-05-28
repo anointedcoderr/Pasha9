@@ -9,11 +9,12 @@
 
 import Link from 'next/link';
 import { useState, type ReactNode } from 'react';
-import { ArrowLeft, ShieldCheck, Info, Wallet as WalletIcon, Sparkles } from 'lucide-react';
+import { ArrowLeft, ShieldCheck, Info, Wallet as WalletIcon, Sparkles, Zap, ArrowDownCircle } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { formatBDT } from '@/lib/utils/format';
 import { useLang } from '@/lib/i18n/context';
 import { GameArt } from './GameArt';
+import { HeroArt } from './HeroArt';
 import { FairnessDrawer } from './FairnessDrawer';
 import { RulesModal } from './RulesModal';
 import type { UseNativeGameResult } from '@/lib/native-games/use-native-game';
@@ -26,6 +27,11 @@ interface Props {
   titleBn: string;
   taglineEn?: string;
   taglineBn?: string;
+  // Per-game call-to-action label rendered in the hero ribbon.
+  // Examples: "Roll the Dice", "Reveal Tiles", "Pick Your Luck",
+  // "Spin the Wheel", "Pull the Lever", "Start Round".
+  ctaLabelEn?: string;
+  ctaLabelBn?: string;
   accent?: 'gold' | 'royal' | 'red' | 'emerald' | 'sapphire' | 'amber';
   ng: UseNativeGameResult;
   rules: ReactNode;            // shown inside the rules modal
@@ -41,7 +47,19 @@ const ACCENT_BG: Record<NonNullable<Props['accent']>, string> = {
   amber:    'from-orange-950 via-[#27160B] to-black',
 };
 
-export function GameShell({ code, titleEn, titleBn, taglineEn, taglineBn, accent = 'royal', ng, rules, children }: Props) {
+// Distinct hero-ribbon gradient per game accent. Picked richer than
+// the outer frame so the hero stands out without the rest of the
+// page going dark.
+const ACCENT_HERO_BG: Record<NonNullable<Props['accent']>, string> = {
+  gold:     'from-[#1a0d2a] via-[#2a1335] to-[#3a1500]',
+  royal:    'from-[#1a0d2a] via-[#2a1062] to-[#101030]',
+  red:      'from-[#260714] via-[#480818] to-[#1a0608]',
+  emerald:  'from-[#08231a] via-[#0e4634] to-[#06120e]',
+  sapphire: 'from-[#0a1640] via-[#102a72] to-[#04060f]',
+  amber:    'from-[#3a1f08] via-[#5a330e] to-[#1a0a06]',
+};
+
+export function GameShell({ code, titleEn, titleBn, taglineEn, taglineBn, ctaLabelEn, ctaLabelBn, accent = 'royal', ng, rules, children }: Props) {
   const { lang } = useLang();
   const [rulesOpen, setRulesOpen] = useState(false);
   const [fairnessOpen, setFairnessOpen] = useState(false);
@@ -121,27 +139,73 @@ export function GameShell({ code, titleEn, titleBn, taglineEn, taglineBn, accent
         canFairness={Boolean(ng.session)}
       />
 
-      {/* Game art ribbon: a thin glossy banner under the topbar with the
-          game's signature artwork on the right + title block on the left.
-          Keeps the page rooted in its game identity without taking the
-          whole hero. */}
-      <section className="relative overflow-hidden rounded-2xl border border-white/10 bg-black/40 px-5 py-4 backdrop-blur md:px-7 md:py-5">
-        <div aria-hidden className="absolute inset-y-0 right-0 w-2/3 opacity-50">
-          <GameArt code={code} className="h-full w-full" />
-        </div>
-        <div aria-hidden className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/55 to-transparent" />
-        <div className="relative flex items-center justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-300/90">
+      {/* Game hero ribbon. Two-column composition on every breakpoint:
+          - left: kicker / title / tagline / chips stack / per-game CTA pill
+          - right: HeroArt foreground composition with ambient glow
+          Mobile compresses the art to ~36% width but keeps it visible so
+          the page reads as "a real game" the moment it loads. */}
+      <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-[#0a0613] shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_24px_60px_-30px_rgba(0,0,0,0.65)]">
+        {/* Layered background: deep gradient + radial spotlight tied to accent + hairline gold rule */}
+        <div aria-hidden className={cn('absolute inset-0 bg-gradient-to-br opacity-90', ACCENT_HERO_BG[accent])} />
+        <div aria-hidden className="absolute inset-0 bg-[radial-gradient(circle_at_75%_30%,rgba(255,213,84,0.18),transparent_55%)]" />
+        <div aria-hidden className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-300/45 to-transparent" />
+        <div aria-hidden className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-amber-300/25 to-transparent" />
+
+        <div className="relative grid grid-cols-[1fr_125px] items-center gap-3 px-4 py-4 sm:grid-cols-[1fr_180px] sm:gap-5 sm:px-5 sm:py-5 md:grid-cols-[1.2fr_1fr] md:gap-6 md:px-7 md:py-7">
+          {/* Left: copy + chips + CTA */}
+          <div className="min-w-0 png-fade-up">
+            <p className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.22em] text-amber-300">
+              <Sparkles className="h-3 w-3" />
               {lang === 'bn' ? 'পাশা অরিজিনাল' : 'Pasha Original'}
             </p>
-            <h1 className="mt-0.5 text-2xl font-extrabold leading-tight text-white md:text-3xl">{title}</h1>
-            {tagline ? <p className="mt-1 max-w-md text-xs text-white/75 md:text-sm">{tagline}</p> : null}
+            <h1 className="mt-1 text-2xl font-extrabold leading-[1.05] text-white drop-shadow-[0_2px_6px_rgba(0,0,0,0.55)] sm:text-3xl md:text-4xl">
+              {title}
+            </h1>
+            {tagline ? (
+              <p className="mt-2 max-w-md text-xs font-medium text-white/90 sm:text-sm">
+                {tagline}
+              </p>
+            ) : null}
+
+            {/* Premium chip stack */}
+            <div className="mt-3 flex flex-wrap items-center gap-1.5">
+              <HeroBadge tone="emerald" icon={<ShieldCheck className="h-3 w-3" />}>
+                {lang === 'bn' ? 'প্রভাবলি ফেয়ার' : 'Provably Fair'}
+              </HeroBadge>
+              <HeroBadge tone="gold" icon={<Zap className="h-3 w-3" />}>
+                {lang === 'bn' ? 'ইনস্ট্যান্ট প্লে' : 'Instant Play'}
+              </HeroBadge>
+              <HeroBadge tone="sky" icon={<WalletIcon className="h-3 w-3" />}>
+                {lang === 'bn' ? 'ওয়ালেট কানেক্টেড' : 'Wallet Connected'}
+              </HeroBadge>
+              {ng.game ? (
+                <>
+                  <HeroBadge tone="bone">
+                    {lang === 'bn' ? 'মিন' : 'Min'}: {formatBDT(Number(ng.game.minBet))}
+                  </HeroBadge>
+                  <HeroBadge tone="bone">
+                    {lang === 'bn' ? 'ম্যাক্স' : 'Max'}: {formatBDT(Number(ng.game.maxBet))}
+                  </HeroBadge>
+                </>
+              ) : null}
+            </div>
+
+            {/* CTA pill: anchor scrolls to the bet card */}
+            {ctaLabelEn || ctaLabelBn ? (
+              <a
+                href="#png-bet"
+                className="mt-4 inline-flex h-11 items-center gap-2 rounded-full bg-gradient-to-b from-amber-300 to-amber-500 px-5 text-sm font-extrabold uppercase tracking-wider text-[#3A1F00] shadow-[inset_0_1px_0_rgba(255,255,255,0.55),0_10px_22px_-10px_rgba(245,180,0,0.7)] transition hover:brightness-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/70 active:translate-y-px"
+              >
+                <ArrowDownCircle className="h-4 w-4" />
+                {lang === 'bn' ? (ctaLabelBn ?? ctaLabelEn ?? '') : (ctaLabelEn ?? ctaLabelBn ?? '')}
+              </a>
+            ) : null}
           </div>
-          <span className="hidden h-9 shrink-0 items-center gap-1.5 rounded-full border border-emerald-400/40 bg-emerald-500/10 px-3 text-[11px] font-bold uppercase tracking-wider text-emerald-200 md:inline-flex">
-            <Sparkles className="h-3.5 w-3.5" />
-            {lang === 'bn' ? 'প্রভাবলি ফেয়ার' : 'Provably Fair'}
-          </span>
+
+          {/* Right: per-game hero illustration */}
+          <div className="relative h-32 sm:h-40 md:h-48">
+            <HeroArt code={code} className="absolute inset-0 h-full w-full drop-shadow-[0_18px_24px_rgba(0,0,0,0.45)]" />
+          </div>
         </div>
       </section>
 
@@ -222,6 +286,25 @@ function Centerpiece({ children }: { children: ReactNode }) {
 }
 
 // ---------- Convenience exports for game pages ----------
+
+// Premium chip used in the hero ribbon. Distinct tones so the
+// badge stack reads as ordered (status / capability / wallet / range)
+// without going noisy.
+function HeroBadge({ tone, icon, children }: { tone: 'gold' | 'emerald' | 'sky' | 'bone' | 'rose'; icon?: ReactNode; children: ReactNode }) {
+  const map = {
+    gold:    'border-amber-300/55 bg-gradient-to-b from-amber-300/25 to-amber-500/10 text-amber-100',
+    emerald: 'border-emerald-300/55 bg-gradient-to-b from-emerald-400/25 to-emerald-600/10 text-emerald-100',
+    sky:     'border-sky-300/55 bg-gradient-to-b from-sky-400/25 to-sky-600/10 text-sky-100',
+    rose:    'border-rose-300/55 bg-gradient-to-b from-rose-400/25 to-rose-600/10 text-rose-100',
+    bone:    'border-white/25 bg-white/10 text-white/90',
+  } as const;
+  return (
+    <span className={cn('inline-flex h-6 items-center gap-1 rounded-full border px-2 text-[10px] font-bold uppercase tracking-wider backdrop-blur', map[tone])}>
+      {icon}
+      <span>{children}</span>
+    </span>
+  );
+}
 
 export function GamePanel({ children, className }: { children: ReactNode; className?: string }) {
   return (

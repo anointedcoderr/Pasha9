@@ -159,6 +159,8 @@ export default function MinesPage() {
       titleBn="পাশা মাইনস"
       taglineEn="Reveal safe tiles, cash out before the mine."
       taglineBn="নিরাপদ টাইল উন্মোচন করুন, মাইনের আগে ক্যাশআউট করুন।"
+      ctaLabelEn="Reveal Tiles"
+      ctaLabelBn="টাইল উন্মোচন করুন"
       accent="red"
       ng={ng}
       rules={<MinesRules lang={lang} />}

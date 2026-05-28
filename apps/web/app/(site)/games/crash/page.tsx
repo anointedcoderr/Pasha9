@@ -92,6 +92,8 @@ export default function CrashPage() {
       titleBn="পাশা ক্র্যাশ"
       taglineEn="Set your target. Reveal the crash point. Take the multiplier if you survive it."
       taglineBn="লক্ষ্য সেট করুন। ক্র্যাশ পয়েন্ট প্রকাশ করুন। লক্ষ্যের আগে ক্র্যাশ না হলে গুণিতক জিতবেন।"
+      ctaLabelEn="Start Round"
+      ctaLabelBn="রাউন্ড শুরু"
       accent="sapphire"
       ng={ng}
       rules={<CrashRules lang={lang} />}

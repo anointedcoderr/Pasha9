@@ -114,6 +114,8 @@ export default function KenoPage() {
       titleBn="পাশা কেনো"
       taglineEn={`Pick numbers. The server draws ${drawCount}. Match to win the multiplier.`}
       taglineBn={`নম্বর বাছাই করুন। সার্ভার ${drawCount}টি ড্র করবে। মিল হলেই গুণিতক জিতবেন।`}
+      ctaLabelEn="Pick Your Luck"
+      ctaLabelBn="ভাগ্য বাছাই করুন"
       accent="emerald"
       ng={ng}
       rules={<KenoRules lang={lang} poolSize={poolSize} drawCount={drawCount} />}

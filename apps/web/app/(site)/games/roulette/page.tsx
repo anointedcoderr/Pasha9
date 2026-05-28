@@ -93,6 +93,8 @@ export default function RoulettePage() {
       titleBn="পাশা রুলেট"
       taglineEn="European single zero. Red, black, straight - your call."
       taglineBn="ইউরোপীয় সিঙ্গেল জিরো। রেড, ব্ল্যাক, সরাসরি - আপনার ইচ্ছা।"
+      ctaLabelEn="Spin the Wheel"
+      ctaLabelBn="হুইল ঘোরান"
       accent="red"
       ng={ng}
       rules={<RouletteRules lang={lang} />}

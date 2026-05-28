@@ -48,10 +48,15 @@ export function BetCard({ bet, setBet, minBet, maxBet, balance, playLabel, onPla
   };
 
   return (
-    <div className={cn(
-      'rounded-2xl border border-white/10 bg-black/45 p-4 backdrop-blur md:p-5',
-      stickyMobile && 'fixed inset-x-3 bottom-3 z-30 shadow-[0_20px_60px_-20px_rgba(0,0,0,0.7)] md:static md:inset-auto md:shadow-none',
-    )}>
+    <div
+      id="png-bet"
+      className={cn(
+        // Scroll offset keeps the BetCard out from under the topbar when
+        // jumped to via the hero CTA anchor link.
+        'scroll-mt-24 rounded-2xl border border-white/10 bg-black/45 p-4 backdrop-blur md:p-5',
+        stickyMobile && 'fixed inset-x-3 bottom-3 z-30 shadow-[0_20px_60px_-20px_rgba(0,0,0,0.7)] md:static md:inset-auto md:shadow-none',
+      )}
+    >
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex flex-1 items-center gap-2">
           <label className="text-[10px] font-bold uppercase tracking-wider text-white/55 sm:inline">

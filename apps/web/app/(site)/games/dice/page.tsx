@@ -97,6 +97,8 @@ export default function DicePage() {
       titleBn="পাশা ডাইস"
       taglineEn="Pick a target. Roll over or under. Instant settle."
       taglineBn="লক্ষ্য বাছাই করুন। কম বা বেশি রোল করুন। সাথে সাথে সেটল।"
+      ctaLabelEn="Roll the Dice"
+      ctaLabelBn="ডাইস রোল করুন"
       accent="royal"
       ng={ng}
       rules={<DiceRules lang={lang} />}
