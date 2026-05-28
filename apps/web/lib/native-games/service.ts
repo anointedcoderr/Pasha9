@@ -1179,24 +1179,41 @@ export interface GameAggregate {
     wagered: number;
     paid: number;
     houseResult: number;
+    // Last 24h activity for the admin "Recent activity" indicator.
+    // Counts non-cancelled rounds settled within the last 24 hours.
+    rounds24h: number;
+    lastRoundAt: Date | null;
   };
 }
 
 export async function listGamesWithTotals(): Promise<GameAggregate[]> {
   const games = await db.nativeGameProvider.findMany({ orderBy: [{ sortOrder: 'asc' }, { displayName: 'asc' }] });
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const out: GameAggregate[] = [];
   for (const g of games) {
-    const agg = await db.gameRound.aggregate({
-      where: { gameCode: g.gameCode, outcome: { not: 'CANCELLED' } },
-      _count: { _all: true },
-      _sum: { betAmount: true, payoutAmount: true },
-    });
+    const [agg, rounds24h, latest] = await Promise.all([
+      db.gameRound.aggregate({
+        where: { gameCode: g.gameCode, outcome: { not: 'CANCELLED' } },
+        _count: { _all: true },
+        _sum: { betAmount: true, payoutAmount: true },
+      }),
+      db.gameRound.count({
+        where: { gameCode: g.gameCode, outcome: { not: 'CANCELLED' }, createdAt: { gte: since } },
+      }),
+      db.gameRound.findFirst({
+        where: { gameCode: g.gameCode, outcome: { not: 'CANCELLED' } },
+        orderBy: { createdAt: 'desc' },
+        select: { createdAt: true },
+      }),
+    ]);
     const wagered = Number(agg._sum.betAmount ?? 0);
     const paid = Number(agg._sum.payoutAmount ?? 0);
     out.push({
       game: g,
       totals: {
         rounds: agg._count._all,
+        rounds24h,
+        lastRoundAt: latest?.createdAt ?? null,
         wagered,
         paid,
         houseResult: wagered - paid,

@@ -54,6 +54,7 @@ const MAIN: Item[] = [
 ];
 
 const GAMES: Item[] = [
+  { key: 'pashaOriginals', href: '/games', icon: Sparkles },
   { key: 'slots', href: '/slots', icon: Cherry },
   { key: 'casino', href: '/live-casino', icon: Tv2 },
   { key: 'crash', href: '/games/crash', icon: Zap },

@@ -35,7 +35,7 @@ interface NativeGameRow {
   minBet: number;
   maxBet: number;
   config: unknown;
-  totals: { rounds: number; wagered: number; paid: number; houseResult: number };
+  totals: { rounds: number; rounds24h: number; lastRoundAt: string | null; wagered: number; paid: number; houseResult: number };
 }
 
 interface AdminListResp {
@@ -212,37 +212,62 @@ export default function AdminNativeGamesPage() {
           </TabsList>
 
           <TabsContent value="games">
+            <Card padding="md" className="mb-4 border-l-4 border-signal-warn">
+              <p className="text-sm font-semibold text-ink-hi inline-flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 text-signal-warn" />
+                Only activate a game after wallet testing.
+              </p>
+              <p className="mt-1 text-xs text-ink-mid">
+                Place a small real-money bet end-to-end (debit + settle + GameRound row + Transaction row) before flipping isActive on. Inactive games return 503 GAME_INACTIVE and stay safely hidden from the player lobby. Use the Rounds tab to confirm a game has settled at least one real round; the &quot;Recent rounds&quot; chip below summarizes the last 24 hours.
+              </p>
+            </Card>
+
             {(data?.games ?? []).length === 0 ? (
               <Card padding="lg"><p className="text-sm text-ink-mid">No native games loaded. Run the seeder or insert NativeGameProvider rows.</p></Card>
             ) : (
               <div className="grid gap-3 md:grid-cols-2">
-                {data!.games.map((g) => (
-                  <Card key={g.gameCode} padding="lg">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-base font-extrabold text-ink-hi">{g.displayName}</p>
-                        <p className="mt-1 font-mono text-[10px] uppercase tracking-wider text-ink-lo">{g.gameCode}</p>
+                {data!.games.map((g) => {
+                  const recent = g.totals.rounds24h ?? 0;
+                  const tested = (g.totals.rounds ?? 0) > 0;
+                  return (
+                    <Card key={g.gameCode} padding="lg">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-base font-extrabold text-ink-hi">{g.displayName}</p>
+                          <p className="mt-1 font-mono text-[10px] uppercase tracking-wider text-ink-lo">{g.gameCode}</p>
+                        </div>
+                        <div className="flex flex-col items-end gap-1">
+                          <Chip tone={g.isActive ? 'ok' : 'warn'}>{g.isActive ? 'Active' : 'Disabled'}</Chip>
+                          {g.isFeatured ? <Chip tone="gold">Featured</Chip> : null}
+                        </div>
                       </div>
-                      <div className="flex flex-col items-end gap-1">
-                        <Chip tone={g.isActive ? 'ok' : 'warn'}>{g.isActive ? 'Active' : 'Disabled'}</Chip>
-                        {g.isFeatured ? <Chip tone="gold">Featured</Chip> : null}
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <Chip tone={recent > 0 ? 'ok' : 'neutral'}>
+                          {recent > 0 ? `${recent} round${recent === 1 ? '' : 's'} in last 24h` : 'No rounds in last 24h'}
+                        </Chip>
+                        <Chip tone={tested ? 'info' : 'warn'}>
+                          {tested ? 'Wallet tested' : 'Not wallet tested yet'}
+                        </Chip>
+                        {!g.isActive && !tested ? (
+                          <span className="text-[11px] font-semibold text-signal-warn">Test a real bet before activating.</span>
+                        ) : null}
                       </div>
-                    </div>
-                    <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                      <Stat label="Min bet" value={fmtMoney(g.minBet)} />
-                      <Stat label="Max bet" value={fmtMoney(g.maxBet)} />
-                      <Stat label="House edge" value={`${(g.houseEdgeBps / 100).toFixed(2)}%`} />
-                      <Stat label="Sort order" value={String(g.sortOrder)} />
-                      <Stat label="Total rounds" value={g.totals.rounds.toLocaleString()} />
-                      <Stat label="Wagered" value={fmtMoney(g.totals.wagered)} />
-                      <Stat label="Paid out" value={fmtMoney(g.totals.paid)} />
-                      <Stat label="House result" value={fmtMoney(g.totals.houseResult)} positive={g.totals.houseResult >= 0} />
-                    </div>
-                    <div className="mt-4 flex justify-end">
-                      <Button size="sm" variant="neon" leftIcon={<Settings className="h-3.5 w-3.5" />} onClick={() => setEditGame(g)}>Edit</Button>
-                    </div>
-                  </Card>
-                ))}
+                      <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                        <Stat label="Min bet" value={fmtMoney(g.minBet)} />
+                        <Stat label="Max bet" value={fmtMoney(g.maxBet)} />
+                        <Stat label="House edge" value={`${(g.houseEdgeBps / 100).toFixed(2)}%`} />
+                        <Stat label="Sort order" value={String(g.sortOrder)} />
+                        <Stat label="Total rounds" value={g.totals.rounds.toLocaleString()} />
+                        <Stat label="Wagered" value={fmtMoney(g.totals.wagered)} />
+                        <Stat label="Paid out" value={fmtMoney(g.totals.paid)} />
+                        <Stat label="House result" value={fmtMoney(g.totals.houseResult)} positive={g.totals.houseResult >= 0} />
+                      </div>
+                      <div className="mt-4 flex justify-end">
+                        <Button size="sm" variant="neon" leftIcon={<Settings className="h-3.5 w-3.5" />} onClick={() => setEditGame(g)}>Edit</Button>
+                      </div>
+                    </Card>
+                  );
+                })}
               </div>
             )}
           </TabsContent>

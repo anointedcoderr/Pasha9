@@ -19,6 +19,7 @@ interface NavItem {
 }
 
 const ITEMS: NavItem[] = [
+  { key: 'pashaOriginals', href: ROUTES.games, marker: 'hot' },
   { key: 'slots', href: ROUTES.slots },
   { key: 'liveCasino', href: ROUTES.liveCasino },
   { key: 'crash', href: '/games/crash', marker: 'new' },

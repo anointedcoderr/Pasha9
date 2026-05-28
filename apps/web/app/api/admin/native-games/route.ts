@@ -33,7 +33,14 @@ export async function GET() {
         minBet: Number(a.game.minBet),
         maxBet: Number(a.game.maxBet),
         config: a.game.config ?? null,
-        totals: a.totals,
+        totals: {
+          rounds: a.totals.rounds,
+          rounds24h: a.totals.rounds24h,
+          lastRoundAt: a.totals.lastRoundAt,
+          wagered: a.totals.wagered,
+          paid: a.totals.paid,
+          houseResult: a.totals.houseResult,
+        },
       })),
     });
   });
