@@ -15,6 +15,7 @@ import { DepositRequiredModal, isInsufficientFundsError } from '@/components/nat
 import { formatBDT } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import { Shuffle, Trophy, X } from 'lucide-react';
+import { safeArray, safeNumber, safeToFixed } from '@/lib/native-games/safe';
 
 interface KenoResult {
   roundId: string;
@@ -54,7 +55,8 @@ export default function KenoPage() {
 
   const playerPicks = useMemo(() => Array.from(picks).sort((a, b) => a - b), [picks]);
   const topMult = TOP_MULT[playerPicks.length] ?? 0;
-  const projectedPayout = Number(bet) * topMult;
+  const betNumber = safeNumber(bet, 0);
+  const projectedPayout = betNumber * topMult;
 
   const togglePick = (n: number) => {
     setLast(null); setError(null);
@@ -107,7 +109,19 @@ export default function KenoPage() {
         if (data?.code === 'SESSION_INACTIVE') ng.newSession();
         return;
       }
-      setLast(data as KenoResult);
+      const raw = (data ?? {}) as Partial<KenoResult>;
+      const safe: KenoResult = {
+        roundId: typeof raw.roundId === 'string' ? raw.roundId : `local-${Date.now()}`,
+        win: Boolean(raw.win),
+        multiplier: safeNumber(raw.multiplier, 0),
+        payout: safeNumber(raw.payout, 0),
+        newBalance: safeNumber(raw.newBalance, 0),
+        draw: safeArray<number>(raw.draw),
+        matches: safeArray<number>(raw.matches),
+        matchCount: safeNumber(raw.matchCount, 0),
+        reused: Boolean(raw.reused),
+      };
+      setLast(safe);
       setAnimKey((k) => k + 1);
       ng.bumpNonce();
       ng.refreshBalance();
@@ -212,7 +226,7 @@ export default function KenoPage() {
             last.win ? 'bg-amber-400/20 text-amber-100' : 'bg-white/5 text-white/70')}>
             <Trophy className="h-4 w-4" />
             {last.win
-              ? lang === 'bn' ? `${last.matchCount} মিল . ${last.multiplier.toFixed(4)}x . +${formatBDT(last.payout)}` : `${last.matchCount} matches . ${last.multiplier.toFixed(4)}x . +${formatBDT(last.payout)}`
+              ? lang === 'bn' ? `${last.matchCount} মিল . ${safeToFixed(last.multiplier, 4)}x . +${formatBDT(last.payout)}` : `${last.matchCount} matches . ${safeToFixed(last.multiplier, 4)}x . +${formatBDT(last.payout)}`
               : lang === 'bn' ? `${last.matchCount} মিল . এই বার লাভ নেই` : `${last.matchCount} matches . no payout this round`}
           </div>
         </GamePanel>
@@ -237,7 +251,7 @@ export default function KenoPage() {
         open={depositOpen}
         onOpenChange={setDepositOpen}
         balance={ng.balance}
-        requiredAmount={Number(bet)}
+        requiredAmount={betNumber}
       />
     </GameShell>
   );

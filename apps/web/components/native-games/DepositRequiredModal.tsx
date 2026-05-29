@@ -18,6 +18,7 @@ import { X, Wallet as WalletIcon, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { formatBDT } from '@/lib/utils/format';
 import { useLang } from '@/lib/i18n/context';
+import { safeNumber, safeString } from '@/lib/native-games/safe';
 
 interface Settings {
   titleEn: string;
@@ -58,6 +59,29 @@ const ACCENT_GRADIENT: Record<Settings['accent'], string> = {
 let cached: Settings | null = null;
 let cachePromise: Promise<Settings> | null = null;
 
+function normalize(raw: unknown): Settings {
+  if (!raw || typeof raw !== 'object') return FALLBACK;
+  const r = raw as Record<string, unknown>;
+  const accentRaw = safeString(r.accent, FALLBACK.accent);
+  const accent: Settings['accent'] = (['gold', 'royal', 'red', 'emerald', 'sapphire'] as const).includes(accentRaw as Settings['accent'])
+    ? (accentRaw as Settings['accent'])
+    : FALLBACK.accent;
+  const bgTypeRaw = safeString(r.bgType, FALLBACK.bgType);
+  const bgType: Settings['bgType'] = bgTypeRaw === 'image' ? 'image' : 'gradient';
+  return {
+    titleEn: safeString(r.titleEn, FALLBACK.titleEn) || FALLBACK.titleEn,
+    titleBn: safeString(r.titleBn, FALLBACK.titleBn) || FALLBACK.titleBn,
+    messageEn: safeString(r.messageEn, FALLBACK.messageEn) || FALLBACK.messageEn,
+    messageBn: safeString(r.messageBn, FALLBACK.messageBn) || FALLBACK.messageBn,
+    ctaEn: safeString(r.ctaEn, FALLBACK.ctaEn) || FALLBACK.ctaEn,
+    ctaBn: safeString(r.ctaBn, FALLBACK.ctaBn) || FALLBACK.ctaBn,
+    bgType,
+    bgImageUrl: safeString(r.bgImageUrl, ''),
+    bgImageEnabled: Boolean(r.bgImageEnabled),
+    accent,
+  };
+}
+
 async function fetchSettings(): Promise<Settings> {
   if (cached) return cached;
   if (cachePromise) return cachePromise;
@@ -65,8 +89,8 @@ async function fetchSettings(): Promise<Settings> {
     try {
       const res = await fetch('/api/content/deposit-prompt', { cache: 'no-store' });
       if (!res.ok) return FALLBACK;
-      const data = (await res.json()) as Partial<Settings> & { ok?: boolean };
-      const merged: Settings = { ...FALLBACK, ...data };
+      const data = await res.json().catch(() => null);
+      const merged = normalize(data);
       cached = merged;
       return merged;
     } catch {
@@ -93,15 +117,25 @@ export function DepositRequiredModal({ open, onOpenChange, balance, requiredAmou
   useEffect(() => {
     if (!open) return;
     let alive = true;
-    fetchSettings().then((s) => { if (alive) setSettings(s); });
+    fetchSettings()
+      .then((s) => { if (alive) setSettings(s); })
+      .catch(() => { if (alive) setSettings(FALLBACK); });
     return () => { alive = false; };
   }, [open]);
 
-  const title = lang === 'bn' ? settings.titleBn : settings.titleEn;
-  const message = lang === 'bn' ? settings.messageBn : settings.messageEn;
-  const cta = lang === 'bn' ? settings.ctaBn : settings.ctaEn;
+  // All renderable fields go through string fallbacks so a partial
+  // settings record (or undefined keys from a misconfigured admin
+  // write) cannot crash the modal.
+  const title = (lang === 'bn' ? settings.titleBn : settings.titleEn) || FALLBACK.titleEn;
+  const message = (lang === 'bn' ? settings.messageBn : settings.messageEn) || FALLBACK.messageEn;
+  const cta = (lang === 'bn' ? settings.ctaBn : settings.ctaEn) || FALLBACK.ctaEn;
 
-  const useImage = settings.bgImageEnabled && settings.bgType === 'image' && Boolean(settings.bgImageUrl) && !imgError;
+  const accent: Settings['accent'] = (settings.accent in ACCENT_GRADIENT ? settings.accent : 'gold') as Settings['accent'];
+  const bgImageUrl = safeString(settings.bgImageUrl, '').trim();
+  const useImage = Boolean(settings.bgImageEnabled) && settings.bgType === 'image' && bgImageUrl.length > 0 && !imgError;
+
+  const balanceNumber = balance == null ? null : safeNumber(balance, 0);
+  const requiredNumber = requiredAmount == null ? null : safeNumber(requiredAmount, 0);
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -112,11 +146,11 @@ export function DepositRequiredModal({ open, onOpenChange, balance, requiredAmou
         >
           {/* Background layer */}
           <div className="relative">
-            <div aria-hidden className={cn('absolute inset-0 bg-gradient-to-br opacity-95', ACCENT_GRADIENT[settings.accent])} />
+            <div aria-hidden className={cn('absolute inset-0 bg-gradient-to-br opacity-95', ACCENT_GRADIENT[accent])} />
             {useImage ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={settings.bgImageUrl}
+                src={bgImageUrl}
                 alt=""
                 aria-hidden
                 className="absolute inset-0 h-full w-full object-cover opacity-55"
@@ -147,18 +181,18 @@ export function DepositRequiredModal({ open, onOpenChange, balance, requiredAmou
           </div>
 
           {/* Balance + required strip */}
-          {(balance != null || requiredAmount != null) ? (
+          {(balanceNumber != null || requiredNumber != null) ? (
             <div className="relative grid grid-cols-2 gap-2 border-t border-white/10 bg-black/40 px-5 py-4 md:px-6">
               <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-center">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-white/55">{lang === 'bn' ? 'বর্তমান ব্যালেন্স' : 'Current balance'}</p>
                 <p className="mt-0.5 text-base font-extrabold tabular-nums text-white">
-                  {balance != null ? formatBDT(balance) : '-'}
+                  {balanceNumber != null ? formatBDT(balanceNumber) : '-'}
                 </p>
               </div>
               <div className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-3 text-center">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-amber-200/80">{lang === 'bn' ? 'প্রয়োজনীয়' : 'Required'}</p>
                 <p className="mt-0.5 text-base font-extrabold tabular-nums text-amber-100">
-                  {requiredAmount != null ? formatBDT(requiredAmount) : '-'}
+                  {requiredNumber != null ? formatBDT(requiredNumber) : '-'}
                 </p>
               </div>
             </div>

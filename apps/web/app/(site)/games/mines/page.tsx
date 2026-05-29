@@ -18,6 +18,7 @@ import { DepositRequiredModal, isInsufficientFundsError } from '@/components/nat
 import { formatBDT } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import { Bomb, Gem, Trophy, RefreshCw } from 'lucide-react';
+import { safeArray, safeNumber, safeToFixed } from '@/lib/native-games/safe';
 
 interface MinesStart {
   roundId: string;
@@ -107,8 +108,15 @@ export default function MinesPage() {
         if (data?.code === 'SESSION_INACTIVE') ng.newSession();
         return;
       }
-      const r = data as MinesStart;
-      setRound({ kind: 'pending', roundId: r.roundId, mineCount: r.mineCount, totalTiles: r.totalTiles, revealed: r.revealedTiles, multiplier: r.currentMultiplier });
+      const raw = (data ?? {}) as Partial<MinesStart>;
+      setRound({
+        kind: 'pending',
+        roundId: typeof raw.roundId === 'string' ? raw.roundId : `local-${Date.now()}`,
+        mineCount: safeNumber(raw.mineCount, mineCount),
+        totalTiles: safeNumber(raw.totalTiles, fallbackTotal),
+        revealed: safeArray<number>(raw.revealedTiles),
+        multiplier: safeNumber(raw.currentMultiplier, 1),
+      });
       ng.refreshBalance();
     } catch { setError('Could not reach server'); }
     finally { setLoading(false); }
@@ -125,12 +133,31 @@ export default function MinesPage() {
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) { setError(data?.message ?? data?.code ?? 'Reveal failed'); return; }
-      const r = data as MinesReveal;
-      if (r.hitMine) {
-        setRound({ kind: 'loss', roundId: round.roundId, mineCount: round.mineCount, totalTiles: round.totalTiles, revealed: r.revealedTiles, minePositions: r.minePositions ?? [], hitTile: r.tile, bet: Number(bet) });
+      const raw = (data ?? {}) as Partial<MinesReveal>;
+      const hitMine = Boolean(raw.hitMine);
+      const revealed = safeArray<number>(raw.revealedTiles);
+      const currentMultiplier = safeNumber(raw.currentMultiplier, round.multiplier);
+      if (hitMine) {
+        setRound({
+          kind: 'loss',
+          roundId: round.roundId,
+          mineCount: round.mineCount,
+          totalTiles: round.totalTiles,
+          revealed,
+          minePositions: safeArray<number>(raw.minePositions),
+          hitTile: safeNumber(raw.tile, tile),
+          bet: safeNumber(bet, 0),
+        });
         ng.bumpNonce();
       } else {
-        setRound({ kind: 'pending', roundId: round.roundId, mineCount: round.mineCount, totalTiles: round.totalTiles, revealed: r.revealedTiles, multiplier: r.currentMultiplier });
+        setRound({
+          kind: 'pending',
+          roundId: round.roundId,
+          mineCount: round.mineCount,
+          totalTiles: round.totalTiles,
+          revealed,
+          multiplier: currentMultiplier,
+        });
       }
       ng.refreshBalance();
     } catch { setError('Could not reach server'); }
@@ -148,8 +175,18 @@ export default function MinesPage() {
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) { setError(data?.message ?? data?.code ?? 'Cashout failed'); return; }
-      const r = data as MinesCashout;
-      setRound({ kind: 'cashout', roundId: round.roundId, mineCount: round.mineCount, totalTiles: round.totalTiles, revealed: r.revealedTiles, minePositions: r.minePositions, payout: r.payout, multiplier: r.multiplier, bet: Number(bet) });
+      const raw = (data ?? {}) as Partial<MinesCashout>;
+      setRound({
+        kind: 'cashout',
+        roundId: round.roundId,
+        mineCount: round.mineCount,
+        totalTiles: round.totalTiles,
+        revealed: safeArray<number>(raw.revealedTiles),
+        minePositions: safeArray<number>(raw.minePositions),
+        payout: safeNumber(raw.payout, 0),
+        multiplier: safeNumber(raw.multiplier, 0),
+        bet: safeNumber(bet, 0),
+      });
       ng.bumpNonce();
       ng.refreshBalance();
     } catch { setError('Could not reach server'); }
@@ -161,7 +198,8 @@ export default function MinesPage() {
   const minBet = game?.minBet ?? 10;
   const maxBet = game?.maxBet ?? 10_000;
   const currentMultiplier = round?.kind === 'pending' ? round.multiplier : round?.kind === 'cashout' ? round.multiplier : 0;
-  const potential = Number(bet) * (currentMultiplier || 1);
+  const betNumber = safeNumber(bet, 0);
+  const potential = betNumber * (currentMultiplier || 1);
 
   return (
     <GameShell
@@ -179,7 +217,7 @@ export default function MinesPage() {
       {/* Multiplier strip */}
       <GamePanel>
         <div className="grid grid-cols-3 gap-3 text-center">
-          <Stat label={lang === 'bn' ? 'গুণিতক' : 'Multiplier'} value={round?.kind !== null && currentMultiplier > 0 ? `${currentMultiplier.toFixed(4)}x` : '-'} />
+          <Stat label={lang === 'bn' ? 'গুণিতক' : 'Multiplier'} value={round && currentMultiplier > 0 ? `${safeToFixed(currentMultiplier, 4)}x` : '-'} />
           <Stat label={lang === 'bn' ? 'সম্ভাব্য জয়' : 'Potential win'} value={round?.kind === 'cashout' ? formatBDT(round.payout) : isPending ? formatBDT(potential) : '-'} accent />
           <Stat label={lang === 'bn' ? 'মাইন' : 'Mines'} value={String(round?.mineCount ?? mineCount)} />
         </div>
@@ -256,8 +294,8 @@ export default function MinesPage() {
             <p className="inline-flex items-center gap-2 text-sm font-extrabold uppercase tracking-wider">
               <Trophy className="h-4 w-4" />
               {lang === 'bn'
-                ? `ক্যাশআউট ${round.multiplier.toFixed(4)}x = ${formatBDT(round.payout)}`
-                : `Cashed out ${round.multiplier.toFixed(4)}x = ${formatBDT(round.payout)}`}
+                ? `ক্যাশআউট ${safeToFixed(round.multiplier, 4)}x = ${formatBDT(round.payout)}`
+                : `Cashed out ${safeToFixed(round.multiplier, 4)}x = ${formatBDT(round.payout)}`}
             </p>
             <button type="button" onClick={onNewRound} className="mt-2 inline-flex h-9 items-center gap-1 rounded-lg bg-white/10 px-3 text-xs font-bold uppercase tracking-wider text-white hover:bg-white/15">
               <RefreshCw className="h-3 w-3" />
@@ -304,7 +342,7 @@ export default function MinesPage() {
         open={depositOpen}
         onOpenChange={setDepositOpen}
         balance={ng.balance}
-        requiredAmount={Number(bet)}
+        requiredAmount={betNumber}
       />
     </GameShell>
   );

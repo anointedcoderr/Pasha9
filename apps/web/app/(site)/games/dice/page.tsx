@@ -15,6 +15,7 @@ import { BetCard } from '@/components/native-games/BetCard';
 import { DepositRequiredModal, isInsufficientFundsError } from '@/components/native-games/DepositRequiredModal';
 import { formatBDT } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
+import { safeNumber, safeToFixed } from '@/lib/native-games/safe';
 
 interface DiceResult {
   roundId: string;
@@ -86,7 +87,22 @@ export default function DicePage() {
         if (data?.code === 'SESSION_INACTIVE') ng.newSession();
         return;
       }
-      const r = data as DiceResult;
+      // Defensive: coerce every numeric field. Decimal columns can
+      // occasionally serialize as strings, and the page must never
+      // hand a non-finite number to .toFixed().
+      const raw = (data ?? {}) as Partial<DiceResult>;
+      const r: DiceResult = {
+        roundId: typeof raw.roundId === 'string' ? raw.roundId : `local-${Date.now()}`,
+        outcome: raw.outcome === 'WIN' ? 'WIN' : 'LOSS',
+        result: safeNumber(raw.result, 0),
+        multiplier: safeNumber(raw.multiplier, 0),
+        payout: safeNumber(raw.payout, 0),
+        win: Boolean(raw.win),
+        winChancePct: safeNumber(raw.winChancePct, 0),
+        newBalance: safeNumber(raw.newBalance, 0),
+        nonce: safeNumber(raw.nonce, 0),
+        reused: Boolean(raw.reused),
+      };
       setLast(r);
       setAnimKey((k) => k + 1);
       ng.bumpNonce();
@@ -137,12 +153,12 @@ export default function DicePage() {
                 last && !last.win && 'text-rose-300',
               )}
             >
-              {last ? last.result.toFixed(2) : '00.00'}
+              {last ? safeToFixed(last.result, 2) : '00.00'}
             </span>
             {last ? (
               <span className={cn('mt-1 text-xs font-bold uppercase tracking-wider', last.win ? 'text-amber-200' : 'text-rose-200')}>
                 {last.win
-                  ? lang === 'bn' ? `+${formatBDT(last.payout)} . ${last.multiplier.toFixed(4)}x` : `+${formatBDT(last.payout)} . ${last.multiplier.toFixed(4)}x`
+                  ? lang === 'bn' ? `+${formatBDT(last.payout)} . ${safeToFixed(last.multiplier, 4)}x` : `+${formatBDT(last.payout)} . ${safeToFixed(last.multiplier, 4)}x`
                   : lang === 'bn' ? 'হার' : 'Bust'}
               </span>
             ) : (
@@ -195,8 +211,8 @@ export default function DicePage() {
           <div className="rounded-xl border border-white/10 bg-white/5 p-4">
             <GamePanelTitle>{lang === 'bn' ? 'বেট পূর্বরূপ' : 'Bet preview'}</GamePanelTitle>
             <div className="grid grid-cols-2 gap-3">
-              <Stat label={lang === 'bn' ? 'জয়ের সম্ভাবনা' : 'Win chance'} value={`${winChancePct.toFixed(2)}%`} />
-              <Stat label={lang === 'bn' ? 'গুণিতক' : 'Multiplier'} value={`${projectedMultiplier.toFixed(4)}x`} />
+              <Stat label={lang === 'bn' ? 'জয়ের সম্ভাবনা' : 'Win chance'} value={`${safeToFixed(winChancePct, 2)}%`} />
+              <Stat label={lang === 'bn' ? 'গুণিতক' : 'Multiplier'} value={`${safeToFixed(projectedMultiplier, 4)}x`} />
             </div>
             <div className="mt-3 rounded-lg border border-amber-400/30 bg-amber-400/10 p-3">
               <p className="text-[10px] font-bold uppercase tracking-wider text-amber-200/80">{lang === 'bn' ? 'সম্ভাব্য জয়' : 'Potential win'}</p>
@@ -235,7 +251,7 @@ export default function DicePage() {
                 )}
                 title={`${h.direction.toUpperCase()} ${h.target} . ${formatBDT(h.bet)}`}
               >
-                {h.result.toFixed(2)}
+                {safeToFixed(h.result, 2)}
               </span>
             ))}
           </div>

@@ -12,6 +12,7 @@ import { useNativeGame } from '@/lib/native-games/use-native-game';
 import { GameShell, GamePanel, GamePanelTitle } from '@/components/native-games/GameShell';
 import { BetCard } from '@/components/native-games/BetCard';
 import { DepositRequiredModal, isInsufficientFundsError } from '@/components/native-games/DepositRequiredModal';
+import { safeNumber, safeToFixed } from '@/lib/native-games/safe';
 import { formatBDT } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import { Rocket, Trophy } from 'lucide-react';
@@ -44,11 +45,13 @@ export default function CrashPage() {
   const [animKey, setAnimKey] = useState(0);
   const [depositOpen, setDepositOpen] = useState(false);
 
-  const projectedPayout = useMemo(() => Number(bet) * Number(target), [bet, target]);
+  const betNumber = useMemo(() => safeNumber(bet, 0), [bet]);
+  const targetNumber = useMemo(() => safeNumber(target, minTarget), [target, minTarget]);
+  const projectedPayout = useMemo(() => betNumber * targetNumber, [betNumber, targetNumber]);
 
   useEffect(() => {
     if (!last) return;
-    setHistory((prev) => [last.crashPoint, ...prev].slice(0, 14));
+    setHistory((prev) => [safeNumber(last.crashPoint, 1), ...prev].slice(0, 14));
   }, [last]);
 
   const onPlace = async () => {
@@ -85,7 +88,18 @@ export default function CrashPage() {
         if (data?.code === 'SESSION_INACTIVE') ng.newSession();
         return;
       }
-      setLast(data as CrashResult);
+      const raw = (data ?? {}) as Partial<CrashResult>;
+      const safe: CrashResult = {
+        roundId: typeof raw.roundId === 'string' ? raw.roundId : `local-${Date.now()}`,
+        win: Boolean(raw.win),
+        multiplier: safeNumber(raw.multiplier, 0),
+        payout: safeNumber(raw.payout, 0),
+        newBalance: safeNumber(raw.newBalance, 0),
+        crashPoint: safeNumber(raw.crashPoint, 1),
+        targetMultiplier: safeNumber(raw.targetMultiplier, tgt),
+        reused: Boolean(raw.reused),
+      };
+      setLast(safe);
       setAnimKey((k) => k + 1);
       ng.bumpNonce();
       ng.refreshBalance();
@@ -168,13 +182,13 @@ export default function CrashPage() {
                   last && !last.win && 'text-rose-300',
                 )}
               >
-                {last ? `${last.crashPoint.toFixed(2)}x` : '0.00x'}
+                {last ? `${safeToFixed(last.crashPoint, 2)}x` : '0.00x'}
               </span>
               {last ? (
                 <span className={cn('mt-1 inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wider', last.win ? 'text-amber-200' : 'text-rose-200')}>
                   <Trophy className="h-3.5 w-3.5" />
                   {last.win
-                    ? lang === 'bn' ? `+${formatBDT(last.payout)} . ${last.targetMultiplier.toFixed(2)}x` : `+${formatBDT(last.payout)} . ${last.targetMultiplier.toFixed(2)}x`
+                    ? lang === 'bn' ? `+${formatBDT(last.payout)} . ${safeToFixed(last.targetMultiplier, 2)}x` : `+${formatBDT(last.payout)} . ${safeToFixed(last.targetMultiplier, 2)}x`
                     : lang === 'bn' ? 'লক্ষ্যের আগে ক্র্যাশ' : 'Crashed before target'}
                 </span>
               ) : (
@@ -212,7 +226,7 @@ export default function CrashPage() {
                 onClick={() => setTarget(v.toFixed(2))}
                 className={cn(
                   'h-10 min-w-[52px] rounded-lg border px-3 text-xs font-extrabold transition',
-                  Number(target) === v
+                  targetNumber === v
                     ? 'border-amber-300 bg-gradient-to-b from-amber-300 to-amber-500 text-[#3A1F00]'
                     : 'border-white/15 bg-white/5 text-white/80 hover:border-white/30 hover:bg-white/10',
                 )}
@@ -243,7 +257,7 @@ export default function CrashPage() {
                   cp >= 2 ? 'border-amber-400/40 bg-amber-400/15 text-amber-100' : 'border-rose-400/30 bg-rose-500/10 text-rose-200',
                 )}
               >
-                {cp.toFixed(2)}x
+                {safeToFixed(cp, 2)}x
               </span>
             ))}
           </div>
@@ -260,14 +274,14 @@ export default function CrashPage() {
         onPlay={onPlace}
         loading={loading}
         disabled={!ng.session}
-        hint={`${lang === 'bn' ? 'লক্ষ্য' : 'Target'} ${Number(target).toFixed(2)}x`}
+        hint={`${lang === 'bn' ? 'লক্ষ্য' : 'Target'} ${safeToFixed(targetNumber, 2)}x`}
       />
 
       <DepositRequiredModal
         open={depositOpen}
         onOpenChange={setDepositOpen}
         balance={ng.balance}
-        requiredAmount={Number(bet)}
+        requiredAmount={betNumber}
       />
     </GameShell>
   );

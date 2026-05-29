@@ -12,6 +12,7 @@ import { useNativeGame } from '@/lib/native-games/use-native-game';
 import { GameShell, GamePanel, GamePanelTitle } from '@/components/native-games/GameShell';
 import { BetCard } from '@/components/native-games/BetCard';
 import { DepositRequiredModal, isInsufficientFundsError } from '@/components/native-games/DepositRequiredModal';
+import { safeNumber, safeToFixed } from '@/lib/native-games/safe';
 import { formatBDT } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import { Trophy } from 'lucide-react';
@@ -47,7 +48,8 @@ export default function RoulettePage() {
   const wheelRef = useRef<HTMLDivElement | null>(null);
 
   const projectedMultiplier = useMemo(() => (betType === 'straight' ? 36 : 2), [betType]);
-  const projectedPayout = useMemo(() => Number(bet) * projectedMultiplier, [bet, projectedMultiplier]);
+  const betNumber = useMemo(() => safeNumber(bet, 0), [bet]);
+  const projectedPayout = useMemo(() => betNumber * projectedMultiplier, [betNumber, projectedMultiplier]);
 
   const onSpin = async () => {
     if (!ng.session) return;
@@ -80,7 +82,20 @@ export default function RoulettePage() {
         if (data?.code === 'SESSION_INACTIVE') ng.newSession();
         return;
       }
-      setLast(data as RouletteResult);
+      const raw = (data ?? {}) as Partial<RouletteResult>;
+      const colorRaw = typeof raw.resultColor === 'string' ? raw.resultColor : 'green';
+      const resultColor: RouletteResult['resultColor'] = colorRaw === 'red' || colorRaw === 'black' ? colorRaw : 'green';
+      const safe: RouletteResult = {
+        roundId: typeof raw.roundId === 'string' ? raw.roundId : `local-${Date.now()}`,
+        win: Boolean(raw.win),
+        multiplier: safeNumber(raw.multiplier, 0),
+        payout: safeNumber(raw.payout, 0),
+        newBalance: safeNumber(raw.newBalance, 0),
+        result: Math.max(0, Math.min(36, Math.round(safeNumber(raw.result, 0)))),
+        resultColor,
+        reused: Boolean(raw.reused),
+      };
+      setLast(safe);
       ng.bumpNonce();
       ng.refreshBalance();
     } catch { setError('Could not reach server'); }
@@ -130,7 +145,7 @@ export default function RoulettePage() {
           {last ? (
             <p className={cn('mt-3 inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-extrabold uppercase tracking-wider', last.win ? 'bg-amber-400/20 text-amber-100' : 'bg-white/5 text-white/70')}>
               <Trophy className="h-4 w-4" />
-              {last.win ? `+${formatBDT(last.payout)} . ${last.multiplier.toFixed(2)}x` : (lang === 'bn' ? 'হার' : 'No win')}
+              {last.win ? `+${formatBDT(last.payout)} . ${safeToFixed(last.multiplier, 2)}x` : (lang === 'bn' ? 'হার' : 'No win')}
             </p>
           ) : null}
         </div>
@@ -206,7 +221,7 @@ export default function RoulettePage() {
         open={depositOpen}
         onOpenChange={setDepositOpen}
         balance={ng.balance}
-        requiredAmount={Number(bet)}
+        requiredAmount={betNumber}
       />
     </GameShell>
   );

@@ -11,6 +11,7 @@ import { useNativeGame } from '@/lib/native-games/use-native-game';
 import { GameShell, GamePanel, GamePanelTitle } from '@/components/native-games/GameShell';
 import { BetCard } from '@/components/native-games/BetCard';
 import { DepositRequiredModal, isInsufficientFundsError } from '@/components/native-games/DepositRequiredModal';
+import { safeArray, safeNumber, safeString, safeToFixed } from '@/lib/native-games/safe';
 import { formatBDT } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import { Trophy } from 'lucide-react';
@@ -89,7 +90,18 @@ export default function SlotsPage() {
         if (data?.code === 'SESSION_INACTIVE') ng.newSession();
         return;
       }
-      setLast(data as SlotsResult);
+      const raw = (data ?? {}) as Partial<SlotsResult>;
+      const safe: SlotsResult = {
+        roundId: typeof raw.roundId === 'string' ? raw.roundId : `local-${Date.now()}`,
+        win: Boolean(raw.win),
+        multiplier: safeNumber(raw.multiplier, 0),
+        payout: safeNumber(raw.payout, 0),
+        newBalance: safeNumber(raw.newBalance, 0),
+        reelSymbols: safeArray<string>(raw.reelSymbols).map((s) => safeString(s, '')),
+        matchedSymbol: typeof raw.matchedSymbol === 'string' ? raw.matchedSymbol : null,
+        reused: Boolean(raw.reused),
+      };
+      setLast(safe);
       ng.bumpNonce();
       ng.refreshBalance();
     } catch { setError('Could not reach server'); }
@@ -149,8 +161,8 @@ export default function SlotsPage() {
             <p className="png-fade-up mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-amber-400/20 px-3 py-2 text-sm font-extrabold uppercase tracking-wider text-amber-100">
               <Trophy className="h-4 w-4" />
               {lang === 'bn'
-                ? `${last.matchedSymbol} . ${last.multiplier.toFixed(4)}x . +${formatBDT(last.payout)}`
-                : `${last.matchedSymbol} . ${last.multiplier.toFixed(4)}x . +${formatBDT(last.payout)}`}
+                ? `${last.matchedSymbol} . ${safeToFixed(last.multiplier, 4)}x . +${formatBDT(last.payout)}`
+                : `${last.matchedSymbol} . ${safeToFixed(last.multiplier, 4)}x . +${formatBDT(last.payout)}`}
             </p>
           ) : last ? (
             <p className="mt-3 text-center text-xs uppercase tracking-wider text-white/55">{lang === 'bn' ? 'কোনো ম্যাচ নেই' : 'No match'}</p>
@@ -178,7 +190,7 @@ export default function SlotsPage() {
         open={depositOpen}
         onOpenChange={setDepositOpen}
         balance={ng.balance}
-        requiredAmount={Number(bet)}
+        requiredAmount={safeNumber(bet, 0)}
       />
     </GameShell>
   );
