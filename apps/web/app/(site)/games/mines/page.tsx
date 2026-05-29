@@ -14,6 +14,7 @@ import { useLang } from '@/lib/i18n/context';
 import { useNativeGame } from '@/lib/native-games/use-native-game';
 import { GameShell, GamePanel, GamePanelTitle } from '@/components/native-games/GameShell';
 import { BetCard } from '@/components/native-games/BetCard';
+import { DepositRequiredModal, isInsufficientFundsError } from '@/components/native-games/DepositRequiredModal';
 import { formatBDT } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import { Bomb, Gem, Trophy, RefreshCw } from 'lucide-react';
@@ -71,6 +72,7 @@ export default function MinesPage() {
   const [loading, setLoading] = useState(false);
   const [revealing, setRevealing] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [depositOpen, setDepositOpen] = useState(false);
 
   const totalTiles = round?.totalTiles ?? fallbackTotal;
   const gridSide = Math.max(2, Math.round(Math.sqrt(totalTiles)));
@@ -83,6 +85,10 @@ export default function MinesPage() {
       setError(lang === 'bn' ? 'বেট পরিমাণ অবৈধ' : 'Bet amount is invalid');
       return;
     }
+    if (ng.balance != null && amount > ng.balance) {
+      setDepositOpen(true);
+      return;
+    }
     setError(null); setLoading(true);
     try {
       const res = await fetch('/api/native-games/mines/bet', {
@@ -92,6 +98,11 @@ export default function MinesPage() {
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
+        if (isInsufficientFundsError(data)) {
+          setDepositOpen(true);
+          ng.refreshBalance();
+          return;
+        }
         setError(data?.message ?? data?.code ?? 'Start failed');
         if (data?.code === 'SESSION_INACTIVE') ng.newSession();
         return;
@@ -287,6 +298,13 @@ export default function MinesPage() {
           disabled: !(round?.kind === 'pending' && round.revealed.length > 0),
           loading,
         } : undefined}
+      />
+
+      <DepositRequiredModal
+        open={depositOpen}
+        onOpenChange={setDepositOpen}
+        balance={ng.balance}
+        requiredAmount={Number(bet)}
       />
     </GameShell>
   );

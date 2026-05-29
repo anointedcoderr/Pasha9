@@ -11,6 +11,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { CategoryHero } from '@/components/site/CategoryHero';
 import { BackBar } from '@/components/site/BackBar';
+import { LottoCountdown } from '@/components/site/LottoCountdown';
 import { useLang } from '@/lib/i18n/context';
 import {
   Ticket,
@@ -176,26 +177,35 @@ export default function LottoPage() {
         ]}
       />
 
-      {/* Top strip: next draw + draw timing */}
-      <section className="relative overflow-hidden rounded-2xl bg-[linear-gradient(135deg,#0F1115_0%,#1A1D24_60%,#0F1115_100%)] p-5 text-white shadow-[0_10px_30px_-18px_rgba(15,17,21,0.7)]">
-        <span aria-hidden className="pointer-events-none absolute -right-12 -top-12 h-44 w-44 rounded-full bg-brand-yellow-500/30 blur-3xl" />
-        <div className="relative grid gap-4 md:grid-cols-2 md:items-center">
+      {/* Top strip: jackpot + countdown + draw timing */}
+      <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-[linear-gradient(135deg,#0F1115_0%,#1A1D24_60%,#0F1115_100%)] p-5 text-white shadow-[0_18px_44px_-22px_rgba(0,0,0,0.7)] md:p-7">
+        <span aria-hidden className="pointer-events-none absolute -right-12 -top-12 h-48 w-48 rounded-full bg-brand-yellow-500/30 blur-3xl" />
+        <span aria-hidden className="pointer-events-none absolute -left-16 bottom-0 h-44 w-44 rounded-full bg-fuchsia-500/20 blur-3xl" />
+        <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-300/45 to-transparent" />
+
+        <div className="relative grid gap-5 md:grid-cols-2 md:items-center">
           <div>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-yellow-500/15 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-brand-yellow-300">
               <Clock className="h-3 w-3" /> {lang === 'bn' ? 'দৈনিক ড্র' : 'Daily Draw'}
             </span>
-            <h2 className="mt-2 text-2xl font-extrabold leading-tight md:text-3xl">
-              {lang === 'bn' ? 'প্রতিদিন সন্ধ্যা ৭:৩০ টায়' : 'Every day at 7:30 PM BST'}
-            </h2>
-            <p className="mt-1 text-sm text-white/75">
-              {featured?.drawsAt
-                ? lang === 'bn'
-                  ? `পরবর্তী ড্র: ${formatDateTime(featured.drawsAt, lang)}`
-                  : `Next draw: ${formatDateTime(featured.drawsAt, lang)}`
-                : lang === 'bn'
-                  ? 'পরবর্তী ড্রের জন্য পেজে চোখ রাখুন।'
-                  : 'Watch this page for the next draw window.'}
+            <p className="mt-2 text-[10px] font-bold uppercase tracking-[0.22em] text-white/55">
+              {lang === 'bn' ? 'এই ড্রয়ের জ্যাকপট' : 'This draw jackpot'}
             </p>
+            <p className="mt-1 inline-flex items-baseline gap-2 text-4xl font-extrabold tabular-nums text-brand-yellow-300 drop-shadow-[0_3px_10px_rgba(245,180,0,0.35)] md:text-5xl">
+              {featured?.prizePool != null ? formatBDT(Number(featured.prizePool), { compact: true }) : '-'}
+              <span className="text-xs font-bold uppercase tracking-wider text-white/60">BDT</span>
+            </p>
+            <p className="mt-3 text-sm text-white/85">
+              {lang === 'bn'
+                ? `টিকেট বেস ভ্যালু ${featured?.ticketPrice ?? 20} টাকা . প্রতিদিন সন্ধ্যা ৭:৩০ টায় ড্র।`
+                : `Ticket base ${featured?.ticketPrice ?? 20} BDT . Every day at 7:30 PM BST.`}
+            </p>
+            <div className="mt-4">
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.18em] text-amber-200/80">
+                {lang === 'bn' ? 'পরবর্তী ড্র' : 'Next draw'}
+              </p>
+              <LottoCountdown drawsAt={featured?.drawsAt ?? null} />
+            </div>
           </div>
           {me ? (
             <LottoSelfStrip me={me} lang={lang} />

@@ -11,6 +11,7 @@ import { useLang } from '@/lib/i18n/context';
 import { useNativeGame } from '@/lib/native-games/use-native-game';
 import { GameShell, GamePanel, GamePanelTitle } from '@/components/native-games/GameShell';
 import { BetCard } from '@/components/native-games/BetCard';
+import { DepositRequiredModal, isInsufficientFundsError } from '@/components/native-games/DepositRequiredModal';
 import { formatBDT } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import { Trophy } from 'lucide-react';
@@ -42,6 +43,7 @@ export default function RoulettePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [spinning, setSpinning] = useState(false);
+  const [depositOpen, setDepositOpen] = useState(false);
   const wheelRef = useRef<HTMLDivElement | null>(null);
 
   const projectedMultiplier = useMemo(() => (betType === 'straight' ? 36 : 2), [betType]);
@@ -52,6 +54,10 @@ export default function RoulettePage() {
     const amount = Number(bet);
     if (!Number.isFinite(amount) || amount <= 0) {
       setError(lang === 'bn' ? 'বেট পরিমাণ অবৈধ' : 'Bet amount is invalid');
+      return;
+    }
+    if (ng.balance != null && amount > ng.balance) {
+      setDepositOpen(true);
       return;
     }
     setError(null); setLoading(true); setSpinning(true);
@@ -65,6 +71,11 @@ export default function RoulettePage() {
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
+        if (isInsufficientFundsError(data)) {
+          setDepositOpen(true);
+          ng.refreshBalance();
+          return;
+        }
         setError(data?.message ?? data?.code ?? 'Spin failed');
         if (data?.code === 'SESSION_INACTIVE') ng.newSession();
         return;
@@ -189,6 +200,13 @@ export default function RoulettePage() {
         loading={loading}
         disabled={!ng.session}
         hint={`${lang === 'bn' ? 'জিতলে' : 'Win'}: ${formatBDT(Number.isFinite(projectedPayout) ? projectedPayout : 0)}`}
+      />
+
+      <DepositRequiredModal
+        open={depositOpen}
+        onOpenChange={setDepositOpen}
+        balance={ng.balance}
+        requiredAmount={Number(bet)}
       />
     </GameShell>
   );

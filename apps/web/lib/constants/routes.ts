@@ -70,5 +70,6 @@ export const ROUTES = {
     notifications: '/admin/notifications',
     integrations: '/admin/integrations',
     nativeGames: '/admin/native-games',
+    depositPrompt: '/admin/deposit-prompt',
   },
 } as const;

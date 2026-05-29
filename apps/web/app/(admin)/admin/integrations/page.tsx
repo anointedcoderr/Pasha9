@@ -246,6 +246,25 @@ export default function AdminIntegrationsPage() {
             emptyLabel="No native games loaded yet. Open Native Games admin to add one."
           />
 
+          <Card padding="lg" className="mb-6 border-l-4 border-amber-400/60">
+            <CardHeader
+              title="External provider games"
+              subtitle="Status: Awaiting provider credentials. No external game provider is connected at this time."
+              action={<Plug className="h-4 w-4 text-amber-300" />}
+            />
+            <p className="text-sm text-ink-mid">
+              Once provider API keys and callback documentation are supplied, this platform can connect external game providers through the provider adapter layer. The placeholder rail on /games and the homepage clearly tells players this section is awaiting credentials.
+            </p>
+            <p className="mt-2 text-[11px] text-ink-lo">
+              Do NOT mark any external provider as live in this admin until real credentials have been verified end-to-end via a sandbox round.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {['Slots', 'Live Casino', 'Fishing', 'Crash', 'Table Games'].map((label) => (
+                <Chip key={label} tone="warn">{label} . awaiting credentials</Chip>
+              ))}
+            </div>
+          </Card>
+
           <Card padding="lg" className="mb-6">
             <CardHeader
               title="Scheduled jobs (cron)"

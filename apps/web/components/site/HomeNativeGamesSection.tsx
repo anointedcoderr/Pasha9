@@ -39,49 +39,6 @@ interface NativeListResp {
 
 type Code = 'dice' | 'mines' | 'keno' | 'roulette' | 'slots' | 'crash';
 
-// Per-game tagline + small chip label. Card artwork comes from
-// GameArt. Anything not listed here falls back to a neutral label
-// so a future game added by an operator still surfaces cleanly.
-const GAME_META: Record<string, { taglineEn: string; taglineBn: string; chipEn: string; chipBn: string }> = {
-  dice: {
-    taglineEn: 'Instant settle. Pick a target, roll over or under.',
-    taglineBn: 'সাথে সাথে সেটল। লক্ষ্য বাছাই করুন, কম বা বেশি রোল করুন।',
-    chipEn: 'Instant', chipBn: 'ইনস্ট্যান্ট',
-  },
-  mines: {
-    taglineEn: 'Reveal safe tiles, cash out before the mine.',
-    taglineBn: 'নিরাপদ টাইল উন্মোচন করুন, মাইনের আগে ক্যাশআউট করুন।',
-    chipEn: 'Arcade', chipBn: 'আর্কেড',
-  },
-  keno: {
-    taglineEn: 'Pick numbers. The server draws 20. Match to win big.',
-    taglineBn: 'নম্বর বাছাই করুন। সার্ভার ২০টি ড্র করবে। মিল হলেই বড় জয়।',
-    chipEn: 'Instant', chipBn: 'ইনস্ট্যান্ট',
-  },
-  roulette: {
-    taglineEn: 'European single zero. Red, black, straight - your call.',
-    taglineBn: 'ইউরোপীয় সিঙ্গেল জিরো। রেড, ব্ল্যাক, সরাসরি - আপনার ইচ্ছা।',
-    chipEn: 'Table game', chipBn: 'টেবিল গেম',
-  },
-  slots: {
-    taglineEn: 'Three reels, eight original symbols, instant payout.',
-    taglineBn: 'তিন রিল, আটটি মৌলিক চিহ্ন, সাথে সাথে পেআউট।',
-    chipEn: 'Reels', chipBn: 'রিল',
-  },
-  crash: {
-    taglineEn: 'Set your target, beat the crash, take the multiplier.',
-    taglineBn: 'লক্ষ্য সেট করুন, ক্র্যাশের আগে যান, গুণিতক নিন।',
-    chipEn: 'Arcade', chipBn: 'আর্কেড',
-  },
-};
-
-const DEFAULT_META = {
-  taglineEn: 'Original Pasha 9 native game.',
-  taglineBn: 'মৌলিক পাশা ৯ নেটিভ গেম।',
-  chipEn: 'Original',
-  chipBn: 'অরিজিনাল',
-};
-
 const SUPPORTED: ReadonlySet<Code> = new Set(['dice', 'mines', 'keno', 'roulette', 'slots', 'crash']);
 function isCode(s: string): s is Code { return SUPPORTED.has(s as Code); }
 
@@ -138,63 +95,48 @@ export function HomeNativeGamesSection() {
           : 'Play wallet-connected Pasha games instantly.'}
       </p>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4 md:gap-3 xl:grid-cols-6">
         {games.map((g) => {
-          const meta = GAME_META[g.gameCode] ?? DEFAULT_META;
           const href = g.frontHref ?? '/games';
           const playable = g.isActive;
           const artCode = isCode(g.gameCode) ? g.gameCode : null;
 
           const CardInner = (
-            <div className={cn('group relative h-full overflow-hidden rounded-2xl bg-brand-ink text-white shadow-sm', !playable && 'opacity-95')}>
-              {/* 3D-style art banner */}
-              <div className="relative">
+            <div className={cn('group png-card relative h-full overflow-hidden rounded-2xl border border-white/10 bg-brand-ink text-white shadow-[0_8px_24px_-12px_rgba(0,0,0,0.55)]', !playable && 'opacity-95')}>
+              <div className="relative aspect-[4/3] overflow-hidden">
                 {artCode ? (
-                  <GameArt code={artCode} className="w-full" />
+                  <GameArt code={artCode} className="absolute inset-0 h-full w-full" />
                 ) : (
-                  <div className="aspect-[16/10] w-full bg-gradient-to-br from-slate-700 via-slate-800 to-brand-ink" />
+                  <div className="absolute inset-0 bg-gradient-to-br from-slate-700 via-slate-800 to-brand-ink" />
                 )}
                 <div aria-hidden className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-b from-transparent to-brand-ink/95" />
-                <div className="absolute left-3 top-3 flex flex-wrap items-center gap-1.5">
+                <div className="absolute left-2 top-2 flex flex-wrap items-center gap-1">
                   {g.isFeatured ? (
-                    <span className="rounded-full border border-amber-200/60 bg-amber-200/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-100">
+                    <span className="rounded-full border border-amber-200/60 bg-amber-200/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-100 backdrop-blur">
                       {lang === 'bn' ? 'হট' : 'Hot'}
                     </span>
                   ) : null}
-                  <span className="rounded-full border border-white/30 bg-white/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white backdrop-blur">
+                  <span className="rounded-full border border-white/30 bg-white/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white backdrop-blur">
                     {lang === 'bn' ? 'অরিজিনাল' : 'Original'}
-                  </span>
-                  <span className="rounded-full border border-white/30 bg-white/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white backdrop-blur">
-                    {lang === 'bn' ? meta.chipBn : meta.chipEn}
                   </span>
                 </div>
               </div>
 
-              <div className="relative -mt-10 flex flex-col gap-3 p-4 md:p-5">
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/75">{lang === 'bn' ? 'পাশা অরিজিনাল' : 'Pasha Original'}</p>
-                  <h3 className="text-xl font-extrabold leading-tight">{g.displayName}</h3>
-                  <p className="mt-1 text-xs text-white/85">{lang === 'bn' ? meta.taglineBn : meta.taglineEn}</p>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2 text-[11px] text-white/80">
-                  <span className="rounded-md border border-white/20 bg-white/5 px-2 py-0.5">{lang === 'bn' ? 'ওয়ালেট কানেক্টেড' : 'Wallet connected'}</span>
-                  <span className="rounded-md border border-white/20 bg-white/5 px-2 py-0.5">{lang === 'bn' ? 'মিন বেট' : 'Min bet'}: {Number(g.minBet)}</span>
-                </div>
-
-                <div className="flex items-center justify-between gap-2">
+              <div className="relative -mt-7 px-3 pb-3 pt-0">
+                <h3 className="truncate text-sm font-extrabold leading-tight text-white">{g.displayName}</h3>
+                <div className="mt-1 flex items-center justify-between gap-1">
                   {playable ? (
-                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-brand-yellow-500 px-3 py-2 text-xs font-extrabold uppercase tracking-wider text-brand-ink shadow-sm transition group-hover:translate-y-[-1px]">
-                      {lang === 'bn' ? 'এখনই খেলুন' : 'Play Now'}
-                      <ArrowRight className="h-3.5 w-3.5" />
+                    <span className="inline-flex h-7 items-center gap-1 rounded-full bg-gradient-to-b from-amber-300 to-amber-500 px-2.5 text-[10px] font-extrabold uppercase tracking-wider text-[#3A1F00] shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]">
+                      {lang === 'bn' ? 'খেলুন' : 'Play'}
+                      <ArrowRight className="h-3 w-3" />
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1.5 rounded-lg border border-white/25 bg-white/5 px-3 py-2 text-xs font-bold uppercase tracking-wider text-white">
-                      <Lock className="h-3 w-3" />
-                      {lang === 'bn' ? 'শীঘ্রই আসছে' : 'Coming soon'}
+                    <span className="inline-flex h-7 items-center gap-1 rounded-full border border-white/25 bg-white/5 px-2.5 text-[10px] font-bold uppercase tracking-wider text-white/80">
+                      <Lock className="h-2.5 w-2.5" />
+                      {lang === 'bn' ? 'শীঘ্রই' : 'Soon'}
                     </span>
                   )}
-                  <span className="text-[10px] text-white/60">{lang === 'bn' ? 'হাউস এজ' : 'Edge'}: {(Number(g.houseEdgeBps) / 100).toFixed(2)}%</span>
+                  <span className="text-[10px] tabular-nums text-white/55">৳{Number(g.minBet)}+</span>
                 </div>
               </div>
             </div>

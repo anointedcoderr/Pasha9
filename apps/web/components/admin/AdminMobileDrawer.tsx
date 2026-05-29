@@ -48,6 +48,7 @@ import {
   Bell,
   Plug,
   Gamepad2,
+  Wallet as WalletIcon,
 } from 'lucide-react';
 import { Logo } from '@/components/site/Logo';
 import { ROUTES } from '@/lib/constants/routes';
@@ -136,6 +137,7 @@ const GROUPS = [
     labelKey: 'groupSystem',
     items: [
       { key: 'integrations', href: ROUTES.admin.integrations, icon: Plug },
+      { key: 'depositPrompt', href: ROUTES.admin.depositPrompt, icon: WalletIcon },
       { key: 'support', href: ROUTES.admin.support, icon: LifeBuoy },
       { key: 'settings', href: ROUTES.admin.settings, icon: Settings },
       { key: 'activity', href: ROUTES.admin.activity, icon: ClipboardList },

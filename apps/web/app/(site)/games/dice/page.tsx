@@ -12,6 +12,7 @@ import { useLang } from '@/lib/i18n/context';
 import { useNativeGame } from '@/lib/native-games/use-native-game';
 import { GameShell, GamePanel, GamePanelTitle } from '@/components/native-games/GameShell';
 import { BetCard } from '@/components/native-games/BetCard';
+import { DepositRequiredModal, isInsufficientFundsError } from '@/components/native-games/DepositRequiredModal';
 import { formatBDT } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 
@@ -47,6 +48,7 @@ export default function DicePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [animKey, setAnimKey] = useState(0);
+  const [depositOpen, setDepositOpen] = useState(false);
 
   const winChancePct = useMemo(() => (direction === 'over' ? 100 - target : target), [direction, target]);
   const houseEdgeBps = ng.game?.houseEdgeBps ?? 200;
@@ -62,6 +64,10 @@ export default function DicePage() {
       setError(lang === 'bn' ? 'বেট পরিমাণ অবৈধ' : 'Bet amount is invalid');
       return;
     }
+    if (ng.balance != null && amount > ng.balance) {
+      setDepositOpen(true);
+      return;
+    }
     setError(null); setLoading(true);
     try {
       const res = await fetch('/api/native-games/dice/bet', {
@@ -71,6 +77,11 @@ export default function DicePage() {
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
+        if (isInsufficientFundsError(data)) {
+          setDepositOpen(true);
+          ng.refreshBalance();
+          return;
+        }
         setError(data?.message ?? data?.code ?? 'Roll failed');
         if (data?.code === 'SESSION_INACTIVE') ng.newSession();
         return;
@@ -230,6 +241,13 @@ export default function DicePage() {
           </div>
         </GamePanel>
       ) : null}
+
+      <DepositRequiredModal
+        open={depositOpen}
+        onOpenChange={setDepositOpen}
+        balance={ng.balance}
+        requiredAmount={Number(bet)}
+      />
     </GameShell>
   );
 }

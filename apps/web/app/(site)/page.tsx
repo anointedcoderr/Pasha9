@@ -11,6 +11,7 @@ import { WalletStrip } from '@/components/site/WalletStrip';
 import { CategorySlider } from '@/components/site/CategorySlider';
 import { HomeGameSection } from '@/components/site/HomeGameSection';
 import { HomeNativeGamesSection } from '@/components/site/HomeNativeGamesSection';
+import { ProviderGamesSection } from '@/components/site/ProviderGamesSection';
 import { AmbassadorVideoSection } from '@/components/site/AmbassadorVideoSection';
 import { SportsCardsCarousel } from '@/components/site/SportsCardsCarousel';
 import { PromoPair } from '@/components/site/PromoPair';
@@ -44,6 +45,8 @@ export default function HomePage() {
       <JackpotStrip />
 
       <HomeNativeGamesSection />
+
+      <ProviderGamesSection />
 
       <HomeGameSection
         title={t('home.sectionHot')}
