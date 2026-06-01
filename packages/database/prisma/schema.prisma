@@ -722,6 +722,20 @@ model ProviderTransaction {
   rolledBackBy           String?  // staff/admin User.id
   rollbackReason         String?
   rollbackTransactionId  String?  // Transaction.id of the `adjust` row written on rollback
+  // M3 Phase 3E: balance snapshots at callback time, taken inside
+  // db.$transaction. Lets the admin audit a missing-win incident
+  // without re-deriving wallet state from Transaction rows.
+  walletBefore        Decimal? @db.Decimal(14, 2)
+  walletAfter         Decimal? @db.Decimal(14, 2)
+  // M3 Phase 3E: super-admin repair. Set when the operator manually
+  // credits a missing win on this provider transaction (e.g. when an
+  // older idempotency-blocked win is recovered). repairTransactionId
+  // is the resulting Transaction(adjust) row; null until repaired.
+  repairedAt           DateTime?
+  repairedBy           String?
+  repairReason         String?
+  repairAmount         Decimal? @db.Decimal(14, 2)
+  repairTransactionId  String?
   createdAt           DateTime @default(now())
 
   provider GameProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)

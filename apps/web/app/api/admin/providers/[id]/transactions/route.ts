@@ -40,6 +40,9 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         betAmount: Number(r.betAmount),
         winAmount: Number(r.winAmount),
         netResult: Number(r.netResult),
+        walletBefore: r.walletBefore == null ? null : Number(r.walletBefore),
+        walletAfter: r.walletAfter == null ? null : Number(r.walletAfter),
+        repairAmount: r.repairAmount == null ? null : Number(r.repairAmount),
       })),
       totals: {
         rounds: agg._count._all,

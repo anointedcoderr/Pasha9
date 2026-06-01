@@ -1365,15 +1365,23 @@ interface TxRow {
   type: string;
   status: string;
   errorCode: string | null;
+  walletBefore?: number | null;
+  walletAfter?: number | null;
   rolledBackAt?: string | null;
   rolledBackBy?: string | null;
   rollbackReason?: string | null;
+  repairedAt?: string | null;
+  repairedBy?: string | null;
+  repairReason?: string | null;
+  repairAmount?: number | null;
+  repairTransactionId?: string | null;
 }
 interface TxResp { rows: TxRow[]; totals: { rounds: number; totalBet: number; totalWin: number; netResult: number; ggr: number } }
 
 function TransactionsPanel({ providerId }: { providerId: string }) {
   const [data, setData] = useState<TxResp | null>(null);
   const [rollback, setRollback] = useState<TxRow | null>(null);
+  const [repair, setRepair] = useState<TxRow | null>(null);
   const load = useCallback(async () => {
     const res = await fetch(`/api/admin/providers/${providerId}/transactions?limit=100`, { cache: 'no-store' });
     const j = await res.json().catch(() => null);
@@ -1394,9 +1402,21 @@ function TransactionsPanel({ providerId }: { providerId: string }) {
         </div>
       ) : null}
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[800px] text-sm">
+        <table className="w-full min-w-[1000px] text-sm">
           <thead className="bg-base-elev text-left text-[11px] uppercase tracking-wider text-ink-lo">
-            <tr><th className="px-3 py-2">When</th><th className="px-3 py-2">Member</th><th className="px-3 py-2">Game</th><th className="px-3 py-2">Round</th><th className="px-3 py-2">Bet</th><th className="px-3 py-2">Win</th><th className="px-3 py-2">Type</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Action</th></tr>
+            <tr>
+              <th className="px-3 py-2">When</th>
+              <th className="px-3 py-2">Member</th>
+              <th className="px-3 py-2">Game</th>
+              <th className="px-3 py-2">Round</th>
+              <th className="px-3 py-2">Bet</th>
+              <th className="px-3 py-2">Win</th>
+              <th className="px-3 py-2">Wallet before</th>
+              <th className="px-3 py-2">Wallet after</th>
+              <th className="px-3 py-2">Type</th>
+              <th className="px-3 py-2">Status</th>
+              <th className="px-3 py-2">Action</th>
+            </tr>
           </thead>
           <tbody className="divide-y divide-neon/10">
             {(data?.rows ?? []).map((r) => (
@@ -1407,20 +1427,31 @@ function TransactionsPanel({ providerId }: { providerId: string }) {
                 <td className="px-3 py-2 font-mono text-[11px]">{r.gameRound}</td>
                 <td className="px-3 py-2">{fmt(r.betAmount)}</td>
                 <td className="px-3 py-2">{fmt(r.winAmount)}</td>
+                <td className="px-3 py-2 font-mono text-[11px]">{r.walletBefore != null ? fmt(r.walletBefore) : '-'}</td>
+                <td className="px-3 py-2 font-mono text-[11px]">{r.walletAfter != null ? fmt(r.walletAfter) : '-'}</td>
                 <td className="px-3 py-2 font-mono text-[11px]">{r.type}</td>
                 <td className="px-3 py-2">
                   <Chip tone={r.status === 'accepted' ? 'ok' : r.status === 'duplicate' ? 'info' : r.status === 'rolled_back' ? 'warn' : 'danger'}>{r.status}</Chip>
+                  {r.repairedAt ? <Chip tone="info">repaired</Chip> : null}
                 </td>
                 <td className="px-3 py-2">
-                  {r.status === 'accepted' ? (
-                    <Button size="sm" variant="ghost" leftIcon={<AlertTriangle className="h-3.5 w-3.5" />} onClick={() => setRollback(r)}>Rollback</Button>
-                  ) : r.status === 'rolled_back' ? (
-                    <span className="text-[10px] text-ink-lo" title={r.rollbackReason ?? ''}>{r.rolledBackAt ? new Date(r.rolledBackAt).toLocaleString() : 'rolled back'}</span>
-                  ) : null}
+                  <div className="flex flex-wrap items-center gap-1">
+                    {r.status === 'accepted' && !r.rolledBackAt ? (
+                      <Button size="sm" variant="ghost" leftIcon={<AlertTriangle className="h-3.5 w-3.5" />} onClick={() => setRollback(r)}>Rollback</Button>
+                    ) : null}
+                    {r.status === 'accepted' && r.winAmount > 0 && !r.repairedAt && !r.rolledBackAt ? (
+                      <Button size="sm" variant="ghost" leftIcon={<Save className="h-3.5 w-3.5" />} onClick={() => setRepair(r)}>Repair</Button>
+                    ) : null}
+                    {r.status === 'duplicate' && r.winAmount > 0 && !r.repairedAt ? (
+                      <Button size="sm" variant="neon" leftIcon={<Save className="h-3.5 w-3.5" />} onClick={() => setRepair(r)}>Credit missing win</Button>
+                    ) : null}
+                    {r.repairedAt ? <span className="text-[10px] text-ink-lo" title={r.repairReason ?? ''}>repaired {new Date(r.repairedAt).toLocaleString()}</span> : null}
+                    {r.rolledBackAt ? <span className="text-[10px] text-ink-lo" title={r.rollbackReason ?? ''}>rolled back {new Date(r.rolledBackAt).toLocaleString()}</span> : null}
+                  </div>
                 </td>
               </tr>
             ))}
-            {(data?.rows ?? []).length === 0 ? <tr><td colSpan={9} className="px-3 py-4 text-center text-ink-mid">No transactions yet.</td></tr> : null}
+            {(data?.rows ?? []).length === 0 ? <tr><td colSpan={11} className="px-3 py-4 text-center text-ink-mid">No transactions yet.</td></tr> : null}
           </tbody>
         </table>
       </div>
@@ -1431,7 +1462,117 @@ function TransactionsPanel({ providerId }: { providerId: string }) {
         tx={rollback}
         onDone={() => { setRollback(null); load(); }}
       />
+      <RepairModal
+        open={!!repair}
+        onOpenChange={(v) => { if (!v) setRepair(null); }}
+        providerId={providerId}
+        tx={repair}
+        onDone={() => { setRepair(null); load(); }}
+      />
     </Card>
+  );
+}
+
+function RepairModal({ open, onOpenChange, providerId, tx, onDone }: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  providerId: string;
+  tx: TxRow | null;
+  onDone: () => void;
+}) {
+  const [amount, setAmount] = useState('');
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [result, setResult] = useState<{ walletBefore: number; walletAfter: number; creditAmount: number } | null>(null);
+
+  useEffect(() => {
+    if (!open || !tx) return;
+    // Default credit amount = the winAmount the provider sent. The
+    // operator can override (e.g. to credit only the unfulfilled
+    // portion if a partial credit already exists elsewhere).
+    setAmount(String(tx.winAmount > 0 ? tx.winAmount : ''));
+    setReason('');
+    setErr(null);
+    setResult(null);
+  }, [open, tx]);
+
+  const onRun = async () => {
+    if (!tx) return;
+    const n = Number(amount);
+    if (!Number.isFinite(n) || n <= 0) { setErr('Credit amount must be > 0.'); return; }
+    if (reason.trim().length < 3) { setErr('Reason is required.'); return; }
+    setBusy(true); setErr(null);
+    try {
+      const r = await fetch(`/api/admin/providers/${providerId}/transactions/${tx.id}/credit-missing`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ amount: n, reason: reason.trim() }),
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok) { setErr(j?.message ?? j?.code ?? 'Credit failed'); return; }
+      setResult({
+        walletBefore: Number(j?.walletBefore ?? 0),
+        walletAfter: Number(j?.walletAfter ?? 0),
+        creditAmount: Number(j?.creditAmount ?? 0),
+      });
+      setTimeout(() => onDone(), 1200);
+    } catch (e) { setErr(e instanceof Error ? e.message : 'Credit failed'); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <Modal
+      open={open}
+      onOpenChange={onOpenChange}
+      title={tx ? `Credit missing win on round ${tx.gameRound}` : 'Credit missing win'}
+      description="Super-admin only. Writes one adjusting Transaction row crediting the wallet, links it to this ProviderTransaction, and blocks a second repair attempt."
+      footer={
+        <>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button variant="gold" loading={busy} leftIcon={<Save className="h-3.5 w-3.5" />} onClick={onRun}>Credit wallet</Button>
+        </>
+      }
+    >
+      <Card padding="sm" className="mb-3 border-l-4 border-amber-400/60">
+        <p className="text-[11px] font-semibold text-ink-mid">
+          Use this when the provider sent a winning callback that did not credit the wallet (e.g. older idempotency-blocked duplicate, or a manual reconciliation). The amount is what we credit to the player; the original ProviderTransaction is marked repaired and cannot be repaired again.
+        </p>
+      </Card>
+
+      {err ? <p className="mb-3 text-sm text-signal-danger">{err}</p> : null}
+
+      {tx ? (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-2 text-xs md:grid-cols-4">
+            <Totals label="Status" value={tx.status} />
+            <Totals label="Type" value={tx.type} />
+            <Totals label="Provider bet" value={fmt(tx.betAmount)} />
+            <Totals label="Provider win" value={fmt(tx.winAmount)} />
+            <Totals label="Recorded netResult" value={fmt(tx.netResult)} positive={tx.netResult >= 0} />
+            <Totals label="Wallet before" value={tx.walletBefore != null ? fmt(tx.walletBefore) : '-'} />
+            <Totals label="Wallet after" value={tx.walletAfter != null ? fmt(tx.walletAfter) : '-'} />
+            <Totals label="Round" value={tx.gameRound} />
+          </div>
+          <Field label="Credit amount (BDT)">
+            <input type="number" min={0.01} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} className={inputCls} />
+          </Field>
+          <Field label="Reason (required, kept in activity log)">
+            <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} className={cn(inputCls, 'h-auto py-2')} placeholder="e.g. JILI win callback was duplicate-blocked before type-aware idempotency landed" />
+          </Field>
+        </div>
+      ) : null}
+
+      {result ? (
+        <Card padding="sm" className="mt-4 border-l-4 border-emerald-400/60">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-ink-lo">Credit applied</p>
+          <div className="mt-1 grid grid-cols-3 gap-2 text-xs">
+            <Totals label="Credited" value={fmt(result.creditAmount)} />
+            <Totals label="Wallet before" value={fmt(result.walletBefore)} />
+            <Totals label="Wallet after" value={fmt(result.walletAfter)} positive={result.walletAfter >= result.walletBefore} />
+          </div>
+        </Card>
+      ) : null}
+    </Modal>
   );
 }
 

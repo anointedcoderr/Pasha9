@@ -53,6 +53,16 @@ export interface HealthCheckResult {
 
 // Normalised callback shape. Adapters convert their provider-specific
 // callback body into this; the wallet pipeline operates on this only.
+//
+// type semantics (M3 Phase 3E):
+//   bet     . provider sent bet_amount > 0 and win_amount == 0
+//   win     . provider sent bet_amount == 0 and win_amount > 0
+//   settle  . provider sent BOTH bet_amount > 0 AND win_amount > 0
+//   rollback. provider explicitly reverses a prior round
+//
+// The wallet pipeline uses this type to build a per-event
+// idempotency key so a separate BET callback and a separate WIN
+// callback for the same game_round do NOT collide.
 export interface NormalizedCallback {
   type: 'bet' | 'win' | 'settle' | 'rollback';
   memberAccount: string;

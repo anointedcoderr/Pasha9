@@ -10,10 +10,25 @@
 //     ProviderTransaction row tagged with the same idempotencyKey
 //   })
 //
-// Idempotency key is `${providerKey}:${gameRound}` per operator
-// requirement until the provider confirms a stronger transaction
-// id. If a callback hits us twice we return the stored response
-// and the wallet stays untouched.
+// M3 Phase 3E idempotency:
+//   idempotencyKey = `${providerKey}:${gameRound}:${type}`
+//
+// The type segment is critical. Without it, a BET callback and a
+// separate WIN callback for the same game_round collide on the
+// same key and the WIN is dropped as duplicate (the bug that
+// caused a real player win to be lost). The type segment is one
+// of bet / win / settle / rollback derived by the adapter from
+// the amounts; same-type replays still collide (correct) and
+// different-type events for the same round go through (correct).
+//
+// Double-debit guard:
+//   If a 'settle' or 'win' arrives AFTER an accepted 'bet' or
+//   'settle' for the same gameRound, we ONLY apply the win
+//   portion of the new callback. The bet portion is treated as
+//   already-debited and skipped, even if the provider repeats it
+//   in the new body. This keeps the wallet correct when the
+//   provider sends bet+win as separate callbacks AND/OR as a
+//   combined settle for the same round.
 
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db/client';
@@ -62,18 +77,19 @@ export async function processProviderCallback(
     };
   }
 
-  const idempotencyKey = `${creds.providerKey}:${normalized.gameRound}`;
+  // Type-aware idempotency key.
+  const idempotencyKey = `${creds.providerKey}:${normalized.gameRound}:${normalized.type}`;
 
   // Replay check OUTSIDE the transaction. If we already have a
-  // ProviderTransaction for this key, the caller short-circuits to
-  // duplicate without touching the wallet.
+  // ProviderTransaction for this exact (providerKey, gameRound, type),
+  // short-circuit as duplicate without touching the wallet.
   const prior = await db.providerTransaction.findUnique({ where: { idempotencyKey } });
   if (prior) {
     return {
       status: 'duplicate',
       providerTxId: prior.gameRound,
-      walletBefore: 0,
-      walletAfter: 0,
+      walletBefore: prior.walletBefore ? Number(prior.walletBefore) : 0,
+      walletAfter: prior.walletAfter ? Number(prior.walletAfter) : 0,
       netResult: Number(prior.netResult ?? 0),
       userId: prior.userId,
     };
@@ -127,15 +143,33 @@ export async function processProviderCallback(
     };
   }
 
-  const bet = dec(normalized.betAmount);
+  // Double-debit guard: was the bet for this gameRound already
+  // applied by an earlier 'bet' or 'settle' callback?
+  const priorBetApplied = (normalized.type === 'win' || normalized.type === 'settle')
+    ? Boolean(await db.providerTransaction.findFirst({
+        where: {
+          providerId: creds.id,
+          gameRound: normalized.gameRound,
+          status: 'accepted',
+          type: { in: ['bet', 'settle'] },
+        },
+        select: { id: true },
+      }))
+    : false;
+
+  const rawBet = dec(normalized.betAmount);
   const win = dec(normalized.winAmount);
-  const net = win.sub(bet); // positive = credit, negative = debit
+  // If a prior bet has already been debited for this round and this
+  // callback is a win/settle that repeats the bet portion, skip the
+  // bet so we do not double-debit.
+  const effectiveBet = priorBetApplied && normalized.type !== 'bet' ? dec(0) : rawBet;
+  const net = win.sub(effectiveBet);
 
   const txResult = await db.$transaction(async (tx) => {
     const wallet = await tx.wallet.findUnique({ where: { userId: user.id } });
     const before = wallet ? Number(wallet.balance) : 0;
 
-    if (bet.gt(0) && (!wallet || dec(wallet.balance).lt(bet))) {
+    if (effectiveBet.gt(0) && (!wallet || dec(wallet.balance).lt(effectiveBet))) {
       const rejected = await tx.providerTransaction.create({
         data: {
           providerId: creds.id,
@@ -143,7 +177,7 @@ export async function processProviderCallback(
           memberAccount: normalized.memberAccount,
           gameUid: normalized.gameUid,
           gameRound: normalized.gameRound,
-          betAmount: bet,
+          betAmount: rawBet,
           winAmount: win,
           netResult: dec(0),
           type: normalized.type,
@@ -151,6 +185,8 @@ export async function processProviderCallback(
           idempotencyKey,
           rawRequest: (normalized.rawBody ?? null) as Prisma.InputJsonValue,
           errorCode: 'INSUFFICIENT_FUNDS',
+          walletBefore: dec(before),
+          walletAfter: dec(before),
         },
       });
       return {
@@ -164,19 +200,19 @@ export async function processProviderCallback(
       };
     }
 
-    // 1. Apply net wallet movement.
+    // 1. Apply wallet movement.
     let walletTransactionId: string | null = null;
-    if (bet.gt(0)) {
-      await tx.wallet.update({ where: { userId: user.id }, data: { balance: { decrement: bet } } });
+    if (effectiveBet.gt(0)) {
+      await tx.wallet.update({ where: { userId: user.id }, data: { balance: { decrement: effectiveBet } } });
       const t = await tx.transaction.create({
         data: {
           userId: user.id,
           type: 'bet',
           status: 'completed',
-          amount: bet.neg(),
+          amount: effectiveBet.neg(),
           reference: normalized.gameRound,
           description: `${creds.name} bet`,
-          meta: { providerKey: creds.providerKey, gameUid: normalized.gameUid, gameRound: normalized.gameRound } as Prisma.JsonObject,
+          meta: { providerKey: creds.providerKey, gameUid: normalized.gameUid, gameRound: normalized.gameRound, callbackType: normalized.type } as Prisma.JsonObject,
         },
       });
       walletTransactionId = t.id;
@@ -191,12 +227,9 @@ export async function processProviderCallback(
           amount: win,
           reference: normalized.gameRound,
           description: `${creds.name} win`,
-          meta: { providerKey: creds.providerKey, gameUid: normalized.gameUid, gameRound: normalized.gameRound } as Prisma.JsonObject,
+          meta: { providerKey: creds.providerKey, gameUid: normalized.gameUid, gameRound: normalized.gameRound, callbackType: normalized.type } as Prisma.JsonObject,
         },
       });
-      // Only the first wallet write's id is tracked on the
-      // ProviderTransaction row; subsequent ones live on
-      // Transaction.reference for audit.
       walletTransactionId = walletTransactionId ?? t.id;
     }
 
@@ -210,7 +243,10 @@ export async function processProviderCallback(
         memberAccount: normalized.memberAccount,
         gameUid: normalized.gameUid,
         gameRound: normalized.gameRound,
-        betAmount: bet,
+        // Persist the RAW amounts the provider sent for auditability.
+        // netResult reflects what was actually applied (post double-
+        // debit guard) so the GGR aggregate stays correct.
+        betAmount: rawBet,
         winAmount: win,
         netResult: net,
         type: normalized.type,
@@ -218,6 +254,8 @@ export async function processProviderCallback(
         idempotencyKey,
         walletTransactionId,
         rawRequest: (normalized.rawBody ?? null) as Prisma.InputJsonValue,
+        walletBefore: dec(before),
+        walletAfter: dec(afterNum),
       },
     });
 
@@ -233,21 +271,22 @@ export async function processProviderCallback(
 
   // Bonus turnover is applied OUTSIDE the wallet transaction so that
   // a misbehaving bonus engine cannot roll back a settled provider
-  // bet. We only contribute on accepted bet-bearing rows: duplicates,
-  // rejections, rollback and pure-win callbacks all skip. The
-  // idempotency key on ProviderTransaction guarantees we cannot reach
-  // this branch twice for the same gameRound.
-  if (txResult.status === 'accepted' && bet.gt(0) && normalized.type !== 'rollback') {
+  // bet. We only contribute on accepted bet-bearing rows where the
+  // bet actually moved the wallet (so a 'settle' or 'win' callback
+  // following a prior 'bet' does NOT double-count turnover).
+  // Duplicates, rejections, and rollback callbacks all skip.
+  if (txResult.status === 'accepted' && effectiveBet.gt(0) && normalized.type !== 'rollback') {
     try {
       await addTurnover({
         userId: user.id,
-        amount: Number(bet),
+        amount: Number(effectiveBet),
         kind: 'provider_game',
         reference: normalized.gameRound,
         meta: {
           providerKey: creds.providerKey,
           gameUid: normalized.gameUid ?? null,
           providerTxId: txResult.providerTxId,
+          callbackType: normalized.type,
         } as Prisma.JsonObject,
       });
     } catch (err) {

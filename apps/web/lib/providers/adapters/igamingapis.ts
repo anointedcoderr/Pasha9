@@ -428,10 +428,20 @@ export const igamingapisAdapter: ProviderAdapter = {
       }
     }
 
+    // Three-state event derivation. iGamingAPIs does not send an
+    // explicit transaction_type field on its callbacks, so we derive
+    // one from the amounts. This is what the new type-aware
+    // idempotency key depends on (otherwise a separate BET callback
+    // followed by a separate WIN callback for the same game_round
+    // collides and the WIN is dropped as duplicate - the exact bug
+    // that caused a real player win to be lost).
+    let derivedType: 'bet' | 'win' | 'settle';
+    if (betAmount > 0 && winAmount > 0) derivedType = 'settle';
+    else if (winAmount > 0) derivedType = 'win';
+    else derivedType = 'bet';
+
     return {
-      // Until docs clarify a transaction_type field, treat any
-      // win_amount > 0 as a win, otherwise a bet/settle event.
-      type: winAmount > 0 ? 'win' : 'bet',
+      type: derivedType,
       memberAccount,
       gameUid: gameUid || null,
       gameRound,

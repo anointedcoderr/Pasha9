@@ -235,6 +235,83 @@ is structure only and depends on the operator pasting real values.
 - [ ] Duplicate callback verified (status: duplicate in Logs).
 - [ ] Reports tab returns non-zero numbers for the test period.
 
+## Provider callback troubleshooting
+
+### Symptom: real winning round did not credit the player wallet
+
+**Root cause (fixed in M3 Phase 3E).** The earlier idempotency key
+was `${providerKey}:${gameRound}`. iGamingAPIs sometimes sends a
+BET callback and a separate WIN callback for the same `game_round`.
+The second callback hit the existing ProviderTransaction row with
+the same key, short-circuited as `duplicate`, and the wallet was
+never credited. Real player wins were silently lost.
+
+**Fix.**
+- Idempotency key is now `${providerKey}:${gameRound}:${type}` where
+  type is one of `bet / win / settle / rollback` derived from the
+  amounts by the adapter.
+- BET callback and WIN callback for the same round now produce
+  different keys, so both go through.
+- Duplicate same-type replays still collide on the same key and are
+  rejected as duplicate (correct).
+- Double-debit guard: when a SETTLE or WIN callback arrives AFTER an
+  accepted BET (or SETTLE) for the same gameRound, the wallet
+  pipeline applies only the win portion of the new callback and
+  treats the repeated bet as already-debited.
+- `ProviderTransaction.walletBefore` / `walletAfter` are now captured
+  inside the same `db.$transaction` so the admin can audit a round
+  without re-deriving wallet state from `Transaction` rows.
+
+### Inspecting a failed round
+
+1. `/admin/providers/<id>` -> Logs tab -> Callbacks. Filter by the
+   `member_account` or scroll to the time the player reported. The
+   raw masked body is on every row.
+2. `/admin/providers/<id>` -> Transactions tab. Find the row by
+   `gameRound`. New columns surface walletBefore / walletAfter.
+   Status chip shows `accepted / duplicate / rejected / rolled_back`,
+   plus a `repaired` chip if a credit-missing repair was applied.
+3. If the win was duplicate-blocked under the old idempotency scheme
+   (any row with status `duplicate` AND `winAmount > 0`), the
+   Transactions tab shows a **Credit missing win** action on that
+   row.
+
+### Repair tool (super_admin only)
+
+POST `/api/admin/providers/[id]/transactions/[txId]/credit-missing`
+with `{ amount, reason }`. Admin UI: Transactions tab -> per-row
+**Repair** (on accepted rows with a positive win that need a
+correction) or **Credit missing win** (on duplicate rows that
+carry a positive win and never moved the wallet).
+
+- Writes ONE `Transaction(type='adjust')` row crediting the wallet.
+- Marks the ProviderTransaction with `repairedAt`, `repairedBy`,
+  `repairReason`, `repairAmount`, `repairTransactionId`.
+- Refuses a second repair on the same row with `409 ALREADY_REPAIRED`.
+- Refuses if the row was already rolled back (`409 ALREADY_ROLLED_BACK`).
+- Activity log: `PROVIDER_TX_REPAIR_CREDIT`.
+- We do NOT call the provider. This is wallet correction inside
+  Pasha 9 only.
+
+### Manual test matrix
+
+Run these against `/admin/providers/<id>` -> Setup -> Simulate
+callback (or via curl to the public callback URL) to confirm the new
+pipeline.
+
+| # | Setup | Callback | Expected wallet behaviour |
+| --- | --- | --- | --- |
+| 1 | Funded user, balance 100 | bet=10 win=0 | -10 . status accepted |
+| 2 | Same | (replay #1, same gameRound) | unchanged . status duplicate |
+| 3 | Funded user, fresh gameRound | bet=0 win=20 | +20 . status accepted |
+| 4 | Funded user, fresh gameRound | bet=10 win=20 (combined settle) | -10 +20 . status accepted, type settle |
+| 5 | Funded user, fresh gameRound | bet=10 then later bet=0 win=20 (two separate callbacks) | first -10 (accepted, bet), second +20 (accepted, win). Wallet net +10 |
+| 6 | Funded user, fresh gameRound | bet=10, then settle bet=10 win=20 for same round | first -10 (bet), second +20 (settle, bet portion skipped). Wallet net +10 |
+| 7 | Funded user, balance 5 | bet=10 win=0 | rejected, errorCode INSUFFICIENT_FUNDS, wallet unchanged |
+| 8 | Unmapped member_account | bet=10 win=0 | rejected, errorCode MEMBER_ACCOUNT_NOT_FOUND, wallet unchanged |
+| 9 | Blocked user | bet=10 win=0 | rejected, errorCode USER_BLOCKED, wallet unchanged |
+| 10 | Repair a duplicate-blocked old win | use the Credit missing win button | wallet +winAmount, status flags repaired, second click returns 409 |
+
 ## Known risks and maintenance notes
 
 - **Token rotation.** Provider portal may rotate tokens. The
