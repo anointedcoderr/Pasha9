@@ -17,6 +17,7 @@
 
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db/client';
+import { addTurnover } from '@/lib/bonuses/engine';
 import type { NormalizedCallback } from './types';
 import type { ProviderCreds } from './credentials';
 import { lookupUserIdByMemberAccount } from './player-account';
@@ -130,7 +131,7 @@ export async function processProviderCallback(
   const win = dec(normalized.winAmount);
   const net = win.sub(bet); // positive = credit, negative = debit
 
-  return await db.$transaction(async (tx) => {
+  const txResult = await db.$transaction(async (tx) => {
     const wallet = await tx.wallet.findUnique({ where: { userId: user.id } });
     const before = wallet ? Number(wallet.balance) : 0;
 
@@ -229,4 +230,30 @@ export async function processProviderCallback(
       userId: user.id,
     };
   });
+
+  // Bonus turnover is applied OUTSIDE the wallet transaction so that
+  // a misbehaving bonus engine cannot roll back a settled provider
+  // bet. We only contribute on accepted bet-bearing rows: duplicates,
+  // rejections, rollback and pure-win callbacks all skip. The
+  // idempotency key on ProviderTransaction guarantees we cannot reach
+  // this branch twice for the same gameRound.
+  if (txResult.status === 'accepted' && bet.gt(0) && normalized.type !== 'rollback') {
+    try {
+      await addTurnover({
+        userId: user.id,
+        amount: Number(bet),
+        kind: 'provider_game',
+        reference: normalized.gameRound,
+        meta: {
+          providerKey: creds.providerKey,
+          gameUid: normalized.gameUid ?? null,
+          providerTxId: txResult.providerTxId,
+        } as Prisma.JsonObject,
+      });
+    } catch (err) {
+      console.error('[providers/wallet] addTurnover failed', { gameRound: normalized.gameRound, err });
+    }
+  }
+
+  return txResult;
 }

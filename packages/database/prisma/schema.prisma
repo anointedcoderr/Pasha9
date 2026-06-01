@@ -599,6 +599,12 @@ model GameProvider {
   // provider cannot reach). Set this per-provider as soon as the
   // production domain is final.
   publicBaseUrl   String?
+  // Minimum wallet balance (BDT) a player must have before the
+  // public launch route will call this provider. 0 disables the
+  // pre-check. Used by the lobby to short-circuit to the existing
+  // DepositRequiredModal instead of round-tripping a guaranteed
+  // failure to upstream.
+  launchMinBalance Decimal @default(0) @db.Decimal(14, 2)
   lastSyncAt      DateTime?
   lastHealthCheckAt DateTime?
   lastHealthCheckOk Boolean?
@@ -702,12 +708,20 @@ model ProviderTransaction {
   winAmount           Decimal  @default(0) @db.Decimal(14, 2)
   netResult           Decimal  @default(0) @db.Decimal(14, 2)
   type                String   // bet | win | settle | rollback | rejected
-  status              String   // accepted | rejected | duplicate | error
+  status              String   // accepted | rejected | duplicate | error | rolled_back
   idempotencyKey      String   @unique
   walletTransactionId String?
   rawRequest          Json?
   rawResponse         Json?
   errorCode           String?
+  // M3 Phase 3D: super-admin rollback. Set once when the operator
+  // manually reverses a previously-accepted callback. We never call
+  // the provider's rollback API (its semantics are unconfirmed) -
+  // this is internal wallet correction only.
+  rolledBackAt           DateTime?
+  rolledBackBy           String?  // staff/admin User.id
+  rollbackReason         String?
+  rollbackTransactionId  String?  // Transaction.id of the `adjust` row written on rollback
   createdAt           DateTime @default(now())
 
   provider GameProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)

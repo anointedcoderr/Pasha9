@@ -16,6 +16,7 @@ export async function GET() {
     select: {
       id: true, name: true, providerKey: true, adapterKey: true,
       lastHealthCheckAt: true, lastHealthCheckOk: true, lastSyncAt: true,
+      launchMinBalance: true,
     },
   });
   return jsonOk({
@@ -26,6 +27,7 @@ export async function GET() {
       lastHealthCheckAt: r.lastHealthCheckAt,
       lastHealthCheckOk: r.lastHealthCheckOk,
       lastSyncAt: r.lastSyncAt,
+      launchMinBalance: r.launchMinBalance ? Number(r.launchMinBalance) : 0,
     })),
   });
 }

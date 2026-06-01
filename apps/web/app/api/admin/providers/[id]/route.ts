@@ -34,6 +34,7 @@ const patchSchema = z.object({
   launchMode: z.enum(['redirect', 'iframe']).optional(),
   launchTimestampOffsetMs: z.coerce.number().int().min(-86_400_000).max(86_400_000).optional(),
   publicBaseUrl: z.string().trim().url().max(400).optional().or(z.literal('')),
+  launchMinBalance: z.coerce.number().min(0).max(1_000_000).optional(),
   status: z.enum(['active', 'maintenance']).optional(),
 });
 
@@ -74,6 +75,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       ...(parsed.data.launchMode !== undefined ? { launchMode: parsed.data.launchMode } : {}),
       ...(parsed.data.launchTimestampOffsetMs !== undefined ? { launchTimestampOffsetMs: parsed.data.launchTimestampOffsetMs } : {}),
       ...(parsed.data.publicBaseUrl !== undefined ? { publicBaseUrl: parsed.data.publicBaseUrl || null } : {}),
+      ...(parsed.data.launchMinBalance !== undefined ? { launchMinBalance: new Prisma.Decimal(parsed.data.launchMinBalance) } : {}),
       ...(parsed.data.status !== undefined ? { status: parsed.data.status } : {}),
       ...enc,
     };
@@ -117,6 +119,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         launchMode: updated.launchMode,
         launchTimestampOffsetMs: updated.launchTimestampOffsetMs,
         publicBaseUrl: updated.publicBaseUrl,
+        launchMinBalance: Number(updated.launchMinBalance ?? 0),
         status: updated.status,
         lastSyncAt: updated.lastSyncAt,
         lastHealthCheckAt: updated.lastHealthCheckAt,

@@ -51,11 +51,17 @@ export async function POST(req: NextRequest, { params }: { params: { providerKey
     });
     if (!game || game.status !== 'active') return jsonError(404, 'GAME_NOT_FOUND');
 
-    // Read wallet balance so we can pass it to the provider. (We do
-    // NOT block on zero balance here; the lobby's DepositRequiredModal
-    // is responsible for that UX flow.)
+    // Read wallet balance up-front so we can do a server-side
+    // preflight against the per-provider launchMinBalance setting.
+    // This is a hard gate: if a misbehaving client bypasses the
+    // lobby's DepositRequiredModal, the launch route still refuses
+    // and the provider is not called.
     const wallet = await db.wallet.findUnique({ where: { userId: session.sub }, select: { balance: true } });
     const balance = wallet ? Number(wallet.balance) : 0;
+    const minBalance = creds.launchMinBalance;
+    if (minBalance > 0 && balance < minBalance) {
+      return jsonError(402, 'INSUFFICIENT_FUNDS', `Minimum BDT ${minBalance.toFixed(2)} required to launch this provider.`, { balance, minBalance });
+    }
 
     // Resolve the public callback + return URLs. NEVER pass through
     // a localhost origin to the provider - it cannot reach us. The

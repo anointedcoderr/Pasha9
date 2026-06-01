@@ -17,6 +17,7 @@ import { Plug, ArrowRight, Lock, Play } from 'lucide-react';
 import { useLang } from '@/lib/i18n/context';
 import { cn } from '@/lib/utils/cn';
 import { CategoryHeroArt, type CategoryCode } from './CategoryHeroArt';
+import { DepositRequiredModal, isInsufficientFundsError } from '@/components/native-games/DepositRequiredModal';
 
 interface SlotItem {
   code: CategoryCode;
@@ -37,7 +38,7 @@ interface Props {
   showAdminLink?: boolean;
 }
 
-interface ProviderSummary { providerKey: string; name: string; lastSyncAt: string | null }
+interface ProviderSummary { providerKey: string; name: string; lastSyncAt: string | null; launchMinBalance?: number }
 interface ProviderGameRow { gameUid: string; displayName: string; category: string | null; imageUrl: string | null; brandKey?: string | null; brandName?: string | null }
 
 // Map normalized provider category to the closest hero-art code so
@@ -63,6 +64,8 @@ export function ProviderGamesSection({ showAdminLink = false }: Props) {
   const [launching, setLaunching] = useState<string | null>(null);
   const [launchError, setLaunchError] = useState<string | null>(null);
   const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
+  const [depositOpen, setDepositOpen] = useState(false);
+  const [depositInfo, setDepositInfo] = useState<{ balance: number; required: number }>({ balance: 0, required: 0 });
 
   const markImageFailed = (key: string) => {
     setFailedImages((prev) => {
@@ -72,6 +75,19 @@ export function ProviderGamesSection({ showAdminLink = false }: Props) {
       return next;
     });
   };
+
+  const fetchBalance = async (): Promise<number | null> => {
+    try {
+      const r = await fetch('/api/auth/me', { cache: 'no-store', credentials: 'include' });
+      if (r.status === 401) return null;
+      if (!r.ok) return 0;
+      const j = await r.json().catch(() => null);
+      const v = j?.user?.wallet?.balance;
+      return v == null ? 0 : Number(v);
+    } catch { return 0; }
+  };
+
+  const providerByKey = new Map(providers.map((p) => [p.providerKey, p]));
 
   useEffect(() => {
     let alive = true;
@@ -115,6 +131,20 @@ export function ProviderGamesSection({ showAdminLink = false }: Props) {
     setLaunchError(null);
     setLaunching(`${providerKey}:${gameUid}`);
     try {
+      // Pre-flight: prove the player is logged in AND has at least
+      // the per-provider minimum balance. We avoid burning the
+      // upstream call AND we never expose the launch payload when
+      // the modal is about to fire instead.
+      const balance = await fetchBalance();
+      if (balance === null) { window.location.href = '/?login=1'; return; }
+      const minBalance = providerByKey.get(providerKey)?.launchMinBalance ?? 0;
+      const required = Math.max(0.01, minBalance > 0 ? minBalance : 1);
+      if (balance < required) {
+        setDepositInfo({ balance, required });
+        setDepositOpen(true);
+        return;
+      }
+
       const res = await fetch(`/api/providers/${encodeURIComponent(providerKey)}/launch`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -122,6 +152,11 @@ export function ProviderGamesSection({ showAdminLink = false }: Props) {
       });
       const j = await res.json().catch(() => null);
       if (res.status === 401) { window.location.href = '/?login=1'; return; }
+      if (res.status === 402 || isInsufficientFundsError(j)) {
+        setDepositInfo({ balance: Number(j?.balance ?? balance), required: Number(j?.minBalance ?? required) });
+        setDepositOpen(true);
+        return;
+      }
       if (!res.ok) {
         setLaunchError(j?.message ?? j?.code ?? 'Launch failed');
         return;
@@ -163,6 +198,8 @@ export function ProviderGamesSection({ showAdminLink = false }: Props) {
         </div>
 
         {launchError ? <p className="rounded-lg border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{launchError}</p> : null}
+
+        <DepositRequiredModal open={depositOpen} onOpenChange={setDepositOpen} balance={depositInfo.balance} requiredAmount={depositInfo.required} />
 
         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-5 md:gap-3">
           {games.map((g) => {
@@ -211,6 +248,16 @@ export function ProviderGamesSection({ showAdminLink = false }: Props) {
               </button>
             );
           })}
+        </div>
+
+        <div className="flex justify-center">
+          <Link
+            href="/games/provider"
+            className="inline-flex h-10 items-center gap-2 rounded-full border border-brand-divider bg-brand-paper px-5 text-xs font-extrabold uppercase tracking-wider text-brand-ink transition hover:border-amber-400 hover:bg-brand-surface"
+          >
+            {lang === 'bn' ? 'সব প্রোভাইডার গেম দেখুন' : 'View all provider games'}
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
         </div>
       </section>
     );

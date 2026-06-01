@@ -44,6 +44,7 @@ function rowToView(row: {
   launchMode: string | null;
   launchTimestampOffsetMs: number;
   publicBaseUrl: string | null;
+  launchMinBalance: Prisma.Decimal | number;
   secretEncoding: string | null;
   status: 'active' | 'maintenance';
   lastSyncAt: Date | null;
@@ -70,6 +71,7 @@ function rowToView(row: {
     launchMode: row.launchMode,
     launchTimestampOffsetMs: row.launchTimestampOffsetMs,
     publicBaseUrl: row.publicBaseUrl,
+    launchMinBalance: Number(row.launchMinBalance ?? 0),
     secretEncoding: row.secretEncoding,
     status: row.status,
     lastSyncAt: row.lastSyncAt,
@@ -109,6 +111,7 @@ const createSchema = z.object({
   launchMode: z.enum(['redirect', 'iframe']).default('redirect'),
   launchTimestampOffsetMs: z.coerce.number().int().min(-86_400_000).max(86_400_000).default(0),
   publicBaseUrl: z.string().trim().url().max(400).optional().or(z.literal('')),
+  launchMinBalance: z.coerce.number().min(0).max(1_000_000).default(0),
 });
 
 export async function POST(req: NextRequest) {
@@ -152,6 +155,7 @@ export async function POST(req: NextRequest) {
         launchMode: parsed.data.launchMode,
         launchTimestampOffsetMs: parsed.data.launchTimestampOffsetMs,
         publicBaseUrl: parsed.data.publicBaseUrl || null,
+        launchMinBalance: parsed.data.launchMinBalance,
         status: 'maintenance', // operator must activate after Test connection + Sync
       },
     });

@@ -41,6 +41,7 @@ interface ProviderRow {
   launchMode: string | null;
   launchTimestampOffsetMs: number;
   publicBaseUrl: string | null;
+  launchMinBalance: number;
   status: 'active' | 'maintenance';
   lastSyncAt: string | null;
   lastHealthCheckAt: string | null;
@@ -139,6 +140,7 @@ export default function AdminProviderDetailPage() {
               <TabsTrigger value="games">Games</TabsTrigger>
               <TabsTrigger value="logs">Logs</TabsTrigger>
               <TabsTrigger value="transactions">Transactions</TabsTrigger>
+              <TabsTrigger value="reports">Reports</TabsTrigger>
             </TabsList>
 
             <TabsContent value="setup">
@@ -148,6 +150,7 @@ export default function AdminProviderDetailPage() {
             <TabsContent value="games"><GamesPanel providerId={id} /></TabsContent>
             <TabsContent value="logs"><LogsPanel providerId={id} /></TabsContent>
             <TabsContent value="transactions"><TransactionsPanel providerId={id} /></TabsContent>
+            <TabsContent value="reports"><ReportsPanel providerId={id} /></TabsContent>
           </Tabs>
         </>
       )}
@@ -171,6 +174,7 @@ function SetupPanel({ provider, onSaved, onError }: { provider: ProviderRow; onS
   const [launchMode, setLaunchMode] = useState<'redirect' | 'iframe'>((provider.launchMode as 'redirect' | 'iframe') ?? 'redirect');
   const [launchTimestampOffsetMs, setLaunchTimestampOffsetMs] = useState(String(provider.launchTimestampOffsetMs ?? 0));
   const [publicBaseUrl, setPublicBaseUrl] = useState(provider.publicBaseUrl ?? '');
+  const [launchMinBalance, setLaunchMinBalance] = useState(String(provider.launchMinBalance ?? 0));
   const [busy, setBusy] = useState(false);
 
   const onSave = async () => {
@@ -184,6 +188,7 @@ function SetupPanel({ provider, onSaved, onError }: { provider: ProviderRow; onS
         currencyCode, language, callbackResponseMode, launchMode,
         launchTimestampOffsetMs: Number(launchTimestampOffsetMs) || 0,
         publicBaseUrl: publicBaseUrl.trim() || '',
+        launchMinBalance: Number(launchMinBalance) || 0,
       };
       if (apiKey.trim()) body.apiKey = apiKey.trim();
       if (apiSecret.trim()) body.apiSecret = apiSecret.trim();
@@ -259,9 +264,13 @@ function SetupPanel({ provider, onSaved, onError }: { provider: ProviderRow; onS
         <Field label="Public base URL (HTTPS, no trailing slash)">
           <input value={publicBaseUrl} onChange={(e) => setPublicBaseUrl(e.target.value)} className={inputCls} placeholder="https://pasha9.com" />
         </Field>
+        <Field label="Minimum BDT to allow launch">
+          <input type="number" min={0} step="0.01" value={launchMinBalance} onChange={(e) => setLaunchMinBalance(e.target.value)} className={inputCls} placeholder="0" />
+        </Field>
       </div>
       <p className="mt-2 text-[10px] text-ink-lo">Public base URL overrides the request origin when building callback + return URLs sent to the provider. Required for production; localhost / private IPs will be refused by the public launch route.</p>
       <p className="mt-1 text-[10px] text-ink-lo">Launch timestamp default 0. The timestamp itself is always generated fresh as Date.now() inside the adapter.</p>
+      <p className="mt-1 text-[10px] text-ink-lo">Minimum balance gates the public launch route. The lobby fetches this value and opens DepositRequiredModal when the player is under-funded. 0 disables the check.</p>
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <Button variant="gold" loading={busy} leftIcon={<Save className="h-3.5 w-3.5" />} onClick={onSave}>Save</Button>
         <Button variant="neon" loading={busy} leftIcon={<ShieldCheck className="h-3.5 w-3.5" />} onClick={onTestEncryption}>Test encryption</Button>
@@ -1241,11 +1250,28 @@ function LogsPanel({ providerId }: { providerId: string }) {
   );
 }
 
-interface TxRow { id: string; createdAt: string; userId: string | null; memberAccount: string; gameUid: string | null; gameRound: string; betAmount: number; winAmount: number; netResult: number; type: string; status: string; errorCode: string | null }
+interface TxRow {
+  id: string;
+  createdAt: string;
+  userId: string | null;
+  memberAccount: string;
+  gameUid: string | null;
+  gameRound: string;
+  betAmount: number;
+  winAmount: number;
+  netResult: number;
+  type: string;
+  status: string;
+  errorCode: string | null;
+  rolledBackAt?: string | null;
+  rolledBackBy?: string | null;
+  rollbackReason?: string | null;
+}
 interface TxResp { rows: TxRow[]; totals: { rounds: number; totalBet: number; totalWin: number; netResult: number; ggr: number } }
 
 function TransactionsPanel({ providerId }: { providerId: string }) {
   const [data, setData] = useState<TxResp | null>(null);
+  const [rollback, setRollback] = useState<TxRow | null>(null);
   const load = useCallback(async () => {
     const res = await fetch(`/api/admin/providers/${providerId}/transactions?limit=100`, { cache: 'no-store' });
     const j = await res.json().catch(() => null);
@@ -1266,9 +1292,9 @@ function TransactionsPanel({ providerId }: { providerId: string }) {
         </div>
       ) : null}
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[700px] text-sm">
+        <table className="w-full min-w-[800px] text-sm">
           <thead className="bg-base-elev text-left text-[11px] uppercase tracking-wider text-ink-lo">
-            <tr><th className="px-3 py-2">When</th><th className="px-3 py-2">Member</th><th className="px-3 py-2">Game</th><th className="px-3 py-2">Round</th><th className="px-3 py-2">Bet</th><th className="px-3 py-2">Win</th><th className="px-3 py-2">Type</th><th className="px-3 py-2">Status</th></tr>
+            <tr><th className="px-3 py-2">When</th><th className="px-3 py-2">Member</th><th className="px-3 py-2">Game</th><th className="px-3 py-2">Round</th><th className="px-3 py-2">Bet</th><th className="px-3 py-2">Win</th><th className="px-3 py-2">Type</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Action</th></tr>
           </thead>
           <tbody className="divide-y divide-neon/10">
             {(data?.rows ?? []).map((r) => (
@@ -1280,14 +1306,117 @@ function TransactionsPanel({ providerId }: { providerId: string }) {
                 <td className="px-3 py-2">{fmt(r.betAmount)}</td>
                 <td className="px-3 py-2">{fmt(r.winAmount)}</td>
                 <td className="px-3 py-2 font-mono text-[11px]">{r.type}</td>
-                <td className="px-3 py-2"><Chip tone={r.status === 'accepted' ? 'ok' : r.status === 'duplicate' ? 'info' : 'danger'}>{r.status}</Chip></td>
+                <td className="px-3 py-2">
+                  <Chip tone={r.status === 'accepted' ? 'ok' : r.status === 'duplicate' ? 'info' : r.status === 'rolled_back' ? 'warn' : 'danger'}>{r.status}</Chip>
+                </td>
+                <td className="px-3 py-2">
+                  {r.status === 'accepted' ? (
+                    <Button size="sm" variant="ghost" leftIcon={<AlertTriangle className="h-3.5 w-3.5" />} onClick={() => setRollback(r)}>Rollback</Button>
+                  ) : r.status === 'rolled_back' ? (
+                    <span className="text-[10px] text-ink-lo" title={r.rollbackReason ?? ''}>{r.rolledBackAt ? new Date(r.rolledBackAt).toLocaleString() : 'rolled back'}</span>
+                  ) : null}
+                </td>
               </tr>
             ))}
-            {(data?.rows ?? []).length === 0 ? <tr><td colSpan={8} className="px-3 py-4 text-center text-ink-mid">No transactions yet.</td></tr> : null}
+            {(data?.rows ?? []).length === 0 ? <tr><td colSpan={9} className="px-3 py-4 text-center text-ink-mid">No transactions yet.</td></tr> : null}
           </tbody>
         </table>
       </div>
+      <RollbackModal
+        open={!!rollback}
+        onOpenChange={(v) => { if (!v) setRollback(null); }}
+        providerId={providerId}
+        tx={rollback}
+        onDone={() => { setRollback(null); load(); }}
+      />
     </Card>
+  );
+}
+
+function RollbackModal({ open, onOpenChange, providerId, tx, onDone }: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  providerId: string;
+  tx: TxRow | null;
+  onDone: () => void;
+}) {
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [result, setResult] = useState<{ walletBefore: number; walletAfter: number; adjustDelta: number } | null>(null);
+
+  useEffect(() => { if (!open) { setReason(''); setErr(null); setResult(null); setBusy(false); } }, [open]);
+
+  const onRun = async () => {
+    if (!tx) return;
+    if (reason.trim().length < 3) { setErr('Reason is required.'); return; }
+    setBusy(true); setErr(null);
+    try {
+      const r = await fetch(`/api/admin/providers/${providerId}/transactions/${tx.id}/rollback`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ reason: reason.trim() }),
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok) { setErr(j?.message ?? j?.code ?? 'Rollback failed'); return; }
+      setResult({
+        walletBefore: Number(j?.walletBefore ?? 0),
+        walletAfter: Number(j?.walletAfter ?? 0),
+        adjustDelta: Number(j?.adjustDelta ?? 0),
+      });
+      setTimeout(() => onDone(), 1200);
+    } catch (e) { setErr(e instanceof Error ? e.message : 'Rollback failed'); }
+    finally { setBusy(false); }
+  };
+
+  const impact = tx ? tx.winAmount - tx.betAmount : 0;
+  const rollbackDelta = -impact;
+
+  return (
+    <Modal
+      open={open}
+      onOpenChange={onOpenChange}
+      title={tx ? `Rollback round ${tx.gameRound}` : 'Rollback'}
+      description="This reverses the wallet effect inside Pasha 9 only. Provider-side rollback is not confirmed."
+      footer={
+        <>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button variant="gold" loading={busy} leftIcon={<AlertTriangle className="h-3.5 w-3.5" />} onClick={onRun}>Confirm rollback</Button>
+        </>
+      }
+    >
+      <Card padding="sm" className="mb-3 border-l-4 border-rose-400/60">
+        <p className="text-[11px] font-semibold text-ink-mid">
+          Super-admin only. Writes one adjust Transaction row reversing the net wallet delta and flags this ProviderTransaction as rolled_back. We never call the provider's rollback API.
+        </p>
+      </Card>
+
+      {err ? <p className="mb-3 text-sm text-signal-danger">{err}</p> : null}
+
+      {tx ? (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-2 text-xs md:grid-cols-4">
+            <Totals label="Bet" value={fmt(tx.betAmount)} />
+            <Totals label="Win" value={fmt(tx.winAmount)} />
+            <Totals label="Original impact" value={fmt(impact)} positive={impact >= 0} />
+            <Totals label="Rollback delta" value={fmt(rollbackDelta)} positive={rollbackDelta >= 0} />
+          </div>
+          <Field label="Reason (required, kept in activity log)">
+            <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} className={cn(inputCls, 'h-auto py-2')} placeholder="e.g. provider replay caused duplicate debit" />
+          </Field>
+        </div>
+      ) : null}
+
+      {result ? (
+        <Card padding="sm" className="mt-4 border-l-4 border-emerald-400/60">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-ink-lo">Rollback applied</p>
+          <div className="mt-1 grid grid-cols-3 gap-2 text-xs">
+            <Totals label="Wallet before" value={fmt(result.walletBefore)} />
+            <Totals label="Wallet after" value={fmt(result.walletAfter)} positive={result.walletAfter >= result.walletBefore} />
+            <Totals label="Delta" value={fmt(result.adjustDelta)} positive={result.adjustDelta >= 0} />
+          </div>
+        </Card>
+      ) : null}
+    </Modal>
   );
 }
 
@@ -1349,5 +1478,198 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-lo">{label}</label>
       <div className="mt-1">{children}</div>
     </div>
+  );
+}
+
+interface ReportPayload {
+  totals: { rounds: number; totalBet: number; totalWin: number; netResult: number; ggr: number };
+  byStatus: Record<string, number>;
+  daily: Array<{ day: string; rounds: number; totalBet: number; totalWin: number; netResult: number; ggr: number }>;
+  topGames: Array<{ gameUid: string; displayName: string; category: string | null; rounds: number; totalBet: number; totalWin: number; netResult: number; ggr: number }>;
+  topUsers: Array<{ userId: string; username: string; rounds: number; totalBet: number; totalWin: number; netResult: number; ggr: number }>;
+  byCategory: Record<string, { rounds: number; totalBet: number; totalWin: number; ggr: number }>;
+}
+
+function isoDay(d: Date): string { return d.toISOString().slice(0, 10); }
+
+function ReportsPanel({ providerId }: { providerId: string }) {
+  const today = new Date();
+  const sevenDaysAgo = new Date(today.getTime() - 6 * 24 * 60 * 60 * 1000);
+  const [from, setFrom] = useState(isoDay(sevenDaysAgo));
+  const [to, setTo] = useState(isoDay(today));
+  const [gameUid, setGameUid] = useState('');
+  const [userIdQ, setUserIdQ] = useState('');
+  const [category, setCategory] = useState('');
+  const [data, setData] = useState<ReportPayload | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const buildQs = useCallback((extra?: Record<string, string>): string => {
+    const p = new URLSearchParams();
+    if (from) p.set('from', new Date(from).toISOString());
+    if (to) p.set('to', new Date(`${to}T23:59:59`).toISOString());
+    if (gameUid.trim()) p.set('gameUid', gameUid.trim());
+    if (userIdQ.trim()) p.set('userId', userIdQ.trim());
+    if (category) p.set('category', category);
+    if (extra) for (const k of Object.keys(extra)) p.set(k, extra[k]);
+    return p.toString();
+  }, [from, to, gameUid, userIdQ, category]);
+
+  const load = useCallback(async () => {
+    setBusy(true); setErr(null);
+    try {
+      const r = await fetch(`/api/admin/providers/${providerId}/reports?${buildQs()}`, { cache: 'no-store' });
+      const j = await r.json().catch(() => null);
+      if (!r.ok) { setErr(j?.message ?? j?.code ?? 'Report failed'); return; }
+      setData(j as ReportPayload);
+    } catch (e) { setErr(e instanceof Error ? e.message : 'Report failed'); }
+    finally { setBusy(false); }
+  }, [providerId, buildQs]);
+  useEffect(() => { load(); }, [load]);
+
+  const onCsv = () => {
+    const qs = buildQs({ format: 'csv' });
+    window.location.href = `/api/admin/providers/${providerId}/reports?${qs}`;
+  };
+
+  return (
+    <Card padding="lg">
+      <CardHeader
+        title="Reports"
+        subtitle="Aggregated accepted transactions across the selected date range."
+        action={
+          <div className="flex gap-2">
+            <Button size="sm" variant="ghost" leftIcon={<RefreshCw className={cn('h-3.5 w-3.5', busy && 'animate-spin')} />} onClick={load}>Reload</Button>
+            <Button size="sm" variant="neon" leftIcon={<Download className="h-3.5 w-3.5" />} onClick={onCsv}>Export CSV</Button>
+          </div>
+        }
+      />
+
+      <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-5">
+        <Field label="From"><input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={inputCls} /></Field>
+        <Field label="To"><input type="date" value={to} onChange={(e) => setTo(e.target.value)} className={inputCls} /></Field>
+        <Field label="Game UID (optional)"><input value={gameUid} onChange={(e) => setGameUid(e.target.value)} className={inputCls} placeholder="any" /></Field>
+        <Field label="User id (optional)"><input value={userIdQ} onChange={(e) => setUserIdQ(e.target.value)} className={inputCls} placeholder="any" /></Field>
+        <Field label="Category">
+          <select value={category} onChange={(e) => setCategory(e.target.value)} className={inputCls}>
+            <option value="">All</option>
+            {CATEGORY_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </Field>
+      </div>
+
+      {err ? <p className="mb-3 text-sm text-signal-danger">{err}</p> : null}
+
+      {data ? (
+        <>
+          <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-5">
+            <Totals label="Rounds" value={String(data.totals.rounds)} />
+            <Totals label="Total bet" value={fmt(data.totals.totalBet)} />
+            <Totals label="Total win" value={fmt(data.totals.totalWin)} />
+            <Totals label="Net" value={fmt(data.totals.netResult)} positive={data.totals.netResult >= 0} />
+            <Totals label="GGR" value={fmt(data.totals.ggr)} positive={data.totals.ggr >= 0} />
+          </div>
+
+          {Object.keys(data.byStatus).length > 0 ? (
+            <Card padding="sm" className="mb-3">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-ink-lo">By status</p>
+              <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
+                {Object.entries(data.byStatus).map(([s, n]) => (
+                  <Chip key={s} tone={s === 'accepted' ? 'ok' : s === 'duplicate' ? 'info' : s === 'rolled_back' ? 'warn' : 'danger'}>{s} ({n})</Chip>
+                ))}
+              </div>
+            </Card>
+          ) : null}
+
+          {data.daily.length > 0 ? (
+            <Card padding="sm" className="mb-3">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-ink-lo">Daily series</p>
+              <div className="mt-2 overflow-x-auto">
+                <table className="w-full min-w-[600px] text-xs">
+                  <thead className="text-ink-lo">
+                    <tr><th className="px-2 py-1 text-left">Day</th><th className="px-2 py-1 text-right">Rounds</th><th className="px-2 py-1 text-right">Bet</th><th className="px-2 py-1 text-right">Win</th><th className="px-2 py-1 text-right">Net</th><th className="px-2 py-1 text-right">GGR</th></tr>
+                  </thead>
+                  <tbody className="divide-y divide-neon/10">
+                    {data.daily.map((d) => (
+                      <tr key={d.day}>
+                        <td className="px-2 py-1 text-ink-mid">{d.day}</td>
+                        <td className="px-2 py-1 text-right">{d.rounds}</td>
+                        <td className="px-2 py-1 text-right">{fmt(d.totalBet)}</td>
+                        <td className="px-2 py-1 text-right">{fmt(d.totalWin)}</td>
+                        <td className="px-2 py-1 text-right">{fmt(d.netResult)}</td>
+                        <td className="px-2 py-1 text-right">{fmt(d.ggr)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          ) : null}
+
+          {data.topGames.length > 0 ? (
+            <Card padding="sm" className="mb-3">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-ink-lo">Top games</p>
+              <div className="mt-2 overflow-x-auto">
+                <table className="w-full min-w-[600px] text-xs">
+                  <thead className="text-ink-lo">
+                    <tr><th className="px-2 py-1 text-left">Game</th><th className="px-2 py-1 text-left">Cat</th><th className="px-2 py-1 text-right">Rounds</th><th className="px-2 py-1 text-right">Bet</th><th className="px-2 py-1 text-right">Win</th><th className="px-2 py-1 text-right">GGR</th></tr>
+                  </thead>
+                  <tbody className="divide-y divide-neon/10">
+                    {data.topGames.map((g) => (
+                      <tr key={g.gameUid}>
+                        <td className="px-2 py-1"><span className="text-ink-hi">{g.displayName}</span> <span className="ml-1 font-mono text-[10px] text-ink-lo">{g.gameUid}</span></td>
+                        <td className="px-2 py-1 text-ink-mid">{g.category ?? '-'}</td>
+                        <td className="px-2 py-1 text-right">{g.rounds}</td>
+                        <td className="px-2 py-1 text-right">{fmt(g.totalBet)}</td>
+                        <td className="px-2 py-1 text-right">{fmt(g.totalWin)}</td>
+                        <td className="px-2 py-1 text-right">{fmt(g.ggr)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          ) : null}
+
+          {data.topUsers.length > 0 ? (
+            <Card padding="sm" className="mb-3">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-ink-lo">Top users</p>
+              <div className="mt-2 overflow-x-auto">
+                <table className="w-full min-w-[600px] text-xs">
+                  <thead className="text-ink-lo">
+                    <tr><th className="px-2 py-1 text-left">User</th><th className="px-2 py-1 text-right">Rounds</th><th className="px-2 py-1 text-right">Bet</th><th className="px-2 py-1 text-right">Win</th><th className="px-2 py-1 text-right">GGR</th></tr>
+                  </thead>
+                  <tbody className="divide-y divide-neon/10">
+                    {data.topUsers.map((u) => (
+                      <tr key={u.userId}>
+                        <td className="px-2 py-1"><span className="text-ink-hi">{u.username}</span> <span className="ml-1 font-mono text-[10px] text-ink-lo">{u.userId}</span></td>
+                        <td className="px-2 py-1 text-right">{u.rounds}</td>
+                        <td className="px-2 py-1 text-right">{fmt(u.totalBet)}</td>
+                        <td className="px-2 py-1 text-right">{fmt(u.totalWin)}</td>
+                        <td className="px-2 py-1 text-right">{fmt(u.ggr)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          ) : null}
+
+          {Object.keys(data.byCategory).length > 0 ? (
+            <Card padding="sm" className="mb-3">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-ink-lo">By category (top games sum)</p>
+              <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-3">
+                {Object.entries(data.byCategory).map(([cat, v]) => (
+                  <div key={cat} className="rounded-lg border border-neon/10 bg-base-panel/40 p-2 text-[11px]">
+                    <div className="font-semibold text-ink-hi">{cat}</div>
+                    <div className="text-ink-mid">{v.rounds} rounds . GGR {fmt(v.ggr)}</div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          ) : null}
+        </>
+      ) : null}
+    </Card>
   );
 }

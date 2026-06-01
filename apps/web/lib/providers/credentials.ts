@@ -45,6 +45,11 @@ export interface ProviderCreds {
    * origin. Never include a path here - just the scheme + host.
    */
   publicBaseUrl: string | null;
+  /**
+   * Minimum BDT wallet balance required for the public launch
+   * route to forward to the provider. 0 disables the check.
+   */
+  launchMinBalance: number;
   active: boolean;
 }
 
@@ -97,6 +102,7 @@ export async function loadProviderCreds(providerKey: string): Promise<ProviderCr
     launchMode: asLaunchMode(row.launchMode),
     launchTimestampOffsetMs: row.launchTimestampOffsetMs ?? 0,
     publicBaseUrl: row.publicBaseUrl ?? null,
+    launchMinBalance: row.launchMinBalance ? Number(row.launchMinBalance) : 0,
     active: row.status === 'active',
   };
 }
