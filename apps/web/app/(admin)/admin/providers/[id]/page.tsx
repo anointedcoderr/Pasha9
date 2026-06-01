@@ -16,7 +16,8 @@ import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
 import { Switch } from '@/components/ui/Switch';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/Tabs';
-import { Plug, RefreshCw, ArrowLeft, AlertCircle, ShieldCheck, Zap, Save, Download } from 'lucide-react';
+import { Plug, RefreshCw, ArrowLeft, AlertCircle, ShieldCheck, Zap, Save, Download, Plus } from 'lucide-react';
+import { Modal } from '@/components/ui/Modal';
 import { cn } from '@/lib/utils/cn';
 
 interface SecretPreview { set: boolean; preview: string }
@@ -45,8 +46,6 @@ interface ProviderRow {
 
 interface ListResp { providers: ProviderRow[] }
 
-interface Brand { id: string; brandKey: string; displayName: string; lastSyncAt: string | null }
-interface Game { id: string; brandId: string | null; gameUid: string; displayName: string; category: string | null }
 
 export default function AdminProviderDetailPage() {
   const params = useParams<{ id: string }>();
@@ -142,7 +141,7 @@ export default function AdminProviderDetailPage() {
             <TabsContent value="setup">
               <SetupPanel provider={provider} onSaved={(msg) => { showToast(msg); load(); }} onError={(m) => setError(m)} />
             </TabsContent>
-            <TabsContent value="brands"><BrandsPanel providerId={id} onMsg={showToast} onError={setError} /></TabsContent>
+            <TabsContent value="brands"><BrandsPanel providerId={id} /></TabsContent>
             <TabsContent value="games"><GamesPanel providerId={id} /></TabsContent>
             <TabsContent value="logs"><LogsPanel providerId={id} /></TabsContent>
             <TabsContent value="transactions"><TransactionsPanel providerId={id} /></TabsContent>
@@ -257,97 +256,250 @@ function SetupPanel({ provider, onSaved, onError }: { provider: ProviderRow; onS
   );
 }
 
-function BrandsPanel({ providerId, onMsg, onError }: { providerId: string; onMsg: (m: string) => void; onError: (m: string) => void }) {
-  const [brands, setBrands] = useState<Brand[]>([]);
+interface BrandRow { id: string; brandKey: string; displayName: string; status: string; gameCount: number; lastSyncAt: string | null; createdAt: string }
+
+function BrandsPanel({ providerId }: { providerId: string }) {
+  const [rows, setRows] = useState<BrandRow[]>([]);
+  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [info, setInfo] = useState<string | null>(null);
+  const [err, setErr] = useState<{ msg: string; snippet?: string } | null>(null);
+  const [openManual, setOpenManual] = useState(false);
 
   const load = useCallback(async () => {
+    setLoading(true);
     try {
-      const res = await fetch(`/api/admin/providers/${providerId}/transactions?limit=1`, { cache: 'no-store' });
-      // re-using existing endpoints; brands come back via a follow-up call below
-      if (!res.ok) return;
-    } catch { /* ignore */ }
-    try {
-      const r = await fetch(`/api/admin/providers`, { cache: 'no-store' });
-      if (!r.ok) return;
-      // No dedicated brands GET endpoint - fetch via sync result rendering instead.
-    } catch { /* ignore */ }
+      const res = await fetch(`/api/admin/providers/${providerId}/brands`, { cache: 'no-store' });
+      const j = await res.json().catch(() => null);
+      setRows(Array.isArray(j?.brands) ? (j.brands as BrandRow[]) : []);
+    } finally { setLoading(false); }
   }, [providerId]);
-
   useEffect(() => { load(); }, [load]);
 
   const onSync = async () => {
-    setBusy(true);
+    setBusy(true); setErr(null); setInfo(null);
     try {
       const res = await fetch(`/api/admin/providers/${providerId}/sync-brands`, { method: 'POST' });
       const j = await res.json().catch(() => null);
-      if (!res.ok) { onError(j?.message ?? 'Sync failed'); return; }
-      onMsg(`Brands synced: ${j?.count ?? 0} (inserted ${j?.inserted ?? 0}, updated ${j?.updated ?? 0}).`);
-      // Pull the actual rows via direct DB-backed endpoint
-      const r2 = await fetch(`/api/admin/providers/${providerId}/logs?kind=request&limit=1`, { cache: 'no-store' });
-      void r2;
-    } catch (e) { onError(e instanceof Error ? e.message : 'Sync failed'); }
+      if (!res.ok) { setErr({ msg: j?.message ?? j?.code ?? 'Sync failed', snippet: typeof j?.snippet === 'string' ? j.snippet : undefined }); return; }
+      setInfo(`Brands synced: ${j?.count ?? 0} (inserted ${j?.inserted ?? 0}, updated ${j?.updated ?? 0}).`);
+      load();
+    } catch (e) { setErr({ msg: e instanceof Error ? e.message : 'Sync failed' }); }
     finally { setBusy(false); }
   };
 
   return (
     <Card padding="lg">
-      <CardHeader title="Brands" subtitle="Aggregator sub-providers. Click Sync to pull the latest list." action={<Button size="sm" variant="neon" loading={busy} leftIcon={<Download className="h-3.5 w-3.5" />} onClick={onSync}>Sync brands</Button>} />
-      {brands.length === 0 ? (
-        <p className="text-sm text-ink-mid">After Sync brands, refresh this page or open the Logs tab to confirm the upstream response.</p>
+      <CardHeader
+        title="Brands"
+        subtitle="Aggregator sub-providers. Auto sync first; if the catalog is gated, use Add Manual Brand."
+        action={
+          <div className="flex gap-2">
+            <Button size="sm" variant="ghost" leftIcon={<Plus className="h-3.5 w-3.5" />} onClick={() => setOpenManual(true)}>Add Manual Brand</Button>
+            <Button size="sm" variant="neon" loading={busy} leftIcon={<Download className="h-3.5 w-3.5" />} onClick={onSync}>Sync brands</Button>
+          </div>
+        }
+      />
+
+      <Card padding="sm" className="mb-3 border-l-4 border-amber-400/60">
+        <p className="text-[11px] font-semibold text-ink-mid">
+          If auto brand sync returns 0, the provider catalog likely requires panel login. Click <strong>Add Manual Brand</strong> with brandKey <code>JILI</code> / displayName <code>JILI</code>, then go to the Games tab and use the confirmed brand_id from the provider panel.
+        </p>
+      </Card>
+
+      {info ? <p className="mb-3 rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">{info}</p> : null}
+      {err ? (
+        <div className="mb-3 rounded-lg border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">
+          <p className="font-semibold">{err.msg}</p>
+          {err.snippet ? <pre className="mt-2 max-h-24 overflow-auto rounded border border-rose-400/20 bg-black/40 p-2 text-[10px] text-rose-100/85">{err.snippet}</pre> : null}
+        </div>
+      ) : null}
+
+      {loading ? (
+        <p className="text-sm text-ink-mid">Loading...</p>
+      ) : rows.length === 0 ? (
+        <p className="text-sm text-ink-mid">No brands yet. Sync or Add Manual Brand.</p>
       ) : (
         <ul className="space-y-2">
-          {brands.map((b) => (
+          {rows.map((b) => (
             <li key={b.id} className="flex items-center justify-between rounded-lg border border-neon/10 bg-base-panel/40 px-3 py-2 text-sm">
-              <div><span className="font-semibold text-ink-hi">{b.displayName}</span><span className="ml-2 font-mono text-[10px] text-ink-lo">{b.brandKey}</span></div>
+              <div>
+                <span className="font-semibold text-ink-hi">{b.displayName}</span>
+                <span className="ml-2 font-mono text-[10px] text-ink-lo">{b.brandKey}</span>
+                <span className="ml-2 text-[10px] text-ink-lo">. {b.gameCount} game{b.gameCount === 1 ? '' : 's'}</span>
+              </div>
               <span className="text-[10px] text-ink-lo">{b.lastSyncAt ? new Date(b.lastSyncAt).toLocaleString() : 'Never'}</span>
             </li>
           ))}
         </ul>
       )}
+
+      <ManualBrandModal open={openManual} onOpenChange={setOpenManual} providerId={providerId} onCreated={() => { setOpenManual(false); load(); }} />
     </Card>
   );
 }
 
-function GamesPanel({ providerId }: { providerId: string }) {
-  const [games, setGames] = useState<Game[]>([]);
-  const [brandKey, setBrandKey] = useState('');
+function ManualBrandModal({ open, onOpenChange, providerId, onCreated }: { open: boolean; onOpenChange: (v: boolean) => void; providerId: string; onCreated: () => void }) {
+  const [brandKey, setBrandKey] = useState('JILI');
+  const [displayName, setDisplayName] = useState('JILI');
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const onSave = async () => {
+    setBusy(true); setErr(null);
+    try {
+      const res = await fetch(`/api/admin/providers/${providerId}/brands`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ brandKey: brandKey.trim(), displayName: displayName.trim() }),
+      });
+      const j = await res.json().catch(() => null);
+      if (!res.ok) { setErr(j?.message ?? j?.code ?? 'Save failed'); return; }
+      onCreated();
+    } catch (e) { setErr(e instanceof Error ? e.message : 'Save failed'); }
+    finally { setBusy(false); }
+  };
+  return (
+    <Modal
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Add Manual Brand"
+      description="Use this when the provider catalog is gated. Type the brand ID confirmed from the provider panel."
+      footer={
+        <>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button variant="gold" loading={busy} leftIcon={<Save className="h-3.5 w-3.5" />} onClick={onSave}>Save brand</Button>
+        </>
+      }
+    >
+      {err ? <p className="mb-3 text-sm text-signal-danger">{err}</p> : null}
+      <div className="space-y-3">
+        <Field label="Brand key / brand_id"><input value={brandKey} onChange={(e) => setBrandKey(e.target.value)} className={inputCls} placeholder="JILI" /></Field>
+        <Field label="Display name"><input value={displayName} onChange={(e) => setDisplayName(e.target.value)} className={inputCls} placeholder="JILI" /></Field>
+      </div>
+    </Modal>
+  );
+}
+
+interface GameRow { id: string; gameUid: string; brandId: string | null; displayName: string; category: string | null; status: string; lastSyncAt: string | null }
+
+function GamesPanel({ providerId }: { providerId: string }) {
+  const [brands, setBrands] = useState<BrandRow[]>([]);
+  const [games, setGames] = useState<GameRow[]>([]);
+  const [brandKey, setBrandKey] = useState('');
+  const [filterBrandId, setFilterBrandId] = useState<string>('');
+  const [busy, setBusy] = useState(false);
+  const [info, setInfo] = useState<string | null>(null);
+  const [err, setErr] = useState<{ msg: string; snippet?: string } | null>(null);
+  const [previewSample, setPreviewSample] = useState<Array<{ gameUid: string; displayName: string }> | null>(null);
+
+  const loadBrands = useCallback(async () => {
+    const r = await fetch(`/api/admin/providers/${providerId}/brands`, { cache: 'no-store' });
+    const j = await r.json().catch(() => null);
+    const list = Array.isArray(j?.brands) ? (j.brands as BrandRow[]) : [];
+    setBrands(list);
+    if (!brandKey && list.length === 1) setBrandKey(list[0].brandKey);
+  }, [providerId, brandKey]);
+  const loadGames = useCallback(async () => {
+    const r = await fetch(`/api/admin/providers/${providerId}/games?${filterBrandId ? `brandId=${filterBrandId}&` : ''}limit=200`, { cache: 'no-store' });
+    const j = await r.json().catch(() => null);
+    setGames(Array.isArray(j?.games) ? (j.games as GameRow[]) : []);
+  }, [providerId, filterBrandId]);
+  useEffect(() => { loadBrands(); }, [loadBrands]);
+  useEffect(() => { loadGames(); }, [loadGames]);
+
+  const onPreview = async () => {
+    if (!brandKey.trim()) { setErr({ msg: 'Enter a brand_id first.' }); return; }
+    setBusy(true); setInfo(null); setErr(null); setPreviewSample(null);
+    try {
+      const res = await fetch(`/api/admin/providers/${providerId}/preview-games`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ brandKey: brandKey.trim() }),
+      });
+      const j = await res.json().catch(() => null);
+      if (!res.ok) { setErr({ msg: j?.message ?? 'Preview failed', snippet: typeof j?.snippet === 'string' ? j.snippet : undefined }); return; }
+      setInfo(`Preview ok. Provider would return ${j?.count ?? 0} games. No rows inserted yet.`);
+      setPreviewSample(Array.isArray(j?.sample) ? (j.sample as Array<{ gameUid: string; displayName: string }>) : []);
+    } catch (e) { setErr({ msg: e instanceof Error ? e.message : 'Preview failed' }); }
+    finally { setBusy(false); }
+  };
 
   const onSync = async () => {
-    if (!brandKey.trim()) { setMsg('Enter a brandKey first (or sync brands).'); return; }
-    setBusy(true);
+    if (!brandKey.trim()) { setErr({ msg: 'Enter a brand_id first.' }); return; }
+    setBusy(true); setInfo(null); setErr(null);
     try {
       const res = await fetch(`/api/admin/providers/${providerId}/sync-games`, {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ brandKey: brandKey.trim() }),
       });
       const j = await res.json().catch(() => null);
-      if (!res.ok) { setMsg(j?.message ?? j?.code ?? 'Sync failed'); return; }
-      setMsg(`Games synced: ${j?.count ?? 0} (inserted ${j?.inserted ?? 0}, updated ${j?.updated ?? 0}).`);
-    } catch (e) { setMsg(e instanceof Error ? e.message : 'Sync failed'); }
+      if (!res.ok) { setErr({ msg: j?.message ?? 'Sync failed', snippet: typeof j?.snippet === 'string' ? j.snippet : undefined }); return; }
+      setInfo(`Games synced: ${j?.count ?? 0} (inserted ${j?.inserted ?? 0}, updated ${j?.updated ?? 0}).`);
+      loadGames();
+    } catch (e) { setErr({ msg: e instanceof Error ? e.message : 'Sync failed' }); }
     finally { setBusy(false); }
   };
 
   return (
     <Card padding="lg">
-      <CardHeader title="Games" subtitle="Enter a brand key (string from the provider) and click Sync games." />
-      <div className="flex gap-2">
-        <input value={brandKey} onChange={(e) => setBrandKey(e.target.value)} className={cn(inputCls, 'flex-1')} placeholder="JILI" />
+      <CardHeader
+        title="Games"
+        subtitle="Confirm with Preview before Sync. Synced rows below; filter by brand."
+      />
+
+      <div className="mb-3 flex flex-wrap items-end gap-2">
+        <div className="grow">
+          <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-lo">Brand id / key</label>
+          <input value={brandKey} onChange={(e) => setBrandKey(e.target.value)} className={cn(inputCls, 'mt-1')} placeholder="JILI (or 73, etc)" list="brand-suggestions" />
+          <datalist id="brand-suggestions">
+            {brands.map((b) => <option key={b.id} value={b.brandKey}>{b.displayName}</option>)}
+          </datalist>
+        </div>
+        <Button variant="ghost" loading={busy} leftIcon={<Zap className="h-3.5 w-3.5" />} onClick={onPreview}>Preview</Button>
         <Button variant="neon" loading={busy} leftIcon={<Download className="h-3.5 w-3.5" />} onClick={onSync}>Sync games</Button>
       </div>
-      {msg ? <p className="mt-3 text-sm text-ink-mid">{msg}</p> : null}
-      {games.length > 0 ? (
-        <ul className="mt-4 space-y-2">
+
+      {info ? <p className="mb-3 rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">{info}</p> : null}
+      {err ? (
+        <div className="mb-3 rounded-lg border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">
+          <p className="font-semibold">{err.msg}</p>
+          {err.snippet ? <pre className="mt-2 max-h-24 overflow-auto rounded border border-rose-400/20 bg-black/40 p-2 text-[10px] text-rose-100/85">{err.snippet}</pre> : null}
+        </div>
+      ) : null}
+
+      {previewSample && previewSample.length > 0 ? (
+        <Card padding="sm" className="mb-3">
+          <p className="text-xs font-semibold uppercase tracking-wider text-amber-300">Preview sample ({previewSample.length})</p>
+          <ul className="mt-2 grid gap-1 text-xs text-ink-mid md:grid-cols-2">
+            {previewSample.map((s, i) => (
+              <li key={`${s.gameUid}-${i}`} className="rounded border border-neon/10 bg-base-panel/50 px-2 py-1">
+                <span className="font-semibold text-ink-hi">{s.displayName}</span>
+                <span className="ml-2 font-mono text-[10px] text-ink-lo">{s.gameUid}</span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
+
+      <div className="mb-2 flex items-center gap-2">
+        <label className="text-[10px] font-bold uppercase tracking-wider text-ink-lo">Filter</label>
+        <select value={filterBrandId} onChange={(e) => setFilterBrandId(e.target.value)} className={cn(inputCls, 'w-auto')}>
+          <option value="">All brands ({games.length})</option>
+          {brands.map((b) => <option key={b.id} value={b.id}>{b.displayName} ({b.gameCount})</option>)}
+        </select>
+      </div>
+
+      {games.length === 0 ? (
+        <p className="text-sm text-ink-mid">No games yet. Preview a brand_id then Sync games.</p>
+      ) : (
+        <ul className="grid gap-1 md:grid-cols-2">
           {games.map((g) => (
             <li key={g.id} className="rounded-lg border border-neon/10 bg-base-panel/40 px-3 py-2 text-sm">
               <span className="font-semibold text-ink-hi">{g.displayName}</span>
               <span className="ml-2 font-mono text-[10px] text-ink-lo">{g.gameUid}</span>
+              {g.category ? <span className="ml-2 text-[10px] text-ink-lo">. {g.category}</span> : null}
             </li>
           ))}
         </ul>
-      ) : null}
+      )}
     </Card>
   );
 }

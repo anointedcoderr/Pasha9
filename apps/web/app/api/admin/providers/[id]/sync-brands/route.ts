@@ -13,6 +13,7 @@ import { Prisma } from '@prisma/client';
 import { loadProviderCredsById } from '@/lib/providers/credentials';
 import { getAdapter } from '@/lib/providers/registry';
 import { logRequest } from '@/lib/providers/log';
+import { ProviderAdapterError } from '@/lib/providers/types';
 
 export async function POST(_req: Request, { params }: { params: { id: string } }) {
   return withAuth(async () => {
@@ -70,15 +71,19 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
       return jsonOk({ count: result.length, inserted, updated });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      const code = err instanceof ProviderAdapterError ? err.code : 'SYNC_FAILED';
+      const snippet = err instanceof ProviderAdapterError ? err.snippet : undefined;
+      const status = err instanceof ProviderAdapterError ? err.status : 502;
       await logRequest({
         providerId: params.id,
         direction: 'outbound',
         endpoint: 'brands',
         method: 'GET',
-        status: 0,
+        status,
+        responsePayload: snippet ? { snippet } : undefined,
         errorMessage: msg,
       });
-      return jsonError(502, 'SYNC_FAILED', msg);
+      return jsonError(status, code, msg, snippet ? { snippet } : undefined);
     }
   });
 }

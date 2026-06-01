@@ -103,6 +103,14 @@ export interface ProviderAdapter {
 }
 
 export class ProviderAdapterError extends Error {
+  /**
+   * Optional snippet of the upstream response body (already masked
+   * by the adapter). Surfaced to the admin UI so the operator can
+   * see what the provider actually returned without digging through
+   * raw logs.
+   */
+  public snippet?: string;
+
   constructor(
     public code:
       | 'PROVIDER_NOT_FOUND'
@@ -111,13 +119,17 @@ export class ProviderAdapterError extends Error {
       | 'CREDENTIALS_INVALID'
       | 'UPSTREAM_HTTP_ERROR'
       | 'UPSTREAM_BAD_RESPONSE'
+      | 'UPSTREAM_NOT_JSON'
+      | 'UPSTREAM_EMPTY'
       | 'CALLBACK_INVALID'
       | 'CALLBACK_REPLAY'
       | 'CALLBACK_UNAUTHORIZED',
     message: string,
     public status: number = 400,
+    snippet?: string,
   ) {
     super(message);
     this.name = 'ProviderAdapterError';
+    if (snippet) this.snippet = snippet;
   }
 }

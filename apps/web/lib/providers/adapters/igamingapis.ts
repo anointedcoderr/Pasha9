@@ -77,6 +77,50 @@ function asArray(x: unknown): unknown[] {
   return Array.isArray(x) ? x : [];
 }
 
+/**
+ * Looks at the response body text + JSON parse outcome and decides
+ * whether the upstream actually returned JSON. The iGamingAPIs brand
+ * + games endpoints sit behind a login wall and return an HTML
+ * marketing page to unauthenticated fetchers; detecting that early
+ * lets us surface a clear admin error instead of silently inserting
+ * zero rows.
+ */
+function detectHtml(bodyText: string, bodyJson: unknown): { isHtml: boolean; snippet: string } {
+  const head = bodyText.trim().slice(0, 200);
+  const lowered = head.toLowerCase();
+  const looksHtml = lowered.startsWith('<!doctype') || lowered.startsWith('<html') || lowered.includes('<head') || lowered.includes('<title') || lowered.includes('premium igaming api solutions');
+  const isHtml = looksHtml && bodyJson == null;
+  return { isHtml, snippet: head };
+}
+
+/**
+ * Tries to pull a list out of a response of unknown shape. Supports
+ * top-level arrays as well as common wrappers like { data: [...] },
+ * { brands: [...] }, { games: [...] }, { result: { data: [...] } }.
+ */
+function extractList(bodyJson: unknown, hintedKeys: string[]): unknown[] {
+  if (Array.isArray(bodyJson)) return bodyJson;
+  if (!bodyJson || typeof bodyJson !== 'object') return [];
+  const obj = bodyJson as Record<string, unknown>;
+  for (const k of hintedKeys) {
+    if (Array.isArray(obj[k])) return obj[k] as unknown[];
+  }
+  if (obj.data && typeof obj.data === 'object') {
+    if (Array.isArray(obj.data)) return obj.data as unknown[];
+    for (const k of hintedKeys) {
+      const v = (obj.data as Record<string, unknown>)[k];
+      if (Array.isArray(v)) return v;
+    }
+  }
+  if (obj.result && typeof obj.result === 'object') {
+    for (const k of hintedKeys) {
+      const v = (obj.result as Record<string, unknown>)[k];
+      if (Array.isArray(v)) return v;
+    }
+  }
+  return [];
+}
+
 function pickString(obj: unknown, key: string, fallback = ''): string {
   if (obj && typeof obj === 'object' && key in obj) {
     const v = (obj as Record<string, unknown>)[key];
@@ -103,61 +147,130 @@ export const igamingapisAdapter: ProviderAdapter = {
   label: LABEL,
 
   async listBrands(creds) {
-    const url = (creds.apiBase || '').replace(/\/+$/, '') || DEFAULT_BRANDS_URL;
-    // Prefer the dedicated brands URL when the operator left apiBase
-    // pointing at /api/v1; the brand catalog lives on the marketing
-    // domain per panel screenshots.
-    const target = /^https?:\/\/igamingapis\.com\/provider/.test(url) ? url : DEFAULT_BRANDS_URL;
-    const { status, bodyText, bodyJson } = await timedFetch(target, {
-      method: 'GET',
-      headers: { accept: 'application/json' },
-    });
-    if (status < 200 || status >= 300) {
-      throw new ProviderAdapterError('UPSTREAM_HTTP_ERROR', `Brands fetch failed (HTTP ${status})`, status);
+    // Candidate URLs to try, in order. The brand catalog historically
+    // lives on the marketing domain per panel screenshots, but the
+    // .live API host may also expose it. We also append the API token
+    // because the panel often gates the same path behind a session.
+    const base = (creds.apiBase || '').replace(/\/+$/, '');
+    const tokenSuffix = creds.apiKey ? `?token=${encodeURIComponent(creds.apiKey)}` : '';
+    const candidates: string[] = [];
+    if (/^https?:\/\/igamingapis\.com\/provider/.test(base)) candidates.push(base);
+    candidates.push(DEFAULT_BRANDS_URL);
+    if (creds.apiKey) {
+      candidates.push(`${DEFAULT_BRANDS_URL}${tokenSuffix}`);
+      if (base && !/^https?:\/\/igamingapis\.com\/provider/.test(base)) {
+        candidates.push(`${base}/brands${tokenSuffix}`);
+      }
     }
-    // The endpoint returns either an array or { data: [...] } per
-    // panel observation. Both shapes are supported.
-    const list = Array.isArray(bodyJson)
-      ? bodyJson
-      : asArray((bodyJson as { data?: unknown })?.data);
 
-    const result: ProviderBrand[] = list.map((row) => ({
-      brandKey: pickString(row, 'brand_id') || pickString(row, 'id') || pickString(row, 'key') || pickString(row, 'slug'),
-      displayName: pickString(row, 'name') || pickString(row, 'display_name') || pickString(row, 'brand_name') || pickString(row, 'brand_id', 'unknown'),
-      raw: row,
-    })).filter((b) => b.brandKey.length > 0);
+    let lastSnippet = '';
+    let lastStatus = 0;
+    for (const target of candidates) {
+      const { status, bodyText, bodyJson } = await timedFetch(target, {
+        method: 'GET',
+        headers: {
+          accept: 'application/json',
+          ...(creds.apiKey ? { authorization: `Bearer ${creds.apiKey}` } : {}),
+        },
+      });
+      lastStatus = status;
+      const { isHtml, snippet } = detectHtml(bodyText, bodyJson);
+      lastSnippet = snippet;
+      if (status < 200 || status >= 300) continue;
+      if (isHtml) continue;
+      const list = extractList(bodyJson, ['brands', 'providers', 'data', 'items']);
+      if (list.length === 0) continue;
+      const result: ProviderBrand[] = list.map((row) => ({
+        brandKey: pickString(row, 'brand_id') || pickString(row, 'id') || pickString(row, 'key') || pickString(row, 'slug'),
+        displayName: pickString(row, 'name') || pickString(row, 'display_name') || pickString(row, 'brand_name') || pickString(row, 'brand_id', 'unknown'),
+        raw: row,
+      })).filter((b) => b.brandKey.length > 0);
+      if (result.length === 0) continue;
+      return { result, rawRequest: { url: target, method: 'GET' }, rawResponse: bodyJson ?? bodyText.slice(0, 400) };
+    }
 
-    return { result, rawRequest: { url: target, method: 'GET' }, rawResponse: bodyJson ?? bodyText };
+    // Every candidate failed: HTML, empty, or no usable rows.
+    if (lastStatus >= 400) {
+      throw new ProviderAdapterError('UPSTREAM_HTTP_ERROR', `Brands fetch failed (HTTP ${lastStatus}). Confirm endpoint URL or use Add Manual Brand.`, lastStatus, lastSnippet);
+    }
+    if (lastSnippet && (lastSnippet.startsWith('<') || lastSnippet.toLowerCase().includes('premium'))) {
+      throw new ProviderAdapterError(
+        'UPSTREAM_NOT_JSON',
+        'Provider brand endpoint returned HTML/login page, not JSON. Use manual JILI setup or provide a JSON endpoint.',
+        502,
+        lastSnippet,
+      );
+    }
+    throw new ProviderAdapterError(
+      'UPSTREAM_EMPTY',
+      'Provider returned 0 brands. Confirm the endpoint URL in Setup or use Add Manual Brand to create JILI manually.',
+      502,
+      lastSnippet,
+    );
   },
 
   async listGames(creds, brandKey) {
     if (!brandKey) throw new ProviderAdapterError('UPSTREAM_BAD_RESPONSE', 'brandKey is required for listGames.');
     const base = (creds.apiBase || '').replace(/\/+$/, '');
-    const target = /^https?:\/\/igamingapis\.com\/provider/.test(base)
-      ? `${base.replace(/\/?$/, '')}/brands.php?brand_id=${encodeURIComponent(brandKey)}`
-      : `${DEFAULT_GAMES_URL}?brand_id=${encodeURIComponent(brandKey)}`;
-
-    const { status, bodyText, bodyJson } = await timedFetch(target, {
-      method: 'GET',
-      headers: { accept: 'application/json' },
-    });
-    if (status < 200 || status >= 300) {
-      throw new ProviderAdapterError('UPSTREAM_HTTP_ERROR', `Games fetch failed (HTTP ${status})`, status);
+    const tokenSuffix = creds.apiKey ? `&token=${encodeURIComponent(creds.apiKey)}` : '';
+    const candidates: string[] = [];
+    if (/^https?:\/\/igamingapis\.com\/provider/.test(base)) {
+      candidates.push(`${base}/brands.php?brand_id=${encodeURIComponent(brandKey)}`);
     }
-    const list = Array.isArray(bodyJson)
-      ? bodyJson
-      : asArray((bodyJson as { data?: unknown })?.data);
+    candidates.push(`${DEFAULT_GAMES_URL}?brand_id=${encodeURIComponent(brandKey)}`);
+    if (creds.apiKey) {
+      candidates.push(`${DEFAULT_GAMES_URL}?brand_id=${encodeURIComponent(brandKey)}${tokenSuffix}`);
+      if (base && !/^https?:\/\/igamingapis\.com\/provider/.test(base)) {
+        candidates.push(`${base}/games?brand_id=${encodeURIComponent(brandKey)}${tokenSuffix}`);
+      }
+    }
 
-    const result: ProviderGame[] = list.map((row) => ({
-      gameUid: pickString(row, 'game_uid') || pickString(row, 'game_id') || pickString(row, 'id'),
-      displayName: pickString(row, 'name') || pickString(row, 'game_name') || pickString(row, 'title') || 'Provider Game',
-      category: pickString(row, 'category') || pickString(row, 'type') || undefined,
-      imageUrl: pickString(row, 'image') || pickString(row, 'image_url') || pickString(row, 'thumbnail') || undefined,
-      brandKey,
-      raw: row,
-    })).filter((g) => g.gameUid.length > 0);
+    let lastSnippet = '';
+    let lastStatus = 0;
+    for (const target of candidates) {
+      const { status, bodyText, bodyJson } = await timedFetch(target, {
+        method: 'GET',
+        headers: {
+          accept: 'application/json',
+          ...(creds.apiKey ? { authorization: `Bearer ${creds.apiKey}` } : {}),
+        },
+      });
+      lastStatus = status;
+      const { isHtml, snippet } = detectHtml(bodyText, bodyJson);
+      lastSnippet = snippet;
+      if (status < 200 || status >= 300) continue;
+      if (isHtml) continue;
+      const list = extractList(bodyJson, ['games', 'data', 'items', 'list']);
+      if (list.length === 0) continue;
+      const result: ProviderGame[] = list.map((row) => ({
+        gameUid: pickString(row, 'game_uid') || pickString(row, 'game_id') || pickString(row, 'id'),
+        displayName: pickString(row, 'name') || pickString(row, 'game_name') || pickString(row, 'title') || 'Provider Game',
+        category: pickString(row, 'category') || pickString(row, 'type') || undefined,
+        imageUrl: pickString(row, 'image') || pickString(row, 'image_url') || pickString(row, 'thumbnail') || undefined,
+        brandKey,
+        raw: row,
+      })).filter((g) => g.gameUid.length > 0);
+      if (result.length === 0) continue;
+      return { result, rawRequest: { url: target, method: 'GET' }, rawResponse: bodyJson ?? bodyText.slice(0, 400) };
+    }
 
-    return { result, rawRequest: { url: target, method: 'GET' }, rawResponse: bodyJson ?? bodyText };
+    if (lastStatus >= 400) {
+      throw new ProviderAdapterError('UPSTREAM_HTTP_ERROR', `Games fetch failed (HTTP ${lastStatus}).`, lastStatus, lastSnippet);
+    }
+    if (lastSnippet && (lastSnippet.startsWith('<') || lastSnippet.toLowerCase().includes('premium'))) {
+      throw new ProviderAdapterError(
+        'UPSTREAM_NOT_JSON',
+        `Games endpoint returned HTML/login page, not JSON, for brand_id=${brandKey}.`,
+        502,
+        lastSnippet,
+      );
+    }
+    throw new ProviderAdapterError(
+      'UPSTREAM_EMPTY',
+      `Provider returned 0 games for brand_id=${brandKey}. Confirm the brand ID matches the provider panel.`,
+      502,
+      lastSnippet,
+    );
   },
 
   async launch(creds, opts) {

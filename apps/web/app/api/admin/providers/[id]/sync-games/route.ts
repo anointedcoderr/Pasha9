@@ -16,6 +16,7 @@ import { db } from '@/lib/db/client';
 import { loadProviderCredsById } from '@/lib/providers/credentials';
 import { getAdapter } from '@/lib/providers/registry';
 import { logRequest } from '@/lib/providers/log';
+import { ProviderAdapterError } from '@/lib/providers/types';
 
 const schema = z.object({ brandKey: z.string().trim().min(1).max(120) });
 
@@ -93,11 +94,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return jsonOk({ brandKey: brand.brandKey, count: result.length, inserted, updated });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      const code = err instanceof ProviderAdapterError ? err.code : 'SYNC_FAILED';
+      const snippet = err instanceof ProviderAdapterError ? err.snippet : undefined;
+      const status = err instanceof ProviderAdapterError ? err.status : 502;
       await logRequest({
         providerId: params.id, direction: 'outbound', endpoint: 'games', method: 'GET',
-        status: 0, errorMessage: msg,
+        status, responsePayload: snippet ? { snippet } : undefined, errorMessage: msg,
       });
-      return jsonError(502, 'SYNC_FAILED', msg);
+      return jsonError(status, code, msg, snippet ? { snippet } : undefined);
     }
   });
 }
