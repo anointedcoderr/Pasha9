@@ -555,15 +555,169 @@ model GameCategory {
   updatedAt    DateTime      @updatedAt
 }
 
+// M3 external-provider catalog. Extends the M1 GameProvider with
+// everything the iGamingAPIs / SoftAPI adapter needs to operate:
+// adapter selection, encrypted secret storage, callback security,
+// sync timestamps and per-provider behaviour flags. All new columns
+// are nullable / defaulted so `prisma db push` stays additive and
+// existing M1 rows keep working.
+//
+// Secrets (`apiKey`, `apiSecret`, `callbackSecret`) are stored as
+// AEAD-encrypted blobs via lib/crypto/aead.ts. They never leave the
+// server and are masked in every admin response.
 model GameProvider {
-  id        String         @id @default(cuid())
-  name      String         @unique
-  apiBase   String?
-  apiKey    String?
-  status    ProviderStatus @default(active)
-  games     Game[]
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
+  id              String         @id @default(cuid())
+  name            String         @unique
+  providerKey     String?        @unique // URL-safe slug used in /api/providers/<key>/*
+  adapterKey      String?        // 'igamingapis' etc - picks the adapter implementation
+  apiBase         String?
+  apiKey          String?        // AEAD-encrypted bearer / API token
+  apiSecret       String?        // AEAD-encrypted AES-256 secret
+  secretEncoding  String?        @default("utf8") // utf8 | hex | base64
+  callbackPath    String?        // e.g. /api/providers/igamingapis/callback
+  callbackSecret  String?        // AEAD-encrypted; matched against ?key= on callback
+  ipWhitelist     String?        // comma-joined IPs/CIDRs accepted on callback
+  clockSkewSeconds Int           @default(30)
+  currencyCode    String?        @default("BDT")
+  language        String?        @default("bn")
+  callbackResponseMode String?   @default("updated_balance") // updated_balance | net_loss_amount
+  launchMode      String?        @default("redirect") // redirect | iframe
+  lastSyncAt      DateTime?
+  lastHealthCheckAt DateTime?
+  lastHealthCheckOk Boolean?
+  status          ProviderStatus @default(maintenance)
+  games           Game[]
+  brands          ProviderBrand[]
+  externalGames   ExternalGame[]
+  txns            ProviderTransaction[]
+  requestLogs     ProviderRequestLog[]
+  callbackLogs    ProviderCallbackLog[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([adapterKey])
+  @@index([status])
+}
+
+// One row per brand / sub-provider returned by an aggregator. For
+// iGamingAPIs this is e.g. "JILI", "PG Soft" etc.
+model ProviderBrand {
+  id          String   @id @default(cuid())
+  providerId  String
+  brandKey    String   // provider-side identifier (string per iGamingAPIs)
+  displayName String
+  status      String   @default("active") // active | hidden
+  rawMeta     Json?
+  lastSyncAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  provider GameProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  games    ExternalGame[]
+
+  @@unique([providerId, brandKey])
+  @@index([providerId, status])
+}
+
+// One row per playable external game. gameUid is the provider-side
+// identifier we send back in the launch payload. category + imageUrl
+// drive the public lobby.
+model ExternalGame {
+  id          String   @id @default(cuid())
+  providerId  String
+  brandId     String?
+  gameUid     String   // provider-side identifier echoed in launch + callbacks
+  displayName String
+  category    String?
+  imageUrl    String?
+  status      String   @default("active") // active | hidden | maintenance
+  rawMeta     Json?
+  lastSyncAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  provider GameProvider   @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  brand    ProviderBrand? @relation(fields: [brandId], references: [id], onDelete: SetNull)
+
+  @@unique([providerId, gameUid])
+  @@index([providerId, status])
+  @@index([brandId])
+  @@index([category])
+}
+
+// Append-only ledger of every settled provider event. Mirrors the
+// M2D Transaction pattern with a unique idempotencyKey so a retried
+// provider callback cannot double-settle. walletTransactionId points
+// to the corresponding Transaction row written in the same db.$transaction.
+model ProviderTransaction {
+  id                  String   @id @default(cuid())
+  providerId          String
+  userId              String?
+  memberAccount       String   // raw value the provider sent
+  gameUid             String?
+  gameRound           String
+  betAmount           Decimal  @default(0) @db.Decimal(14, 2)
+  winAmount           Decimal  @default(0) @db.Decimal(14, 2)
+  netResult           Decimal  @default(0) @db.Decimal(14, 2)
+  type                String   // bet | win | settle | rollback | rejected
+  status              String   // accepted | rejected | duplicate | error
+  idempotencyKey      String   @unique
+  walletTransactionId String?
+  rawRequest          Json?
+  rawResponse         Json?
+  errorCode           String?
+  createdAt           DateTime @default(now())
+
+  provider GameProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([providerId, createdAt])
+  @@index([userId, createdAt])
+  @@index([gameUid])
+  @@index([status])
+}
+
+// Outbound + inbound HTTP audit. Payloads are masked before storage
+// so a stolen DB dump cannot expose tokens, secrets or callback keys.
+model ProviderRequestLog {
+  id          String   @id @default(cuid())
+  providerId  String
+  direction   String   // outbound | inbound
+  endpoint    String
+  method      String
+  status      Int?
+  durationMs  Int?
+  requestPayload  Json?
+  responsePayload Json?
+  errorMessage    String?
+  createdAt   DateTime @default(now())
+
+  provider GameProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([providerId, createdAt])
+  @@index([direction])
+}
+
+// Every callback hit lands here, valid or not. callbackKeyValid /
+// ipValid / timestampValid let the operator see why a request was
+// rejected without exposing the secret itself.
+model ProviderCallbackLog {
+  id              String   @id @default(cuid())
+  providerId      String
+  ip              String?
+  method          String   @default("POST")
+  callbackKeyValid Boolean?
+  ipValid         Boolean?
+  timestampValid  Boolean?
+  body            Json?
+  response        Json?
+  processedTxId   String?
+  error           String?
+  receivedAt      DateTime @default(now())
+
+  provider GameProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([providerId, receivedAt])
+  @@index([callbackKeyValid])
 }
 
 model Game {
