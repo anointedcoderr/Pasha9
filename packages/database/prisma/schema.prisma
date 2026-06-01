@@ -214,6 +214,11 @@ model User {
   // Pasha Native Games Phase 1: per-user provably-fair sessions across
   // Dice + Mines. Cascade-deletes with the user.
   nativeSessions      GameSession[]
+  // M3 Phase 3A: per-provider numeric account map. iGamingAPIs and
+  // peer aggregators only accept numeric user_id values; we never
+  // expose the internal cuid to upstream and always look up the
+  // wallet target through this mapping.
+  providerAccounts    ProviderPlayerAccount[]
 
   @@index([referredById])
   @@index([roleId])
@@ -592,6 +597,7 @@ model GameProvider {
   txns            ProviderTransaction[]
   requestLogs     ProviderRequestLog[]
   callbackLogs    ProviderCallbackLog[]
+  playerAccounts  ProviderPlayerAccount[]
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
@@ -643,6 +649,30 @@ model ExternalGame {
   @@index([providerId, status])
   @@index([brandId])
   @@index([category])
+}
+
+// Per-provider numeric member account map. iGamingAPIs and most
+// aggregators reject non-numeric user_id values, so we never send
+// the internal cuid upstream. memberAccount is an 8-12 digit numeric
+// string allocated on first launch and reused forever; the unique
+// constraint on (providerId, userId) keeps the mapping stable and
+// the unique on (providerId, memberAccount) lets the callback
+// resolver translate inbound member_account back to the internal
+// User row in O(1).
+model ProviderPlayerAccount {
+  id            String   @id @default(cuid())
+  providerId    String
+  userId        String
+  memberAccount String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  provider GameProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, userId])
+  @@unique([providerId, memberAccount])
+  @@index([userId])
 }
 
 // Append-only ledger of every settled provider event. Mirrors the

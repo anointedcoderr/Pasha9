@@ -1,15 +1,18 @@
 // Built by Anointed Coder.
 //
 // POST /api/admin/providers/[id]/test-launch
-// Body: { gameUid: string, userId?: string }
+// Body: { gameUid: string, userQuery?: string }
 //
 // Admin-only round trip that runs the launch flow against the
-// upstream provider WITHOUT redirecting the operator. Used to
-// confirm manually imported gameUids actually work before exposing
-// them to players. Token + secret never reach the response: the
-// adapter's rawResponse is run through maskPayload, and any
-// embedded encrypted blob in the launchUrl is left intact for the
-// operator to copy but only delivered to admin-permissioned callers.
+// upstream provider without redirecting the operator. The
+// `userQuery` field accepts any of: internal user id (cuid),
+// username, phone, or email. When omitted, defaults to the calling
+// admin. Either way we look up or allocate the provider-specific
+// numeric memberAccount (ProviderPlayerAccount) and send THAT as
+// user_id upstream; the internal cuid is never exposed.
+//
+// Token + secret stay server-side: the adapter's raw response goes
+// through maskPayload before reaching the browser.
 
 export const dynamic = 'force-dynamic';
 
@@ -24,11 +27,30 @@ import { getAdapter } from '@/lib/providers/registry';
 import { logRequest } from '@/lib/providers/log';
 import { maskPayload } from '@/lib/providers/mask';
 import { ProviderAdapterError } from '@/lib/providers/types';
+import { getOrCreateMemberAccount } from '@/lib/providers/player-account';
 
 const schema = z.object({
   gameUid: z.string().trim().min(1).max(120),
-  userId: z.string().trim().min(1).max(120).optional(),
+  userQuery: z.string().trim().min(1).max(160).optional(),
 });
+
+// Resolves a free-text query to a real User row. Accepts the cuid,
+// username, phone number, or email address. Returns null on miss.
+async function resolveUserByQuery(q: string) {
+  const v = q.trim();
+  if (!v) return null;
+  return db.user.findFirst({
+    where: {
+      OR: [
+        { id: v },
+        { username: v },
+        { phone: v },
+        { email: v },
+      ],
+    },
+    select: { id: true, username: true, phone: true, email: true, status: true },
+  });
+}
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   return withAuth(async () => {
@@ -45,28 +67,33 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const adapter = getAdapter(creds.adapterKey);
     if (!adapter) return jsonError(500, 'ADAPTER_NOT_REGISTERED');
 
-    // Validate the game is registered for this provider. We do NOT
-    // require status='active' so the operator can test maintenance
-    // entries before flipping them live.
     const game = await db.externalGame.findUnique({
       where: { providerId_gameUid: { providerId: creds.id, gameUid: parsed.data.gameUid } },
       select: { gameUid: true, displayName: true, status: true },
     });
     if (!game) return jsonError(404, 'GAME_NOT_FOUND', 'Game is not registered for this provider. Add it manually first.');
 
-    // Pick the test user. Default to the calling admin so the operator
-    // tries the flow against their own wallet. If a userId is supplied
-    // it must resolve to a non-blocked user row.
-    const targetUserId = parsed.data.userId ?? claims.sub;
-    const user = await db.user.findUnique({
-      where: { id: targetUserId },
-      select: { id: true, username: true, status: true },
-    });
-    if (!user) return jsonError(404, 'USER_NOT_FOUND');
+    // Resolve test user. With no query we default to the calling
+    // admin so the operator probes against their own wallet.
+    let user: { id: string; username: string; phone: string; email: string | null; status: string } | null = null;
+    if (parsed.data.userQuery) {
+      user = await resolveUserByQuery(parsed.data.userQuery);
+      if (!user) return jsonError(404, 'USER_NOT_FOUND', `No user matches "${parsed.data.userQuery}".`);
+    } else {
+      user = await db.user.findUnique({
+        where: { id: claims.sub },
+        select: { id: true, username: true, phone: true, email: true, status: true },
+      });
+      if (!user) return jsonError(404, 'USER_NOT_FOUND');
+    }
     if (user.status === 'blocked') return jsonError(403, 'USER_BLOCKED');
 
     const wallet = await db.wallet.findUnique({ where: { userId: user.id }, select: { balance: true } });
     const balance = wallet ? Number(wallet.balance) : 0;
+
+    // Allocate the numeric memberAccount. ProviderPlayerAccount keeps
+    // this stable forever for (providerId, userId).
+    const memberAccount = await getOrCreateMemberAccount(creds.id, user.id);
 
     const origin = new URL(req.url).origin;
     const callbackUrl = `${origin}${creds.callbackPath || `/api/providers/${creds.providerKey}/callback`}?key=${encodeURIComponent(creds.callbackSecret)}`;
@@ -75,7 +102,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     try {
       const { result, rawRequest, rawResponse } = await adapter.launch(creds, {
         userId: user.id,
-        memberAccount: user.id,
+        memberAccount,
         balance,
         gameUid: parsed.data.gameUid,
         token: creds.apiKey,
@@ -99,7 +126,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         actorRole: claims.role,
         action: 'PROVIDER_LAUNCH_TEST',
         target: parsed.data.gameUid,
-        meta: { providerId: creds.id, providerKey: creds.providerKey, testUserId: user.id, mode: result.mode },
+        meta: {
+          providerId: creds.id,
+          providerKey: creds.providerKey,
+          testUserId: user.id,
+          memberAccount,
+          mode: result.mode,
+        },
       });
 
       return jsonOk({
@@ -108,7 +141,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         rawCode: result.rawCode,
         rawMessage: result.rawMessage,
         balanceUsed: balance,
-        testUser: { id: user.id, username: user.username },
+        testUser: {
+          id: user.id,
+          username: user.username,
+          phone: user.phone,
+          email: user.email,
+        },
+        providerMemberAccount: memberAccount,
         maskedResponse: maskPayload(rawResponse),
       });
     } catch (err) {

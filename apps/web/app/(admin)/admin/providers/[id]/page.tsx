@@ -670,7 +670,8 @@ interface TestLaunchResult {
   rawCode?: number;
   rawMessage?: string;
   balanceUsed: number;
-  testUser: { id: string; username: string };
+  testUser: { id: string; username: string; phone: string; email: string | null };
+  providerMemberAccount: string;
   maskedResponse: unknown;
 }
 
@@ -680,13 +681,13 @@ function TestLaunchModal({ open, onOpenChange, providerId, game }: {
   providerId: string;
   game: GameRow | null;
 }) {
-  const [userId, setUserId] = useState('');
+  const [userQuery, setUserQuery] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<{ msg: string; snippet?: string } | null>(null);
   const [result, setResult] = useState<TestLaunchResult | null>(null);
 
   useEffect(() => {
-    if (!open) { setUserId(''); setErr(null); setResult(null); setBusy(false); }
+    if (!open) { setUserQuery(''); setErr(null); setResult(null); setBusy(false); }
   }, [open]);
 
   const onRun = async () => {
@@ -694,7 +695,7 @@ function TestLaunchModal({ open, onOpenChange, providerId, game }: {
     setBusy(true); setErr(null); setResult(null);
     try {
       const body: Record<string, unknown> = { gameUid: game.gameUid };
-      if (userId.trim()) body.userId = userId.trim();
+      if (userQuery.trim()) body.userQuery = userQuery.trim();
       const res = await fetch(`/api/admin/providers/${providerId}/test-launch`, {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),
@@ -719,6 +720,12 @@ function TestLaunchModal({ open, onOpenChange, providerId, game }: {
         </>
       }
     >
+      <Card padding="sm" className="mb-3 border-l-4 border-amber-400/60">
+        <p className="text-[11px] font-semibold text-ink-mid">
+          Provider requires a numeric member account. The internal user ID is mapped securely server-side to a stable 10-digit account and reused forever for callbacks.
+        </p>
+      </Card>
+
       {err ? (
         <div className="mb-3 rounded-lg border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">
           <p className="font-semibold">{err.msg}</p>
@@ -728,8 +735,8 @@ function TestLaunchModal({ open, onOpenChange, providerId, game }: {
 
       <div className="space-y-3">
         <p className="text-[11px] text-ink-mid">Game UID: <span className="font-mono text-ink-hi">{game?.gameUid ?? '-'}</span></p>
-        <Field label="Test user id (optional, defaults to you)">
-          <input value={userId} onChange={(e) => setUserId(e.target.value)} className={inputCls} placeholder="user cuid" />
+        <Field label="Test user (id, username, phone or email - defaults to you)">
+          <input value={userQuery} onChange={(e) => setUserQuery(e.target.value)} className={inputCls} placeholder="username, +8801..., email or cuid" />
         </Field>
       </div>
 
@@ -738,6 +745,11 @@ function TestLaunchModal({ open, onOpenChange, providerId, game }: {
           <Card padding="sm" className="border-l-4 border-emerald-400/60">
             <p className="text-[10px] font-bold uppercase tracking-wider text-ink-lo">Launch URL</p>
             <p className="mt-1 break-all font-mono text-[11px] text-emerald-200">{result.launchUrl}</p>
+          </Card>
+          <Card padding="sm" className="border-l-4 border-gold-400/60">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-ink-lo">Provider user_id sent</p>
+            <p className="mt-1 font-mono text-base font-extrabold text-gold-200">{result.providerMemberAccount}</p>
+            <p className="mt-1 text-[10px] text-ink-lo">Internal user: <span className="font-mono text-ink-mid">{result.testUser.username}</span> ({result.testUser.id})</p>
           </Card>
           <div className="grid grid-cols-2 gap-2 text-xs text-ink-mid md:grid-cols-4">
             <Totals label="Mode" value={result.mode} />

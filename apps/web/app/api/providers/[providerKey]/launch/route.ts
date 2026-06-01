@@ -20,6 +20,7 @@ import { loadProviderCreds } from '@/lib/providers/credentials';
 import { getAdapter } from '@/lib/providers/registry';
 import { logRequest } from '@/lib/providers/log';
 import { ProviderAdapterError } from '@/lib/providers/types';
+import { getOrCreateMemberAccount } from '@/lib/providers/player-account';
 
 const schema = z.object({ gameUid: z.string().trim().min(1).max(120) });
 
@@ -59,10 +60,14 @@ export async function POST(req: NextRequest, { params }: { params: { providerKey
     const callbackUrl = `${origin}${creds.callbackPath || `/api/providers/${creds.providerKey}/callback`}?key=${encodeURIComponent(creds.callbackSecret)}`;
     const returnUrl = `${origin}/games/provider/return?p=${encodeURIComponent(creds.providerKey)}`;
 
+    // Resolve or allocate the numeric memberAccount the provider
+    // requires. The internal cuid is NEVER sent upstream.
+    const memberAccount = await getOrCreateMemberAccount(creds.id, session.sub);
+
     try {
       const { result, rawRequest, rawResponse } = await adapter.launch(creds, {
         userId: session.sub,
-        memberAccount: session.sub, // we use cuid as member identifier - admin can rewrite later
+        memberAccount,
         balance,
         gameUid: parsed.data.gameUid,
         token: creds.apiKey,

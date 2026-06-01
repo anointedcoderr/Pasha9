@@ -19,10 +19,11 @@ import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db/client';
 import type { NormalizedCallback } from './types';
 import type { ProviderCreds } from './credentials';
+import { lookupUserIdByMemberAccount } from './player-account';
 
 export interface ProcessResult {
   status: 'accepted' | 'duplicate' | 'rejected';
-  errorCode?: 'INSUFFICIENT_FUNDS' | 'USER_NOT_FOUND' | 'USER_BLOCKED' | 'PROVIDER_INACTIVE';
+  errorCode?: 'INSUFFICIENT_FUNDS' | 'USER_NOT_FOUND' | 'USER_BLOCKED' | 'PROVIDER_INACTIVE' | 'MEMBER_ACCOUNT_NOT_FOUND';
   providerTxId: string;
   walletBefore: number;
   walletAfter: number;
@@ -35,17 +36,18 @@ function dec(v: number | string | Prisma.Decimal): Prisma.Decimal {
 }
 
 /**
- * Member account -> User id. iGamingAPIs sends the value we passed
- * as `user_id` in the launch payload. We currently use the user's
- * Pasha 9 cuid string verbatim; future-proof for usernames if the
- * operator changes the launch payload mapping.
+ * Member account -> User row. Primary lookup is ProviderPlayerAccount
+ * (numeric mapping allocated at launch time). The legacy cuid
+ * fallback was removed: callbacks that arrive with a member_account
+ * we never mapped are rejected with MEMBER_ACCOUNT_NOT_FOUND and
+ * the wallet is left untouched.
  */
-async function resolveUser(memberAccount: string): Promise<{ id: string; status: string } | null> {
+async function resolveUser(providerId: string, memberAccount: string): Promise<{ id: string; status: string } | null> {
   if (!memberAccount) return null;
-  const byId = await db.user.findUnique({ where: { id: memberAccount }, select: { id: true, status: true } });
-  if (byId) return byId;
-  const byUsername = await db.user.findUnique({ where: { username: memberAccount }, select: { id: true, status: true } });
-  return byUsername ?? null;
+  const userId = await lookupUserIdByMemberAccount(providerId, memberAccount);
+  if (!userId) return null;
+  const user = await db.user.findUnique({ where: { id: userId }, select: { id: true, status: true } });
+  return user ?? null;
 }
 
 export async function processProviderCallback(
@@ -76,7 +78,7 @@ export async function processProviderCallback(
     };
   }
 
-  const user = await resolveUser(normalized.memberAccount);
+  const user = await resolveUser(creds.id, normalized.memberAccount);
   if (!user) {
     await db.providerTransaction.create({
       data: {
@@ -92,11 +94,11 @@ export async function processProviderCallback(
         status: 'rejected',
         idempotencyKey,
         rawRequest: (normalized.rawBody ?? null) as Prisma.InputJsonValue,
-        errorCode: 'USER_NOT_FOUND',
+        errorCode: 'MEMBER_ACCOUNT_NOT_FOUND',
       },
     });
     return {
-      status: 'rejected', errorCode: 'USER_NOT_FOUND',
+      status: 'rejected', errorCode: 'MEMBER_ACCOUNT_NOT_FOUND',
       providerTxId: normalized.gameRound, walletBefore: 0, walletAfter: 0, netResult: 0, userId: null,
     };
   }
