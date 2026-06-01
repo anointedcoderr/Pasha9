@@ -240,13 +240,13 @@ export default function AdminNativeGamesPage() {
                             <GameArt code={g.gameCode as 'dice' | 'mines' | 'keno' | 'roulette' | 'slots' | 'crash'} className="h-full w-full" />
                           </div>
                         ) : null}
-                        <div className="flex-1">
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <p className="text-base font-extrabold text-ink-hi">{g.displayName}</p>
-                              <p className="mt-1 font-mono text-[10px] uppercase tracking-wider text-ink-lo">{g.gameCode}</p>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div className="min-w-0 max-w-full">
+                              <p className="break-words text-base font-extrabold text-ink-hi">{g.displayName}</p>
+                              <p className="mt-1 break-all font-mono text-[10px] uppercase tracking-wider text-ink-lo">{g.gameCode}</p>
                             </div>
-                            <div className="flex flex-col items-end gap-1">
+                            <div className="flex flex-wrap items-center gap-1">
                               <Chip tone={g.isActive ? 'ok' : 'warn'}>{g.isActive ? 'Active' : 'Disabled'}</Chip>
                               {g.isFeatured ? <Chip tone="gold">Featured</Chip> : null}
                             </div>
@@ -267,7 +267,7 @@ export default function AdminNativeGamesPage() {
                           <span className="text-[11px] font-semibold text-signal-warn">Test a real bet before activating.</span>
                         ) : null}
                       </div>
-                      <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                      <div className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                         <Stat label="Min bet" value={fmtMoney(g.minBet)} />
                         <Stat label="Max bet" value={fmtMoney(g.maxBet)} />
                         <Stat label="House edge" value={`${(g.houseEdgeBps / 100).toFixed(2)}%`} />

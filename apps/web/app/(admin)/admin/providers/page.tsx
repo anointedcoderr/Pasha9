@@ -92,24 +92,31 @@ export default function AdminProvidersPage() {
       ) : !data || data.providers.length === 0 ? (
         <Card padding="lg"><p className="text-sm text-ink-mid">No providers configured. Click &quot;Add provider&quot; to register iGamingAPIs.</p></Card>
       ) : (
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid gap-3 xl:grid-cols-2">
           {data.providers.map((p) => (
             <Card key={p.id} padding="lg">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-base font-extrabold text-ink-hi">{p.name}</p>
-                  <p className="mt-1 font-mono text-[10px] uppercase tracking-wider text-ink-lo">{p.providerKey ?? '(no key)'} . {p.adapterKey ?? '(no adapter)'}</p>
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0 max-w-full">
+                  <p className="break-words text-base font-extrabold text-ink-hi">{p.name}</p>
+                  <p className="mt-1 break-all font-mono text-[10px] uppercase tracking-wider text-ink-lo">
+                    {p.providerKey ?? '(no key)'} . {p.adapterKey ?? '(no adapter)'}
+                  </p>
                 </div>
                 <Chip tone={p.status === 'active' ? 'ok' : 'warn'}>{p.status === 'active' ? 'Live' : 'Maintenance'}</Chip>
               </div>
-              <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-                <Stat label="Base URL" value={p.apiBase ?? '-'} mono />
+              <div className="mt-3 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+                <Stat label="Base URL" value={p.apiBase ?? '-'} mono breakAll className="sm:col-span-2" />
                 <Stat label="Last sync" value={p.lastSyncAt ? new Date(p.lastSyncAt).toLocaleString() : 'Never'} />
-                <Stat label="Health" value={p.lastHealthCheckAt ? `${p.lastHealthCheckOk ? 'OK' : 'FAIL'} . ${new Date(p.lastHealthCheckAt).toLocaleString()}` : 'Not tested'} positive={p.lastHealthCheckOk === true} negative={p.lastHealthCheckOk === false} />
+                <Stat
+                  label="Health"
+                  value={p.lastHealthCheckAt ? `${p.lastHealthCheckOk ? 'OK' : 'FAIL'} . ${new Date(p.lastHealthCheckAt).toLocaleString()}` : 'Not tested'}
+                  positive={p.lastHealthCheckOk === true}
+                  negative={p.lastHealthCheckOk === false}
+                />
               </div>
-              <div className="mt-4 flex justify-end">
-                <Link href={`/admin/providers/${p.id}`}>
-                  <Button size="sm" variant="neon" leftIcon={<ArrowRight className="h-3.5 w-3.5" />}>Open</Button>
+              <div className="mt-4">
+                <Link href={`/admin/providers/${p.id}`} className="block sm:inline-block">
+                  <Button size="sm" variant="neon" leftIcon={<ArrowRight className="h-3.5 w-3.5" />} className="w-full sm:w-auto">Open</Button>
                 </Link>
               </div>
             </Card>
@@ -127,11 +134,21 @@ export default function AdminProvidersPage() {
   );
 }
 
-function Stat({ label, value, mono, positive, negative }: { label: string; value: string; mono?: boolean; positive?: boolean; negative?: boolean }) {
+function Stat({ label, value, mono, positive, negative, breakAll, className }: { label: string; value: string; mono?: boolean; positive?: boolean; negative?: boolean; breakAll?: boolean; className?: string }) {
   return (
-    <div>
+    <div className={cn('min-w-0', className)}>
       <p className="text-[10px] font-bold uppercase tracking-wider text-ink-lo">{label}</p>
-      <p className={cn('mt-0.5 font-semibold', negative ? 'text-signal-danger' : positive ? 'text-signal-ok' : 'text-ink-hi', mono && 'font-mono text-xs')}>{value}</p>
+      <p
+        className={cn(
+          'mt-0.5 font-semibold',
+          negative ? 'text-signal-danger' : positive ? 'text-signal-ok' : 'text-ink-hi',
+          mono && 'font-mono text-xs',
+          breakAll ? 'break-all' : 'break-words',
+        )}
+        title={value}
+      >
+        {value}
+      </p>
     </div>
   );
 }

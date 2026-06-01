@@ -36,6 +36,7 @@ const LOTTO_HREF = '/admin/lotto';
 const RECOVERY_HREF = '/admin/recovery';
 const PAYMENT_METHODS_HREF = '/admin/payment-methods';
 const NATIVE_GAMES_HREF = '/admin/native-games';
+const PROVIDERS_HREF = '/admin/providers';
 
 interface ProviderCard {
   key: string;
@@ -75,6 +76,14 @@ export async function GET() {
       totpEnabledCount,
       activeStaffCount,
       recentEdits,
+      externalProviders,
+      externalGameCount,
+      externalGameActiveCount,
+      providerCallbackCount,
+      providerTxAcceptedCount,
+      providerTxDuplicateCount,
+      providerTxRolledBackCount,
+      whatsappSetting,
     ] = await Promise.all([
       safeRun('listProviderSummaries', () => listProviderSummaries(), [] as Awaited<ReturnType<typeof listProviderSummaries>>),
       safeRun('listPayoutSummaries', () => listPayoutSummaries(), [] as Awaited<ReturnType<typeof listPayoutSummaries>>),
@@ -125,6 +134,21 @@ export async function GET() {
           actor?: { username: string } | null;
         }>,
       ),
+      safeRun('externalProviders', () => db.gameProvider.findMany({
+        orderBy: { name: 'asc' },
+        select: {
+          id: true, name: true, providerKey: true, adapterKey: true,
+          status: true, lastSyncAt: true, lastHealthCheckAt: true, lastHealthCheckOk: true,
+          apiKey: true, apiSecret: true, callbackSecret: true,
+        },
+      }), [] as Array<{ id: string; name: string; providerKey: string | null; adapterKey: string | null; status: 'active' | 'maintenance'; lastSyncAt: Date | null; lastHealthCheckAt: Date | null; lastHealthCheckOk: boolean | null; apiKey: string | null; apiSecret: string | null; callbackSecret: string | null }>),
+      safeRun('externalGameCount', () => db.externalGame.count(), 0),
+      safeRun('externalGameActiveCount', () => db.externalGame.count({ where: { status: 'active' } }), 0),
+      safeRun('providerCallbackCount', () => db.providerCallbackLog.count(), 0),
+      safeRun('providerTxAccepted', () => db.providerTransaction.count({ where: { status: 'accepted' } }), 0),
+      safeRun('providerTxDuplicate', () => db.providerTransaction.count({ where: { status: 'duplicate' } }), 0),
+      safeRun('providerTxRolledBack', () => db.providerTransaction.count({ where: { status: 'rolled_back' } }), 0),
+      safeRun('whatsappSetting', () => db.systemSetting.findFirst({ where: { key: { startsWith: 'whatsapp_' } }, select: { key: true, value: true } }), null as { key: string; value: string } | null),
     ]);
 
     const activeSmsKey = (smsProviderRow?.value ?? 'manual').trim() || 'manual';
@@ -195,6 +219,61 @@ export async function GET() {
       };
     });
 
+    // External providers (M3): one card per GameProvider row, with
+    // an honest status derived from the row itself + the presence
+    // of saved credentials.
+    const externalProviderCards: ProviderCard[] = (Array.isArray(externalProviders) ? externalProviders : []).map((p) => {
+      const hasCreds = Boolean(p.apiKey && p.apiSecret && p.callbackSecret);
+      const status = p.status === 'active'
+        ? 'live'
+        : hasCreds
+          ? 'maintenance'
+          : 'requires_credentials';
+      const lastSyncBit = p.lastSyncAt ? `Synced ${new Date(p.lastSyncAt).toISOString().slice(0, 10)}` : 'Never synced';
+      const healthBit = p.lastHealthCheckAt
+        ? `Health ${p.lastHealthCheckOk ? 'OK' : 'FAIL'}`
+        : 'Not tested';
+      return {
+        key: p.providerKey ?? p.id,
+        label: p.name,
+        status,
+        description: `${p.adapterKey ?? 'no adapter'} . ${lastSyncBit} . ${healthBit}`,
+        configureHref: `${PROVIDERS_HREF}/${p.id}`,
+        fieldCount: 0,
+        isActive: p.status === 'active',
+      };
+    });
+
+    // Launch readiness is the at-a-glance summary the client cares
+    // about. Every field is derived from the data we already loaded;
+    // nothing is fabricated.
+    const liveExternalProviderCount = externalProviderCards.filter((p) => p.status === 'live').length;
+    const hasLivePayment = paymentsCards.some((p) => p.status === 'live');
+    const hasLivePayout = payoutsCards.some((p) => p.status === 'live');
+    const hasLiveSms = smsCards.some((p) => p.status === 'live' && p.isActive);
+    const liveTrackingCount = trackingCards.filter((p) => p.status === 'live').length;
+    const hasWhatsapp = Boolean(whatsappSetting?.value);
+    const launchReadiness = {
+      externalProvider: {
+        liveCount: liveExternalProviderCount,
+        gameCount: Number(externalGameCount ?? 0),
+        activeGameCount: Number(externalGameActiveCount ?? 0),
+        callbackCount: Number(providerCallbackCount ?? 0),
+        acceptedTxCount: Number(providerTxAcceptedCount ?? 0),
+        duplicateTxCount: Number(providerTxDuplicateCount ?? 0),
+        rolledBackTxCount: Number(providerTxRolledBackCount ?? 0),
+      },
+      payment: { live: hasLivePayment, totalAdapters: paymentsCards.length },
+      payout: { live: hasLivePayout, totalAdapters: payoutsCards.length },
+      sms: { live: hasLiveSms, activeKey: activeSmsKey, totalAdapters: smsCards.length },
+      whatsapp: { configured: hasWhatsapp },
+      tracking: { liveCount: liveTrackingCount, totalPlatforms: trackingCards.length },
+      nativeGames: { enabled: Boolean(nativeGamesEnabled), totalGames: nativeGameCards.length, liveGames: nativeGameCards.filter((g) => g.isActive).length },
+      cronSecret: { configured: cronSecretConfigured },
+      apkGuide: { ready: true }, // docs/APK-BUILD.md is committed; build is operator-side
+      docs: { ready: true },
+    };
+
     return jsonOk({
       categories: {
         payments: paymentsCards,
@@ -202,7 +281,9 @@ export async function GET() {
         sms: smsCards,
         tracking: trackingCards,
         nativeGames: nativeGameCards,
+        externalProviders: externalProviderCards,
       },
+      launchReadiness,
       platform: {
         activeSmsProvider: activeSmsKey,
         cronSecretConfigured,

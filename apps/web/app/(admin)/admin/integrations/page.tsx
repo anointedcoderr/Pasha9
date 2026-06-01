@@ -66,6 +66,7 @@ interface Snapshot {
     sms?: ProviderCard[];
     tracking?: ProviderCard[];
     nativeGames?: ProviderCard[];
+    externalProviders?: ProviderCard[];
   };
   platform?: {
     activeSmsProvider?: string;
@@ -81,41 +82,55 @@ interface Snapshot {
     totpEnabledUserCount?: number;
     activeStaffCount?: number;
   };
+  launchReadiness?: {
+    externalProvider?: { liveCount?: number; gameCount?: number; activeGameCount?: number; callbackCount?: number; acceptedTxCount?: number; duplicateTxCount?: number; rolledBackTxCount?: number };
+    payment?: { live?: boolean; totalAdapters?: number };
+    payout?: { live?: boolean; totalAdapters?: number };
+    sms?: { live?: boolean; activeKey?: string; totalAdapters?: number };
+    whatsapp?: { configured?: boolean };
+    tracking?: { liveCount?: number; totalPlatforms?: number };
+    nativeGames?: { enabled?: boolean; totalGames?: number; liveGames?: number };
+    cronSecret?: { configured?: boolean };
+    apkGuide?: { ready?: boolean };
+    docs?: { ready?: boolean };
+  };
   recentEdits?: EditRow[];
 }
 
-const EMPTY_SNAP: Required<Snapshot> & {
-  categories: Required<NonNullable<Snapshot['categories']>>;
-  platform: Required<NonNullable<Snapshot['platform']>>;
-  security: Required<NonNullable<Snapshot['security']>>;
-} = {
-  categories: { payments: [], payouts: [], sms: [], tracking: [], nativeGames: [] },
+const EMPTY_SNAP = {
+  categories: { payments: [] as ProviderCard[], payouts: [] as ProviderCard[], sms: [] as ProviderCard[], tracking: [] as ProviderCard[], nativeGames: [] as ProviderCard[], externalProviders: [] as ProviderCard[] },
   platform: {
     activeSmsProvider: 'manual',
     cronSecretConfigured: false,
-    cronRoutes: [],
+    cronRoutes: [] as CronRoute[],
     paymentMethodsHref: '/admin/payment-methods',
     securityHref: '/admin/security',
     nativeGamesEnabled: true,
     nativeGamesHref: '/admin/native-games',
   },
   security: { ipBlockCount: 0, totpEnabledUserCount: 0, activeStaffCount: 0 },
-  recentEdits: [],
+  recentEdits: [] as EditRow[],
 };
 
-function statusTone(s: string): 'ok' | 'warn' | 'neutral' | 'danger' {
+function statusTone(s: string): 'ok' | 'warn' | 'neutral' | 'danger' | 'info' {
   if (s === 'live') return 'ok';
   if (s === 'manual') return 'neutral';
   if (s === 'requires_credentials') return 'warn';
+  if (s === 'maintenance') return 'warn';
   if (s === 'disabled') return 'danger';
+  if (s === 'error') return 'danger';
+  if (s === 'ready') return 'info';
   return 'neutral';
 }
 
 function statusLabel(s: string): string {
   if (s === 'live') return 'Live';
   if (s === 'manual') return 'Manual';
-  if (s === 'requires_credentials') return 'Needs credentials';
+  if (s === 'requires_credentials') return 'Awaiting credentials';
+  if (s === 'maintenance') return 'Maintenance';
   if (s === 'disabled') return 'Disabled';
+  if (s === 'error') return 'Error';
+  if (s === 'ready') return 'Provider-ready';
   return s || 'Unknown';
 }
 
@@ -172,9 +187,11 @@ export default function AdminIntegrationsPage() {
   const smsCards = safeArray<ProviderCard>(categories.sms);
   const trackingCards = safeArray<ProviderCard>(categories.tracking);
   const nativeGameCards = safeArray<ProviderCard>(categories.nativeGames);
+  const externalProviderCards = safeArray<ProviderCard>(categories.externalProviders);
   const cronRoutes = safeArray<CronRoute>(platform.cronRoutes);
   const nativeGamesEnabled = platform.nativeGamesEnabled !== false;
   const nativeGamesHref = platform.nativeGamesHref || '/admin/native-games';
+  const readiness = snap?.launchReadiness ?? {};
 
   return (
     <>
@@ -201,6 +218,17 @@ export default function AdminIntegrationsPage() {
         <p className="text-sm text-ink-mid">Loading...</p>
       ) : (
         <>
+          <LaunchReadinessPanel readiness={readiness} />
+
+          <CategorySection
+            title="External game providers"
+            subtitle="Aggregator integrations like iGamingAPIs / JILI. Live status comes from GameProvider.status; Awaiting credentials means the row exists but token/secret/callback-secret are not all saved yet."
+            icon={<Plug className="h-4 w-4 text-gold-300" />}
+            providers={externalProviderCards}
+            emptyHref="/admin/providers"
+            emptyLabel="No external providers registered yet. Open External Providers to add iGamingAPIs / JILI or any future aggregator."
+          />
+
           <CategorySection
             title="Inbound payments"
             subtitle="Deposit gateways. Active credentials are stored in SystemSetting and never returned by this snapshot."
@@ -245,25 +273,6 @@ export default function AdminIntegrationsPage() {
             emptyHref={nativeGamesHref}
             emptyLabel="No native games loaded yet. Open Native Games admin to add one."
           />
-
-          <Card padding="lg" className="mb-6 border-l-4 border-amber-400/60">
-            <CardHeader
-              title="External provider games"
-              subtitle="Status: Awaiting provider credentials. No external game provider is connected at this time."
-              action={<Plug className="h-4 w-4 text-amber-300" />}
-            />
-            <p className="text-sm text-ink-mid">
-              Once provider API keys and callback documentation are supplied, this platform can connect external game providers through the provider adapter layer. The placeholder rail on /games and the homepage clearly tells players this section is awaiting credentials.
-            </p>
-            <p className="mt-2 text-[11px] text-ink-lo">
-              Do NOT mark any external provider as live in this admin until real credentials have been verified end-to-end via a sandbox round.
-            </p>
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {['Slots', 'Live Casino', 'Fishing', 'Crash', 'Table Games'].map((label) => (
-                <Chip key={label} tone="warn">{label} . awaiting credentials</Chip>
-              ))}
-            </div>
-          </Card>
 
           <Card padding="lg" className="mb-6">
             <CardHeader
@@ -377,17 +386,17 @@ function CategorySection({ title, subtitle, icon, providers, emptyHref, emptyLab
           ) : null}
         </div>
       ) : (
-        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {providers.map((p) => (
-            <div key={p.key} className={cn('rounded-xl border p-3', p.isActive ? 'border-signal-ok/40 bg-signal-ok/5' : 'border-neon/10 bg-base-deep/40')}>
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-ink-hi">{p.label}</p>
-                  <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-ink-lo">{p.key}</p>
+            <div key={p.key} className={cn('flex min-w-0 flex-col rounded-xl border p-3', p.isActive ? 'border-signal-ok/40 bg-signal-ok/5' : 'border-neon/10 bg-base-deep/40')}>
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0 max-w-full">
+                  <p className="break-words text-sm font-semibold text-ink-hi">{p.label}</p>
+                  <p className="mt-0.5 break-all font-mono text-[10px] uppercase tracking-wider text-ink-lo">{p.key}</p>
                 </div>
                 <Chip tone={statusTone(p.status)}>{statusLabel(p.status)}</Chip>
               </div>
-              <p className="mt-2 text-xs text-ink-mid line-clamp-3">{p.description || 'No description.'}</p>
+              <p className="mt-2 break-words text-xs text-ink-mid line-clamp-3" title={p.description || ''}>{p.description || 'No description.'}</p>
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                 <span className="text-[11px] text-ink-lo">{p.fieldCount} field{p.fieldCount === 1 ? '' : 's'}{p.isActive ? ' . active' : ''}</span>
                 {p.configureHref ? (
@@ -400,6 +409,136 @@ function CategorySection({ title, subtitle, icon, providers, emptyHref, emptyLab
           ))}
         </div>
       )}
+    </Card>
+  );
+}
+
+interface ReadinessTile {
+  label: string;
+  state: 'live' | 'ready' | 'pending' | 'configured' | 'missing';
+  detail: string;
+  href?: string;
+}
+
+function tileTone(state: ReadinessTile['state']): 'ok' | 'warn' | 'neutral' | 'danger' | 'info' {
+  if (state === 'live') return 'ok';
+  if (state === 'ready' || state === 'configured') return 'info';
+  if (state === 'pending') return 'warn';
+  if (state === 'missing') return 'danger';
+  return 'neutral';
+}
+
+function tileLabel(state: ReadinessTile['state']): string {
+  if (state === 'live') return 'Live';
+  if (state === 'ready') return 'Provider-ready';
+  if (state === 'pending') return 'Awaiting credentials';
+  if (state === 'configured') return 'Configured';
+  if (state === 'missing') return 'Needs configuration';
+  return state;
+}
+
+function LaunchReadinessPanel({ readiness }: { readiness: NonNullable<Snapshot['launchReadiness']> }) {
+  const ep = readiness.externalProvider ?? {};
+  const epLive = (ep.liveCount ?? 0) > 0;
+  const epGames = ep.gameCount ?? 0;
+  const epCallbacks = ep.callbackCount ?? 0;
+  const epAccepted = ep.acceptedTxCount ?? 0;
+  const epDup = ep.duplicateTxCount ?? 0;
+
+  const tiles: ReadinessTile[] = [
+    {
+      label: 'External game provider',
+      state: epLive ? 'live' : (epGames > 0 ? 'ready' : 'pending'),
+      detail: epLive
+        ? `${ep.liveCount} live . ${epGames} games (${ep.activeGameCount ?? 0} active)`
+        : (epGames > 0 ? `${epGames} games imported, provider in Maintenance` : 'No provider registered'),
+      href: '/admin/providers',
+    },
+    {
+      label: 'Provider callbacks + wallet',
+      state: epAccepted > 0 ? 'live' : (epCallbacks > 0 ? 'configured' : 'pending'),
+      detail: `${epCallbacks} callback${epCallbacks === 1 ? '' : 's'} . ${epAccepted} accepted . ${epDup} duplicate`,
+      href: '/admin/providers',
+    },
+    {
+      label: 'Payment gateway',
+      state: readiness.payment?.live ? 'live' : (readiness.payment?.totalAdapters ? 'pending' : 'missing'),
+      detail: readiness.payment?.live
+        ? 'At least one gateway live'
+        : `${readiness.payment?.totalAdapters ?? 0} adapter${readiness.payment?.totalAdapters === 1 ? '' : 's'} registered, none live yet`,
+      href: '/admin/payments',
+    },
+    {
+      label: 'Payout provider',
+      state: readiness.payout?.live ? 'live' : (readiness.payout?.totalAdapters ? 'pending' : 'missing'),
+      detail: readiness.payout?.live
+        ? 'At least one payout adapter live'
+        : `${readiness.payout?.totalAdapters ?? 0} adapter${readiness.payout?.totalAdapters === 1 ? '' : 's'} registered, none live yet`,
+      href: '/admin/payouts',
+    },
+    {
+      label: 'SMS / OTP',
+      state: readiness.sms?.live ? 'live' : (readiness.sms?.activeKey && readiness.sms.activeKey !== 'manual' ? 'pending' : 'missing'),
+      detail: readiness.sms?.live
+        ? `Active: ${readiness.sms.activeKey}`
+        : `Active key: ${readiness.sms?.activeKey ?? 'manual'} (no live adapter)`,
+      href: '/admin/notifications',
+    },
+    {
+      label: 'WhatsApp API',
+      state: readiness.whatsapp?.configured ? 'configured' : 'pending',
+      detail: readiness.whatsapp?.configured ? 'Setting present' : 'Not configured',
+      href: '/admin/notifications',
+    },
+    {
+      label: 'Tracking pixels',
+      state: (readiness.tracking?.liveCount ?? 0) > 0 ? 'live' : 'pending',
+      detail: `${readiness.tracking?.liveCount ?? 0} of ${readiness.tracking?.totalPlatforms ?? 0} platforms live`,
+      href: '/admin/notifications',
+    },
+    {
+      label: 'Native games',
+      state: readiness.nativeGames?.enabled && (readiness.nativeGames?.liveGames ?? 0) > 0 ? 'live' : 'configured',
+      detail: `${readiness.nativeGames?.liveGames ?? 0} live . ${readiness.nativeGames?.totalGames ?? 0} total . global ${readiness.nativeGames?.enabled ? 'ON' : 'OFF'}`,
+      href: '/admin/native-games',
+    },
+    {
+      label: 'Cron secret',
+      state: readiness.cronSecret?.configured ? 'configured' : 'missing',
+      detail: readiness.cronSecret?.configured ? 'CRON_SECRET env set' : 'CRON_SECRET env missing',
+    },
+    {
+      label: 'APK build guide',
+      state: readiness.apkGuide?.ready ? 'ready' : 'pending',
+      detail: 'docs/APK-BUILD.md committed; signed APK is operator-side',
+    },
+  ];
+
+  return (
+    <Card padding="lg" className="mb-6 border-l-4 border-gold-400/60">
+      <CardHeader
+        title="Launch readiness"
+        subtitle="At-a-glance view of every external surface. Live means a real connection is verified. Provider-ready / Awaiting credentials means the structure exists but real keys are not in place."
+        action={<Sparkles className="h-4 w-4 text-gold-300" />}
+      />
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+        {tiles.map((t) => (
+          <div key={t.label} className="rounded-xl border border-neon/10 bg-base-deep/40 p-3">
+            <div className="flex items-start justify-between gap-2">
+              <p className="min-w-0 text-sm font-semibold text-ink-hi">{t.label}</p>
+              <Chip tone={tileTone(t.state)}>{tileLabel(t.state)}</Chip>
+            </div>
+            <p className="mt-1 break-words text-[11px] text-ink-mid">{t.detail}</p>
+            {t.href ? (
+              <div className="mt-2">
+                <Link href={t.href} className="text-[11px] font-bold uppercase tracking-wider text-gold-300 hover:underline">
+                  Configure <ArrowRight className="inline h-3 w-3" />
+                </Link>
+              </div>
+            ) : null}
+          </div>
+        ))}
+      </div>
     </Card>
   );
 }

@@ -110,6 +110,33 @@ Built by Anointed Coder.
 - [ ] Mobile drawer renders. No horizontal overflow on the
       provider lobby.
 
+## Provider-dependent systems (read the Launch Readiness panel)
+
+`/admin/integrations` now opens with a Launch Readiness panel.
+The honest split before client preview:
+
+- [ ] **JILI API**: Live and tested. Tile shows "Live" and the
+      callback tile shows accepted transactions > 0.
+- [ ] **Real payment gateway**: Provider-ready. Tile reads
+      "Awaiting credentials". Update before real money goes in.
+- [ ] **Real payout provider**: Provider-ready. Tile reads
+      "Awaiting credentials". Update before any withdrawal goes out.
+- [ ] **SMS / OTP**: Provider-ready. Tile reads "Awaiting
+      credentials" until an adapter is picked AND its key is set.
+- [ ] **WhatsApp API**: Provider-ready (no adapter wired today).
+      Tile reads "Awaiting credentials".
+- [ ] **Facebook / TikTok / GA4 / Google Ads tracking**:
+      Provider-ready. Tile reads "Awaiting credentials" until each
+      platform's pixel id + token is saved.
+- [ ] **APK**: Build guide ready (`docs/APK-BUILD.md`). No signed
+      APK yet; mark this done only after a developer builds and
+      sideloads the first signed release.
+
+If a tile says "Live" but no real credentials have been entered,
+stop and audit `/admin/integrations` -> the matching CategorySection
++ ActivityLog. Never present a system as Live when only the
+structure exists.
+
 ## Secrets check (final pass)
 
 - [ ] No `localhost`, no `127.0.0.1` in the production `.env`.

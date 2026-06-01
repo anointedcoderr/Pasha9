@@ -109,6 +109,42 @@ Built by Anointed Coder.
 - Rollback (Task 4) is **super-admin only** and reverses wallet only;
   we do NOT call the provider's rollback API (unconfirmed).
 
+## Provider-dependent systems (status at delivery)
+
+This is the honest split. **Live** means a real connection is
+verified end-to-end. **Provider-ready** means the structure and
+admin surface exist; only operator credentials are missing.
+
+- **iGamingAPIs / JILI** . **Live and tested.** Encryption, launch
+  payload, callback wallet flow, 241 imported games, simulate
+  callback, rollback and reports all verified. Visible in
+  `/admin/integrations` -> Launch readiness as "Live" once the
+  provider chip is flipped Live.
+- **Real payment gateway** . **Provider-ready.** Adapter registry
+  (`lib/payments/registry.ts`) lists every shape; each tile in
+  `/admin/integrations` -> Inbound payments shows
+  "Awaiting credentials" until merchant credentials are stored
+  on the corresponding `/admin/payments` editor.
+- **Real payout provider** . **Provider-ready.** Same pattern as
+  payments via `lib/payouts/registry.ts`; surfaced under Outbound
+  payouts.
+- **SMS / OTP** . **Provider-ready.** Adapter registry
+  (`lib/sms/registry.ts`) shows every supported provider. The
+  active key is `manual` until an admin picks an adapter AND
+  stores its credentials in `/admin/notifications`.
+- **WhatsApp API** . **Provider-ready** (structure only). No
+  WhatsApp adapter is wired today; the Launch Readiness tile
+  reports "Configured" only when a `whatsapp_*` SystemSetting row
+  exists.
+- **Facebook / TikTok / GA4 / Google Ads tracking** .
+  **Provider-ready.** Browser pixels + server-side CAPI / Events
+  API plumbing exists; each platform tile flips to "Live" only
+  when its real pixel id + token are saved in
+  `/admin/notifications`.
+- **APK** . **Build guide ready** (`docs/APK-BUILD.md`). No
+  signed APK has been generated yet; build runs on a developer
+  laptop with Android SDK + JDK 17.
+
 ## Remaining provider-dependent limitations
 
 - **PG Soft, Pragmatic, Evolution etc.** are not connected. Each
