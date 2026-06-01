@@ -163,6 +163,26 @@ admin surface exist; only operator credentials are missing.
 
 See `LAUNCH-CHECKLIST.md`.
 
+## Final M3 admin additions (delivered in the final sprint)
+
+- **Tracking pixels.** Google Tag Manager (`analytics_gtm`) joined
+  Facebook Pixel, TikTok Pixel, GA4 and Google Ads. All public IDs
+  render via `components/site/TrackingScripts.tsx`; server-side
+  tokens stay encrypted at rest and never leave the server.
+- **WhatsApp admin** (`/admin/whatsapp`). Structured fields for
+  Meta Cloud API / gateway / manual modes. Access token + verify
+  token are AES-256-GCM at rest. Tile honestly reads "Configured"
+  until a real adapter ships.
+- **Game edit.** Per-row Edit button in the admin Games tab edits
+  displayName, category, imageUrl, status and brand on a single
+  ExternalGame row. Category is normalized; activity logged as
+  PROVIDER_GAME_EDIT.
+- **PWA manifest.** `/manifest.webmanifest` ships with the build
+  pointing at `apps/web/public/app-assets/`. Players can Add to
+  Home Screen before any signed APK exists.
+- **docs/ADMIN-GUIDE.md** expanded with an M3 section covering
+  every new admin surface.
+
 ## Handover checklist
 
 - [ ] Operator has `/admin/providers` access (super_admin role).

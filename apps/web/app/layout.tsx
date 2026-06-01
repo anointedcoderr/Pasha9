@@ -19,7 +19,9 @@ export const metadata: Metadata = {
   publisher: 'Anointed Coder',
   icons: {
     icon: '/favicon.svg',
+    apple: '/favicon.svg',
   },
+  manifest: '/manifest.webmanifest',
 };
 
 export const viewport: Viewport = {

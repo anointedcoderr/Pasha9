@@ -136,3 +136,146 @@ Role-permission mapping lives in `packages/database/prisma/seed.ts` and is re-ap
 - Ambassador section is empty on the homepage. Admin has not yet set ambassador fields in `/admin/ambassador`. Toggling Active off there hides the section entirely.
 
 For anything else: Telegram `t.me/anointedcoder` or WhatsApp `wa.link/fi5z8a`.
+
+---
+
+## M3 admin additions
+
+This section covers everything added in Milestone 3. It supplements
+the M1 sections above; both stay valid.
+
+### External providers (`/admin/providers`)
+
+What it does: lists every external game provider. iGamingAPIs / JILI
+is connected today; future aggregators slot in the same way.
+
+Without a developer you can:
+
+- **Add provider**: pick the adapter, paste API base, token, secret,
+  callback secret, IP whitelist, currency, language, callback
+  response mode, launch mode.
+- **Enable / Disable**: toggle the chip on the provider detail page.
+  Live = the public lobby will show this provider.
+- **Edit credentials**: open the provider, save new token/secret
+  values. Empty fields keep the existing encrypted blob.
+- **Public base URL**: the HTTPS host the provider should dial for
+  callbacks. Required for production; localhost / private hosts are
+  refused by the public launch route.
+- **Launch minimum balance**: per-provider BDT threshold. Players
+  under this see the deposit prompt before the launch call goes
+  out.
+- **Test encryption / Test connection**: two buttons on Setup.
+- **Callback readiness checklist**: URL https, callback secret,
+  callback received, transaction processed, duplicate protection
+  tested. Computed live; no hardcoded green.
+- **Simulate callback**: rehearse the wallet pipeline without real
+  provider traffic. Same gameRound re-run hits the idempotency
+  short-circuit.
+
+### Game import + edit (`/admin/providers/<id>` -> Games tab)
+
+- **Add manual game**: single row or bulk CSV / JSON. Non-numeric
+  game IDs are skipped automatically with a per-row reason.
+- **Bulk JILI import**: on the VPS run
+  `pnpm --filter @pasha9/database import:jili`. Default path is
+  `packages/database/seed-data/jili_games_import_ready.csv`; pass a
+  different path as the first argument to read from elsewhere.
+- **Edit game** (new): per-row Edit button updates name, category,
+  image URL, status, brand. Category is normalized into `slots /
+  flash / table / fishing / crash`.
+- **Bulk status**: tick rows, pick Mark active / Mark maintenance /
+  Mark hidden in the sticky toolbar.
+- **Search + filter**: name, gameUid, brand, category, status.
+- **Test launch**: per-row button; runs the encrypted launch flow.
+- **Stats tiles**: Total / Active / Maintenance / Hidden plus
+  per-category counts.
+
+### Provider transactions + rollback
+
+- See every accepted, duplicate, rejected, rolled-back row.
+- **Rollback** (super_admin only) on any accepted row: reason
+  required, wallet correction is internal to Pasha 9, second
+  attempt returns 409 ALREADY_ROLLED_BACK.
+
+### Provider reports
+
+- Date range pickers + optional filters by gameUid / userId /
+  category.
+- Totals, by-status chips, daily series, top 25 games, top 25
+  users, by-category rollup.
+- **Export CSV** downloads one combined file.
+
+### Payment / Payout / SMS (already shipped in earlier milestones)
+
+- `/admin/payments`, `/admin/payouts`, `/admin/notifications` -> SMS
+  tab.
+- Status chips read `Live` only after a real adapter verifies
+  successfully; otherwise `Awaiting credentials`. Existing manual
+  deposit + manual approval queues stay functional in either state.
+
+### Tracking pixels (`/admin/notifications` -> Tracking tab)
+
+Public IDs (safe to ship to the browser):
+
+- `pixel_facebook` . Meta Pixel ID
+- `pixel_tiktok` . TikTok Pixel Code
+- `analytics_ga4` . GA4 Measurement ID (G-XXXX)
+- `analytics_google_ads` . Google Ads conversion ID (AW-XXXX)
+- `analytics_google_ads_conv_label` . Optional conversion label
+- `analytics_gtm` . **NEW.** Google Tag Manager container ID
+  (GTM-XXXX); renders gtm.js on every page when set.
+
+Server-side tokens (encrypted at rest, never sent to the browser):
+
+- `pixel_facebook_capi_token`
+- `pixel_facebook_test_event_code`
+- `pixel_tiktok_access_token`
+- `analytics_ga4_api_secret`
+
+`components/site/TrackingScripts.tsx` reads `/api/content/tracking`
+on the first client paint and injects the standard snippets for
+every platform with a configured public ID. Disabled platforms
+render nothing.
+
+### WhatsApp (`/admin/whatsapp`)
+
+NEW page. Stores:
+
+- Enabled toggle, provider type (Meta Cloud / gateway / manual),
+  default support number, phone number id, WABA id.
+- Access token + verify token (AES-256-GCM at rest).
+- Webhook URL preview with Copy button.
+
+Honest status: even with everything saved, the integrations tile
+reads "Configured", not "Live". Pasha 9 does not ship a WhatsApp
+adapter today; the structure is in place for when one lands.
+
+### Launch readiness (`/admin/integrations`)
+
+Single panel at the top of the integrations page. One tile per
+surface (external provider, callbacks, payment, payout, SMS,
+WhatsApp, tracking, native games, cron secret, APK guide). Every
+tile state is computed live from the snapshot data. If a tile says
+Live, a real signal proves it.
+
+### PWA install
+
+`/manifest.webmanifest` ships with the build. Players can Add to
+Home Screen before a signed APK exists. Icons live at
+`apps/web/public/app-assets/`; replace the placeholder before any
+Play Store release. See `docs/APK-BUILD.md` for the signed-APK
+recipe.
+
+### M3 status vocabulary
+
+The admin uses these chip labels everywhere. Stick to them.
+
+- **Live**: a real connection has been verified.
+- **Provider-ready**: structure and admin surface exist; credentials
+  missing.
+- **Awaiting credentials**: needs credentials to function.
+- **Configured**: credentials are stored but cannot be auto-verified
+  (e.g. WhatsApp until an adapter ships).
+- **Maintenance / Disabled**: operator-flagged off.
+- **Error**: a recent test failed; check the relevant Logs tab.
+

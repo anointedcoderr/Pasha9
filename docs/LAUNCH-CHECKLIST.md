@@ -110,6 +110,26 @@ Built by Anointed Coder.
 - [ ] Mobile drawer renders. No horizontal overflow on the
       provider lobby.
 
+## Final M3 admin sanity (run before client preview)
+
+- [ ] `/admin/providers/<id>` Games tab Edit button updates a real
+      row (try renaming a manual JILI game, save, reload, see the
+      new name).
+- [ ] `/admin/notifications` Tracking tab includes the new GTM
+      field. Pasting a GTM-XXXX value, saving, and reloading the
+      homepage in an incognito window renders the gtm.js script
+      (check the page source).
+- [ ] `/admin/whatsapp` saves with the verify token; reload shows
+      the masked preview, never the raw token. Webhook URL Copy
+      button works.
+- [ ] `view-source:` on the homepage shows the PWA manifest link
+      `/manifest.webmanifest`. Hitting that URL returns valid JSON
+      with the icons block.
+- [ ] Add to Home Screen prompt fires on a real Android Chrome
+      (this depends on the operator dropping real icons into
+      `apps/web/public/app-assets/`; the placeholder README is the
+      fallback signal).
+
 ## Provider-dependent systems (read the Launch Readiness panel)
 
 `/admin/integrations` now opens with a Launch Readiness panel.

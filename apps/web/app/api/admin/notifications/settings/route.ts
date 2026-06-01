@@ -31,6 +31,7 @@ const ALLOWED_KEYS = new Set([
   'analytics_ga4_api_secret',
   'analytics_google_ads',
   'analytics_google_ads_conv_label',
+  'analytics_gtm',
 ]);
 const SECRET_KEY = /(token|secret|api_key|api_token|auth_token)/i;
 

@@ -40,6 +40,7 @@ export async function GET() {
       'analytics_ga4_api_secret',
       'analytics_google_ads',
       'analytics_google_ads_conv_label',
+      'analytics_gtm',
     ]));
 
     const rows = await db.systemSetting.findMany({

@@ -660,6 +660,7 @@ function GamesPanel({ providerId }: { providerId: string }) {
   const [previewSample, setPreviewSample] = useState<Array<{ gameUid: string; displayName: string }> | null>(null);
   const [openManual, setOpenManual] = useState(false);
   const [testGame, setTestGame] = useState<GameRow | null>(null);
+  const [editGame, setEditGame] = useState<GameRow | null>(null);
 
   // Debounce the search field so we are not hammering the API
   // on every keystroke.
@@ -903,6 +904,7 @@ function GamesPanel({ providerId }: { providerId: string }) {
                   <p className="font-mono text-[10px] text-ink-lo">{g.gameUid}{g.category ? ` . ${g.category}` : ''}</p>
                 </div>
                 <Chip tone={g.status === 'active' ? 'ok' : g.status === 'maintenance' ? 'warn' : 'neutral'}>{g.status}</Chip>
+                <Button size="sm" variant="ghost" leftIcon={<Save className="h-3.5 w-3.5" />} onClick={() => setEditGame(g)}>Edit</Button>
                 <Button size="sm" variant="ghost" leftIcon={<Zap className="h-3.5 w-3.5" />} onClick={() => setTestGame(g)}>Test</Button>
               </li>
             ))}
@@ -922,6 +924,14 @@ function GamesPanel({ providerId }: { providerId: string }) {
         onOpenChange={(v) => { if (!v) setTestGame(null); }}
         providerId={providerId}
         game={testGame}
+      />
+      <EditGameModal
+        open={!!editGame}
+        onOpenChange={(v) => { if (!v) setEditGame(null); }}
+        providerId={providerId}
+        brands={brands}
+        game={editGame}
+        onDone={(msg) => { setEditGame(null); setInfo(msg); loadGames(); }}
       />
     </Card>
   );
@@ -1069,6 +1079,98 @@ interface TestLaunchResult {
   timestamp?: { timestampSent: number | null; serverNow: number | null; ageMs: number | null; offsetMs: number };
   urls?: { callbackUrl: string; returnUrl: string; baseUrl: string; baseUrlSource: string; isHttps: boolean; isPrivateHost: boolean };
   maskedResponse: unknown;
+}
+
+function EditGameModal({ open, onOpenChange, providerId, brands, game, onDone }: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  providerId: string;
+  brands: BrandRow[];
+  game: GameRow | null;
+  onDone: (msg: string) => void;
+}) {
+  const [displayName, setDisplayName] = useState('');
+  const [category, setCategory] = useState<string>('slots');
+  const [imageUrl, setImageUrl] = useState('');
+  const [status, setStatus] = useState<'active' | 'maintenance' | 'hidden'>('active');
+  const [brandKey, setBrandKey] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open || !game) return;
+    setDisplayName(game.displayName);
+    setCategory(normalizeCategory(game.category ?? '') as string);
+    setImageUrl(game.imageUrl ?? '');
+    setStatus((game.status === 'maintenance' || game.status === 'hidden') ? game.status : 'active');
+    const currentBrand = brands.find((b) => b.id === game.brandId);
+    setBrandKey(currentBrand?.brandKey ?? '');
+    setErr(null);
+  }, [open, game, brands]);
+
+  const onSave = async () => {
+    if (!game) return;
+    if (!displayName.trim()) { setErr('Display name is required.'); return; }
+    setBusy(true); setErr(null);
+    try {
+      const body = {
+        displayName: displayName.trim(),
+        category,
+        imageUrl: imageUrl.trim(),
+        status,
+        brandKey: brandKey.trim(),
+      };
+      const r = await fetch(`/api/admin/providers/${providerId}/games/${game.id}`, {
+        method: 'PATCH', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok) { setErr(j?.message ?? j?.code ?? 'Save failed'); return; }
+      onDone(`Updated ${displayName.trim()}.`);
+    } catch (e) { setErr(e instanceof Error ? e.message : 'Save failed'); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <Modal
+      open={open}
+      onOpenChange={onOpenChange}
+      title={game ? `Edit ${game.displayName}` : 'Edit game'}
+      description="Updates the row in ExternalGame. Provider catalog re-sync would overwrite manual edits with the upstream values; manual rows are stable."
+      footer={
+        <>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button variant="gold" loading={busy} leftIcon={<Save className="h-3.5 w-3.5" />} onClick={onSave}>Save changes</Button>
+        </>
+      }
+    >
+      {err ? <p className="mb-3 text-sm text-signal-danger">{err}</p> : null}
+
+      <div className="space-y-3">
+        <p className="text-[11px] text-ink-mid">Game UID: <span className="font-mono text-ink-hi">{game?.gameUid ?? '-'}</span></p>
+        <Field label="Display name"><input value={displayName} onChange={(e) => setDisplayName(e.target.value)} className={inputCls} /></Field>
+        <Field label="Category">
+          <select value={category} onChange={(e) => setCategory(e.target.value)} className={inputCls}>
+            {CATEGORY_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </Field>
+        <Field label="Image URL"><input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} className={inputCls} placeholder="https://..." /></Field>
+        <Field label="Status">
+          <select value={status} onChange={(e) => setStatus(e.target.value as 'active' | 'maintenance' | 'hidden')} className={inputCls}>
+            <option value="active">active</option>
+            <option value="maintenance">maintenance</option>
+            <option value="hidden">hidden</option>
+          </select>
+        </Field>
+        <Field label="Brand (optional)">
+          <select value={brandKey} onChange={(e) => setBrandKey(e.target.value)} className={inputCls}>
+            <option value="">- unassigned -</option>
+            {brands.map((b) => <option key={b.id} value={b.brandKey}>{b.displayName} ({b.brandKey})</option>)}
+          </select>
+        </Field>
+      </div>
+    </Modal>
+  );
 }
 
 function TestLaunchModal({ open, onOpenChange, providerId, game }: {

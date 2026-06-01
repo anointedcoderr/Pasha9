@@ -19,6 +19,7 @@ const PUBLIC_KEYS = [
   'analytics_ga4',
   'analytics_google_ads',
   'analytics_google_ads_conv_label',
+  'analytics_gtm',
 ];
 
 export async function GET() {
@@ -33,5 +34,6 @@ export async function GET() {
     ga4: map.get('analytics_ga4') || null,
     googleAds: map.get('analytics_google_ads') || null,
     googleAdsConversionLabel: map.get('analytics_google_ads_conv_label') || null,
+    gtm: map.get('analytics_gtm') || null,
   });
 }

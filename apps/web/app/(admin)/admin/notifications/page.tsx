@@ -322,6 +322,9 @@ export default function AdminNotificationsPage() {
                   <FormField label="analytics_google_ads_conv_label" hint="Optional conversion label (after the / in the AW snippet).">
                     <Input value={value('analytics_google_ads_conv_label')} onChange={(e) => setValue('analytics_google_ads_conv_label', e.target.value)} placeholder="abcDEF1234" />
                   </FormField>
+                  <FormField label="analytics_gtm" hint="Google Tag Manager container id (GTM-XXXX). Renders gtm.js on every page when set.">
+                    <Input value={value('analytics_gtm')} onChange={(e) => setValue('analytics_gtm', e.target.value)} placeholder="GTM-XXXXXXX" />
+                  </FormField>
                 </div>
               </Card>
 
