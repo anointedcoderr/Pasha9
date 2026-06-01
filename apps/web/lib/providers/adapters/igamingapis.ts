@@ -278,12 +278,19 @@ export const igamingapisAdapter: ProviderAdapter = {
     if (!creds.apiSecret) throw new ProviderAdapterError('CREDENTIALS_MISSING', 'API secret is not configured.');
     if (!creds.apiBase) throw new ProviderAdapterError('CREDENTIALS_MISSING', 'API base URL is not configured.');
 
+    // Timestamp is generated fresh on every invocation, AFTER all
+    // input validation, IMMEDIATELY before payload assembly. Never
+    // pulled from a cache, a request body, a DB column, or the
+    // browser; always Date.now() in milliseconds (NOT seconds).
+    const offsetMs = creds.launchTimestampOffsetMs ?? 0;
+    const timestampSent = Date.now() + offsetMs;
+
     const payload: LaunchPayload = {
       user_id: opts.memberAccount,
       balance: Math.max(0, Math.floor(opts.balance * 100) / 100),
       game_uid: opts.gameUid,
       token: opts.token,
-      timestamp: Math.floor(Date.now() / 1000),
+      timestamp: timestampSent,
       return: opts.returnUrl,
       callback: opts.callbackUrl,
     };
@@ -295,6 +302,20 @@ export const igamingapisAdapter: ProviderAdapter = {
 
     const base = creds.apiBase.replace(/\/+$/, '');
     const url = `${base}?payload=${encodeURIComponent(encrypted)}&token=${encodeURIComponent(creds.apiKey)}`;
+
+    // Local sanity check immediately before we send. Anything beyond
+    // a few seconds means clock drift on this VPS (NTP not running)
+    // or someone is feeding a stale timestamp into the helper -
+    // fail loudly instead of letting the provider reject the payload.
+    const serverNow = Date.now();
+    const ageMs = serverNow - timestampSent;
+    if (Math.abs(ageMs) > 5_000) {
+      throw new ProviderAdapterError(
+        'CREDENTIALS_INVALID',
+        `Local clock drift detected. timestampSent=${timestampSent} serverNow=${serverNow} ageMs=${ageMs} offsetMs=${offsetMs}. Check NTP / ntpd / chrony on the VPS, or zero out launchTimestampOffsetMs.`,
+        400,
+      );
+    }
 
     const { status, bodyText, bodyJson } = await timedFetch(url, {
       method: 'GET',
@@ -308,8 +329,25 @@ export const igamingapisAdapter: ProviderAdapter = {
     const rawMessage = pickString(bodyJson, 'msg') || pickString(bodyJson, 'message');
     const data = (bodyJson && typeof bodyJson === 'object' ? (bodyJson as { data?: unknown }).data : null) ?? null;
     const launchUrl = pickString(data, 'url') || pickString(bodyJson, 'url');
+    // iGamingAPIs returns { code: 0 } on success and { code: 1 } on
+    // any rejection. A non-zero code still sometimes carries a
+    // data.url pointing at the provider's /error page; treat that
+    // as a rejection and surface the diagnostics so the operator
+    // can see exactly which field failed (payload expired, invalid
+    // user_id, etc.).
+    if (rawCode > 0) {
+      throw new ProviderAdapterError(
+        'UPSTREAM_BAD_RESPONSE',
+        `Provider rejected launch. code=${rawCode} msg=${rawMessage || 'n/a'}. Diagnostics: timestampSent=${timestampSent} serverNow=${serverNow} ageMs=${ageMs} offsetMs=${offsetMs}.`,
+        400,
+        launchUrl ? `Provider URL: ${launchUrl}` : undefined,
+      );
+    }
     if (!launchUrl) {
-      throw new ProviderAdapterError('UPSTREAM_BAD_RESPONSE', `Launch URL missing in provider response. code=${rawCode} msg=${rawMessage || 'n/a'}`);
+      throw new ProviderAdapterError(
+        'UPSTREAM_BAD_RESPONSE',
+        `Launch URL missing in provider response. code=${rawCode} msg=${rawMessage || 'n/a'}. Diagnostics: timestampSent=${timestampSent} serverNow=${serverNow} ageMs=${ageMs} offsetMs=${offsetMs}.`,
+      );
     }
     return {
       result: {
@@ -319,7 +357,19 @@ export const igamingapisAdapter: ProviderAdapter = {
         rawMessage,
         raw: bodyJson,
       } satisfies LaunchResult,
-      rawRequest: { url: '<masked>', method: 'GET', payload },
+      // rawRequest is what gets logged + surfaced to admin. It does
+      // NOT include the encrypted blob, the API token, or the API
+      // secret. timestampSent / serverNow / ageMs / offsetMs are the
+      // signals the operator actually needs to debug expiry errors.
+      rawRequest: {
+        url: '<masked>',
+        method: 'GET',
+        payload: { ...payload, token: '<masked>' },
+        timestampSent,
+        serverNow,
+        ageMs,
+        offsetMs,
+      },
       rawResponse: bodyJson ?? bodyText,
     };
   },

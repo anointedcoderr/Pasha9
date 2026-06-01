@@ -32,6 +32,7 @@ const patchSchema = z.object({
   language: z.string().trim().toLowerCase().min(2).max(8).optional(),
   callbackResponseMode: z.enum(['updated_balance', 'net_loss_amount']).optional(),
   launchMode: z.enum(['redirect', 'iframe']).optional(),
+  launchTimestampOffsetMs: z.coerce.number().int().min(-86_400_000).max(86_400_000).optional(),
   status: z.enum(['active', 'maintenance']).optional(),
 });
 
@@ -70,6 +71,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       ...(parsed.data.language !== undefined ? { language: parsed.data.language } : {}),
       ...(parsed.data.callbackResponseMode !== undefined ? { callbackResponseMode: parsed.data.callbackResponseMode } : {}),
       ...(parsed.data.launchMode !== undefined ? { launchMode: parsed.data.launchMode } : {}),
+      ...(parsed.data.launchTimestampOffsetMs !== undefined ? { launchTimestampOffsetMs: parsed.data.launchTimestampOffsetMs } : {}),
       ...(parsed.data.status !== undefined ? { status: parsed.data.status } : {}),
       ...enc,
     };
@@ -111,6 +113,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         language: updated.language,
         callbackResponseMode: updated.callbackResponseMode,
         launchMode: updated.launchMode,
+        launchTimestampOffsetMs: updated.launchTimestampOffsetMs,
         status: updated.status,
         lastSyncAt: updated.lastSyncAt,
         lastHealthCheckAt: updated.lastHealthCheckAt,

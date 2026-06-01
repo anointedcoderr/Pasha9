@@ -38,6 +38,7 @@ interface ProviderRow {
   language: string | null;
   callbackResponseMode: string | null;
   launchMode: string | null;
+  launchTimestampOffsetMs: number;
   status: 'active' | 'maintenance';
   lastSyncAt: string | null;
   lastHealthCheckAt: string | null;
@@ -166,6 +167,7 @@ function SetupPanel({ provider, onSaved, onError }: { provider: ProviderRow; onS
   const [language, setLanguage] = useState(provider.language ?? 'bn');
   const [callbackResponseMode, setCallbackResponseMode] = useState<'updated_balance' | 'net_loss_amount'>((provider.callbackResponseMode as 'updated_balance' | 'net_loss_amount') ?? 'updated_balance');
   const [launchMode, setLaunchMode] = useState<'redirect' | 'iframe'>((provider.launchMode as 'redirect' | 'iframe') ?? 'redirect');
+  const [launchTimestampOffsetMs, setLaunchTimestampOffsetMs] = useState(String(provider.launchTimestampOffsetMs ?? 0));
   const [busy, setBusy] = useState(false);
 
   const onSave = async () => {
@@ -177,6 +179,7 @@ function SetupPanel({ provider, onSaved, onError }: { provider: ProviderRow; onS
         ipWhitelist: ipWhitelist || undefined,
         clockSkewSeconds: Number(clockSkewSeconds) || 30,
         currencyCode, language, callbackResponseMode, launchMode,
+        launchTimestampOffsetMs: Number(launchTimestampOffsetMs) || 0,
       };
       if (apiKey.trim()) body.apiKey = apiKey.trim();
       if (apiSecret.trim()) body.apiSecret = apiSecret.trim();
@@ -246,7 +249,11 @@ function SetupPanel({ provider, onSaved, onError }: { provider: ProviderRow; onS
             <option value="redirect">Redirect</option><option value="iframe">Iframe</option>
           </select>
         </Field>
+        <Field label="Launch timestamp offset (ms)">
+          <input type="number" step={1} value={launchTimestampOffsetMs} onChange={(e) => setLaunchTimestampOffsetMs(e.target.value)} className={inputCls} placeholder="0" />
+        </Field>
       </div>
+      <p className="mt-2 text-[10px] text-ink-lo">Default 0. Used only if the provider rejects payloads with clock-drift errors. The launch timestamp itself is always generated fresh as Date.now() inside the adapter.</p>
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <Button variant="gold" loading={busy} leftIcon={<Save className="h-3.5 w-3.5" />} onClick={onSave}>Save</Button>
         <Button variant="neon" loading={busy} leftIcon={<ShieldCheck className="h-3.5 w-3.5" />} onClick={onTestEncryption}>Test encryption</Button>
@@ -672,6 +679,7 @@ interface TestLaunchResult {
   balanceUsed: number;
   testUser: { id: string; username: string; phone: string; email: string | null };
   providerMemberAccount: string;
+  timestamp?: { timestampSent: number | null; serverNow: number | null; ageMs: number | null; offsetMs: number };
   maskedResponse: unknown;
 }
 
@@ -751,6 +759,7 @@ function TestLaunchModal({ open, onOpenChange, providerId, game }: {
             <p className="mt-1 font-mono text-base font-extrabold text-gold-200">{result.providerMemberAccount}</p>
             <p className="mt-1 text-[10px] text-ink-lo">Internal user: <span className="font-mono text-ink-mid">{result.testUser.username}</span> ({result.testUser.id})</p>
           </Card>
+          {result.timestamp ? <TimestampPanel diag={result.timestamp} /> : null}
           <div className="grid grid-cols-2 gap-2 text-xs text-ink-mid md:grid-cols-4">
             <Totals label="Mode" value={result.mode} />
             <Totals label="Code" value={String(result.rawCode ?? '-')} />
@@ -890,6 +899,30 @@ function TransactionsPanel({ providerId }: { providerId: string }) {
           </tbody>
         </table>
       </div>
+    </Card>
+  );
+}
+
+function TimestampPanel({ diag }: { diag: { timestampSent: number | null; serverNow: number | null; ageMs: number | null; offsetMs: number } }) {
+  const sent = diag.timestampSent;
+  const now = diag.serverNow;
+  const age = diag.ageMs;
+  const offset = diag.offsetMs;
+  const clockSuspect = sent != null && (sent < 1_600_000_000_000 || sent > 4_000_000_000_000);
+  const drift = age != null && Math.abs(age) > 1_500;
+  const tone = clockSuspect || drift ? 'border-rose-400/60' : 'border-neon/30';
+  const fmtTs = (n: number | null) => n == null ? '-' : `${n} (${new Date(n).toISOString()})`;
+  return (
+    <Card padding="sm" className={cn('border-l-4', tone)}>
+      <p className="text-[10px] font-bold uppercase tracking-wider text-ink-lo">Launch timestamp</p>
+      <div className="mt-1 grid grid-cols-1 gap-1 text-[11px] text-ink-mid md:grid-cols-2">
+        <div><span className="text-ink-lo">timestampSent:</span> <span className="font-mono text-ink-hi">{fmtTs(sent)}</span></div>
+        <div><span className="text-ink-lo">serverNow:</span> <span className="font-mono text-ink-hi">{fmtTs(now)}</span></div>
+        <div><span className="text-ink-lo">ageMs:</span> <span className="font-mono text-ink-hi">{age == null ? '-' : age}</span></div>
+        <div><span className="text-ink-lo">offsetMs:</span> <span className="font-mono text-ink-hi">{offset}</span></div>
+      </div>
+      {clockSuspect ? <p className="mt-2 text-[11px] font-semibold text-rose-200">VPS clock is far outside the expected range. Check NTP / chrony immediately.</p> : null}
+      {drift && !clockSuspect ? <p className="mt-2 text-[11px] font-semibold text-rose-200">Local ageMs &gt; 1500ms - investigate request slowdown.</p> : null}
     </Card>
   );
 }

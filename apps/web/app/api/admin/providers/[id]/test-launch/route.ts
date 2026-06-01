@@ -112,6 +112,18 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         language: creds.language,
       });
 
+      // Pull timestamp diagnostics out of the rawRequest the adapter
+      // assembled. These are NOT secrets - they let the operator
+      // confirm the launch payload carried a fresh ms-precision
+      // timestamp.
+      const r = rawRequest as { timestampSent?: number; serverNow?: number; ageMs?: number; offsetMs?: number };
+      const diagnostics = {
+        timestampSent: r.timestampSent ?? null,
+        serverNow: r.serverNow ?? null,
+        ageMs: r.ageMs ?? null,
+        offsetMs: r.offsetMs ?? creds.launchTimestampOffsetMs,
+      };
+
       await logRequest({
         providerId: creds.id,
         direction: 'outbound',
@@ -119,7 +131,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         method: 'GET',
         status: 200,
         requestPayload: rawRequest,
-        responsePayload: { ok: true, mode: result.mode, gameUid: parsed.data.gameUid },
+        responsePayload: { ok: true, mode: result.mode, gameUid: parsed.data.gameUid, ...diagnostics },
       });
       await recordActivity({
         actorId: claims.sub,
@@ -132,6 +144,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           testUserId: user.id,
           memberAccount,
           mode: result.mode,
+          ...diagnostics,
         },
       });
 
@@ -148,6 +161,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           email: user.email,
         },
         providerMemberAccount: memberAccount,
+        timestamp: diagnostics,
         maskedResponse: maskPayload(rawResponse),
       });
     } catch (err) {

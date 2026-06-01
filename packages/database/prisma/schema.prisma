@@ -587,6 +587,11 @@ model GameProvider {
   language        String?        @default("bn")
   callbackResponseMode String?   @default("updated_balance") // updated_balance | net_loss_amount
   launchMode      String?        @default("redirect") // redirect | iframe
+  // Optional millisecond offset added to Date.now() inside the
+  // launch payload. Default 0. Used only by operators chasing a
+  // confirmed clock-drift on the upstream side; the timestamp
+  // itself is always generated fresh per launch.
+  launchTimestampOffsetMs Int    @default(0)
   lastSyncAt      DateTime?
   lastHealthCheckAt DateTime?
   lastHealthCheckOk Boolean?

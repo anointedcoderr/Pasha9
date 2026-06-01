@@ -42,6 +42,7 @@ function rowToView(row: {
   language: string | null;
   callbackResponseMode: string | null;
   launchMode: string | null;
+  launchTimestampOffsetMs: number;
   secretEncoding: string | null;
   status: 'active' | 'maintenance';
   lastSyncAt: Date | null;
@@ -66,6 +67,7 @@ function rowToView(row: {
     language: row.language,
     callbackResponseMode: row.callbackResponseMode,
     launchMode: row.launchMode,
+    launchTimestampOffsetMs: row.launchTimestampOffsetMs,
     secretEncoding: row.secretEncoding,
     status: row.status,
     lastSyncAt: row.lastSyncAt,
@@ -103,6 +105,7 @@ const createSchema = z.object({
   language: z.string().trim().toLowerCase().min(2).max(8).default('bn'),
   callbackResponseMode: z.enum(['updated_balance', 'net_loss_amount']).default('updated_balance'),
   launchMode: z.enum(['redirect', 'iframe']).default('redirect'),
+  launchTimestampOffsetMs: z.coerce.number().int().min(-86_400_000).max(86_400_000).default(0),
 });
 
 export async function POST(req: NextRequest) {
@@ -144,6 +147,7 @@ export async function POST(req: NextRequest) {
         language: parsed.data.language,
         callbackResponseMode: parsed.data.callbackResponseMode,
         launchMode: parsed.data.launchMode,
+        launchTimestampOffsetMs: parsed.data.launchTimestampOffsetMs,
         status: 'maintenance', // operator must activate after Test connection + Sync
       },
     });

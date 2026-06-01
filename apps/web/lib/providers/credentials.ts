@@ -32,6 +32,12 @@ export interface ProviderCreds {
   language: string;
   callbackResponseMode: 'updated_balance' | 'net_loss_amount';
   launchMode: 'redirect' | 'iframe';
+  /**
+   * Optional offset in milliseconds added to Date.now() when the
+   * adapter builds the launch timestamp. Defaults to 0. The base
+   * timestamp is always generated fresh inside adapter.launch.
+   */
+  launchTimestampOffsetMs: number;
   active: boolean;
 }
 
@@ -82,6 +88,7 @@ export async function loadProviderCreds(providerKey: string): Promise<ProviderCr
     language: row.language ?? 'bn',
     callbackResponseMode: asResponseMode(row.callbackResponseMode),
     launchMode: asLaunchMode(row.launchMode),
+    launchTimestampOffsetMs: row.launchTimestampOffsetMs ?? 0,
     active: row.status === 'active',
   };
 }
