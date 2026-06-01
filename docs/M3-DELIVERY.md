@@ -163,6 +163,40 @@ admin surface exist; only operator credentials are missing.
 
 See `LAUNCH-CHECKLIST.md`.
 
+## Requested admin controls (status table)
+
+Every item the client asked for, with its live state and the exact
+admin location. Anything marked Provider-ready / Awaiting credentials
+is structure only and depends on the operator pasting real values.
+
+| Requested control | Status | Admin location | Notes |
+| --- | --- | --- | --- |
+| Game providers | Live (JILI) | /admin/providers . /admin/providers/[id] | Add / edit / enable / disable; AES-256-GCM at rest. |
+| Game catalog import + manual add | Live | /admin/providers/[id] -> Games tab | Bulk CSV via `pnpm import:jili`, manual add, bulk JSON. |
+| Game edit (name, category, image, status, brand) | Live | /admin/providers/[id] -> Games tab -> Edit | PATCH /api/admin/providers/[id]/games/[gameId]; category normalized. |
+| Bulk game status (active / maintenance / hidden) | Live | /admin/providers/[id] -> Games tab -> bulk toolbar | PATCH /games/bulk-status. |
+| Game categories | Live | Edit modal -> Category select | Five canonical buckets: slots / flash / table / fishing / crash. |
+| Game images | Live | Edit modal -> Image URL | Fallback art when image fails. |
+| Banners + homepage content | Live | /admin/banners . /admin/homepage . /admin/popups . /admin/promo-text . /admin/ambassador | M1 admin pages; bilingual fields. |
+| Website settings | Live | /admin/settings . /admin/website | Site name, support email/phone, currency, language, etc. |
+| Payment gateway credentials | Provider-ready | /admin/payments | Adapter registry; tile reads Awaiting credentials until real merchant credentials saved. |
+| Payout provider credentials | Provider-ready | /admin/payouts | Same pattern as payments. |
+| SMS / OTP credentials | Provider-ready | /admin/notifications -> SMS tab | Active key `manual` until an adapter is picked. |
+| WhatsApp API credentials | Configured (when set) | /admin/whatsapp | NEW page; AES-256-GCM secrets; tile reads Configured, never Live. |
+| Facebook Pixel ID + CAPI token | Live (when set) | /admin/notifications -> Tracking tab (also via sidebar "Tracking") | Public ID renders client-side; CAPI token server-only. |
+| GA4 Measurement ID + API secret | Live (when set) | /admin/notifications -> Tracking tab | Measurement ID renders client-side; API secret server-only. |
+| Google Tag Manager (GTM-XXXX) | Live (when set) | /admin/notifications -> Tracking tab | gtm.js injected on every page when ID is configured. |
+| TikTok Pixel ID + Events API token | Live (when set) | /admin/notifications -> Tracking tab | Public ID client-side; access token server-only. |
+| Google Ads Conversion ID + label | Live (when set) | /admin/notifications -> Tracking tab | Both IDs are public; render via gtag config. |
+| Enable / disable third-party integrations | Live | /admin/integrations -> Launch Readiness panel + per-page toggles | Status chips computed live from real signals. |
+| Affiliate verification | Live | /admin/affiliate . /admin/affiliate/tiers | Approve, reject, suspend; commission tiers CRUD. |
+| Lotto verification | Live | /admin/lotto | Draws + ticket settings; M1 admin page. |
+| Reports verification | Live | /admin/reports + /admin/providers/[id] -> Reports + /admin/native-games -> Rounds | CSV export on provider reports. |
+| Provider transaction rollback | Live (super_admin only) | /admin/providers/[id] -> Transactions -> Rollback | Idempotent; ALREADY_ROLLED_BACK on retry. |
+| Launch readiness panel | Live | /admin/integrations top of page | Tile state computed from snapshot; nothing hardcoded. |
+| PWA install | Live | /manifest.webmanifest | Add to Home Screen works today; signed APK is operator-side. |
+| Signed Android APK | Not generated | n/a | docs/APK-BUILD.md is the recipe; needs Android SDK + JDK 17 on a developer laptop / CI. |
+
 ## Final M3 admin additions (delivered in the final sprint)
 
 - **Tracking pixels.** Google Tag Manager (`analytics_gtm`) joined

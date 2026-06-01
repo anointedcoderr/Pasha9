@@ -49,6 +49,7 @@ import {
   Plug,
   Gamepad2,
   Wallet as WalletIcon,
+  MessageCircle,
 } from 'lucide-react';
 import { Logo } from '@/components/site/Logo';
 import { ROUTES } from '@/lib/constants/routes';
@@ -124,6 +125,8 @@ const GROUPS = [
       { key: 'reports', href: ROUTES.admin.reports, icon: BarChart3 },
       { key: 'marketing', href: ROUTES.admin.marketing, icon: Sparkles },
       { key: 'notifications', href: ROUTES.admin.notifications, icon: Bell },
+      { key: 'tracking', href: ROUTES.admin.tracking, icon: BarChart3 },
+      { key: 'whatsapp', href: ROUTES.admin.whatsapp, icon: MessageCircle },
     ],
   },
   {

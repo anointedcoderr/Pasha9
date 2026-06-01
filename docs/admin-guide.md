@@ -266,6 +266,27 @@ Home Screen before a signed APK exists. Icons live at
 Play Store release. See `docs/APK-BUILD.md` for the signed-APK
 recipe.
 
+### Navigation map
+
+Every admin control the client asked for, by sidebar entry:
+
+| Sidebar group | Entry | Where it goes |
+| --- | --- | --- |
+| Operations | Payments | `/admin/payments` (provider credentials) |
+| Operations | Payouts | `/admin/payouts` (payout provider credentials) |
+| Content & Media | Website | `/admin/website` |
+| Content & Media | Banners | `/admin/banners` |
+| Content & Media | Homepage | `/admin/homepage` |
+| Lotto & Rewards | Lotto | `/admin/lotto` |
+| Lotto & Rewards | Native Games | `/admin/native-games` |
+| Games | Providers | `/admin/providers` |
+| Reports & Marketing | Reports | `/admin/reports` |
+| Reports & Marketing | Notifications | `/admin/notifications` (SMS tab landing) |
+| Reports & Marketing | **Tracking** | `/admin/notifications?tab=tracking` (deep-link to the Tracking tab) |
+| Reports & Marketing | **WhatsApp** | `/admin/whatsapp` |
+| System | Integrations | `/admin/integrations` (Launch Readiness top) |
+| System | Settings | `/admin/settings` |
+
 ### M3 status vocabulary
 
 The admin uses these chip labels everywhere. Stick to them.

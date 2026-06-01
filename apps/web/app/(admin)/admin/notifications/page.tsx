@@ -78,6 +78,15 @@ function statusTone(s: string): 'ok' | 'warn' | 'neutral' {
 
 export default function AdminNotificationsPage() {
   const [tab, setTab] = useState<'sms' | 'tracking' | 'history'>('sms');
+
+  // Deep-linking: /admin/notifications?tab=tracking should land on
+  // the Tracking tab without a flash. Runs once on mount; SSR
+  // always renders the 'sms' default so there is no hydration
+  // mismatch.
+  useEffect(() => {
+    const v = new URLSearchParams(window.location.search).get('tab');
+    if (v === 'tracking' || v === 'history') setTab(v);
+  }, []);
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
