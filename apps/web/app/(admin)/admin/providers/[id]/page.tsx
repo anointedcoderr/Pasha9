@@ -16,7 +16,8 @@ import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
 import { Switch } from '@/components/ui/Switch';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/Tabs';
-import { Plug, RefreshCw, ArrowLeft, AlertCircle, ShieldCheck, Zap, Save, Download, Plus, Copy, Check, AlertTriangle, Activity, PlayCircle } from 'lucide-react';
+import { Plug, RefreshCw, ArrowLeft, AlertCircle, ShieldCheck, Zap, Save, Download, Plus, Copy, Check, AlertTriangle, Activity, PlayCircle, Search, ImageOff } from 'lucide-react';
+import { CATEGORY_OPTIONS, normalizeCategory } from '@/lib/providers/category';
 import { Modal } from '@/components/ui/Modal';
 import { cn } from '@/lib/utils/cn';
 
@@ -282,11 +283,12 @@ interface HealthPayload {
     baseUrlSource: string;
     callbackSecretSet: boolean;
     ipWhitelistConfigured: boolean;
+    gameCatalogImported: boolean;
     callbackReceived: boolean;
     transactionProcessed: boolean;
     duplicateProtectionTested: boolean;
   };
-  counts: { callbacks: number; accepted: number; duplicates: number };
+  counts: { callbacks: number; accepted: number; duplicates: number; games: number; activeGames: number };
   lastCallback: { receivedAt: string; ip: string | null; callbackKeyValid: boolean | null; error: string | null } | null;
 }
 
@@ -349,6 +351,7 @@ function HealthPanel({ providerId }: { providerId: string }) {
               <CheckRow label="Callback URL is public host" ok={data.checks.baseUrlIsPublic} />
               <CheckRow label="Callback secret set" ok={data.checks.callbackSecretSet} />
               <CheckRow label="IP whitelist configured" ok={data.checks.ipWhitelistConfigured} optional />
+              <CheckRow label={`Game catalog imported (${data.counts.games}${data.counts.activeGames ? ` . ${data.counts.activeGames} active` : ''})`} ok={data.checks.gameCatalogImported} />
               <CheckRow label={`Callback received (${data.counts.callbacks})`} ok={data.checks.callbackReceived} />
               <CheckRow label={`Transaction processed (${data.counts.accepted})`} ok={data.checks.transactionProcessed} />
               <CheckRow label={`Duplicate protection tested (${data.counts.duplicates})`} ok={data.checks.duplicateProtectionTested} optional />
@@ -628,19 +631,33 @@ function ManualBrandModal({ open, onOpenChange, providerId, onCreated }: { open:
   );
 }
 
-interface GameRow { id: string; gameUid: string; brandId: string | null; displayName: string; category: string | null; status: string; lastSyncAt: string | null }
+interface GameRow { id: string; gameUid: string; brandId: string | null; displayName: string; category: string | null; imageUrl: string | null; status: string; lastSyncAt: string | null }
+interface GamesCounts { total: number; filtered: number; byStatus: Record<string, number>; byCategory: Record<string, number> }
 
 function GamesPanel({ providerId }: { providerId: string }) {
   const [brands, setBrands] = useState<BrandRow[]>([]);
   const [games, setGames] = useState<GameRow[]>([]);
+  const [counts, setCounts] = useState<GamesCounts | null>(null);
   const [brandKey, setBrandKey] = useState('');
   const [filterBrandId, setFilterBrandId] = useState<string>('');
+  const [filterCategory, setFilterCategory] = useState<string>('');
+  const [filterStatus, setFilterStatus] = useState<string>('');
+  const [q, setQ] = useState('');
+  const [debouncedQ, setDebouncedQ] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [info, setInfo] = useState<string | null>(null);
   const [err, setErr] = useState<{ msg: string; snippet?: string } | null>(null);
   const [previewSample, setPreviewSample] = useState<Array<{ gameUid: string; displayName: string }> | null>(null);
   const [openManual, setOpenManual] = useState(false);
   const [testGame, setTestGame] = useState<GameRow | null>(null);
+
+  // Debounce the search field so we are not hammering the API
+  // on every keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQ(q.trim()), 250);
+    return () => clearTimeout(t);
+  }, [q]);
 
   const loadBrands = useCallback(async () => {
     const r = await fetch(`/api/admin/providers/${providerId}/brands`, { cache: 'no-store' });
@@ -650,12 +667,46 @@ function GamesPanel({ providerId }: { providerId: string }) {
     if (!brandKey && list.length === 1) setBrandKey(list[0].brandKey);
   }, [providerId, brandKey]);
   const loadGames = useCallback(async () => {
-    const r = await fetch(`/api/admin/providers/${providerId}/games?${filterBrandId ? `brandId=${filterBrandId}&` : ''}limit=200`, { cache: 'no-store' });
+    const params = new URLSearchParams();
+    if (filterBrandId) params.set('brandId', filterBrandId);
+    if (filterCategory) params.set('category', filterCategory);
+    if (filterStatus) params.set('status', filterStatus);
+    if (debouncedQ) params.set('q', debouncedQ);
+    params.set('limit', '300');
+    const r = await fetch(`/api/admin/providers/${providerId}/games?${params.toString()}`, { cache: 'no-store' });
     const j = await r.json().catch(() => null);
     setGames(Array.isArray(j?.games) ? (j.games as GameRow[]) : []);
-  }, [providerId, filterBrandId]);
+    setCounts((j?.counts as GamesCounts) ?? null);
+    setSelectedIds(new Set());
+  }, [providerId, filterBrandId, filterCategory, filterStatus, debouncedQ]);
   useEffect(() => { loadBrands(); }, [loadBrands]);
   useEffect(() => { loadGames(); }, [loadGames]);
+
+  const toggleSel = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const selectAll = () => setSelectedIds(new Set(games.map((g) => g.id)));
+  const clearSel = () => setSelectedIds(new Set());
+
+  const onBulkStatus = async (status: 'active' | 'maintenance' | 'hidden') => {
+    if (selectedIds.size === 0) return;
+    setBusy(true); setErr(null); setInfo(null);
+    try {
+      const r = await fetch(`/api/admin/providers/${providerId}/games/bulk-status`, {
+        method: 'PATCH', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(selectedIds), status }),
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok) { setErr({ msg: j?.message ?? j?.code ?? 'Bulk update failed' }); return; }
+      setInfo(`Bulk status -> ${status}: updated ${j?.updated ?? 0}, skipped ${j?.skipped ?? 0}.`);
+      loadGames();
+    } catch (e) { setErr({ msg: e instanceof Error ? e.message : 'Bulk update failed' }); }
+    finally { setBusy(false); }
+  };
 
   const onPreview = async () => {
     if (!brandKey.trim()) { setErr({ msg: 'Enter a brand_id first.' }); return; }
@@ -741,32 +792,113 @@ function GamesPanel({ providerId }: { providerId: string }) {
         </Card>
       ) : null}
 
-      <div className="mb-2 flex items-center gap-2">
-        <label className="text-[10px] font-bold uppercase tracking-wider text-ink-lo">Filter</label>
-        <select value={filterBrandId} onChange={(e) => setFilterBrandId(e.target.value)} className={cn(inputCls, 'w-auto')}>
-          <option value="">All brands ({games.length})</option>
-          {brands.map((b) => <option key={b.id} value={b.id}>{b.displayName} ({b.gameCount})</option>)}
-        </select>
+      {counts ? (
+        <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-4">
+          <Totals label="Total" value={String(counts.total)} />
+          <Totals label="Active" value={String(counts.byStatus.active ?? 0)} positive={(counts.byStatus.active ?? 0) > 0} />
+          <Totals label="Maintenance" value={String(counts.byStatus.maintenance ?? 0)} />
+          <Totals label="Hidden" value={String(counts.byStatus.hidden ?? 0)} />
+        </div>
+      ) : null}
+
+      {counts && Object.keys(counts.byCategory).length > 0 ? (
+        <div className="mb-3 flex flex-wrap gap-2 text-[11px]">
+          {Object.entries(counts.byCategory).sort((a, b) => b[1] - a[1]).map(([cat, n]) => (
+            <button
+              key={cat}
+              type="button"
+              onClick={() => setFilterCategory(filterCategory === cat ? '' : cat)}
+              className={cn(
+                'rounded-full border px-3 py-1 font-semibold transition',
+                filterCategory === cat ? 'border-gold-400/60 bg-gold-400/20 text-gold-100' : 'border-neon/15 bg-base-panel/40 text-ink-mid hover:border-neon/40'
+              )}
+            >
+              {cat} ({n})
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="mb-3 flex flex-wrap items-end gap-2">
+        <div className="relative grow">
+          <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-lo">Search</label>
+          <Search className="absolute left-3 top-9 h-3.5 w-3.5 text-ink-lo" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} className={cn(inputCls, 'mt-1 pl-9')} placeholder="Name or gameUid" />
+        </div>
+        <div>
+          <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-lo">Brand</label>
+          <select value={filterBrandId} onChange={(e) => setFilterBrandId(e.target.value)} className={cn(inputCls, 'mt-1 w-auto')}>
+            <option value="">All brands</option>
+            {brands.map((b) => <option key={b.id} value={b.id}>{b.displayName} ({b.gameCount})</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-lo">Category</label>
+          <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className={cn(inputCls, 'mt-1 w-auto')}>
+            <option value="">All categories</option>
+            {CATEGORY_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-lo">Status</label>
+          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className={cn(inputCls, 'mt-1 w-auto')}>
+            <option value="">All</option>
+            <option value="active">active</option>
+            <option value="maintenance">maintenance</option>
+            <option value="hidden">hidden</option>
+          </select>
+        </div>
       </div>
 
+      {selectedIds.size > 0 ? (
+        <Card padding="sm" className="mb-3 border-l-4 border-gold-400/60">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+            <span className="font-semibold text-gold-200">{selectedIds.size} selected</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="sm" variant="neon" loading={busy} onClick={() => onBulkStatus('active')}>Mark active</Button>
+              <Button size="sm" variant="ghost" loading={busy} onClick={() => onBulkStatus('maintenance')}>Mark maintenance</Button>
+              <Button size="sm" variant="ghost" loading={busy} onClick={() => onBulkStatus('hidden')}>Mark hidden</Button>
+              <Button size="sm" variant="ghost" onClick={clearSel}>Clear</Button>
+            </div>
+          </div>
+        </Card>
+      ) : null}
+
       {games.length === 0 ? (
-        <p className="text-sm text-ink-mid">No games yet. Preview a brand_id then Sync games, or use Add Manual Game.</p>
+        <p className="text-sm text-ink-mid">No games yet. Use Add Manual Game, run the JILI importer on the VPS, or Preview + Sync from a brand.</p>
       ) : (
-        <ul className="grid gap-1 md:grid-cols-2">
-          {games.map((g) => (
-            <li key={g.id} className="flex items-center justify-between rounded-lg border border-neon/10 bg-base-panel/40 px-3 py-2 text-sm">
-              <div className="min-w-0">
-                <span className="font-semibold text-ink-hi">{g.displayName}</span>
-                <span className="ml-2 font-mono text-[10px] text-ink-lo">{g.gameUid}</span>
-                {g.category ? <span className="ml-2 text-[10px] text-ink-lo">. {g.category}</span> : null}
-              </div>
-              <div className="ml-2 flex shrink-0 items-center gap-2">
+        <>
+          <div className="mb-2 flex items-center gap-2 text-[10px] text-ink-lo">
+            <input
+              type="checkbox"
+              checked={games.length > 0 && selectedIds.size === games.length}
+              onChange={(e) => (e.target.checked ? selectAll() : clearSel())}
+              className="h-3.5 w-3.5 rounded border-neon/30 bg-base-panel"
+              aria-label="Select all"
+            />
+            <span>Showing {games.length}{counts ? ` of ${counts.total}` : ''}</span>
+          </div>
+          <ul className="grid gap-1 md:grid-cols-2">
+            {games.map((g) => (
+              <li key={g.id} className={cn('flex items-center gap-2 rounded-lg border bg-base-panel/40 px-3 py-2 text-sm', selectedIds.has(g.id) ? 'border-gold-400/60' : 'border-neon/10')}>
+                <input
+                  type="checkbox"
+                  checked={selectedIds.has(g.id)}
+                  onChange={() => toggleSel(g.id)}
+                  className="h-3.5 w-3.5 shrink-0 rounded border-neon/30 bg-base-panel"
+                  aria-label={`Select ${g.displayName}`}
+                />
+                <GameThumb game={g} />
+                <div className="min-w-0 grow">
+                  <p className="truncate font-semibold text-ink-hi">{g.displayName}</p>
+                  <p className="font-mono text-[10px] text-ink-lo">{g.gameUid}{g.category ? ` . ${g.category}` : ''}</p>
+                </div>
                 <Chip tone={g.status === 'active' ? 'ok' : g.status === 'maintenance' ? 'warn' : 'neutral'}>{g.status}</Chip>
                 <Button size="sm" variant="ghost" leftIcon={<Zap className="h-3.5 w-3.5" />} onClick={() => setTestGame(g)}>Test</Button>
-              </div>
-            </li>
-          ))}
-        </ul>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
 
       <ManualGameModal
@@ -797,7 +929,7 @@ function ManualGameModal({ open, onOpenChange, providerId, brands, onDone }: {
   const [brandKey, setBrandKey] = useState('');
   const [gameUid, setGameUid] = useState('');
   const [displayName, setDisplayName] = useState('');
-  const [category, setCategory] = useState('slot');
+  const [category, setCategory] = useState<string>('slots');
   const [imageUrl, setImageUrl] = useState('');
   const [status, setStatus] = useState<'active' | 'maintenance'>('active');
   const [format, setFormat] = useState<'csv' | 'json'>('csv');
@@ -808,7 +940,7 @@ function ManualGameModal({ open, onOpenChange, providerId, brands, onDone }: {
   useEffect(() => {
     if (!open) {
       setMode('single'); setBrandKey(''); setGameUid(''); setDisplayName('');
-      setCategory('slot'); setImageUrl(''); setStatus('active');
+      setCategory('slots'); setImageUrl(''); setStatus('active');
       setFormat('csv'); setBulkData(''); setErr(null); setBusy(false);
     } else if (!brandKey && brands.length === 1) {
       setBrandKey(brands[0].brandKey);
@@ -880,7 +1012,11 @@ function ManualGameModal({ open, onOpenChange, providerId, brands, onDone }: {
           <>
             <Field label="Game UID"><input value={gameUid} onChange={(e) => setGameUid(e.target.value)} className={inputCls} placeholder="784512" /></Field>
             <Field label="Display name"><input value={displayName} onChange={(e) => setDisplayName(e.target.value)} className={inputCls} placeholder="Fortune Gems" /></Field>
-            <Field label="Category (optional)"><input value={category} onChange={(e) => setCategory(e.target.value)} className={inputCls} placeholder="slot" /></Field>
+            <Field label="Category">
+              <select value={category} onChange={(e) => setCategory(e.target.value)} className={inputCls}>
+                {CATEGORY_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </Field>
             <Field label="Image URL (optional)"><input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} className={inputCls} placeholder="https://..." /></Field>
             <Field label="Status">
               <select value={status} onChange={(e) => setStatus(e.target.value as 'active' | 'maintenance')} className={inputCls}>
@@ -1176,6 +1312,19 @@ function TimestampPanel({ diag }: { diag: { timestampSent: number | null; server
       {clockSuspect ? <p className="mt-2 text-[11px] font-semibold text-rose-200">VPS clock is far outside the expected range. Check NTP / chrony immediately.</p> : null}
       {drift && !clockSuspect ? <p className="mt-2 text-[11px] font-semibold text-rose-200">Local ageMs &gt; 1500ms - investigate request slowdown.</p> : null}
     </Card>
+  );
+}
+
+function GameThumb({ game }: { game: GameRow }) {
+  const [failed, setFailed] = useState(false);
+  if (game.imageUrl && !failed) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={game.imageUrl} alt={game.displayName} onError={() => setFailed(true)} className="h-10 w-10 shrink-0 rounded-md border border-neon/15 bg-base-panel object-cover" />;
+  }
+  return (
+    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-neon/15 bg-gradient-to-br from-base-deep to-base-panel">
+      <ImageOff className="h-4 w-4 text-ink-lo" />
+    </div>
   );
 }
 

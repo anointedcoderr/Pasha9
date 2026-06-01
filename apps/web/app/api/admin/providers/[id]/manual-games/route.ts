@@ -21,6 +21,7 @@ import { withAuth, ensurePermission, recordActivity } from '@/lib/auth/guard';
 import { getCurrentSession } from '@/lib/auth/rbac';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 import { db } from '@/lib/db/client';
+import { isNumericGameUid, normalizeCategory } from '@/lib/providers/category';
 
 // ----- Schemas -----
 
@@ -82,18 +83,25 @@ function normalizeStatus(raw: unknown): GameInput['status'] {
   return 'active';
 }
 
-function rowToGame(row: Record<string, unknown>, idx: number): { ok: true; value: GameInput } | { ok: false; error: string } {
-  const gameUid = String(row.gameUid ?? row.game_uid ?? row.id ?? '').trim();
-  const displayName = String(row.displayName ?? row.display_name ?? row.name ?? '').trim();
-  if (!gameUid) return { ok: false, error: `Row ${idx + 1}: missing gameUid` };
-  if (!displayName) return { ok: false, error: `Row ${idx + 1}: missing displayName for gameUid ${gameUid}` };
+interface SkippedRow { line: number; reason: string; displayName: string; gameUid: string }
+
+function rowToGame(row: Record<string, unknown>, idx: number): { ok: true; value: GameInput } | { ok: false; skip: SkippedRow } {
+  const lineNo = idx + 2; // header line + 1-indexed body
+  const gameUid = String(row.gameUid ?? row.game_uid ?? row['Game ID'] ?? row.id ?? '').trim();
+  const displayName = String(row.displayName ?? row.display_name ?? row['Game Name'] ?? row.name ?? '').trim();
+  if (!isNumericGameUid(gameUid)) {
+    return { ok: false, skip: { line: lineNo, reason: 'non-numeric gameUid', displayName: displayName || '-', gameUid: gameUid || '(empty)' } };
+  }
+  if (!displayName) {
+    return { ok: false, skip: { line: lineNo, reason: 'missing displayName', displayName: '-', gameUid } };
+  }
   return {
     ok: true,
     value: {
       gameUid,
       displayName,
-      category: row.category ? String(row.category).trim() : undefined,
-      imageUrl: row.imageUrl ? String(row.imageUrl).trim() : row.image_url ? String(row.image_url).trim() : undefined,
+      category: row.category ? String(row.category).trim() : row.Category ? String(row.Category).trim() : undefined,
+      imageUrl: row.imageUrl ? String(row.imageUrl).trim() : row.image_url ? String(row.image_url).trim() : row['Image URL'] ? String(row['Image URL']).trim() : undefined,
       status: normalizeStatus(row.status),
     },
   };
@@ -127,7 +135,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
 
     let inputs: GameInput[] = [];
-    const rowErrors: string[] = [];
+    const skipped: SkippedRow[] = [];
 
     if (isBulk) {
       const parsed = bulkSchema.safeParse(body);
@@ -147,14 +155,18 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       rows.forEach((row, i) => {
         const r = rowToGame(row, i);
         if (r.ok) inputs.push(r.value);
-        else rowErrors.push(r.error);
+        else skipped.push(r.skip);
       });
       if (inputs.length === 0) {
-        return jsonError(400, 'BULK_EMPTY', `Parsed 0 valid rows. ${rowErrors.slice(0, 3).join('; ')}`);
+        const head = skipped.slice(0, 3).map((s) => `line ${s.line}: ${s.reason}`).join('; ');
+        return jsonError(400, 'BULK_EMPTY', `Parsed 0 valid rows. ${head}`);
       }
     } else {
       const parsed = singleSchema.safeParse(body);
       if (!parsed.success) return jsonError(400, 'VALIDATION', undefined, { issues: parsed.error.issues });
+      if (!isNumericGameUid(parsed.data.gameUid)) {
+        return jsonError(400, 'VALIDATION', `gameUid must be numeric (got "${parsed.data.gameUid}").`);
+      }
       inputs = [{
         gameUid: parsed.data.gameUid,
         displayName: parsed.data.displayName,
@@ -178,7 +190,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           where: { id: existing.id },
           data: {
             displayName: g.displayName,
-            category: g.category ?? null,
+            category: normalizeCategory(g.category),
             imageUrl: g.imageUrl ?? null,
             status: g.status ?? 'active',
             brandId: brandId ?? undefined, // null brandId means "do not overwrite"
@@ -194,7 +206,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
             brandId,
             gameUid: g.gameUid,
             displayName: g.displayName,
-            category: g.category ?? null,
+            category: normalizeCategory(g.category),
             imageUrl: g.imageUrl ?? null,
             status: g.status ?? 'active',
             rawMeta: meta,
@@ -210,7 +222,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       actorRole: claims.role,
       action: 'PROVIDER_GAME_MANUAL',
       target: provider.id,
-      meta: { brandKey: brandKeyRaw || null, count: inputs.length, inserted, updated, mode: isBulk ? 'bulk' : 'single' },
+      meta: { brandKey: brandKeyRaw || null, count: inputs.length, inserted, updated, skipped: skipped.length, mode: isBulk ? 'bulk' : 'single' },
     });
 
     return jsonOk({
@@ -218,7 +230,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       count: inputs.length,
       inserted,
       updated,
-      rowErrors: rowErrors.slice(0, 20),
+      skipped: skipped.length,
+      skippedRows: skipped.slice(0, 20).map((s) => `line ${s.line}: ${s.displayName} (gameUid="${s.gameUid}") - ${s.reason}`),
     }, isBulk ? 200 : (inserted > 0 ? 201 : 200));
   });
 }

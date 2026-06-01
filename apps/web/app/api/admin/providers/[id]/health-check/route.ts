@@ -35,7 +35,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     const origin = new URL(req.url).origin;
     const urls = resolveProviderUrls(creds, origin);
 
-    const [callbackCount, lastCallback, txAccepted, txDuplicate] = await Promise.all([
+    const [callbackCount, lastCallback, txAccepted, txDuplicate, gamesCount, activeGames] = await Promise.all([
       db.providerCallbackLog.count({ where: { providerId: creds.id } }),
       db.providerCallbackLog.findFirst({
         where: { providerId: creds.id },
@@ -44,6 +44,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       }),
       db.providerTransaction.count({ where: { providerId: creds.id, status: 'accepted' } }),
       db.providerTransaction.count({ where: { providerId: creds.id, status: 'duplicate' } }),
+      db.externalGame.count({ where: { providerId: creds.id } }),
+      db.externalGame.count({ where: { providerId: creds.id, status: 'active' } }),
     ]);
 
     const checks = {
@@ -52,6 +54,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       baseUrlSource: urls.baseUrl.source,
       callbackSecretSet: creds.callbackSecret.length > 0,
       ipWhitelistConfigured: creds.ipWhitelist.length > 0,
+      gameCatalogImported: gamesCount > 0,
       callbackReceived: callbackCount > 0,
       transactionProcessed: txAccepted > 0,
       duplicateProtectionTested: txDuplicate > 0,
@@ -77,6 +80,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         callbacks: callbackCount,
         accepted: txAccepted,
         duplicates: txDuplicate,
+        games: gamesCount,
+        activeGames,
       },
       lastCallback,
     });

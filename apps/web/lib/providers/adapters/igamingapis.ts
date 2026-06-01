@@ -38,6 +38,7 @@ import {
 } from '../types';
 import type { ProviderCreds } from '../credentials';
 import { aesEcbEncryptBase64 } from '../crypto';
+import { normalizeCategory } from '../category';
 
 const ADAPTER_KEY = 'igamingapis';
 const LABEL = 'iGamingAPIs / SoftAPI (JILI)';
@@ -245,7 +246,7 @@ export const igamingapisAdapter: ProviderAdapter = {
       const result: ProviderGame[] = list.map((row) => ({
         gameUid: pickString(row, 'game_uid') || pickString(row, 'game_id') || pickString(row, 'id'),
         displayName: pickString(row, 'name') || pickString(row, 'game_name') || pickString(row, 'title') || 'Provider Game',
-        category: pickString(row, 'category') || pickString(row, 'type') || undefined,
+        category: normalizeCategory(pickString(row, 'category') || pickString(row, 'type') || ''),
         imageUrl: pickString(row, 'image') || pickString(row, 'image_url') || pickString(row, 'thumbnail') || undefined,
         brandKey,
         raw: row,

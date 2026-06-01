@@ -17,6 +17,7 @@ import { loadProviderCredsById } from '@/lib/providers/credentials';
 import { getAdapter } from '@/lib/providers/registry';
 import { logRequest } from '@/lib/providers/log';
 import { ProviderAdapterError } from '@/lib/providers/types';
+import { normalizeCategory } from '@/lib/providers/category';
 
 const schema = z.object({ brandKey: z.string().trim().min(1).max(120) });
 
@@ -56,7 +57,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
             data: {
               brandId: brand.id,
               displayName: g.displayName,
-              category: g.category ?? null,
+              category: normalizeCategory(g.category),
               imageUrl: g.imageUrl ?? null,
               rawMeta: (g.raw ?? null) as Prisma.InputJsonValue,
               lastSyncAt: new Date(),
@@ -70,7 +71,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
               brandId: brand.id,
               gameUid: g.gameUid,
               displayName: g.displayName,
-              category: g.category ?? null,
+              category: normalizeCategory(g.category),
               imageUrl: g.imageUrl ?? null,
               rawMeta: (g.raw ?? null) as Prisma.InputJsonValue,
               lastSyncAt: new Date(),

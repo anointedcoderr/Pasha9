@@ -38,7 +38,22 @@ interface Props {
 }
 
 interface ProviderSummary { providerKey: string; name: string; lastSyncAt: string | null }
-interface ProviderGameRow { gameUid: string; displayName: string; category: string | null; imageUrl: string | null }
+interface ProviderGameRow { gameUid: string; displayName: string; category: string | null; imageUrl: string | null; brandKey?: string | null; brandName?: string | null }
+
+// Map normalized provider category to the closest hero-art code so
+// failed images fall back to art that matches the game's nature.
+const CATEGORY_TO_ART: Record<string, CategoryCode> = {
+  slots: 'slots',
+  flash: 'liveCasino',
+  table: 'tableGames',
+  fishing: 'fishing',
+  crash: 'crash',
+};
+
+function artFor(category: string | null | undefined): CategoryCode {
+  if (!category) return 'liveCasino';
+  return CATEGORY_TO_ART[category.toLowerCase()] ?? 'liveCasino';
+}
 
 export function ProviderGamesSection({ showAdminLink = false }: Props) {
   const { lang } = useLang();
@@ -47,6 +62,16 @@ export function ProviderGamesSection({ showAdminLink = false }: Props) {
   const [loaded, setLoaded] = useState(false);
   const [launching, setLaunching] = useState<string | null>(null);
   const [launchError, setLaunchError] = useState<string | null>(null);
+  const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
+
+  const markImageFailed = (key: string) => {
+    setFailedImages((prev) => {
+      if (prev.has(key)) return prev;
+      const next = new Set(prev);
+      next.add(key);
+      return next;
+    });
+  };
 
   useEffect(() => {
     let alive = true;
@@ -155,16 +180,26 @@ export function ProviderGamesSection({ showAdminLink = false }: Props) {
                 )}
               >
                 <div className="relative aspect-[4/3] overflow-hidden">
-                  {g.imageUrl ? (
+                  {g.imageUrl && !failedImages.has(key) ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={g.imageUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                    <img
+                      src={g.imageUrl}
+                      alt={g.displayName}
+                      onError={() => markImageFailed(key)}
+                      className="absolute inset-0 h-full w-full object-cover"
+                    />
                   ) : (
-                    <CategoryHeroArt code={'liveCasino' as CategoryCode} className="absolute inset-0 h-full w-full opacity-65" />
+                    <CategoryHeroArt code={artFor(g.category)} className="absolute inset-0 h-full w-full opacity-65" />
                   )}
                   <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-brand-ink/95 via-brand-ink/40 to-transparent" />
-                  <span className="absolute left-2 top-2 inline-flex h-5 items-center rounded-full border border-amber-300/60 bg-amber-200/15 px-1.5 text-[9px] font-bold uppercase tracking-wider text-amber-100 backdrop-blur">
+                  <span className="absolute left-2 top-2 inline-flex h-5 max-w-[60%] items-center truncate rounded-full border border-amber-300/60 bg-amber-200/15 px-1.5 text-[9px] font-bold uppercase tracking-wider text-amber-100 backdrop-blur">
                     {g.providerName}
                   </span>
+                  {g.brandKey ? (
+                    <span className="absolute right-2 top-2 inline-flex h-5 items-center rounded-full border border-yellow-300/60 bg-yellow-300/25 px-1.5 text-[9px] font-extrabold uppercase tracking-wider text-yellow-50 backdrop-blur">
+                      {g.brandName ?? g.brandKey}
+                    </span>
+                  ) : null}
                 </div>
                 <div className="relative -mt-7 px-3 pb-3 pt-0 text-left">
                   <h3 className="truncate text-sm font-extrabold leading-tight text-white">{g.displayName}</h3>
