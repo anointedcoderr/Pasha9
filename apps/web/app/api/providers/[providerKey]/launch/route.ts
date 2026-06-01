@@ -21,6 +21,7 @@ import { getAdapter } from '@/lib/providers/registry';
 import { logRequest } from '@/lib/providers/log';
 import { ProviderAdapterError } from '@/lib/providers/types';
 import { getOrCreateMemberAccount } from '@/lib/providers/player-account';
+import { resolveProviderUrls } from '@/lib/providers/site-url';
 
 const schema = z.object({ gameUid: z.string().trim().min(1).max(120) });
 
@@ -56,9 +57,18 @@ export async function POST(req: NextRequest, { params }: { params: { providerKey
     const wallet = await db.wallet.findUnique({ where: { userId: session.sub }, select: { balance: true } });
     const balance = wallet ? Number(wallet.balance) : 0;
 
+    // Resolve the public callback + return URLs. NEVER pass through
+    // a localhost origin to the provider - it cannot reach us. The
+    // resolver prefers GameProvider.publicBaseUrl, then env, then
+    // (last) the request origin; we hard-stop on a private host so
+    // production launches never silently leak the dev URL.
     const origin = new URL(req.url).origin;
-    const callbackUrl = `${origin}${creds.callbackPath || `/api/providers/${creds.providerKey}/callback`}?key=${encodeURIComponent(creds.callbackSecret)}`;
-    const returnUrl = `${origin}/games/provider/return?p=${encodeURIComponent(creds.providerKey)}`;
+    const urls = resolveProviderUrls(creds, origin);
+    if (urls.baseUrl.isPrivateHost || !urls.baseUrl.isHttps) {
+      return jsonError(503, 'PROVIDER_BASE_URL_INVALID', 'Provider public base URL is not a reachable HTTPS host. Set publicBaseUrl on the provider before going live.');
+    }
+    const callbackUrl = urls.callbackUrl;
+    const returnUrl = urls.returnUrl;
 
     // Resolve or allocate the numeric memberAccount the provider
     // requires. The internal cuid is NEVER sent upstream.

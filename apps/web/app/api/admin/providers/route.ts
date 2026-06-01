@@ -43,6 +43,7 @@ function rowToView(row: {
   callbackResponseMode: string | null;
   launchMode: string | null;
   launchTimestampOffsetMs: number;
+  publicBaseUrl: string | null;
   secretEncoding: string | null;
   status: 'active' | 'maintenance';
   lastSyncAt: Date | null;
@@ -68,6 +69,7 @@ function rowToView(row: {
     callbackResponseMode: row.callbackResponseMode,
     launchMode: row.launchMode,
     launchTimestampOffsetMs: row.launchTimestampOffsetMs,
+    publicBaseUrl: row.publicBaseUrl,
     secretEncoding: row.secretEncoding,
     status: row.status,
     lastSyncAt: row.lastSyncAt,
@@ -106,6 +108,7 @@ const createSchema = z.object({
   callbackResponseMode: z.enum(['updated_balance', 'net_loss_amount']).default('updated_balance'),
   launchMode: z.enum(['redirect', 'iframe']).default('redirect'),
   launchTimestampOffsetMs: z.coerce.number().int().min(-86_400_000).max(86_400_000).default(0),
+  publicBaseUrl: z.string().trim().url().max(400).optional().or(z.literal('')),
 });
 
 export async function POST(req: NextRequest) {
@@ -148,6 +151,7 @@ export async function POST(req: NextRequest) {
         callbackResponseMode: parsed.data.callbackResponseMode,
         launchMode: parsed.data.launchMode,
         launchTimestampOffsetMs: parsed.data.launchTimestampOffsetMs,
+        publicBaseUrl: parsed.data.publicBaseUrl || null,
         status: 'maintenance', // operator must activate after Test connection + Sync
       },
     });

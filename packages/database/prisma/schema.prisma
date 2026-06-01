@@ -592,6 +592,13 @@ model GameProvider {
   // confirmed clock-drift on the upstream side; the timestamp
   // itself is always generated fresh per launch.
   launchTimestampOffsetMs Int    @default(0)
+  // Public HTTPS base URL the provider must dial to reach our
+  // callback / player return endpoints. NULL = fall back to the
+  // PUBLIC_SITE_URL env var, then to the incoming request origin
+  // (which on a VPS dev session is localhost:3000 - which the
+  // provider cannot reach). Set this per-provider as soon as the
+  // production domain is final.
+  publicBaseUrl   String?
   lastSyncAt      DateTime?
   lastHealthCheckAt DateTime?
   lastHealthCheckOk Boolean?

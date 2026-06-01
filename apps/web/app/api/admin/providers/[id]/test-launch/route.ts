@@ -28,6 +28,7 @@ import { logRequest } from '@/lib/providers/log';
 import { maskPayload } from '@/lib/providers/mask';
 import { ProviderAdapterError } from '@/lib/providers/types';
 import { getOrCreateMemberAccount } from '@/lib/providers/player-account';
+import { resolveProviderUrls } from '@/lib/providers/site-url';
 
 const schema = z.object({
   gameUid: z.string().trim().min(1).max(120),
@@ -95,9 +96,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     // this stable forever for (providerId, userId).
     const memberAccount = await getOrCreateMemberAccount(creds.id, user.id);
 
+    // Same URL resolver as the public launch route; we surface the
+    // private-host / non-HTTPS verdict in the response so the
+    // operator can fix Setup before going live.
     const origin = new URL(req.url).origin;
-    const callbackUrl = `${origin}${creds.callbackPath || `/api/providers/${creds.providerKey}/callback`}?key=${encodeURIComponent(creds.callbackSecret)}`;
-    const returnUrl = `${origin}/games/provider/return?p=${encodeURIComponent(creds.providerKey)}`;
+    const urls = resolveProviderUrls(creds, origin);
+    const callbackUrl = urls.callbackUrl;
+    const returnUrl = urls.returnUrl;
 
     try {
       const { result, rawRequest, rawResponse } = await adapter.launch(creds, {
@@ -162,6 +167,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         },
         providerMemberAccount: memberAccount,
         timestamp: diagnostics,
+        urls: {
+          callbackUrl: urls.callbackUrlMasked,
+          returnUrl: urls.returnUrl,
+          baseUrl: urls.baseUrl.base,
+          baseUrlSource: urls.baseUrl.source,
+          isHttps: urls.baseUrl.isHttps,
+          isPrivateHost: urls.baseUrl.isPrivateHost,
+        },
         maskedResponse: maskPayload(rawResponse),
       });
     } catch (err) {

@@ -38,6 +38,13 @@ export interface ProviderCreds {
    * timestamp is always generated fresh inside adapter.launch.
    */
   launchTimestampOffsetMs: number;
+  /**
+   * Per-provider override of the public HTTPS base URL used to
+   * build the callback and player return URLs in the launch
+   * payload. NULL falls back to PUBLIC_SITE_URL env then request
+   * origin. Never include a path here - just the scheme + host.
+   */
+  publicBaseUrl: string | null;
   active: boolean;
 }
 
@@ -89,6 +96,7 @@ export async function loadProviderCreds(providerKey: string): Promise<ProviderCr
     callbackResponseMode: asResponseMode(row.callbackResponseMode),
     launchMode: asLaunchMode(row.launchMode),
     launchTimestampOffsetMs: row.launchTimestampOffsetMs ?? 0,
+    publicBaseUrl: row.publicBaseUrl ?? null,
     active: row.status === 'active',
   };
 }

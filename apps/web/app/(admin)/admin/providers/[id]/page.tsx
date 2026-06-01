@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
 import { Switch } from '@/components/ui/Switch';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/Tabs';
-import { Plug, RefreshCw, ArrowLeft, AlertCircle, ShieldCheck, Zap, Save, Download, Plus } from 'lucide-react';
+import { Plug, RefreshCw, ArrowLeft, AlertCircle, ShieldCheck, Zap, Save, Download, Plus, Copy, Check, AlertTriangle, Activity, PlayCircle } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { cn } from '@/lib/utils/cn';
 
@@ -39,6 +39,7 @@ interface ProviderRow {
   callbackResponseMode: string | null;
   launchMode: string | null;
   launchTimestampOffsetMs: number;
+  publicBaseUrl: string | null;
   status: 'active' | 'maintenance';
   lastSyncAt: string | null;
   lastHealthCheckAt: string | null;
@@ -168,6 +169,7 @@ function SetupPanel({ provider, onSaved, onError }: { provider: ProviderRow; onS
   const [callbackResponseMode, setCallbackResponseMode] = useState<'updated_balance' | 'net_loss_amount'>((provider.callbackResponseMode as 'updated_balance' | 'net_loss_amount') ?? 'updated_balance');
   const [launchMode, setLaunchMode] = useState<'redirect' | 'iframe'>((provider.launchMode as 'redirect' | 'iframe') ?? 'redirect');
   const [launchTimestampOffsetMs, setLaunchTimestampOffsetMs] = useState(String(provider.launchTimestampOffsetMs ?? 0));
+  const [publicBaseUrl, setPublicBaseUrl] = useState(provider.publicBaseUrl ?? '');
   const [busy, setBusy] = useState(false);
 
   const onSave = async () => {
@@ -180,6 +182,7 @@ function SetupPanel({ provider, onSaved, onError }: { provider: ProviderRow; onS
         clockSkewSeconds: Number(clockSkewSeconds) || 30,
         currencyCode, language, callbackResponseMode, launchMode,
         launchTimestampOffsetMs: Number(launchTimestampOffsetMs) || 0,
+        publicBaseUrl: publicBaseUrl.trim() || '',
       };
       if (apiKey.trim()) body.apiKey = apiKey.trim();
       if (apiSecret.trim()) body.apiSecret = apiSecret.trim();
@@ -252,14 +255,253 @@ function SetupPanel({ provider, onSaved, onError }: { provider: ProviderRow; onS
         <Field label="Launch timestamp offset (ms)">
           <input type="number" step={1} value={launchTimestampOffsetMs} onChange={(e) => setLaunchTimestampOffsetMs(e.target.value)} className={inputCls} placeholder="0" />
         </Field>
+        <Field label="Public base URL (HTTPS, no trailing slash)">
+          <input value={publicBaseUrl} onChange={(e) => setPublicBaseUrl(e.target.value)} className={inputCls} placeholder="https://pasha9.com" />
+        </Field>
       </div>
-      <p className="mt-2 text-[10px] text-ink-lo">Default 0. Used only if the provider rejects payloads with clock-drift errors. The launch timestamp itself is always generated fresh as Date.now() inside the adapter.</p>
+      <p className="mt-2 text-[10px] text-ink-lo">Public base URL overrides the request origin when building callback + return URLs sent to the provider. Required for production; localhost / private IPs will be refused by the public launch route.</p>
+      <p className="mt-1 text-[10px] text-ink-lo">Launch timestamp default 0. The timestamp itself is always generated fresh as Date.now() inside the adapter.</p>
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <Button variant="gold" loading={busy} leftIcon={<Save className="h-3.5 w-3.5" />} onClick={onSave}>Save</Button>
         <Button variant="neon" loading={busy} leftIcon={<ShieldCheck className="h-3.5 w-3.5" />} onClick={onTestEncryption}>Test encryption</Button>
         <Button variant="neon" loading={busy} leftIcon={<Zap className="h-3.5 w-3.5" />} onClick={onTestConnection}>Test connection</Button>
       </div>
+
+      <HealthPanel providerId={provider.id} />
     </Card>
+  );
+}
+
+interface HealthPayload {
+  ready: boolean;
+  providerActive: boolean;
+  urls: { baseUrl: string; baseUrlSource: 'provider_setting' | 'env' | 'request_origin'; callbackUrl: string; returnUrl: string };
+  checks: {
+    baseUrlIsHttps: boolean;
+    baseUrlIsPublic: boolean;
+    baseUrlSource: string;
+    callbackSecretSet: boolean;
+    ipWhitelistConfigured: boolean;
+    callbackReceived: boolean;
+    transactionProcessed: boolean;
+    duplicateProtectionTested: boolean;
+  };
+  counts: { callbacks: number; accepted: number; duplicates: number };
+  lastCallback: { receivedAt: string; ip: string | null; callbackKeyValid: boolean | null; error: string | null } | null;
+}
+
+function HealthPanel({ providerId }: { providerId: string }) {
+  const [data, setData] = useState<HealthPayload | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [openSim, setOpenSim] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await fetch(`/api/admin/providers/${providerId}/health-check`, { cache: 'no-store' });
+      const j = await r.json().catch(() => null);
+      setData(j as HealthPayload);
+    } finally { setLoading(false); }
+  }, [providerId]);
+  useEffect(() => { load(); }, [load]);
+
+  const copy = async (label: string, value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(label);
+      setTimeout(() => setCopied(null), 1500);
+    } catch { /* clipboard may be unavailable */ }
+  };
+
+  const urlSuspect = data && (!data.checks.baseUrlIsHttps || !data.checks.baseUrlIsPublic);
+
+  return (
+    <div className="mt-6 space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-semibold text-ink-hi inline-flex items-center gap-2"><Activity className="h-4 w-4 text-gold-300" /> Callback readiness</p>
+        <div className="flex gap-2">
+          <Button size="sm" variant="ghost" leftIcon={<RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />} onClick={load}>Reload</Button>
+          <Button size="sm" variant="neon" leftIcon={<PlayCircle className="h-3.5 w-3.5" />} onClick={() => setOpenSim(true)}>Simulate callback</Button>
+        </div>
+      </div>
+
+      {data ? (
+        <>
+          <Card padding="sm" className={cn('border-l-4', urlSuspect ? 'border-rose-400/60' : 'border-emerald-400/60')}>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-ink-lo">URLs sent to provider</p>
+            <div className="mt-2 space-y-2 text-xs">
+              <UrlRow label="Callback" value={data.urls.callbackUrl} suspect={urlSuspect} onCopy={() => copy('callback', data.urls.callbackUrl)} copied={copied === 'callback'} />
+              <UrlRow label="Return" value={data.urls.returnUrl} suspect={urlSuspect} onCopy={() => copy('return', data.urls.returnUrl)} copied={copied === 'return'} />
+              <p className="text-[10px] text-ink-lo">Source: <span className="font-mono">{data.urls.baseUrlSource}</span> . Base: <span className="font-mono">{data.urls.baseUrl}</span></p>
+            </div>
+            {urlSuspect ? (
+              <p className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-rose-200">
+                <AlertTriangle className="h-3.5 w-3.5" /> Base URL is not HTTPS or points at a private host. The provider cannot reach this URL. Set Public base URL above to your production domain.
+              </p>
+            ) : null}
+          </Card>
+
+          <Card padding="sm">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-ink-lo">Checklist</p>
+            <ul className="mt-2 grid gap-1 text-[12px] md:grid-cols-2">
+              <CheckRow label="Callback URL is HTTPS" ok={data.checks.baseUrlIsHttps} />
+              <CheckRow label="Callback URL is public host" ok={data.checks.baseUrlIsPublic} />
+              <CheckRow label="Callback secret set" ok={data.checks.callbackSecretSet} />
+              <CheckRow label="IP whitelist configured" ok={data.checks.ipWhitelistConfigured} optional />
+              <CheckRow label={`Callback received (${data.counts.callbacks})`} ok={data.checks.callbackReceived} />
+              <CheckRow label={`Transaction processed (${data.counts.accepted})`} ok={data.checks.transactionProcessed} />
+              <CheckRow label={`Duplicate protection tested (${data.counts.duplicates})`} ok={data.checks.duplicateProtectionTested} optional />
+              <CheckRow label={`Provider is Live`} ok={data.providerActive} optional />
+            </ul>
+            {data.lastCallback ? (
+              <p className="mt-2 text-[10px] text-ink-lo">
+                Last callback {new Date(data.lastCallback.receivedAt).toLocaleString()} from <span className="font-mono">{data.lastCallback.ip ?? '-'}</span>
+                {data.lastCallback.error ? <> . <span className="text-rose-300">{data.lastCallback.error}</span></> : null}
+              </p>
+            ) : <p className="mt-2 text-[10px] text-ink-lo">No callbacks logged yet. Run Simulate callback or wait for real provider traffic.</p>}
+          </Card>
+        </>
+      ) : <p className="text-sm text-ink-mid">{loading ? 'Loading checklist...' : 'No data.'}</p>}
+
+      <SimulateCallbackModal open={openSim} onOpenChange={setOpenSim} providerId={providerId} onDone={load} />
+    </div>
+  );
+}
+
+function UrlRow({ label, value, suspect, onCopy, copied }: { label: string; value: string; suspect: boolean | null | undefined; onCopy: () => void; copied: boolean }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-20 shrink-0 text-[10px] font-bold uppercase tracking-wider text-ink-lo">{label}</span>
+      <code className={cn('grow break-all rounded border px-2 py-1 font-mono text-[11px]', suspect ? 'border-rose-400/40 bg-rose-500/10 text-rose-100' : 'border-neon/15 bg-base-panel/60 text-ink-mid')}>{value}</code>
+      <Button size="sm" variant="ghost" leftIcon={copied ? <Check className="h-3.5 w-3.5 text-emerald-300" /> : <Copy className="h-3.5 w-3.5" />} onClick={onCopy}>{copied ? 'Copied' : 'Copy'}</Button>
+    </div>
+  );
+}
+
+function CheckRow({ label, ok, optional }: { label: string; ok: boolean; optional?: boolean }) {
+  const tone = ok ? 'text-emerald-300' : optional ? 'text-amber-300' : 'text-rose-300';
+  const Icon = ok ? Check : optional ? AlertTriangle : AlertCircle;
+  return (
+    <li className={cn('inline-flex items-center gap-2', tone)}>
+      <Icon className="h-3.5 w-3.5" />
+      <span>{label}</span>
+    </li>
+  );
+}
+
+interface SimulateResult {
+  gameRound: string;
+  memberAccount: string;
+  callbackBody: Record<string, unknown>;
+  callbackResponse: { status: number; body: unknown };
+  result: {
+    status: 'accepted' | 'duplicate' | 'rejected';
+    errorCode?: string;
+    providerTxId: string;
+    walletBefore: number;
+    walletAfter: number;
+    netResult: number;
+  };
+  testUser: { id: string; username: string };
+}
+
+function SimulateCallbackModal({ open, onOpenChange, providerId, onDone }: { open: boolean; onOpenChange: (v: boolean) => void; providerId: string; onDone: () => void }) {
+  const [gameUid, setGameUid] = useState('');
+  const [userQuery, setUserQuery] = useState('');
+  const [betAmount, setBetAmount] = useState('10');
+  const [winAmount, setWinAmount] = useState('0');
+  const [gameRound, setGameRound] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [result, setResult] = useState<SimulateResult | null>(null);
+
+  useEffect(() => {
+    if (!open) { setGameUid(''); setUserQuery(''); setBetAmount('10'); setWinAmount('0'); setGameRound(''); setErr(null); setResult(null); }
+  }, [open]);
+
+  const onRun = async () => {
+    setBusy(true); setErr(null); setResult(null);
+    try {
+      const body: Record<string, unknown> = {
+        gameUid: gameUid.trim(),
+        betAmount: Number(betAmount) || 0,
+        winAmount: Number(winAmount) || 0,
+      };
+      if (userQuery.trim()) body.userQuery = userQuery.trim();
+      if (gameRound.trim()) body.gameRound = gameRound.trim();
+      const r = await fetch(`/api/admin/providers/${providerId}/simulate-callback`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok) { setErr(j?.message ?? j?.code ?? 'Simulate failed'); return; }
+      setResult(j as SimulateResult);
+      // Auto-fill gameRound so the operator can immediately re-run to test the duplicate path.
+      if (j?.gameRound) setGameRound(j.gameRound);
+      onDone();
+    } catch (e) { setErr(e instanceof Error ? e.message : 'Simulate failed'); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <Modal
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Simulate provider callback"
+      description="Builds a callback body the provider would send and runs it through the live wallet pipeline. Idempotency, blocked users and mapping checks all apply."
+      footer={
+        <>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>Close</Button>
+          <Button variant="gold" loading={busy} leftIcon={<PlayCircle className="h-3.5 w-3.5" />} onClick={onRun}>Run simulation</Button>
+        </>
+      }
+    >
+      <Card padding="sm" className="mb-3 border-l-4 border-amber-400/60">
+        <p className="text-[11px] font-semibold text-ink-mid">
+          Simulation moves real money in the test user's wallet. Use a sandbox user or re-run with the same Game round value to exercise the duplicate-protection path without spending more.
+        </p>
+      </Card>
+
+      {err ? <p className="mb-3 text-sm text-signal-danger">{err}</p> : null}
+
+      <div className="grid gap-3 md:grid-cols-2">
+        <Field label="Game UID"><input value={gameUid} onChange={(e) => setGameUid(e.target.value)} className={inputCls} placeholder="784512" /></Field>
+        <Field label="Test user (id / username / phone / email)"><input value={userQuery} onChange={(e) => setUserQuery(e.target.value)} className={inputCls} placeholder="defaults to you" /></Field>
+        <Field label="Bet amount"><input type="number" min={0} step="0.01" value={betAmount} onChange={(e) => setBetAmount(e.target.value)} className={inputCls} /></Field>
+        <Field label="Win amount"><input type="number" min={0} step="0.01" value={winAmount} onChange={(e) => setWinAmount(e.target.value)} className={inputCls} /></Field>
+        <Field label="Game round (blank = new)">
+          <input value={gameRound} onChange={(e) => setGameRound(e.target.value)} className={inputCls} placeholder="auto" />
+        </Field>
+      </div>
+
+      {result ? (
+        <div className="mt-4 space-y-3">
+          <Card padding="sm" className={cn('border-l-4', result.result.status === 'accepted' ? 'border-emerald-400/60' : result.result.status === 'duplicate' ? 'border-amber-400/60' : 'border-rose-400/60')}>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-ink-lo">Wallet pipeline</p>
+            <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+              <Totals label="Status" value={result.result.status + (result.result.errorCode ? ` (${result.result.errorCode})` : '')} />
+              <Totals label="Round" value={result.gameRound} />
+              <Totals label="Member" value={result.memberAccount} />
+              <Totals label="Tester" value={result.testUser.username} />
+              <Totals label="Wallet before" value={fmt(result.result.walletBefore)} />
+              <Totals label="Wallet after" value={fmt(result.result.walletAfter)} positive={result.result.walletAfter >= result.result.walletBefore} />
+              <Totals label="Net" value={fmt(result.result.netResult)} positive={result.result.netResult >= 0} />
+              <Totals label="Provider tx" value={result.result.providerTxId} />
+            </div>
+          </Card>
+          <Card padding="sm">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-ink-lo">Callback body sent</p>
+            <pre className="mt-1 max-h-40 overflow-auto rounded border border-neon/10 bg-black/40 p-2 text-[10px] text-ink-mid">{JSON.stringify(result.callbackBody, null, 2)}</pre>
+          </Card>
+          <Card padding="sm">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-ink-lo">Callback response returned</p>
+            <pre className="mt-1 max-h-40 overflow-auto rounded border border-neon/10 bg-black/40 p-2 text-[10px] text-ink-mid">{JSON.stringify(result.callbackResponse, null, 2)}</pre>
+          </Card>
+          <p className="text-[11px] text-ink-mid">Tip: keep this modal open and click <strong>Run simulation</strong> again to re-send the same Game round - the status should flip to <strong>duplicate</strong> and the wallet should not move.</p>
+        </div>
+      ) : null}
+    </Modal>
   );
 }
 
@@ -680,6 +922,7 @@ interface TestLaunchResult {
   testUser: { id: string; username: string; phone: string; email: string | null };
   providerMemberAccount: string;
   timestamp?: { timestampSent: number | null; serverNow: number | null; ageMs: number | null; offsetMs: number };
+  urls?: { callbackUrl: string; returnUrl: string; baseUrl: string; baseUrlSource: string; isHttps: boolean; isPrivateHost: boolean };
   maskedResponse: unknown;
 }
 
@@ -759,6 +1002,15 @@ function TestLaunchModal({ open, onOpenChange, providerId, game }: {
             <p className="mt-1 font-mono text-base font-extrabold text-gold-200">{result.providerMemberAccount}</p>
             <p className="mt-1 text-[10px] text-ink-lo">Internal user: <span className="font-mono text-ink-mid">{result.testUser.username}</span> ({result.testUser.id})</p>
           </Card>
+          {result.urls ? (
+            <Card padding="sm" className={cn('border-l-4', !result.urls.isHttps || result.urls.isPrivateHost ? 'border-rose-400/60' : 'border-neon/30')}>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-ink-lo">Callback / return URLs the provider received</p>
+              <p className="mt-1 break-all font-mono text-[11px] text-ink-mid">Callback: {result.urls.callbackUrl}</p>
+              <p className="mt-1 break-all font-mono text-[11px] text-ink-mid">Return:   {result.urls.returnUrl}</p>
+              <p className="mt-1 text-[10px] text-ink-lo">source: {result.urls.baseUrlSource} . https: {String(result.urls.isHttps)} . private host: {String(result.urls.isPrivateHost)}</p>
+              {!result.urls.isHttps || result.urls.isPrivateHost ? <p className="mt-2 text-[11px] font-semibold text-rose-200">These URLs are NOT reachable by the provider in production. Set Public base URL in Setup before going live.</p> : null}
+            </Card>
+          ) : null}
           {result.timestamp ? <TimestampPanel diag={result.timestamp} /> : null}
           <div className="grid grid-cols-2 gap-2 text-xs text-ink-mid md:grid-cols-4">
             <Totals label="Mode" value={result.mode} />
