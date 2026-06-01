@@ -390,6 +390,8 @@ function GamesPanel({ providerId }: { providerId: string }) {
   const [info, setInfo] = useState<string | null>(null);
   const [err, setErr] = useState<{ msg: string; snippet?: string } | null>(null);
   const [previewSample, setPreviewSample] = useState<Array<{ gameUid: string; displayName: string }> | null>(null);
+  const [openManual, setOpenManual] = useState(false);
+  const [testGame, setTestGame] = useState<GameRow | null>(null);
 
   const loadBrands = useCallback(async () => {
     const r = await fetch(`/api/admin/providers/${providerId}/brands`, { cache: 'no-store' });
@@ -442,8 +444,19 @@ function GamesPanel({ providerId }: { providerId: string }) {
     <Card padding="lg">
       <CardHeader
         title="Games"
-        subtitle="Confirm with Preview before Sync. Synced rows below; filter by brand."
+        subtitle="Auto sync first. Manual import when the provider catalog is gated."
+        action={
+          <div className="flex gap-2">
+            <Button size="sm" variant="ghost" leftIcon={<Plus className="h-3.5 w-3.5" />} onClick={() => setOpenManual(true)}>Add Manual Game</Button>
+          </div>
+        }
       />
+
+      <Card padding="sm" className="mb-3 border-l-4 border-amber-400/60">
+        <p className="text-[11px] font-semibold text-ink-mid">
+          Use manual games only when the provider panel supplies confirmed game IDs. The provider stays at Maintenance until you flip it Live. Test launch is available per row to confirm the upstream accepts the gameUid before exposing it to players.
+        </p>
+      </Card>
 
       <div className="mb-3 flex flex-wrap items-end gap-2">
         <div className="grow">
@@ -488,19 +501,258 @@ function GamesPanel({ providerId }: { providerId: string }) {
       </div>
 
       {games.length === 0 ? (
-        <p className="text-sm text-ink-mid">No games yet. Preview a brand_id then Sync games.</p>
+        <p className="text-sm text-ink-mid">No games yet. Preview a brand_id then Sync games, or use Add Manual Game.</p>
       ) : (
         <ul className="grid gap-1 md:grid-cols-2">
           {games.map((g) => (
-            <li key={g.id} className="rounded-lg border border-neon/10 bg-base-panel/40 px-3 py-2 text-sm">
-              <span className="font-semibold text-ink-hi">{g.displayName}</span>
-              <span className="ml-2 font-mono text-[10px] text-ink-lo">{g.gameUid}</span>
-              {g.category ? <span className="ml-2 text-[10px] text-ink-lo">. {g.category}</span> : null}
+            <li key={g.id} className="flex items-center justify-between rounded-lg border border-neon/10 bg-base-panel/40 px-3 py-2 text-sm">
+              <div className="min-w-0">
+                <span className="font-semibold text-ink-hi">{g.displayName}</span>
+                <span className="ml-2 font-mono text-[10px] text-ink-lo">{g.gameUid}</span>
+                {g.category ? <span className="ml-2 text-[10px] text-ink-lo">. {g.category}</span> : null}
+              </div>
+              <div className="ml-2 flex shrink-0 items-center gap-2">
+                <Chip tone={g.status === 'active' ? 'ok' : g.status === 'maintenance' ? 'warn' : 'neutral'}>{g.status}</Chip>
+                <Button size="sm" variant="ghost" leftIcon={<Zap className="h-3.5 w-3.5" />} onClick={() => setTestGame(g)}>Test</Button>
+              </div>
             </li>
           ))}
         </ul>
       )}
+
+      <ManualGameModal
+        open={openManual}
+        onOpenChange={setOpenManual}
+        providerId={providerId}
+        brands={brands}
+        onDone={(msg) => { setOpenManual(false); setInfo(msg); loadGames(); }}
+      />
+      <TestLaunchModal
+        open={!!testGame}
+        onOpenChange={(v) => { if (!v) setTestGame(null); }}
+        providerId={providerId}
+        game={testGame}
+      />
     </Card>
+  );
+}
+
+function ManualGameModal({ open, onOpenChange, providerId, brands, onDone }: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  providerId: string;
+  brands: BrandRow[];
+  onDone: (msg: string) => void;
+}) {
+  const [mode, setMode] = useState<'single' | 'bulk'>('single');
+  const [brandKey, setBrandKey] = useState('');
+  const [gameUid, setGameUid] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [category, setCategory] = useState('slot');
+  const [imageUrl, setImageUrl] = useState('');
+  const [status, setStatus] = useState<'active' | 'maintenance'>('active');
+  const [format, setFormat] = useState<'csv' | 'json'>('csv');
+  const [bulkData, setBulkData] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      setMode('single'); setBrandKey(''); setGameUid(''); setDisplayName('');
+      setCategory('slot'); setImageUrl(''); setStatus('active');
+      setFormat('csv'); setBulkData(''); setErr(null); setBusy(false);
+    } else if (!brandKey && brands.length === 1) {
+      setBrandKey(brands[0].brandKey);
+    }
+  }, [open, brands, brandKey]);
+
+  const onSave = async () => {
+    setBusy(true); setErr(null);
+    try {
+      const body: Record<string, unknown> = {};
+      if (brandKey.trim()) body.brandKey = brandKey.trim();
+      if (mode === 'single') {
+        if (!gameUid.trim() || !displayName.trim()) { setErr('gameUid and displayName are required.'); return; }
+        body.gameUid = gameUid.trim();
+        body.displayName = displayName.trim();
+        if (category.trim()) body.category = category.trim();
+        if (imageUrl.trim()) body.imageUrl = imageUrl.trim();
+        body.status = status;
+      } else {
+        if (!bulkData.trim()) { setErr('Paste at least one row.'); return; }
+        body.format = format;
+        body.data = bulkData;
+      }
+      const res = await fetch(`/api/admin/providers/${providerId}/manual-games`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const j = await res.json().catch(() => null);
+      if (!res.ok) {
+        const issues = Array.isArray(j?.issues) ? j.issues.map((i: { path?: string[]; message?: string }) => `${(i.path ?? []).join('.')}: ${i.message}`).join('; ') : '';
+        setErr(j?.message ?? j?.code ?? `Save failed${issues ? ` (${issues})` : ''}`);
+        return;
+      }
+      const rowErrors = Array.isArray(j?.rowErrors) && j.rowErrors.length > 0 ? ` Skipped: ${j.rowErrors.length}.` : '';
+      onDone(`Manual import done. Inserted ${j?.inserted ?? 0}, updated ${j?.updated ?? 0}.${rowErrors}`);
+    } catch (e) { setErr(e instanceof Error ? e.message : 'Save failed'); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <Modal
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Add Manual Game"
+      description="Single entry or bulk import. Upserts on (provider, gameUid). Provider stays at Maintenance."
+      footer={
+        <>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button variant="gold" loading={busy} leftIcon={<Save className="h-3.5 w-3.5" />} onClick={onSave}>Save</Button>
+        </>
+      }
+    >
+      <div className="mb-3 inline-flex rounded-lg border border-neon/15 bg-base-panel p-1 text-xs">
+        <button type="button" onClick={() => setMode('single')} className={cn('rounded-md px-3 py-1.5 font-semibold transition', mode === 'single' ? 'bg-gold-400 text-base-deep' : 'text-ink-mid')}>Single</button>
+        <button type="button" onClick={() => setMode('bulk')} className={cn('rounded-md px-3 py-1.5 font-semibold transition', mode === 'bulk' ? 'bg-gold-400 text-base-deep' : 'text-ink-mid')}>Bulk import</button>
+      </div>
+
+      {err ? <p className="mb-3 text-sm text-signal-danger">{err}</p> : null}
+
+      <div className="space-y-3">
+        <Field label="Brand (optional)">
+          <select value={brandKey} onChange={(e) => setBrandKey(e.target.value)} className={inputCls}>
+            <option value="">- unassigned -</option>
+            {brands.map((b) => <option key={b.id} value={b.brandKey}>{b.displayName} ({b.brandKey})</option>)}
+          </select>
+        </Field>
+
+        {mode === 'single' ? (
+          <>
+            <Field label="Game UID"><input value={gameUid} onChange={(e) => setGameUid(e.target.value)} className={inputCls} placeholder="784512" /></Field>
+            <Field label="Display name"><input value={displayName} onChange={(e) => setDisplayName(e.target.value)} className={inputCls} placeholder="Fortune Gems" /></Field>
+            <Field label="Category (optional)"><input value={category} onChange={(e) => setCategory(e.target.value)} className={inputCls} placeholder="slot" /></Field>
+            <Field label="Image URL (optional)"><input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} className={inputCls} placeholder="https://..." /></Field>
+            <Field label="Status">
+              <select value={status} onChange={(e) => setStatus(e.target.value as 'active' | 'maintenance')} className={inputCls}>
+                <option value="active">active</option>
+                <option value="maintenance">maintenance</option>
+              </select>
+            </Field>
+          </>
+        ) : (
+          <>
+            <Field label="Format">
+              <div className="inline-flex rounded-lg border border-neon/15 bg-base-panel p-1 text-xs">
+                <button type="button" onClick={() => setFormat('csv')} className={cn('rounded-md px-3 py-1.5 font-semibold transition', format === 'csv' ? 'bg-gold-400 text-base-deep' : 'text-ink-mid')}>CSV</button>
+                <button type="button" onClick={() => setFormat('json')} className={cn('rounded-md px-3 py-1.5 font-semibold transition', format === 'json' ? 'bg-gold-400 text-base-deep' : 'text-ink-mid')}>JSON</button>
+              </div>
+            </Field>
+            <Field label={format === 'csv' ? 'CSV (first row = header)' : 'JSON (array of objects)'}>
+              <textarea
+                value={bulkData}
+                onChange={(e) => setBulkData(e.target.value)}
+                rows={10}
+                className={cn(inputCls, 'h-auto py-2 font-mono text-[11px]')}
+                placeholder={format === 'csv' ? 'gameUid,displayName,category,imageUrl\n784512,Fortune Gems,slot,\n784513,Money Coming,slot,' : '[\n  {"gameUid":"784512","displayName":"Fortune Gems","category":"slot"},\n  {"gameUid":"784513","displayName":"Money Coming","category":"slot"}\n]'}
+              />
+            </Field>
+          </>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+interface TestLaunchResult {
+  launchUrl: string;
+  mode: string;
+  rawCode?: number;
+  rawMessage?: string;
+  balanceUsed: number;
+  testUser: { id: string; username: string };
+  maskedResponse: unknown;
+}
+
+function TestLaunchModal({ open, onOpenChange, providerId, game }: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  providerId: string;
+  game: GameRow | null;
+}) {
+  const [userId, setUserId] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<{ msg: string; snippet?: string } | null>(null);
+  const [result, setResult] = useState<TestLaunchResult | null>(null);
+
+  useEffect(() => {
+    if (!open) { setUserId(''); setErr(null); setResult(null); setBusy(false); }
+  }, [open]);
+
+  const onRun = async () => {
+    if (!game) return;
+    setBusy(true); setErr(null); setResult(null);
+    try {
+      const body: Record<string, unknown> = { gameUid: game.gameUid };
+      if (userId.trim()) body.userId = userId.trim();
+      const res = await fetch(`/api/admin/providers/${providerId}/test-launch`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const j = await res.json().catch(() => null);
+      if (!res.ok) { setErr({ msg: j?.message ?? j?.code ?? 'Test failed', snippet: typeof j?.snippet === 'string' ? j.snippet : undefined }); return; }
+      setResult(j as TestLaunchResult);
+    } catch (e) { setErr({ msg: e instanceof Error ? e.message : 'Test failed' }); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <Modal
+      open={open}
+      onOpenChange={onOpenChange}
+      title={game ? `Test launch ${game.displayName}` : 'Test launch'}
+      description="Runs the encrypted launch payload through the provider. Token and secret stay on the server."
+      footer={
+        <>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>Close</Button>
+          <Button variant="gold" loading={busy} leftIcon={<Zap className="h-3.5 w-3.5" />} onClick={onRun}>Run test</Button>
+        </>
+      }
+    >
+      {err ? (
+        <div className="mb-3 rounded-lg border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">
+          <p className="font-semibold">{err.msg}</p>
+          {err.snippet ? <pre className="mt-2 max-h-24 overflow-auto rounded border border-rose-400/20 bg-black/40 p-2 text-[10px] text-rose-100/85">{err.snippet}</pre> : null}
+        </div>
+      ) : null}
+
+      <div className="space-y-3">
+        <p className="text-[11px] text-ink-mid">Game UID: <span className="font-mono text-ink-hi">{game?.gameUid ?? '-'}</span></p>
+        <Field label="Test user id (optional, defaults to you)">
+          <input value={userId} onChange={(e) => setUserId(e.target.value)} className={inputCls} placeholder="user cuid" />
+        </Field>
+      </div>
+
+      {result ? (
+        <div className="mt-4 space-y-3">
+          <Card padding="sm" className="border-l-4 border-emerald-400/60">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-ink-lo">Launch URL</p>
+            <p className="mt-1 break-all font-mono text-[11px] text-emerald-200">{result.launchUrl}</p>
+          </Card>
+          <div className="grid grid-cols-2 gap-2 text-xs text-ink-mid md:grid-cols-4">
+            <Totals label="Mode" value={result.mode} />
+            <Totals label="Code" value={String(result.rawCode ?? '-')} />
+            <Totals label="Balance used" value={fmt(result.balanceUsed)} />
+            <Totals label="Tester" value={result.testUser.username} />
+          </div>
+          {result.rawMessage ? <p className="text-xs text-ink-mid">Message: {result.rawMessage}</p> : null}
+          <Card padding="sm">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-ink-lo">Masked response</p>
+            <pre className="mt-1 max-h-48 overflow-auto rounded border border-neon/10 bg-black/40 p-2 text-[10px] text-ink-mid">{JSON.stringify(result.maskedResponse, null, 2)}</pre>
+          </Card>
+        </div>
+      ) : null}
+    </Modal>
   );
 }
 
