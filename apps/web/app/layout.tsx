@@ -60,6 +60,61 @@ const THEME_BOOTSTRAP_SCRIPT = `
 }catch(e){}})();
 `;
 
+// Defensive guard against browser translation extensions (Google
+// Translate, Edge, Safari, etc.) and content-script extensions that
+// move or replace DOM nodes inside React-owned trees. When those
+// engines reparent a text node, React's reconciler later calls
+// parent.removeChild(child) with the wrong parent and throws
+// 'Cannot read properties of null (reading removeChild)' or
+// 'NotFoundError: ... not a child of this node'.
+//
+// We patch the Node prototypes ONCE, BEFORE React loads, so React's
+// own DOM operations are routed through forgiving implementations.
+// We do NOT swallow unrelated errors: any operation where the
+// inputs are valid runs through the originals untouched.
+//
+// Patching Node.prototype is the smallest viable fix. Alternatives
+// like wrapping ReactDOM internals or upgrading to react-dom's
+// experimental error-recovery surface would require code changes
+// across the app and a riskier dependency bump.
+const DOM_GUARD_DEV_FLAG = process.env.NODE_ENV !== 'production';
+const DOM_GUARD_SCRIPT = `
+(function(){
+  if (typeof window === 'undefined' || typeof Node === 'undefined') return;
+  if (window.__PASHA9_DOM_GUARD_INSTALLED__) return;
+  window.__PASHA9_DOM_GUARD_INSTALLED__ = true;
+
+  var DEV = ${JSON.stringify(DOM_GUARD_DEV_FLAG)};
+  var warnedRemove = false;
+  var warnedInsert = false;
+
+  var originalRemoveChild = Node.prototype.removeChild;
+  var originalInsertBefore = Node.prototype.insertBefore;
+
+  Node.prototype.removeChild = function(child) {
+    if (child && child.parentNode === this) {
+      return originalRemoveChild.call(this, child);
+    }
+    if (DEV && !warnedRemove) {
+      warnedRemove = true;
+      try { console.warn('Pasha9 DOM guard handled external DOM mutation (removeChild)'); } catch (e) {}
+    }
+    return child;
+  };
+
+  Node.prototype.insertBefore = function(newNode, referenceNode) {
+    if (referenceNode == null || referenceNode.parentNode === this) {
+      return originalInsertBefore.call(this, newNode, referenceNode);
+    }
+    if (DEV && !warnedInsert) {
+      warnedInsert = true;
+      try { console.warn('Pasha9 DOM guard handled external DOM mutation (insertBefore)'); } catch (e) {}
+    }
+    return Node.prototype.appendChild.call(this, newNode);
+  };
+})();
+`;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const initialLang = resolveLang();
   const bodyFont = initialLang === 'bn' ? 'font-bn' : 'font-en';
@@ -67,6 +122,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang={initialLang} data-lang={initialLang} translate="no" suppressHydrationWarning className={`${fontBn.variable} ${fontEn.variable} ${fontAdmin.variable} notranslate`}>
       <head>
+        {/* DOM guard runs synchronously before any other script so
+            React's first render sees the forgiving prototypes. */}
+        <script dangerouslySetInnerHTML={{ __html: DOM_GUARD_SCRIPT }} />
         {/* Belt + suspenders translation block; some browsers honour
             the meta name=google but not the translate attribute,
             and vice versa. The platform ships its own EN/BN

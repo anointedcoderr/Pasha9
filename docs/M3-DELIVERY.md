@@ -259,6 +259,52 @@ render an empty state; the error boundary captures the failure if
 something deeper raises. **Always run `prisma db push` on the
 deploy host after pulling a new commit.**
 
+## DOM mutation guard for browser extensions (M3 Phase 3K)
+
+`Cannot read properties of null (reading 'removeChild')` kept
+re-surfacing after the notranslate + pages-router scaffolding
+fixes because Chrome's translation engine (and other DOM-mutating
+extensions like content blockers) ignore the `notranslate` hint
+when the user clicks the toolbar Translate icon manually. Once
+they reparent a text node inside a React-owned tree, React's
+reconciler later calls `parent.removeChild(child)` with the wrong
+parent and throws.
+
+Fix: patch `Node.prototype.removeChild` and
+`Node.prototype.insertBefore` defensively, BEFORE React loads.
+
+`apps/web/app/layout.tsx` injects an inline `<script>` as the
+first child of `<head>`. The script:
+
+1. Runs synchronously before any other JS.
+2. Sets `window.__PASHA9_DOM_GUARD_INSTALLED__` to guard against
+   double-install.
+3. Replaces `Node.prototype.removeChild`: if
+   `child.parentNode === this`, defers to the original. Otherwise
+   returns `child` without throwing so React's reconciliation
+   can continue.
+4. Replaces `Node.prototype.insertBefore`: if
+   `referenceNode == null || referenceNode.parentNode === this`,
+   defers to the original. Otherwise falls back to
+   `appendChild(newNode)` so the new node still ends up in the
+   tree.
+5. In development only (`process.env.NODE_ENV !== 'production'`),
+   `console.warn` once per type when the guard suppresses a
+   mismatch. Production stays silent.
+
+What this does NOT do:
+
+- It does not swallow unrelated errors. Any call with valid inputs
+  goes through the original method untouched.
+- It does not interfere with React's own DOM operations when the
+  tree is consistent.
+- It does not patch `replaceChild` or `appendChild` because those
+  have not surfaced as production crashes.
+
+Known and proven workaround used across many React apps to
+coexist with Google Translate, content blockers, and DOM-mutating
+extensions in general.
+
 ## Production runtime scaffolding (M3 Phase 3J)
 
 PM2 logs surfaced the upstream cause of every "Application error"
