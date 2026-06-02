@@ -60,7 +60,7 @@ const SYNTHETIC_TITLES: Record<SyntheticSlug, { bn: string; en: string; desc: st
 
 export default function CategoryPage() {
   const params = useParams<{ category: string }>();
-  const slug = params.category;
+  const slug = params?.category ?? '';
   const t = useT();
   const { lang } = useLang();
 

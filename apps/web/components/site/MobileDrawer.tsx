@@ -76,7 +76,7 @@ interface Props {
 export function MobileDrawer({ open, onClose, isLoggedIn, onRequestLogin, onRequestSignup, onLogout }: Props) {
   const t = useT();
   const { lang, setLang } = useLang();
-  const pathname = usePathname();
+  const pathname = usePathname() ?? '';
   const [apkUrl, setApkUrl] = useState<string | null>(null);
 
   useEffect(() => {

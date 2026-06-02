@@ -50,7 +50,7 @@ export function Sidebar({ collapsed }: { collapsed?: boolean }) {
     >
       <nav className="space-y-1">
         {items.map(({ key, href, icon: Icon }) => {
-          const active = pathname === href || pathname.startsWith(href + '/');
+          const active = pathname === href || (pathname ?? '').startsWith(href + '/');
           return (
             <Link
               key={key}

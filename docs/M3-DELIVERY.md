@@ -259,6 +259,87 @@ render an empty state; the error boundary captures the failure if
 something deeper raises. **Always run `prisma db push` on the
 deploy host after pulling a new commit.**
 
+## Production runtime scaffolding (M3 Phase 3J)
+
+PM2 logs surfaced the upstream cause of every "Application error"
+on the platform:
+
+```
+Cannot find module '/var/www/pasha9/app/apps/web/.next/server/pages/_error.js'
+  at Module._resolveFilename ...
+  at Object.requirePage (next/dist/server/require.js)
+```
+
+Pasha 9 is app-router only and never declared a `pages/`
+directory. Next.js 14's server runtime requires
+`.next/server/pages/_error.js` as the pages-router error fallback
+even in app-router-only deployments. When that file is missing,
+EVERY rendering error (real or hydration) crashes the framework's
+error rendering path BEFORE app-router boundaries
+(`app/global-error.tsx`, route-scoped `error.tsx`) can mount. The
+browser sees a stack-trace surface formatted as
+`Cannot read properties of null (reading 'X')` because the
+framework's own error-rendering code threw on a null Map lookup
+while trying to load the missing module.
+
+Fix:
+
+- `apps/web/pages/_error.tsx` . minimal styled fallback. Defines
+  `getInitialProps` so the build emits a real component, not a
+  stub. The build now produces `.next/server/pages/_error.js`.
+- `apps/web/pages/404.tsx` and `apps/web/pages/500.tsx` for the
+  matching pages-router static fallbacks (the build emits
+  `.next/server/pages/404.html` + `500.html`).
+- `apps/web/scripts/verify-build.mjs` . post-build smoke check
+  that fails the build if any of those files are missing. Wired
+  into `apps/web/package.json` as
+  `build: next build && node scripts/verify-build.mjs`. The
+  previous behaviour stays available as `build:noverify`.
+
+Real errors still surface through `app/global-error.tsx` and the
+route-scoped `error.tsx` files. The pages-router scaffolding is
+pure runtime contract.
+
+Cleanup mop-up for stricter null types after the pages directory
+was added:
+
+- `apps/web/components/site/CategoryNav.tsx`,
+  `apps/web/components/site/Sidebar.tsx`,
+  `apps/web/components/site/StickyBottomNav.tsx`,
+  `apps/web/components/site/MobileDrawer.tsx` . `usePathname()`
+  result is now coerced via `?? ''` before `.startsWith / .endsWith`.
+- `apps/web/app/(site)/games/[category]/page.tsx` . `useParams<...>`
+  result is read via `params?.category ?? ''`.
+
+Hydration warning suppression on `<html>` and `<body>` so any
+late-arriving locale class / theme bootstrap script does not
+trigger React's hydration overlay (which has caused first-load
+flicker since the theme-bootstrap script landed).
+
+### Clean deploy contract
+
+```
+cd /var/www/pasha9/app
+git fetch origin
+git reset --hard <commit>
+unset NODE_ENV
+pnpm install --prod=false
+set -a; source .env; set +a
+pnpm exec prisma generate --schema packages/database/prisma/schema.prisma
+pnpm exec prisma db push --schema packages/database/prisma/schema.prisma
+rm -rf apps/web/.next                   # purge any partial output
+pnpm check:branding
+pnpm --filter @pasha9/web build         # verify-build.mjs runs at the end
+test -f apps/web/.next/server/pages/_error.js  # explicit gate
+pm2 delete pasha9-web                   # avoid loading the previous server module graph
+pm2 start ecosystem.config.cjs --name pasha9-web --update-env
+pm2 save
+```
+
+If `pm2 delete` is not desired in the workflow, at minimum run
+`pm2 restart pasha9-web --update-env` after a successful
+`verify-build`.
+
 ## Browser-translation safety + null .get() (M3 Phase 3I)
 
 Production reproduced two distinct errors after commit `028f738`:

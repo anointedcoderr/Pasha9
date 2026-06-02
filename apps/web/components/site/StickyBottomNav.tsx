@@ -28,7 +28,8 @@ interface Props {
 
 export function StickyBottomNav({ isLoggedIn, onRequestLogin, onRequestSignup }: Props) {
   const t = useT();
-  const pathname = usePathname();
+  const pathnameRaw = usePathname();
+  const pathname = pathnameRaw ?? '';
   const onHome = pathname === '/';
 
   return (

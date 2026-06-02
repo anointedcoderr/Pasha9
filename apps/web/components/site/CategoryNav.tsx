@@ -45,7 +45,7 @@ export function CategoryNav() {
     <nav className="nav-strip hidden lg:block">
       <div className="mx-auto flex max-w-page items-center gap-1 overflow-x-auto px-4 md:px-6 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
         {ITEMS.map((item) => {
-          const active = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href + '/'));
+          const active = pathname === item.href || (item.href !== '/' && (pathname ?? '').startsWith(item.href + '/'));
           return (
             <Link
               key={item.key}

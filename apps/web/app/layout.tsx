@@ -65,7 +65,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const bodyFont = initialLang === 'bn' ? 'font-bn' : 'font-en';
 
   return (
-    <html lang={initialLang} data-lang={initialLang} translate="no" className={`${fontBn.variable} ${fontEn.variable} ${fontAdmin.variable} notranslate`}>
+    <html lang={initialLang} data-lang={initialLang} translate="no" suppressHydrationWarning className={`${fontBn.variable} ${fontEn.variable} ${fontAdmin.variable} notranslate`}>
       <head>
         {/* Belt + suspenders translation block; some browsers honour
             the meta name=google but not the translate attribute,
@@ -74,7 +74,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             nodes that React owns and breaks reconciliation. */}
         <meta name="google" content="notranslate" />
       </head>
-      <body className={`${bodyFont} antialiased notranslate`} translate="no">
+      <body className={`${bodyFont} antialiased notranslate`} translate="no" suppressHydrationWarning>
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
         <DynamicFavicon />
         <TrackingScripts />
