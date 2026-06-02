@@ -259,6 +259,54 @@ render an empty state; the error boundary captures the failure if
 something deeper raises. **Always run `prisma db push` on the
 deploy host after pulling a new commit.**
 
+## One-time auto-recovery + diagnostics + Element.remove patch (M3 Phase 3L)
+
+The DOM-mutation guard from Phase 3K patched Node prototype
+methods, but production still surfaced
+`Cannot read properties of null (reading 'removeChild')` on first
+paint. Two upstream issues missed by Phase 3K:
+
+1. **`Element.prototype.remove()` internally does
+   `this.parentNode.removeChild(this)`.** If a browser extension
+   detached the node, `this.parentNode` is null, the dot access
+   crashes BEFORE the `Node.prototype.removeChild` patch can run.
+   `DynamicFavicon` called `node.remove()` on existing
+   `<link rel~="icon">` tags on every page load.
+2. **The throw stack lived in framework / extension code, so the
+   bare error card from Phase 3K was unhelpful** for diagnosing
+   the exact source.
+
+Fix:
+
+- `apps/web/components/site/DynamicFavicon.tsx` no longer uses
+  `node.remove()`. Each removal is wrapped in a try/catch and
+  checks `node.parentNode` before calling `parentNode.removeChild`.
+- The DOM guard in `apps/web/app/layout.tsx` now patches:
+  - `Node.prototype.removeChild` (Phase 3K + try/catch around the
+    original call so a transient throw still falls through to the
+    no-op path).
+  - `Node.prototype.insertBefore` (Phase 3K + try/catch).
+  - `Node.prototype.replaceChild` (new).
+  - `Element.prototype.remove` (new). Re-implemented as
+    `parentNode && originalRemoveChild.call(parentNode, this)`
+    inside a try/catch.
+- `apps/web/app/global-error.tsx` now:
+  - Detects DOM-mutation symptom messages
+    (`reading 'removeChild' / 'insertBefore' / 'replaceChild' / 'get'`,
+    `not a child of this node`) and triggers ONE recovery reload
+    per pathname per session. The flag lives in `sessionStorage`
+    under `pasha9_recovered_<pathname>` so a repeated crash on the
+    same path falls through to the error card instead of looping.
+  - Has a **Show diagnostics** toggle that surfaces the first 20
+    lines of `error.stack`, plus `window.location.pathname`,
+    `navigator.userAgent`, whether the DOM guard installed
+    (`window.__PASHA9_DOM_GUARD_INSTALLED__`), and whether the
+    `<html>` element carries the `notranslate` class.
+
+The diagnostics block is the operator's tool for the rare case the
+recovery does not stick: copy the stack into a bug report and the
+offending component is pinpointable.
+
 ## DOM mutation guard for browser extensions (M3 Phase 3K)
 
 `Cannot read properties of null (reading 'removeChild')` kept

@@ -19,12 +19,25 @@ export function DynamicFavicon() {
       .then((data) => {
         if (cancelled || !data?.faviconUrl) return;
         const href = String(data.faviconUrl);
-        // Remove existing favicon link tags so the browser picks the new one.
-        document.querySelectorAll('link[rel~="icon"]').forEach((node) => node.remove());
-        const link = document.createElement('link');
-        link.rel = 'icon';
-        link.href = href;
-        document.head.appendChild(link);
+        // Remove existing favicon link tags so the browser picks the
+        // new one. node.remove() internally calls
+        // parentNode.removeChild(this); if a browser extension has
+        // already detached the node we would crash with
+        // 'Cannot read properties of null (reading removeChild)'.
+        // Guard each removal individually.
+        try {
+          document.querySelectorAll('link[rel~="icon"]').forEach((node) => {
+            try {
+              if (node && node.parentNode) node.parentNode.removeChild(node);
+            } catch { /* extension already detached this node */ }
+          });
+        } catch { /* querySelectorAll failed; bail without favicon swap */ }
+        try {
+          const link = document.createElement('link');
+          link.rel = 'icon';
+          link.href = href;
+          if (document.head) document.head.appendChild(link);
+        } catch { /* head missing or extension blocked append */ }
       })
       .catch(() => {});
     return () => { cancelled = true; };

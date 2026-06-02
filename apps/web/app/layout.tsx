@@ -87,13 +87,24 @@ const DOM_GUARD_SCRIPT = `
   var DEV = ${JSON.stringify(DOM_GUARD_DEV_FLAG)};
   var warnedRemove = false;
   var warnedInsert = false;
+  var warnedReplace = false;
+  var warnedElRemove = false;
 
   var originalRemoveChild = Node.prototype.removeChild;
   var originalInsertBefore = Node.prototype.insertBefore;
+  var originalReplaceChild = Node.prototype.replaceChild;
+  var originalElementRemove = typeof Element !== 'undefined' && Element.prototype.remove;
 
   Node.prototype.removeChild = function(child) {
     if (child && child.parentNode === this) {
-      return originalRemoveChild.call(this, child);
+      try { return originalRemoveChild.call(this, child); }
+      catch (e) {
+        if (DEV && !warnedRemove) {
+          warnedRemove = true;
+          try { console.warn('Pasha9 DOM guard caught removeChild throw'); } catch (_) {}
+        }
+        return child;
+      }
     }
     if (DEV && !warnedRemove) {
       warnedRemove = true;
@@ -104,14 +115,59 @@ const DOM_GUARD_SCRIPT = `
 
   Node.prototype.insertBefore = function(newNode, referenceNode) {
     if (referenceNode == null || referenceNode.parentNode === this) {
-      return originalInsertBefore.call(this, newNode, referenceNode);
+      try { return originalInsertBefore.call(this, newNode, referenceNode); }
+      catch (e) {
+        if (DEV && !warnedInsert) {
+          warnedInsert = true;
+          try { console.warn('Pasha9 DOM guard caught insertBefore throw'); } catch (_) {}
+        }
+        try { return Node.prototype.appendChild.call(this, newNode); } catch (_) { return newNode; }
+      }
     }
     if (DEV && !warnedInsert) {
       warnedInsert = true;
       try { console.warn('Pasha9 DOM guard handled external DOM mutation (insertBefore)'); } catch (e) {}
     }
-    return Node.prototype.appendChild.call(this, newNode);
+    try { return Node.prototype.appendChild.call(this, newNode); } catch (_) { return newNode; }
   };
+
+  Node.prototype.replaceChild = function(newChild, oldChild) {
+    if (oldChild && oldChild.parentNode === this) {
+      try { return originalReplaceChild.call(this, newChild, oldChild); }
+      catch (e) {
+        if (DEV && !warnedReplace) {
+          warnedReplace = true;
+          try { console.warn('Pasha9 DOM guard caught replaceChild throw'); } catch (_) {}
+        }
+        try { return Node.prototype.appendChild.call(this, newChild); } catch (_) { return oldChild; }
+      }
+    }
+    if (DEV && !warnedReplace) {
+      warnedReplace = true;
+      try { console.warn('Pasha9 DOM guard handled external DOM mutation (replaceChild)'); } catch (e) {}
+    }
+    try { return Node.prototype.appendChild.call(this, newChild); } catch (_) { return oldChild; }
+  };
+
+  // Element.prototype.remove() internally does
+  // this.parentNode.removeChild(this). If parentNode is null,
+  // the original throws with a less obvious stack. Re-implement
+  // defensively.
+  if (originalElementRemove) {
+    Element.prototype.remove = function() {
+      try {
+        if (this && this.parentNode) {
+          return originalRemoveChild.call(this.parentNode, this);
+        }
+      } catch (e) {
+        if (DEV && !warnedElRemove) {
+          warnedElRemove = true;
+          try { console.warn('Pasha9 DOM guard caught Element.remove throw'); } catch (_) {}
+        }
+      }
+      return undefined;
+    };
+  }
 })();
 `;
 
