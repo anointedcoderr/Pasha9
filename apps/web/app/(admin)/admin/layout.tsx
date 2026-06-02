@@ -32,14 +32,28 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           (Google Translate, etc.) replace text nodes inside React-
           owned trees, which then crashes the reconciler with a
           `removeChild` null error on the next state change. */}
-      <div className="font-admin min-h-screen notranslate" translate="no">
-        <div className="flex">
-          <AdminSidebar />
-          <AdminMobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
-          <div className="min-w-0 flex-1">
-            <AdminTopbar onMenu={() => setDrawerOpen(true)} />
-            <main className="px-4 py-6 md:px-8">{children}</main>
-          </div>
+      {/* Phase 3O admin shell:
+          - Outer flex row is locked to 100dvh and overflow:hidden so
+            the document itself never scrolls. The previous shell let
+            the page scroll as one unit, which slid the sidebar up
+            off-screen together with the content.
+          - The sidebar is a sibling flex column with its own internal
+            scroll. Logo + footer stay pinned at top/bottom; only the
+            nav middle scrolls when the menu is taller than viewport.
+          - The right column is its own flex column. Topbar sits above
+            main as a flex sibling and never moves; main has overflow-
+            y-auto so only its content scrolls. */}
+      <div
+        className="font-admin notranslate flex h-[100dvh] w-full overflow-hidden"
+        translate="no"
+      >
+        <AdminSidebar />
+        <AdminMobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <AdminTopbar onMenu={() => setDrawerOpen(true)} />
+          <main className="flex-1 overflow-y-auto overscroll-contain px-4 py-6 md:px-8">
+            {children}
+          </main>
         </div>
       </div>
     </TooltipProvider>

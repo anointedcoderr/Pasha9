@@ -146,13 +146,13 @@ export function AdminSidebar() {
   const t = useT();
 
   return (
-    <aside className="hidden h-screen w-[260px] shrink-0 flex-col border-r border-brand-divider bg-brand-paper lg:flex">
-      <div className="border-b border-brand-divider px-5 py-5">
+    <aside className="hidden h-[100dvh] w-[260px] shrink-0 flex-col border-r border-brand-divider bg-brand-paper lg:flex">
+      <div className="shrink-0 border-b border-brand-divider px-5 py-5">
         <Logo href={ROUTES.admin.home} tone="dark" size="md" />
         <p className="mt-2 text-[10px] uppercase tracking-[0.18em] text-brand-yellow-700">{t('admin.title')}</p>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-3 py-4 font-admin text-sm">
+      <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4 font-admin text-sm">
         {GROUPS.map((g) => (
           <div key={g.labelKey} className="mb-5">
             <p className="px-3 pb-2 text-[10px] uppercase tracking-[0.18em] text-brand-inkMute">{t(`admin.${g.labelKey}`)}</p>
@@ -181,7 +181,7 @@ export function AdminSidebar() {
         ))}
       </nav>
 
-      <div className="border-t border-brand-divider px-5 py-4">
+      <div className="shrink-0 border-t border-brand-divider px-5 py-4">
         <p className="text-[11px] text-brand-inkMute">
           Built by{' '}
           <a

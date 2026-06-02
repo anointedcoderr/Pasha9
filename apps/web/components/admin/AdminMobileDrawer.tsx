@@ -185,7 +185,7 @@ export function AdminMobileDrawer({ open, onClose }: { open: boolean; onClose: (
         )}
         aria-label="Admin navigation"
       >
-        <div className="flex items-center justify-between border-b border-brand-divider px-4 py-3">
+        <div className="shrink-0 flex items-center justify-between border-b border-brand-divider px-4 py-3">
           <Logo href={ROUTES.admin.home} tone="dark" size="md" />
           <button
             type="button"
@@ -197,7 +197,7 @@ export function AdminMobileDrawer({ open, onClose }: { open: boolean; onClose: (
           </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto px-3 py-4 font-admin text-sm">
+        <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4 font-admin text-sm">
           {GROUPS.map((g) => (
             <div key={g.labelKey} className="mb-5">
               <p className="px-3 pb-2 text-[10px] uppercase tracking-[0.18em] text-brand-inkMute">
