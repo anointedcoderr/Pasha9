@@ -55,6 +55,26 @@ export async function POST(req: NextRequest, { params }: { params: { id: string;
       return jsonError(409, 'LOG_BODY_MISSING', 'Stored body is not a JSON object; cannot reprocess.');
     }
 
+    // Legacy logs (pre-fix) saved the encrypted payload field after
+    // it was masked. Masked strings contain the bullet character or
+    // are non-base64. We cannot decrypt those, so return a clear
+    // error pointing the operator at the Manual repair workflow
+    // instead of letting the parser fail with a misleading
+    // "account field missing".
+    const storedBody = log.body as Record<string, unknown>;
+    const payloadField = typeof storedBody.payload === 'string' ? storedBody.payload : '';
+    if (payloadField) {
+      const looksMasked = payloadField.includes('•') || payloadField.includes('•');
+      const looksBase64 = /^[A-Za-z0-9_\-/+=]+$/.test(payloadField);
+      if (looksMasked || !looksBase64) {
+        return jsonError(
+          409,
+          'LEGACY_MASKED_PAYLOAD',
+          'This old callback cannot be reprocessed because its encrypted payload was stored in masked form before the parser fix landed. Use Manual repair on this row, or ask the provider to resend the callback.',
+        );
+      }
+    }
+
     try {
       const normalized = await adapter.parseCallback(creds, {}, log.body);
       const result = await processProviderCallback(creds, normalized);

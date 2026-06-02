@@ -259,6 +259,96 @@ render an empty state; the error boundary captures the failure if
 something deeper raises. **Always run `prisma db push` on the
 deploy host after pulling a new commit.**
 
+## Stability sprint (M3 Phase 3H)
+
+Three production safety nets after the type-aware idempotency and
+encrypted-payload fixes.
+
+### Stale-chunk auto-reload
+
+The "application error on first load, works after refresh" pattern
+was an nginx/CDN cache vs new-build mismatch: the HTML referenced
+chunk hashes from the previous build, the browser fetched the old
+chunks, and the root client raised before any route-level boundary
+mounted.
+
+Fixes:
+
+- `apps/web/next.config.mjs` ships explicit `Cache-Control`:
+  `_next/static/*` is `public, max-age=31536000, immutable` so the
+  browser caches forever (paths are hashed). Every HTML response
+  is `no-store, must-revalidate` so the page itself is never
+  cached.
+- `apps/web/app/global-error.tsx` is a root boundary that detects
+  `ChunkLoadError` (and the matching message patterns) and forces
+  one `window.location.reload()` with a 30s cooldown stored in
+  `sessionStorage` to prevent reload loops if the new chunks are
+  also broken.
+
+### Defensive format helpers
+
+`apps/web/lib/utils/format.ts` was a documented crash source on the
+admin transaction log: `Intl.DateTimeFormat.format(InvalidDate)`
+throws `RangeError`. Every helper now:
+
+- Coerces non-finite numbers to `0` instead of `NaN`.
+- Returns `-` on invalid dates instead of throwing.
+- Wraps `Intl.*` in try/catch so any future locale issue cannot
+  crash the page.
+
+Helpers affected: `formatBDT`, `formatNumber`, `formatDate`,
+`formatDateTime`, `relativeTime`.
+
+### Legacy masked-payload detection + Manual repair
+
+Old callback logs saved before commit `50a0cee` had their
+encrypted `payload` field masked at write time. We cannot decrypt
+those rows. The Reprocess endpoint detects this:
+
+- If the stored `body.payload` contains the bullet character or is
+  not valid base64 → `409 LEGACY_MASKED_PAYLOAD` with the message
+  "This old callback cannot be reprocessed because its encrypted
+  payload was stored in masked form before the parser fix landed."
+
+The LogsPanel catches that code and offers **Manual repair**
+instead:
+
+- New POST `/api/admin/providers/[id]/callback-logs/[logId]/manual-repair`
+- Body: `{ userQuery, gameRound?, gameUid?, betAmount, winAmount, reason }`
+- Resolves the user by id / username / phone / email.
+- Applies `delta = win - bet` to the wallet inside `db.$transaction`,
+  writes a `Transaction(type='adjust')`, stamps the original
+  ProviderCallbackLog with `response._manualRepair` so a second
+  attempt returns `409 ALREADY_REPAIRED`.
+- Activity log: `PROVIDER_CALLBACK_MANUAL_REPAIR`.
+
+The Logs tab now shows two action buttons per rejected callback
+row:
+
+- **Reprocess**. runs the new parser. Works for any row whose
+  encrypted payload survived (any new row, post-fix).
+- **Manual repair**. opens the modal for the legacy-masked case,
+  prefilled from the row context. Same flow if the operator
+  prefers a manual correction for any reason.
+
+### Encrypted callback simulator (admin verify tool)
+
+POST `/api/admin/providers/[id]/simulate-encrypted-callback`
+(super_admin) builds the exact `{ payload: AES-256-ECB(JSON), timestamp }`
+shape that iGamingAPIs sends and pushes it through the live
+`parseCallback` + `processProviderCallback`. Logs the rehearsal in
+ProviderCallbackLog with an `_simulated: 'encrypted'` marker and
+records `PROVIDER_CALLBACK_ENCRYPTED_SIM` in the activity log.
+
+Use this to verify end-to-end before relying on live JILI traffic:
+
+```
+curl -X POST https://pasha9.com/api/admin/providers/<id>/simulate-encrypted-callback \
+  -H 'cookie: ...' \
+  -H 'content-type: application/json' \
+  -d '{"gameUid":"10035","betAmount":10,"winAmount":0}'
+```
+
 ## Encrypted callback payload + reprocess tool (M3 Phase 3G)
 
 **Symptom.** Production callbacks reached the server, security gates

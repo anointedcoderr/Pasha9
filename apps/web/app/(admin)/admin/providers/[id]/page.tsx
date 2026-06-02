@@ -1349,6 +1349,7 @@ function LogsPanel({ providerId }: { providerId: string }) {
   const [rows, setRows] = useState<RequestLogRow[] | CallbackLogRow[]>([]);
   const [reprocessing, setReprocessing] = useState<string | null>(null);
   const [reprocessResult, setReprocessResult] = useState<string | null>(null);
+  const [manualRepairLog, setManualRepairLog] = useState<CallbackLogRow | null>(null);
   const load = useCallback(async () => {
     const res = await fetch(`/api/admin/providers/${providerId}/logs?kind=${kind}&limit=50`, { cache: 'no-store' });
     const j = await res.json().catch(() => null);
@@ -1356,17 +1357,25 @@ function LogsPanel({ providerId }: { providerId: string }) {
   }, [providerId, kind]);
   useEffect(() => { load(); }, [load]);
 
-  const onReprocess = async (logId: string) => {
+  const onReprocess = async (row: CallbackLogRow) => {
     const reason = window.prompt('Reason for reprocessing this callback (required, min 3 chars):');
     if (!reason || reason.trim().length < 3) return;
-    setReprocessing(logId); setReprocessResult(null);
+    setReprocessing(row.id); setReprocessResult(null);
     try {
-      const r = await fetch(`/api/admin/providers/${providerId}/callback-logs/${logId}/reprocess`, {
+      const r = await fetch(`/api/admin/providers/${providerId}/callback-logs/${row.id}/reprocess`, {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ reason: reason.trim() }),
       });
       const j = await r.json().catch(() => null);
-      if (!r.ok) { setReprocessResult(`Failed: ${j?.message ?? j?.code ?? r.status}`); return; }
+      if (!r.ok) {
+        if (j?.code === 'LEGACY_MASKED_PAYLOAD') {
+          setReprocessResult('Legacy masked payload cannot be decrypted. Use Manual repair instead.');
+          setManualRepairLog(row);
+          return;
+        }
+        setReprocessResult(`Failed: ${j?.message ?? j?.code ?? r.status}`);
+        return;
+      }
       const s = j?.result?.status ?? 'unknown';
       const before = j?.result?.walletBefore ?? 0;
       const after = j?.result?.walletAfter ?? 0;
@@ -1442,9 +1451,14 @@ function LogsPanel({ providerId }: { providerId: string }) {
                       <td className="px-3 py-2 font-mono text-[11px] break-all">{r.processedTxId ?? '-'}</td>
                       <td className="px-3 py-2 break-all text-signal-danger">{r.error ?? (encryptedDetected ? 'encrypted ok' : '')}</td>
                       <td className="px-3 py-2">
-                        {isRejected ? (
-                          <Button size="sm" variant="ghost" loading={reprocessing === r.id} leftIcon={<RefreshCw className="h-3.5 w-3.5" />} onClick={() => onReprocess(r.id)}>Reprocess</Button>
-                        ) : null}
+                        <div className="flex flex-wrap items-center gap-1">
+                          {isRejected ? (
+                            <Button size="sm" variant="ghost" loading={reprocessing === r.id} leftIcon={<RefreshCw className="h-3.5 w-3.5" />} onClick={() => onReprocess(r)}>Reprocess</Button>
+                          ) : null}
+                          {isRejected ? (
+                            <Button size="sm" variant="ghost" leftIcon={<Save className="h-3.5 w-3.5" />} onClick={() => setManualRepairLog(r)}>Manual repair</Button>
+                          ) : null}
+                        </div>
                       </td>
                     </tr>,
                     (diag && (seenKeys?.length || parsedMember || parsedRound)) ? (
@@ -1468,7 +1482,99 @@ function LogsPanel({ providerId }: { providerId: string }) {
           )}
         </table>
       </div>
+
+      <ManualRepairModal
+        open={!!manualRepairLog}
+        onOpenChange={(v) => { if (!v) setManualRepairLog(null); }}
+        providerId={providerId}
+        log={manualRepairLog}
+        onDone={(msg) => { setManualRepairLog(null); setReprocessResult(msg); load(); }}
+      />
     </Card>
+  );
+}
+
+function ManualRepairModal({ open, onOpenChange, providerId, log, onDone }: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  providerId: string;
+  log: CallbackLogRow | null;
+  onDone: (msg: string) => void;
+}) {
+  const [userQuery, setUserQuery] = useState('');
+  const [gameRound, setGameRound] = useState('');
+  const [gameUid, setGameUid] = useState('');
+  const [betAmount, setBetAmount] = useState('0');
+  const [winAmount, setWinAmount] = useState('0');
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) { setUserQuery(''); setGameRound(''); setGameUid(''); setBetAmount('0'); setWinAmount('0'); setReason(''); setErr(null); setBusy(false); }
+  }, [open]);
+
+  const onRun = async () => {
+    if (!log) return;
+    if (!userQuery.trim()) { setErr('User is required.'); return; }
+    if (reason.trim().length < 3) { setErr('Reason is required.'); return; }
+    const bet = Number(betAmount) || 0;
+    const win = Number(winAmount) || 0;
+    if (bet === 0 && win === 0) { setErr('Bet or win must be > 0.'); return; }
+    setBusy(true); setErr(null);
+    try {
+      const r = await fetch(`/api/admin/providers/${providerId}/callback-logs/${log.id}/manual-repair`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          userQuery: userQuery.trim(),
+          gameRound: gameRound.trim(),
+          gameUid: gameUid.trim(),
+          betAmount: bet, winAmount: win,
+          reason: reason.trim(),
+        }),
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok) { setErr(j?.message ?? j?.code ?? 'Repair failed'); return; }
+      const before = Number(j?.walletBefore ?? 0);
+      const after = Number(j?.walletAfter ?? 0);
+      const delta = Number(j?.delta ?? 0);
+      onDone(`Manual repair done. Wallet ${fmt(before)} -> ${fmt(after)} (delta ${fmt(delta)}).`);
+    } catch (e) { setErr(e instanceof Error ? e.message : 'Repair failed'); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <Modal
+      open={open}
+      onOpenChange={onOpenChange}
+      title={log ? `Manual repair for callback ${log.id.slice(0, 8)}` : 'Manual repair'}
+      description="Super-admin only. Credits or debits the wallet by (win - bet) inside db.$transaction. Use when a legacy callback's encrypted payload was stored masked and the Reprocess workflow cannot decrypt it."
+      footer={
+        <>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button variant="gold" loading={busy} leftIcon={<Save className="h-3.5 w-3.5" />} onClick={onRun}>Apply repair</Button>
+        </>
+      }
+    >
+      <Card padding="sm" className="mb-3 border-l-4 border-amber-400/60">
+        <p className="text-[11px] font-semibold text-ink-mid">
+          Each callback log can only be manually repaired ONCE. A second attempt against the same log returns 409 ALREADY_REPAIRED. The wallet delta is win - bet; positive credits, negative debits. We do NOT call the provider.
+        </p>
+      </Card>
+
+      {err ? <p className="mb-3 text-sm text-signal-danger">{err}</p> : null}
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="User (id / username / phone / email)"><input value={userQuery} onChange={(e) => setUserQuery(e.target.value)} className={inputCls} placeholder="player username or phone" /></Field>
+        <Field label="Game round (optional)"><input value={gameRound} onChange={(e) => setGameRound(e.target.value)} className={inputCls} /></Field>
+        <Field label="Game UID (optional)"><input value={gameUid} onChange={(e) => setGameUid(e.target.value)} className={inputCls} placeholder="10035" /></Field>
+        <Field label="Bet amount (debits)"><input type="number" min={0} step="0.01" value={betAmount} onChange={(e) => setBetAmount(e.target.value)} className={inputCls} /></Field>
+        <Field label="Win amount (credits)"><input type="number" min={0} step="0.01" value={winAmount} onChange={(e) => setWinAmount(e.target.value)} className={inputCls} /></Field>
+        <Field label="Reason (required)">
+          <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={2} className={cn(inputCls, 'h-auto py-2')} placeholder="e.g. JILI legacy callback masked before fix landed; verified bet/win via provider portal" />
+        </Field>
+      </div>
+    </Modal>
   );
 }
 
