@@ -1,9 +1,19 @@
+// A per-build identifier inlined into client bundles via
+// process.env.NEXT_PUBLIC_BUILD_ID. Lets global-error.tsx scope
+// its one-time recovery flags to the current build so a future
+// deploy never reuses a stale flag that would silently suppress
+// the recovery on the next failure.
+const BUILD_ID = process.env.BUILD_ID || String(Date.now());
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   experimental: {
     optimizePackageImports: ['lucide-react', 'framer-motion'],
+  },
+  env: {
+    NEXT_PUBLIC_BUILD_ID: BUILD_ID,
   },
   images: {
     formats: ['image/avif', 'image/webp'],

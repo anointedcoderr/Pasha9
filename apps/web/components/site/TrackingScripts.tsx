@@ -28,8 +28,18 @@ interface TrackingIds {
 
 export function TrackingScripts() {
   const [ids, setIds] = useState<TrackingIds | null>(null);
+  const [safe, setSafe] = useState(false);
 
   useEffect(() => {
+    // ?safe=1 query param opts the page out of every non-essential
+    // client extra (third-party pixels). global-error.tsx triggers
+    // this on the second recovery reload so the operator can rule
+    // out third parties causing a first-paint crash.
+    try {
+      const q = new URLSearchParams(window.location.search);
+      if (q.get('safe') === '1') { setSafe(true); return; }
+    } catch { /* fall through */ }
+
     let alive = true;
     fetch('/api/content/tracking', { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
@@ -41,6 +51,7 @@ export function TrackingScripts() {
     return () => { alive = false; };
   }, []);
 
+  if (safe) return null;
   if (!ids) return null;
 
   const gtagId = ids.ga4 || ids.googleAds;

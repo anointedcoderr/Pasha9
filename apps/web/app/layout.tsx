@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from 'next';
 import { fontAdmin, fontBn, fontEn } from '@/styles/fonts';
 import { Providers } from './providers';
 import { resolveLang } from '@/lib/i18n/server';
-import { DynamicFavicon } from '@/components/site/DynamicFavicon';
 import { TrackingScripts } from '@/components/site/TrackingScripts';
 import './globals.css';
 
@@ -190,7 +189,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className={`${bodyFont} antialiased notranslate`} translate="no" suppressHydrationWarning>
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
-        <DynamicFavicon />
+        {/* DynamicFavicon (runtime <link rel=icon> swap) was removed
+            in Phase 3M after it surfaced as the production source
+            of 'Cannot read properties of null (reading removeChild)'.
+            Static metadata.icons in this file is now the source of
+            truth. Operators can replace /public/favicon.svg if
+            they need to rebrand. */}
         <TrackingScripts />
         <Providers initialLang={initialLang}>{children}</Providers>
       </body>

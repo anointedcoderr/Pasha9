@@ -259,6 +259,78 @@ render an empty state; the error boundary captures the failure if
 something deeper raises. **Always run `prisma db push` on the
 deploy host after pulling a new commit.**
 
+## Remove DynamicFavicon + 2-step recovery + safe mode (M3 Phase 3M)
+
+Phase 3L hardened `DynamicFavicon.tsx` with try/catch around the
+removal calls, but Chrome's translate engine was still able to
+reach into the head between `querySelectorAll` and `node.remove()`
+on every page load. The crash kept re-surfacing on first paint.
+
+Fix: stop doing runtime favicon DOM manipulation entirely.
+
+- `apps/web/components/site/DynamicFavicon.tsx` deleted.
+- `apps/web/app/layout.tsx` no longer imports or renders it.
+  `metadata.icons` (`/favicon.svg` + the apple icon) is the only
+  favicon source from now on. Operators can replace the SVG file
+  to rebrand.
+- Project grep for runtime DOM mutation patterns
+  (`removeChild`, `.remove()`, `appendChild`, `insertBefore`,
+  `replaceChild`, `document.head`, `document.body.removeChild`,
+  `querySelectorAll('link[rel~="icon"]')`) is now clean except for
+  (a) the DOM guard script's own prototype patches and (b)
+  benign `document.body.classList.add/remove` calls in the route
+  layouts.
+
+### Recovery upgrade
+
+`apps/web/app/global-error.tsx` now:
+
+- Uses `process.env.NEXT_PUBLIC_BUILD_ID` (inlined at build time
+  via `next.config.mjs`) so recovery flags are scoped per-build.
+  A new deploy starts every counter fresh; old flags never block
+  the new build.
+- Allows up to TWO automatic reloads per (build, pathname).
+  - First reload is a silent hard refresh.
+  - Second reload appends `?safe=1` to the URL so the page
+    renders without the TrackingScripts third-party injection. If
+    safe-mode also fails, the third recovery falls through to the
+    error card so the operator can see the diagnostics.
+- New buttons on the card:
+  - **Reload** clears just this pathname's counter.
+  - **Reload in safe mode** explicitly retries with `?safe=1`.
+  - **Clear recovery and reload** wipes every
+    `pasha9_recovery_*` key in `sessionStorage` and reloads.
+  - Diagnostics panel now also surfaces the recovery count and
+    the build id.
+
+### Safe mode (`?safe=1`)
+
+`apps/web/components/site/TrackingScripts.tsx` reads
+`?safe=1` from `window.location.search` on mount and renders
+nothing when present. No FB Pixel, no GTM, no GA4, no TikTok, no
+Google Ads conversion script. The admin shell itself is
+unaffected.
+
+Use cases:
+
+- Recovery auto-trigger on the second reload (above).
+- Operator can manually visit `/admin?safe=1` or
+  `/admin/transactions?safe=1` to confirm whether a first-paint
+  crash comes from a third-party pixel or from app code.
+
+### Acceptance
+
+- Fresh incognito `/admin`, `/admin/deposits`,
+  `/admin/transactions`, `/admin/withdrawal-limits`,
+  `/admin/providers`, `/admin/providers/<id>` all open directly.
+- A first-paint glitch (extension mutation, stale chunk) triggers
+  at most TWO automatic reloads, second of which is in safe mode.
+  Third failure shows the error card with the stack and recovery
+  count visible.
+- Manual `Reload`, `Reload in safe mode`, and `Clear recovery and
+  reload` buttons all work as labelled.
+- No infinite reload loops thanks to the scoped counter.
+
 ## One-time auto-recovery + diagnostics + Element.remove patch (M3 Phase 3L)
 
 The DOM-mutation guard from Phase 3K patched Node prototype
