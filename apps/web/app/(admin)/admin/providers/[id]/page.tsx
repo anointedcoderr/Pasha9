@@ -351,6 +351,13 @@ function HealthPanel({ providerId }: { providerId: string }) {
                 {safeNumber(data.last24h?.launches)} launch request{safeNumber(data.last24h?.launches) === 1 ? '' : 's'} sent to the provider but zero callbacks received. Likely causes: provider portal is dialling the wrong callback URL, the VPS public IP is not on the provider IP whitelist, or the callback key in the portal does not match what is saved here. Run Simulate callback to confirm the wallet pipeline is healthy, then check the provider portal config.
               </p>
             </Card>
+          ) : safeNumber(data.last24h?.callbacks) > 0 && safeNumber(data.last24h?.accepted) === 0 ? (
+            <Card padding="sm" className="border-l-4 border-rose-400/60">
+              <p className="text-sm font-bold text-rose-200">Callbacks arriving but none accepted</p>
+              <p className="mt-1 text-[11px] text-ink-mid">
+                {safeNumber(data.last24h?.callbacks)} callback{safeNumber(data.last24h?.callbacks) === 1 ? '' : 's'} reached Pasha9 in the last 24h but the wallet pipeline accepted zero. The Logs -&gt; Callbacks tab shows the parsed diagnostics for each row including the seen keys and any decrypt error. The new parser supports encrypted payload bodies and a wide alias list (member_account / user_id / userId / player_id / account; game_uid / game_id; game_round / round_id / transaction_id; bet/win/amount/payout aliases). After deploy, use Reprocess on any rejected callback row to replay it through the new pipeline.
+              </p>
+            </Card>
           ) : null}
 
           <Card padding="sm" className="border-l-4 border-neon/30">
@@ -1324,11 +1331,24 @@ function TestLaunchModal({ open, onOpenChange, providerId, game }: {
 }
 
 interface RequestLogRow { id: string; createdAt: string; direction: string; endpoint: string; method: string; status: number | null; durationMs: number | null; errorMessage: string | null }
-interface CallbackLogRow { id: string; receivedAt: string; ip: string | null; callbackKeyValid: boolean | null; ipValid: boolean | null; timestampValid: boolean | null; processedTxId: string | null; error: string | null }
+interface CallbackLogRow {
+  id: string;
+  receivedAt: string;
+  ip: string | null;
+  callbackKeyValid: boolean | null;
+  ipValid: boolean | null;
+  timestampValid: boolean | null;
+  processedTxId: string | null;
+  error: string | null;
+  body?: Record<string, unknown> | null;
+  response?: Record<string, unknown> | null;
+}
 
 function LogsPanel({ providerId }: { providerId: string }) {
   const [kind, setKind] = useState<'request' | 'callback'>('request');
   const [rows, setRows] = useState<RequestLogRow[] | CallbackLogRow[]>([]);
+  const [reprocessing, setReprocessing] = useState<string | null>(null);
+  const [reprocessResult, setReprocessResult] = useState<string | null>(null);
   const load = useCallback(async () => {
     const res = await fetch(`/api/admin/providers/${providerId}/logs?kind=${kind}&limit=50`, { cache: 'no-store' });
     const j = await res.json().catch(() => null);
@@ -1336,11 +1356,36 @@ function LogsPanel({ providerId }: { providerId: string }) {
   }, [providerId, kind]);
   useEffect(() => { load(); }, [load]);
 
+  const onReprocess = async (logId: string) => {
+    const reason = window.prompt('Reason for reprocessing this callback (required, min 3 chars):');
+    if (!reason || reason.trim().length < 3) return;
+    setReprocessing(logId); setReprocessResult(null);
+    try {
+      const r = await fetch(`/api/admin/providers/${providerId}/callback-logs/${logId}/reprocess`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ reason: reason.trim() }),
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok) { setReprocessResult(`Failed: ${j?.message ?? j?.code ?? r.status}`); return; }
+      const s = j?.result?.status ?? 'unknown';
+      const before = j?.result?.walletBefore ?? 0;
+      const after = j?.result?.walletAfter ?? 0;
+      setReprocessResult(`Reprocessed: ${s}. Wallet ${fmt(before)} -> ${fmt(after)}.`);
+      load();
+    } catch (e) { setReprocessResult(`Failed: ${e instanceof Error ? e.message : 'unknown'}`); }
+    finally { setReprocessing(null); }
+  };
+
   return (
     <Card padding="md">
+      {reprocessResult ? (
+        <Card padding="sm" className="mb-3 border-l-4 border-emerald-400/60">
+          <p className="text-sm text-emerald-200">{reprocessResult}</p>
+        </Card>
+      ) : null}
       <CardHeader
         title="Logs"
-        subtitle="Outbound provider calls + inbound callbacks. Secrets are masked."
+        subtitle="Outbound provider calls + inbound callbacks. Secrets are masked; encrypted payloads preserved verbatim so admin can reprocess rejected callbacks after a parser upgrade."
         action={
           <div className="flex gap-2">
             <select value={kind} onChange={(e) => setKind(e.target.value as 'request' | 'callback')} className={cn(inputCls, 'w-auto')}>
@@ -1375,21 +1420,49 @@ function LogsPanel({ providerId }: { providerId: string }) {
           ) : (
             <>
               <thead className="bg-base-elev text-left text-[11px] uppercase tracking-wider text-ink-lo">
-                <tr><th className="px-3 py-2">When</th><th className="px-3 py-2">IP</th><th className="px-3 py-2">Key</th><th className="px-3 py-2">IP OK</th><th className="px-3 py-2">TS</th><th className="px-3 py-2">Tx</th><th className="px-3 py-2">Error</th></tr>
+                <tr><th className="px-3 py-2">When</th><th className="px-3 py-2">IP</th><th className="px-3 py-2">Key</th><th className="px-3 py-2">IP OK</th><th className="px-3 py-2">TS</th><th className="px-3 py-2">Tx</th><th className="px-3 py-2">Error / Diagnostics</th><th className="px-3 py-2">Action</th></tr>
               </thead>
               <tbody className="divide-y divide-neon/10">
-                {(rows as CallbackLogRow[]).map((r) => (
-                  <tr key={r.id}>
-                    <td className="px-3 py-2 text-ink-mid">{safeDate(r.receivedAt)}</td>
-                    <td className="px-3 py-2 font-mono break-all">{r.ip ?? '-'}</td>
-                    <td className="px-3 py-2">{r.callbackKeyValid ? 'OK' : r.callbackKeyValid === false ? 'BAD' : '-'}</td>
-                    <td className="px-3 py-2">{r.ipValid ? 'OK' : r.ipValid === false ? 'BAD' : '-'}</td>
-                    <td className="px-3 py-2">{r.timestampValid ? 'OK' : r.timestampValid === false ? 'WARN' : '-'}</td>
-                    <td className="px-3 py-2 font-mono text-[11px] break-all">{r.processedTxId ?? '-'}</td>
-                    <td className="px-3 py-2 break-all text-signal-danger">{r.error ?? ''}</td>
-                  </tr>
-                ))}
-                {rows.length === 0 ? <tr><td colSpan={7} className="px-3 py-4 text-center text-ink-mid">No callbacks yet.</td></tr> : null}
+                {(rows as CallbackLogRow[]).flatMap((r) => {
+                  const diag = (r.response as { _diagnostics?: Record<string, unknown>; _reprocess?: Record<string, unknown> } | null)?._diagnostics ?? null;
+                  const seenKeys = Array.isArray(diag?.seenKeys) ? (diag!.seenKeys as string[]) : null;
+                  const parsedMember = typeof diag?.parsedMemberAccount === 'string' ? (diag!.parsedMemberAccount as string) : null;
+                  const parsedRound = typeof diag?.parsedGameRound === 'string' ? (diag!.parsedGameRound as string) : null;
+                  const parsedBet = typeof diag?.parsedBetAmount === 'number' ? (diag!.parsedBetAmount as number) : null;
+                  const parsedWin = typeof diag?.parsedWinAmount === 'number' ? (diag!.parsedWinAmount as number) : null;
+                  const encryptedDetected = diag?.encryptedPayloadDetected === true;
+                  const isRejected = Boolean(r.error);
+                  return [
+                    <tr key={r.id}>
+                      <td className="px-3 py-2 text-ink-mid">{safeDate(r.receivedAt)}</td>
+                      <td className="px-3 py-2 font-mono break-all">{r.ip ?? '-'}</td>
+                      <td className="px-3 py-2">{r.callbackKeyValid ? 'OK' : r.callbackKeyValid === false ? 'BAD' : '-'}</td>
+                      <td className="px-3 py-2">{r.ipValid ? 'OK' : r.ipValid === false ? 'BAD' : '-'}</td>
+                      <td className="px-3 py-2">{r.timestampValid ? 'OK' : r.timestampValid === false ? 'WARN' : '-'}</td>
+                      <td className="px-3 py-2 font-mono text-[11px] break-all">{r.processedTxId ?? '-'}</td>
+                      <td className="px-3 py-2 break-all text-signal-danger">{r.error ?? (encryptedDetected ? 'encrypted ok' : '')}</td>
+                      <td className="px-3 py-2">
+                        {isRejected ? (
+                          <Button size="sm" variant="ghost" loading={reprocessing === r.id} leftIcon={<RefreshCw className="h-3.5 w-3.5" />} onClick={() => onReprocess(r.id)}>Reprocess</Button>
+                        ) : null}
+                      </td>
+                    </tr>,
+                    (diag && (seenKeys?.length || parsedMember || parsedRound)) ? (
+                      <tr key={`${r.id}-diag`} className="bg-base-deep/30">
+                        <td colSpan={8} className="px-3 py-1 text-[10px] text-ink-mid">
+                          <span className="font-bold uppercase tracking-wider text-ink-lo">diag:</span>
+                          {encryptedDetected ? <span className="ml-2 rounded border border-emerald-400/30 bg-emerald-500/10 px-1.5 py-0.5 text-emerald-200">encrypted payload decrypted</span> : null}
+                          {parsedMember ? <span className="ml-2">member <span className="font-mono text-ink-hi">{parsedMember}</span></span> : null}
+                          {parsedRound ? <span className="ml-2">round <span className="font-mono text-ink-hi">{parsedRound}</span></span> : null}
+                          {parsedBet != null ? <span className="ml-2">bet <span className="font-mono text-ink-hi">{fmt(parsedBet)}</span></span> : null}
+                          {parsedWin != null ? <span className="ml-2">win <span className="font-mono text-ink-hi">{fmt(parsedWin)}</span></span> : null}
+                          {seenKeys && seenKeys.length > 0 ? <span className="ml-2">seen <span className="font-mono text-ink-hi">{seenKeys.join(',')}</span></span> : null}
+                        </td>
+                      </tr>
+                    ) : null,
+                  ].filter(Boolean) as JSX.Element[];
+                })}
+                {rows.length === 0 ? <tr><td colSpan={8} className="px-3 py-4 text-center text-ink-mid">No callbacks yet.</td></tr> : null}
               </tbody>
             </>
           )}

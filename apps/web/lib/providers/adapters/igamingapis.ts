@@ -37,7 +37,7 @@ import {
   ProviderAdapterError,
 } from '../types';
 import type { ProviderCreds } from '../credentials';
-import { aesEcbEncryptBase64 } from '../crypto';
+import { aesEcbEncryptBase64, aesEcbDecryptBase64 } from '../crypto';
 import { normalizeCategory } from '../category';
 
 const ADAPTER_KEY = 'igamingapis';
@@ -141,6 +141,55 @@ function pickNumber(obj: unknown, key: string, fallback = 0): number {
     }
   }
   return fallback;
+}
+
+// Callback field alias map. iGamingAPIs documentation shows
+// member_account / game_round / game_uid; production traffic uses
+// user_id / game_id / etc. Every alias here is tried in order; the
+// first non-empty match wins.
+const CALLBACK_ALIASES = {
+  member: ['member_account', 'memberAccount', 'user_id', 'userId', 'user', 'player_id', 'playerId', 'account', 'username'],
+  game:   ['game_uid', 'game_id', 'gameUid', 'gameId'],
+  round:  ['game_round', 'gameRound', 'round_id', 'roundId', 'transaction_id', 'transactionId', 'bet_id', 'betId'],
+  bet:    ['bet_amount', 'betAmount', 'bet', 'amount'],
+  win:    ['win_amount', 'winAmount', 'win', 'payout'],
+  timestamp: ['timestamp', 'time', 'created_at', 'createdAt', 'round_time', 'roundTime'],
+} as const;
+
+// Wrapper field names. Providers sometimes nest the real payload
+// one level deep. We unwrap and merge with the top level so a top-
+// level field still wins if the provider sends both.
+const WRAPPER_KEYS = ['data', 'payload', 'result', 'message'] as const;
+
+function firstString(obj: Record<string, unknown>, aliases: readonly string[]): string {
+  for (const k of aliases) {
+    const v = pickString(obj, k);
+    if (v) return v;
+  }
+  return '';
+}
+
+function firstNumber(obj: Record<string, unknown>, aliases: readonly string[]): number {
+  for (const k of aliases) {
+    if (k in obj) {
+      const n = pickNumber(obj, k, NaN);
+      if (Number.isFinite(n)) return n;
+    }
+  }
+  return 0;
+}
+
+function unwrapBody(raw: Record<string, unknown>): Record<string, unknown> {
+  // Look for a single wrapper field that holds an object; merge its
+  // contents with the top level so we can pick from either place
+  // with the alias lookup below.
+  for (const w of WRAPPER_KEYS) {
+    const v = raw[w];
+    if (v && typeof v === 'object' && !Array.isArray(v)) {
+      return { ...(v as Record<string, unknown>), ...raw };
+    }
+  }
+  return raw;
 }
 
 export const igamingapisAdapter: ProviderAdapter = {
@@ -396,16 +445,71 @@ export const igamingapisAdapter: ProviderAdapter = {
     if (!rawBody || typeof rawBody !== 'object') {
       throw new ProviderAdapterError('CALLBACK_INVALID', 'Callback body must be a JSON object.');
     }
-    const body = rawBody as Record<string, unknown>;
-    const memberAccount = pickString(body, 'member_account');
-    const gameRound = pickString(body, 'game_round');
-    const gameUid = pickString(body, 'game_id') || pickString(body, 'game_uid');
-    const betAmount = pickNumber(body, 'bet_amount', 0);
-    const winAmount = pickNumber(body, 'win_amount', 0);
-    const tsRaw = body.timestamp;
 
-    if (!memberAccount) throw new ProviderAdapterError('CALLBACK_INVALID', 'member_account is required.');
-    if (!gameRound) throw new ProviderAdapterError('CALLBACK_INVALID', 'game_round is required.');
+    // iGamingAPIs sends callbacks as { payload: "<AES-256-ECB base64>",
+    // timestamp: <ms> }. The real payload (member_account, game_round,
+    // bet/win amounts) is INSIDE the encrypted blob, using the same
+    // secret as the launch encryption. Detect and decrypt before
+    // the alias extraction step.
+    const top = rawBody as Record<string, unknown>;
+    const wrapperTimestamp = top.timestamp;
+    let body: Record<string, unknown>;
+    let encryptedPayloadDetected = false;
+    let decryptError: string | undefined;
+
+    const payloadField = typeof top.payload === 'string' ? top.payload : '';
+    if (payloadField && payloadField.length >= 16) {
+      encryptedPayloadDetected = true;
+      try {
+        const plain = aesEcbDecryptBase64(payloadField, creds.apiSecret, creds.secretEncoding);
+        const decoded = JSON.parse(plain);
+        if (decoded && typeof decoded === 'object' && !Array.isArray(decoded)) {
+          body = unwrapBody(decoded as Record<string, unknown>);
+        } else {
+          throw new Error('decrypted body is not a JSON object');
+        }
+      } catch (err) {
+        decryptError = err instanceof Error ? err.message : String(err);
+        // Surface a clear error WITHOUT leaking the secret or the
+        // ciphertext beyond a length hint.
+        throw new ProviderAdapterError(
+          'CALLBACK_INVALID',
+          `CALLBACK_DECRYPT_FAILED. encoding=${creds.secretEncoding} payloadLen=${payloadField.length} err=${decryptError.slice(0, 200)}`,
+        );
+      }
+    } else {
+      // No encrypted payload, fall back to plain JSON shape and
+      // still try wrapper unwrap so non-iGamingAPIs adapters that
+      // reuse this code path work too.
+      body = unwrapBody(top);
+    }
+
+    const seenKeys = Object.keys(body).slice(0, 30);
+
+    const memberAccount = firstString(body, CALLBACK_ALIASES.member);
+    const gameRound = firstString(body, CALLBACK_ALIASES.round);
+    const gameUid = firstString(body, CALLBACK_ALIASES.game);
+    const betAmount = firstNumber(body, CALLBACK_ALIASES.bet);
+    const winAmount = firstNumber(body, CALLBACK_ALIASES.win);
+    let tsRaw: unknown = undefined;
+    for (const k of CALLBACK_ALIASES.timestamp) {
+      if (k in body) { tsRaw = body[k]; break; }
+    }
+    // Fall back to the wrapper timestamp if the decrypted body has none.
+    if (tsRaw === undefined && wrapperTimestamp !== undefined) tsRaw = wrapperTimestamp;
+
+    if (!memberAccount) {
+      throw new ProviderAdapterError(
+        'CALLBACK_INVALID',
+        `account field missing. Seen keys: ${seenKeys.join(',') || '(none)'}`,
+      );
+    }
+    if (!gameRound) {
+      throw new ProviderAdapterError(
+        'CALLBACK_INVALID',
+        `round id field missing. Seen keys: ${seenKeys.join(',') || '(none)'}`,
+      );
+    }
 
     // Provider sends `YYYY-MM-DD HH:mm:ss` per panel screenshot. Use
     // a permissive parse so future ISO/epoch variants still work.
@@ -450,6 +554,16 @@ export const igamingapisAdapter: ProviderAdapter = {
       providerTxId: gameRound,
       timestamp: ts,
       rawBody,
+      diagnostics: {
+        encryptedPayloadDetected,
+        seenKeys,
+        parsedMemberAccount: memberAccount,
+        parsedGameRound: gameRound,
+        parsedGameUid: gameUid || undefined,
+        parsedBetAmount: betAmount,
+        parsedWinAmount: winAmount,
+        derivedType,
+      },
     } satisfies NormalizedCallback;
   },
 

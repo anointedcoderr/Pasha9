@@ -73,6 +73,20 @@ export interface NormalizedCallback {
   providerTxId: string | null;
   timestamp: Date | null;
   rawBody: unknown;
+  // Adapter diagnostics surfaced through to ProviderCallbackLog so
+  // the admin can see exactly what the parser saw when a row was
+  // accepted OR when it was rejected. None of these fields are
+  // secret; they are derived from the inbound body.
+  diagnostics?: {
+    encryptedPayloadDetected?: boolean;
+    seenKeys?: string[];
+    parsedMemberAccount?: string;
+    parsedGameRound?: string;
+    parsedGameUid?: string;
+    parsedBetAmount?: number;
+    parsedWinAmount?: number;
+    derivedType?: 'bet' | 'win' | 'settle' | 'rollback';
+  };
 }
 
 export interface CallbackResponseInput {

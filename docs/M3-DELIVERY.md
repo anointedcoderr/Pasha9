@@ -259,6 +259,105 @@ render an empty state; the error boundary captures the failure if
 something deeper raises. **Always run `prisma db push` on the
 deploy host after pulling a new commit.**
 
+## Encrypted callback payload + reprocess tool (M3 Phase 3G)
+
+**Symptom.** Production callbacks reached the server, security gates
+passed (`callbackKeyValid: true`, `ipValid: true`), but every row
+rejected with `CALLBACK_INVALID: member_account is required`.
+
+**Root cause.** iGamingAPIs sends the real callback body
+**AES-256-ECB encrypted** in a `payload` field at the top level:
+
+```json
+{ "payload": "<base64 ciphertext>", "timestamp": 1780391038793 }
+```
+
+The old parser tried to read `member_account` from the WRAPPER body
+(which only has `payload` and `timestamp`) and never decrypted the
+inner blob. Zero accepted transactions because every callback failed
+at parse time.
+
+**Fix.**
+
+1. Adapter `parseCallback` detects `body.payload` (string, length ≥ 16),
+   base64-decodes it, AES-256-ECB-decrypts with `creds.apiSecret`,
+   parses the resulting JSON, and unwraps one level of common
+   wrappers (`data / payload / result / message`).
+2. Alias-driven extraction. Each logical field tries multiple names:
+   - **member**: `member_account, memberAccount, user_id, userId,
+     user, player_id, playerId, account, username`
+   - **game**: `game_uid, game_id, gameUid, gameId`
+   - **round**: `game_round, gameRound, round_id, roundId,
+     transaction_id, transactionId, bet_id, betId`
+   - **bet**: `bet_amount, betAmount, bet, amount`
+   - **win**: `win_amount, winAmount, win, payout`
+   - **timestamp**: `timestamp, time, created_at, createdAt,
+     round_time, roundTime` (wrapper timestamp is a fallback).
+3. Callback route now accepts both `application/json` and
+   `application/x-www-form-urlencoded` body content types.
+4. Improved errors carry the actually-seen top-level keys:
+   `CALLBACK_INVALID: account field missing. Seen keys: payload,timestamp`.
+5. `lib/providers/mask.ts` now preserves the `payload` field
+   verbatim at storage time. Plaintext is still protected behind the
+   AEAD-encrypted apiSecret; storing the ciphertext is what makes
+   the reprocess tool actually work.
+
+**Diagnostics on every callback log row.**
+`response._diagnostics` now carries:
+
+- `encryptedPayloadDetected` (true if a payload blob was decrypted)
+- `seenKeys` (top-level keys after unwrap)
+- `parsedMemberAccount / parsedGameRound / parsedGameUid /
+  parsedBetAmount / parsedWinAmount / derivedType`
+- `status / errorCode / userId / walletBefore / walletAfter / netResult`
+
+The Logs tab callback table renders an inline diagnostics row under
+each parent row when any of these are present. Rejected rows get a
+**Reprocess** button.
+
+### Reprocess workflow
+
+POST `/api/admin/providers/[id]/callback-logs/[logId]/reprocess`
+with `{ reason }`. Super-admin only.
+
+- Loads the saved ProviderCallbackLog row (with the verbatim
+  encrypted `payload` field).
+- Re-runs adapter.parseCallback + processProviderCallback exactly
+  as a fresh inbound hit would.
+- Idempotency comes from the wallet pipeline: the new
+  `(providerKey, gameRound, type)` key. If the same round was
+  already settled (or already reprocessed once), the second attempt
+  short-circuits as `duplicate` and the wallet stays put.
+- Writes a NEW ProviderCallbackLog row tagged with the replay
+  outcome (`response._reprocess.originalLogId`). The original row
+  is left intact.
+- Activity log: `PROVIDER_CALLBACK_REPROCESS`.
+
+Operator flow for the current client incident:
+
+1. Pull the new build + run `pnpm exec prisma db push` (no schema
+   change in this commit, but earlier commits still need it).
+2. `/admin/providers/<id>` -> Logs tab -> Callbacks.
+3. Each previously-rejected row now shows a Reprocess button.
+4. Click Reprocess on the winning round → wallet is credited inside
+   `db.$transaction`. A toast confirms `accepted` or `duplicate`
+   with the wallet before/after.
+
+### Diagnostics tile rewrite
+
+Setup tab Callback diagnostics card now distinguishes:
+
+- **No callbacks at all**: launches > 0 AND callbacks == 0 →
+  provider portal misconfigured.
+- **Callbacks rejected at parse**: callbacks > 0 AND accepted == 0 →
+  payload format mismatch. Points the operator at the Logs tab.
+
+### /admin/transactions safety net
+
+Added `apps/web/app/(admin)/admin/transactions/error.tsx` to catch
+any uncaught render error on the platform transaction log. Renders
+a recovery card with digest instead of the blank crash overlay.
+
 ## Provider callback troubleshooting
 
 ### Symptom: real winning round did not credit the player wallet

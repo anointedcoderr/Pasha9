@@ -75,9 +75,24 @@ export async function POST(req: NextRequest, { params }: { params: { providerKey
 
   const keyValid = creds.callbackSecret.length > 0 && timingSafeEqualStr(providedKey, creds.callbackSecret);
   const ipOk = ipAllowed(ip, creds.ipWhitelist);
+  const contentType = (req.headers.get('content-type') || '').toLowerCase();
   const bodyRaw = await req.text();
   let bodyJson: unknown = null;
-  try { bodyJson = bodyRaw.length ? JSON.parse(bodyRaw) : null; } catch { bodyJson = { _raw: bodyRaw.slice(0, 2000) }; }
+  if (!bodyRaw.length) {
+    bodyJson = null;
+  } else if (contentType.includes('application/x-www-form-urlencoded')) {
+    // Form-encoded: convert into a flat object so the adapter alias
+    // map can read it the same way as JSON. Numeric strings stay as
+    // strings; pickNumber coerces them anyway.
+    try {
+      const params = new URLSearchParams(bodyRaw);
+      const obj: Record<string, string> = {};
+      params.forEach((v, k) => { obj[k] = v; });
+      bodyJson = obj;
+    } catch { bodyJson = { _raw: bodyRaw.slice(0, 2000) }; }
+  } else {
+    try { bodyJson = JSON.parse(bodyRaw); } catch { bodyJson = { _raw: bodyRaw.slice(0, 2000) }; }
+  }
 
   if (!keyValid || !ipOk || !creds.active) {
     const errorCode = !keyValid ? 'UNAUTHORIZED_KEY' : !ipOk ? 'IP_NOT_WHITELISTED' : 'PROVIDER_INACTIVE';
@@ -133,12 +148,24 @@ export async function POST(req: NextRequest, { params }: { params: { providerKey
       errorCode: result.errorCode,
     });
 
+    const responseWithDiag = {
+      ...(envelope.body as Record<string, unknown>),
+      _diagnostics: {
+        ...(normalized.diagnostics ?? {}),
+        status: result.status,
+        errorCode: result.errorCode ?? null,
+        userId: result.userId,
+        walletBefore: result.walletBefore,
+        walletAfter: result.walletAfter,
+        netResult: result.netResult,
+      },
+    };
     await db.providerCallbackLog.create({
       data: {
         providerId: provider.id, ip, method: 'POST',
         callbackKeyValid: true, ipValid: true, timestampValid: tsValid,
         body: (maskPayload(bodyJson) ?? Prisma.JsonNull) as Prisma.InputJsonValue,
-        response: envelope.body as Prisma.InputJsonValue,
+        response: responseWithDiag as Prisma.InputJsonValue,
         processedTxId: result.providerTxId,
         error: result.status === 'rejected' ? (result.errorCode ?? 'REJECTED') : null,
       },
