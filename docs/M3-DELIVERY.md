@@ -235,6 +235,30 @@ is structure only and depends on the operator pasting real values.
 - [ ] Duplicate callback verified (status: duplicate in Logs).
 - [ ] Reports tab returns non-zero numbers for the test period.
 
+## Client-side crash safety nets (M3 Phase 3F)
+
+Two route-level error boundaries protect the admin shell:
+
+- `apps/web/app/(admin)/admin/error.tsx` catches any uncaught render
+  error anywhere under `/admin/*` and shows a recovery card with the
+  digest copy-pasteable for triage.
+- `apps/web/app/(admin)/admin/providers/[id]/error.tsx` is the
+  closer-scoped boundary for the provider detail page (Setup,
+  Brands, Games, Logs, Transactions, Reports). It wins over the
+  admin-level boundary when the failure is on this page.
+
+`fmt`, `safeNumber`, `safeDate` helpers replace every `.toString()`
+and `new Date(x).toLocaleString()` in the provider Transactions,
+Logs and Reports panels so a missing column or a partial API
+payload renders `-` instead of crashing the table.
+
+If the operator forgot to run `prisma db push` after deploying the
+new ProviderTransaction columns, the API would return 500 for any
+query that mentions those columns. The defensive panels still
+render an empty state; the error boundary captures the failure if
+something deeper raises. **Always run `prisma db push` on the
+deploy host after pulling a new commit.**
+
 ## Provider callback troubleshooting
 
 ### Symptom: real winning round did not credit the player wallet
@@ -292,6 +316,21 @@ carry a positive win and never moved the wallet).
 - Activity log: `PROVIDER_TX_REPAIR_CREDIT`.
 - We do NOT call the provider. This is wallet correction inside
   Pasha 9 only.
+
+### Callback diagnostics card
+
+Setup tab now opens with a Callback diagnostics panel:
+
+- **Last launch / Last callback / Last accepted tx / Last accepted round**:
+  the four timestamps an operator needs to see at a glance whether
+  the wallet pipeline is moving.
+- **Last 24h counters**: launches, callbacks, accepted, duplicates,
+  rejected.
+- **Rose warning headline**: if the platform sent any launch in the
+  last 24h but received zero callbacks, the panel surfaces a clear
+  alert pointing at the three likely causes (wrong callback URL in
+  provider portal, IP whitelist missing the VPS public IPs, or the
+  callback key in the portal does not match what is saved here).
 
 ### Manual test matrix
 

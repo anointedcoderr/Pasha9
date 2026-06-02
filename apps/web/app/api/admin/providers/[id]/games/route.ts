@@ -40,7 +40,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     const [rows, byCategoryRaw, byStatusRaw, total] = await Promise.all([
       db.externalGame.findMany({
         where,
-        orderBy: [{ displayName: 'asc' }],
+        orderBy: [{ isFeatured: 'desc' }, { sortOrder: 'desc' }, { displayName: 'asc' }],
         take: limit,
       }),
       db.externalGame.groupBy({ by: ['category'], where: { providerId: params.id }, _count: { _all: true } }),
@@ -62,6 +62,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         category: g.category,
         imageUrl: g.imageUrl,
         status: g.status,
+        isFeatured: g.isFeatured ?? false,
+        sortOrder: g.sortOrder ?? 0,
         lastSyncAt: g.lastSyncAt,
       })),
       counts: {

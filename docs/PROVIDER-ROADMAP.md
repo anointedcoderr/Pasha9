@@ -12,7 +12,14 @@ a new provider is mechanical once credentials and docs are in hand.
 
 Built by Anointed Coder.
 
-## Recommended priorities
+## Recommended priorities (Babu88-style platform)
+
+The shape below mirrors a full Babu88-class catalogue: one premium
+slots aggregator, one premium live casino brand, a crash specialist,
+a sportsbook, and at least one fishing brand beyond JILI. Each
+provider is an independent commercial relationship.
+
+
 
 ### 1. PG Soft (mobile slots)
 - Why: dominant mobile slots brand in the Bangladesh / South Asia
@@ -88,6 +95,19 @@ Built by Anointed Coder.
 - Manual catalog import + bulk CSV/JSON paths.
 - Test launch + Simulate callback admin tooling.
 - Rollback action.
+
+## Featured games inside an existing provider
+
+Once a provider is live, the admin can promote individual titles via
+`ExternalGame.isFeatured` + `ExternalGame.sortOrder` (M3 Phase 3F).
+Featured games surface first in the homepage rail and in
+`/games/provider`; ties are broken by `sortOrder DESC` then
+`displayName`. Set both from `/admin/providers/<id>` -> Games tab
+-> Edit on any row.
+
+This means JILI alone can fill a Babu88-style featured-games rail
+today: pick 12 to 20 high-RTP titles, mark them Featured, set
+descending sort orders, and the homepage rail puts them at the top.
 
 ## Important honesty
 

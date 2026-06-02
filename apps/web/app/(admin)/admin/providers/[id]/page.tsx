@@ -111,10 +111,10 @@ export default function AdminProviderDetailPage() {
                 <Chip tone={provider.callbackSecret.set ? 'ok' : 'warn'}>Callback key {provider.callbackSecret.set ? 'set' : 'missing'}</Chip>
                 <Chip tone={provider.lastHealthCheckOk ? 'ok' : provider.lastHealthCheckAt ? 'danger' : 'neutral'}>
                   {provider.lastHealthCheckAt
-                    ? `Health ${provider.lastHealthCheckOk ? 'OK' : 'FAIL'} . ${new Date(provider.lastHealthCheckAt).toLocaleString()}`
+                    ? `Health ${provider.lastHealthCheckOk ? 'OK' : 'FAIL'} . ${safeDate(provider.lastHealthCheckAt)}`
                     : 'Not tested'}
                 </Chip>
-                {provider.lastSyncAt ? <Chip tone="info">Last sync {new Date(provider.lastSyncAt).toLocaleString()}</Chip> : null}
+                {provider.lastSyncAt ? <Chip tone="info">Last sync {safeDate(provider.lastSyncAt)}</Chip> : null}
               </div>
               <Switch
                 checked={provider.status === 'active'}
@@ -297,8 +297,13 @@ interface HealthPayload {
     transactionProcessed: boolean;
     duplicateProtectionTested: boolean;
   };
-  counts: { callbacks: number; accepted: number; duplicates: number; games: number; activeGames: number };
+  counts: { callbacks: number; accepted: number; duplicates: number; rejected?: number; rolledBack?: number; games: number; activeGames: number };
   lastCallback: { receivedAt: string; ip: string | null; callbackKeyValid: boolean | null; error: string | null } | null;
+  last24h?: { callbacks: number; accepted: number; duplicates: number; rejected: number; launches: number };
+  lastLaunchAt?: string | null;
+  lastAcceptedAt?: string | null;
+  lastAcceptedRound?: string | null;
+  diagnostics?: { launchWithoutCallback: boolean };
 }
 
 function HealthPanel({ providerId }: { providerId: string }) {
@@ -339,6 +344,33 @@ function HealthPanel({ providerId }: { providerId: string }) {
 
       {data ? (
         <>
+          {data.diagnostics?.launchWithoutCallback ? (
+            <Card padding="sm" className="border-l-4 border-rose-400/60">
+              <p className="text-sm font-bold text-rose-200">Launches with no callbacks in the last 24h</p>
+              <p className="mt-1 text-[11px] text-ink-mid">
+                {safeNumber(data.last24h?.launches)} launch request{safeNumber(data.last24h?.launches) === 1 ? '' : 's'} sent to the provider but zero callbacks received. Likely causes: provider portal is dialling the wrong callback URL, the VPS public IP is not on the provider IP whitelist, or the callback key in the portal does not match what is saved here. Run Simulate callback to confirm the wallet pipeline is healthy, then check the provider portal config.
+              </p>
+            </Card>
+          ) : null}
+
+          <Card padding="sm" className="border-l-4 border-neon/30">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-ink-lo">Callback diagnostics</p>
+            <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
+              <Totals label="Last launch" value={data.lastLaunchAt ? safeDate(data.lastLaunchAt) : 'Never'} />
+              <Totals label="Last callback" value={data.lastCallback?.receivedAt ? safeDate(data.lastCallback.receivedAt) : 'Never'} />
+              <Totals label="Last accepted tx" value={data.lastAcceptedAt ? safeDate(data.lastAcceptedAt) : 'Never'} />
+              <Totals label="Last accepted round" value={data.lastAcceptedRound ?? '-'} />
+            </div>
+            <p className="mt-3 text-[10px] font-bold uppercase tracking-wider text-ink-lo">Last 24h</p>
+            <div className="mt-1 grid grid-cols-2 gap-2 md:grid-cols-5">
+              <Totals label="Launches" value={String(safeNumber(data.last24h?.launches))} />
+              <Totals label="Callbacks" value={String(safeNumber(data.last24h?.callbacks))} />
+              <Totals label="Accepted" value={String(safeNumber(data.last24h?.accepted))} positive={safeNumber(data.last24h?.accepted) > 0} />
+              <Totals label="Duplicates" value={String(safeNumber(data.last24h?.duplicates))} />
+              <Totals label="Rejected" value={String(safeNumber(data.last24h?.rejected))} negative={safeNumber(data.last24h?.rejected) > 0} />
+            </div>
+          </Card>
+
           <Card padding="sm" className={cn('border-l-4', urlSuspect ? 'border-rose-400/60' : 'border-emerald-400/60')}>
             <p className="text-[10px] font-bold uppercase tracking-wider text-ink-lo">URLs sent to provider</p>
             <div className="mt-2 space-y-2 text-xs">
@@ -368,7 +400,7 @@ function HealthPanel({ providerId }: { providerId: string }) {
             </ul>
             {data.lastCallback ? (
               <p className="mt-2 text-[10px] text-ink-lo">
-                Last callback {new Date(data.lastCallback.receivedAt).toLocaleString()} from <span className="font-mono">{data.lastCallback.ip ?? '-'}</span>
+                Last callback {safeDate(data.lastCallback.receivedAt)} from <span className="font-mono">{data.lastCallback.ip ?? '-'}</span>
                 {data.lastCallback.error ? <> . <span className="text-rose-300">{data.lastCallback.error}</span></> : null}
               </p>
             ) : <p className="mt-2 text-[10px] text-ink-lo">No callbacks logged yet. Run Simulate callback or wait for real provider traffic.</p>}
@@ -589,7 +621,7 @@ function BrandsPanel({ providerId }: { providerId: string }) {
                 <span className="ml-2 font-mono text-[10px] text-ink-lo">{b.brandKey}</span>
                 <span className="ml-2 text-[10px] text-ink-lo">. {b.gameCount} game{b.gameCount === 1 ? '' : 's'}</span>
               </div>
-              <span className="text-[10px] text-ink-lo">{b.lastSyncAt ? new Date(b.lastSyncAt).toLocaleString() : 'Never'}</span>
+              <span className="text-[10px] text-ink-lo">{b.lastSyncAt ? safeDate(b.lastSyncAt) : 'Never'}</span>
             </li>
           ))}
         </ul>
@@ -640,7 +672,7 @@ function ManualBrandModal({ open, onOpenChange, providerId, onCreated }: { open:
   );
 }
 
-interface GameRow { id: string; gameUid: string; brandId: string | null; displayName: string; category: string | null; imageUrl: string | null; status: string; lastSyncAt: string | null }
+interface GameRow { id: string; gameUid: string; brandId: string | null; displayName: string; category: string | null; imageUrl: string | null; status: string; isFeatured?: boolean; sortOrder?: number; lastSyncAt: string | null }
 interface GamesCounts { total: number; filtered: number; byStatus: Record<string, number>; byCategory: Record<string, number> }
 
 function GamesPanel({ providerId }: { providerId: string }) {
@@ -1094,6 +1126,8 @@ function EditGameModal({ open, onOpenChange, providerId, brands, game, onDone }:
   const [imageUrl, setImageUrl] = useState('');
   const [status, setStatus] = useState<'active' | 'maintenance' | 'hidden'>('active');
   const [brandKey, setBrandKey] = useState('');
+  const [isFeatured, setIsFeatured] = useState(false);
+  const [sortOrder, setSortOrder] = useState('0');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -1105,6 +1139,8 @@ function EditGameModal({ open, onOpenChange, providerId, brands, game, onDone }:
     setStatus((game.status === 'maintenance' || game.status === 'hidden') ? game.status : 'active');
     const currentBrand = brands.find((b) => b.id === game.brandId);
     setBrandKey(currentBrand?.brandKey ?? '');
+    setIsFeatured(Boolean(game.isFeatured));
+    setSortOrder(String(safeNumber(game.sortOrder)));
     setErr(null);
   }, [open, game, brands]);
 
@@ -1119,6 +1155,8 @@ function EditGameModal({ open, onOpenChange, providerId, brands, game, onDone }:
         imageUrl: imageUrl.trim(),
         status,
         brandKey: brandKey.trim(),
+        isFeatured,
+        sortOrder: Number(sortOrder) || 0,
       };
       const r = await fetch(`/api/admin/providers/${providerId}/games/${game.id}`, {
         method: 'PATCH', headers: { 'content-type': 'application/json' },
@@ -1155,6 +1193,15 @@ function EditGameModal({ open, onOpenChange, providerId, brands, game, onDone }:
           </select>
         </Field>
         <Field label="Image URL"><input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} className={inputCls} placeholder="https://..." /></Field>
+        <Field label="Featured (shows in homepage rail first)">
+          <div className="inline-flex rounded-lg border border-neon/15 bg-base-panel p-1 text-xs">
+            <button type="button" onClick={() => setIsFeatured(true)} className={cn('rounded-md px-3 py-1.5 font-semibold transition', isFeatured ? 'bg-gold-400 text-base-deep' : 'text-ink-mid')}>Featured</button>
+            <button type="button" onClick={() => setIsFeatured(false)} className={cn('rounded-md px-3 py-1.5 font-semibold transition', !isFeatured ? 'bg-gold-400 text-base-deep' : 'text-ink-mid')}>Regular</button>
+          </div>
+        </Field>
+        <Field label="Sort order (higher shows first; default 0)">
+          <input type="number" step={1} value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} className={inputCls} placeholder="0" />
+        </Field>
         <Field label="Status">
           <select value={status} onChange={(e) => setStatus(e.target.value as 'active' | 'maintenance' | 'hidden')} className={inputCls}>
             <option value="active">active</option>
@@ -1314,12 +1361,12 @@ function LogsPanel({ providerId }: { providerId: string }) {
               <tbody className="divide-y divide-neon/10">
                 {(rows as RequestLogRow[]).map((r) => (
                   <tr key={r.id}>
-                    <td className="px-3 py-2 text-ink-mid">{new Date(r.createdAt).toLocaleString()}</td>
-                    <td className="px-3 py-2 font-mono text-ink-mid">{r.direction}</td>
-                    <td className="px-3 py-2 font-mono">{r.endpoint}</td>
+                    <td className="px-3 py-2 text-ink-mid">{safeDate(r.createdAt)}</td>
+                    <td className="px-3 py-2 font-mono text-ink-mid">{r.direction ?? '-'}</td>
+                    <td className="px-3 py-2 font-mono break-all">{r.endpoint ?? '-'}</td>
                     <td className="px-3 py-2">{r.status ?? '-'}</td>
                     <td className="px-3 py-2">{r.durationMs ?? '-'}</td>
-                    <td className="px-3 py-2 text-signal-danger">{r.errorMessage ?? ''}</td>
+                    <td className="px-3 py-2 break-all text-signal-danger">{r.errorMessage ?? ''}</td>
                   </tr>
                 ))}
                 {rows.length === 0 ? <tr><td colSpan={6} className="px-3 py-4 text-center text-ink-mid">No requests yet.</td></tr> : null}
@@ -1333,13 +1380,13 @@ function LogsPanel({ providerId }: { providerId: string }) {
               <tbody className="divide-y divide-neon/10">
                 {(rows as CallbackLogRow[]).map((r) => (
                   <tr key={r.id}>
-                    <td className="px-3 py-2 text-ink-mid">{new Date(r.receivedAt).toLocaleString()}</td>
-                    <td className="px-3 py-2 font-mono">{r.ip ?? '-'}</td>
+                    <td className="px-3 py-2 text-ink-mid">{safeDate(r.receivedAt)}</td>
+                    <td className="px-3 py-2 font-mono break-all">{r.ip ?? '-'}</td>
                     <td className="px-3 py-2">{r.callbackKeyValid ? 'OK' : r.callbackKeyValid === false ? 'BAD' : '-'}</td>
                     <td className="px-3 py-2">{r.ipValid ? 'OK' : r.ipValid === false ? 'BAD' : '-'}</td>
                     <td className="px-3 py-2">{r.timestampValid ? 'OK' : r.timestampValid === false ? 'WARN' : '-'}</td>
-                    <td className="px-3 py-2 font-mono text-[11px]">{r.processedTxId ?? '-'}</td>
-                    <td className="px-3 py-2 text-signal-danger">{r.error ?? ''}</td>
+                    <td className="px-3 py-2 font-mono text-[11px] break-all">{r.processedTxId ?? '-'}</td>
+                    <td className="px-3 py-2 break-all text-signal-danger">{r.error ?? ''}</td>
                   </tr>
                 ))}
                 {rows.length === 0 ? <tr><td colSpan={7} className="px-3 py-4 text-center text-ink-mid">No callbacks yet.</td></tr> : null}
@@ -1394,11 +1441,11 @@ function TransactionsPanel({ providerId }: { providerId: string }) {
       <CardHeader title="Transactions" subtitle="Provider wallet events. Accepted rows feed the GGR aggregate." action={<Button size="sm" variant="ghost" leftIcon={<RefreshCw className="h-3.5 w-3.5" />} onClick={load}>Reload</Button>} />
       {data?.totals ? (
         <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-5">
-          <Totals label="Rounds" value={data.totals.rounds.toString()} />
-          <Totals label="Total bet" value={fmt(data.totals.totalBet)} />
-          <Totals label="Total win" value={fmt(data.totals.totalWin)} />
-          <Totals label="Net" value={fmt(data.totals.netResult)} positive={data.totals.netResult >= 0} />
-          <Totals label="GGR" value={fmt(data.totals.ggr)} positive={data.totals.ggr >= 0} />
+          <Totals label="Rounds" value={String(safeNumber(data.totals?.rounds))} />
+          <Totals label="Total bet" value={fmt(data.totals?.totalBet)} />
+          <Totals label="Total win" value={fmt(data.totals?.totalWin)} />
+          <Totals label="Net" value={fmt(data.totals?.netResult)} positive={safeNumber(data.totals?.netResult) >= 0} />
+          <Totals label="GGR" value={fmt(data.totals?.ggr)} positive={safeNumber(data.totals?.ggr) >= 0} />
         </div>
       ) : null}
       <div className="overflow-x-auto">
@@ -1421,17 +1468,17 @@ function TransactionsPanel({ providerId }: { providerId: string }) {
           <tbody className="divide-y divide-neon/10">
             {(data?.rows ?? []).map((r) => (
               <tr key={r.id}>
-                <td className="px-3 py-2 text-ink-mid">{new Date(r.createdAt).toLocaleString()}</td>
-                <td className="px-3 py-2 font-mono text-[11px]">{r.memberAccount}</td>
+                <td className="px-3 py-2 text-ink-mid">{safeDate(r.createdAt)}</td>
+                <td className="px-3 py-2 font-mono text-[11px] break-all">{r.memberAccount ?? '-'}</td>
                 <td className="px-3 py-2 font-mono text-[11px]">{r.gameUid ?? '-'}</td>
-                <td className="px-3 py-2 font-mono text-[11px]">{r.gameRound}</td>
+                <td className="px-3 py-2 font-mono text-[11px] break-all">{r.gameRound ?? '-'}</td>
                 <td className="px-3 py-2">{fmt(r.betAmount)}</td>
                 <td className="px-3 py-2">{fmt(r.winAmount)}</td>
                 <td className="px-3 py-2 font-mono text-[11px]">{r.walletBefore != null ? fmt(r.walletBefore) : '-'}</td>
                 <td className="px-3 py-2 font-mono text-[11px]">{r.walletAfter != null ? fmt(r.walletAfter) : '-'}</td>
-                <td className="px-3 py-2 font-mono text-[11px]">{r.type}</td>
+                <td className="px-3 py-2 font-mono text-[11px]">{r.type ?? '-'}</td>
                 <td className="px-3 py-2">
-                  <Chip tone={r.status === 'accepted' ? 'ok' : r.status === 'duplicate' ? 'info' : r.status === 'rolled_back' ? 'warn' : 'danger'}>{r.status}</Chip>
+                  <Chip tone={r.status === 'accepted' ? 'ok' : r.status === 'duplicate' ? 'info' : r.status === 'rolled_back' ? 'warn' : 'danger'}>{r.status ?? '-'}</Chip>
                   {r.repairedAt ? <Chip tone="info">repaired</Chip> : null}
                 </td>
                 <td className="px-3 py-2">
@@ -1439,14 +1486,14 @@ function TransactionsPanel({ providerId }: { providerId: string }) {
                     {r.status === 'accepted' && !r.rolledBackAt ? (
                       <Button size="sm" variant="ghost" leftIcon={<AlertTriangle className="h-3.5 w-3.5" />} onClick={() => setRollback(r)}>Rollback</Button>
                     ) : null}
-                    {r.status === 'accepted' && r.winAmount > 0 && !r.repairedAt && !r.rolledBackAt ? (
+                    {r.status === 'accepted' && safeNumber(r.winAmount) > 0 && !r.repairedAt && !r.rolledBackAt ? (
                       <Button size="sm" variant="ghost" leftIcon={<Save className="h-3.5 w-3.5" />} onClick={() => setRepair(r)}>Repair</Button>
                     ) : null}
-                    {r.status === 'duplicate' && r.winAmount > 0 && !r.repairedAt ? (
+                    {r.status === 'duplicate' && safeNumber(r.winAmount) > 0 && !r.repairedAt ? (
                       <Button size="sm" variant="neon" leftIcon={<Save className="h-3.5 w-3.5" />} onClick={() => setRepair(r)}>Credit missing win</Button>
                     ) : null}
-                    {r.repairedAt ? <span className="text-[10px] text-ink-lo" title={r.repairReason ?? ''}>repaired {new Date(r.repairedAt).toLocaleString()}</span> : null}
-                    {r.rolledBackAt ? <span className="text-[10px] text-ink-lo" title={r.rollbackReason ?? ''}>rolled back {new Date(r.rolledBackAt).toLocaleString()}</span> : null}
+                    {r.repairedAt ? <span className="text-[10px] text-ink-lo" title={r.repairReason ?? ''}>repaired {safeDate(r.repairedAt)}</span> : null}
+                    {r.rolledBackAt ? <span className="text-[10px] text-ink-lo" title={r.rollbackReason ?? ''}>rolled back {safeDate(r.rolledBackAt)}</span> : null}
                   </div>
                 </td>
               </tr>
@@ -1700,17 +1747,34 @@ function GameThumb({ game }: { game: GameRow }) {
   );
 }
 
-function Totals({ label, value, positive }: { label: string; value: string; positive?: boolean }) {
+function Totals({ label, value, positive, negative }: { label: string; value: string; positive?: boolean; negative?: boolean }) {
   return (
     <div className="rounded-lg border border-neon/10 bg-base-panel/40 p-3">
       <p className="text-[10px] font-bold uppercase tracking-wider text-ink-lo">{label}</p>
-      <p className={cn('mt-0.5 text-base font-extrabold', positive === false ? 'text-signal-danger' : 'text-ink-hi')}>{value}</p>
+      <p className={cn('mt-0.5 break-words text-base font-extrabold', negative ? 'text-signal-danger' : positive === false ? 'text-signal-danger' : positive ? 'text-signal-ok' : 'text-ink-hi')}>{value}</p>
     </div>
   );
 }
 
-function fmt(n: number): string {
-  return `BDT ${Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+function fmt(n: number | string | null | undefined): string {
+  // Defensive: a missing column (older row) or a Decimal-shaped
+  // value from a partial API response must not crash the table
+  // render. Anything non-numeric collapses to BDT 0.00.
+  const v = Number(n);
+  if (!Number.isFinite(v)) return 'BDT 0.00';
+  return `BDT ${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function safeNumber(n: unknown, fallback = 0): number {
+  const v = Number(n as number);
+  return Number.isFinite(v) ? v : fallback;
+}
+
+function safeDate(s: unknown): string {
+  if (s == null) return '-';
+  const d = new Date(s as string | number | Date);
+  if (Number.isNaN(d.getTime())) return '-';
+  return d.toLocaleString();
 }
 
 const inputCls = 'h-10 w-full rounded-lg border border-neon/15 bg-base-panel px-3 text-sm text-ink-hi focus:outline-none focus:border-gold-300/60';
@@ -1806,11 +1870,11 @@ function ReportsPanel({ providerId }: { providerId: string }) {
       {data ? (
         <>
           <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-5">
-            <Totals label="Rounds" value={String(data.totals.rounds)} />
-            <Totals label="Total bet" value={fmt(data.totals.totalBet)} />
-            <Totals label="Total win" value={fmt(data.totals.totalWin)} />
-            <Totals label="Net" value={fmt(data.totals.netResult)} positive={data.totals.netResult >= 0} />
-            <Totals label="GGR" value={fmt(data.totals.ggr)} positive={data.totals.ggr >= 0} />
+            <Totals label="Rounds" value={String(safeNumber(data.totals?.rounds))} />
+            <Totals label="Total bet" value={fmt(data.totals?.totalBet)} />
+            <Totals label="Total win" value={fmt(data.totals?.totalWin)} />
+            <Totals label="Net" value={fmt(data.totals?.netResult)} positive={safeNumber(data.totals?.netResult) >= 0} />
+            <Totals label="GGR" value={fmt(data.totals?.ggr)} positive={safeNumber(data.totals?.ggr) >= 0} />
           </div>
 
           {Object.keys(data.byStatus).length > 0 ? (

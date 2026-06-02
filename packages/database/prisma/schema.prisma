@@ -655,6 +655,12 @@ model ExternalGame {
   category    String?
   imageUrl    String?
   status      String   @default("active") // active | hidden | maintenance
+  // M3 Phase 3F: featured + sortOrder. Public lobby and homepage
+  // rail surface featured rows first; ties broken by sortOrder DESC
+  // then displayName ASC. Both default to neutral values so legacy
+  // rows render in the same order they did before.
+  isFeatured  Boolean  @default(false)
+  sortOrder   Int      @default(0)
   rawMeta     Json?
   lastSyncAt  DateTime?
   createdAt   DateTime @default(now())
@@ -667,6 +673,7 @@ model ExternalGame {
   @@index([providerId, status])
   @@index([brandId])
   @@index([category])
+  @@index([isFeatured, sortOrder])
 }
 
 // Per-provider numeric member account map. iGamingAPIs and most

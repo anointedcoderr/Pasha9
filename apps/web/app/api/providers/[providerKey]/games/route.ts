@@ -40,10 +40,10 @@ export async function GET(req: Request, { params }: { params: { providerKey: str
   const [games, total, byCategoryRaw] = await Promise.all([
     db.externalGame.findMany({
       where,
-      orderBy: [{ category: 'asc' }, { displayName: 'asc' }],
+      orderBy: [{ isFeatured: 'desc' }, { sortOrder: 'desc' }, { category: 'asc' }, { displayName: 'asc' }],
       select: {
         id: true, gameUid: true, displayName: true, category: true,
-        imageUrl: true, brandId: true, lastSyncAt: true,
+        imageUrl: true, brandId: true, isFeatured: true, sortOrder: true, lastSyncAt: true,
       },
       skip: offset,
       take: limit,
@@ -79,6 +79,7 @@ export async function GET(req: Request, { params }: { params: { providerKey: str
       imageUrl: g.imageUrl ?? null,
       brandKey: g.brandId ? brandMap.get(g.brandId)?.brandKey ?? null : null,
       brandName: g.brandId ? brandMap.get(g.brandId)?.displayName ?? null : null,
+      isFeatured: g.isFeatured ?? false,
     })),
   });
 }
