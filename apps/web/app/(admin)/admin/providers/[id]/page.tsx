@@ -442,19 +442,33 @@ function CheckRow({ label, ok, optional }: { label: string; ok: boolean; optiona
 }
 
 interface SimulateResult {
-  gameRound: string;
+  status: 'accepted' | 'duplicate' | 'rejected';
+  type: 'bet' | 'win' | 'settle' | 'rollback';
+  errorCode: string | null;
+  providerTransactionId: string | null;
+  callbackLogId: string | null;
   memberAccount: string;
+  gameRound: string;
+  gameUid: string;
+  betAmount: number;
+  winAmount: number;
+  walletBefore: number;
+  walletAfter: number;
+  netResult: number;
   callbackBody: Record<string, unknown>;
   callbackResponse: { status: number; body: unknown };
-  result: {
-    status: 'accepted' | 'duplicate' | 'rejected';
-    errorCode?: string;
-    providerTxId: string;
-    walletBefore: number;
-    walletAfter: number;
-    netResult: number;
-  };
+  diagnostics: Record<string, unknown> | null;
+  providerActiveOnSimulate: boolean;
+  gameCatalogHit: boolean;
+  gameDisplayName: string | null;
   testUser: { id: string; username: string };
+}
+
+interface SimulateFailure {
+  code: string;
+  message: string;
+  httpStatus: number;
+  body: unknown;
 }
 
 function SimulateCallbackModal({ open, onOpenChange, providerId, onDone }: { open: boolean; onOpenChange: (v: boolean) => void; providerId: string; onDone: () => void }) {
@@ -464,15 +478,15 @@ function SimulateCallbackModal({ open, onOpenChange, providerId, onDone }: { ope
   const [winAmount, setWinAmount] = useState('0');
   const [gameRound, setGameRound] = useState('');
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const [failure, setFailure] = useState<SimulateFailure | null>(null);
   const [result, setResult] = useState<SimulateResult | null>(null);
 
   useEffect(() => {
-    if (!open) { setGameUid(''); setUserQuery(''); setBetAmount('10'); setWinAmount('0'); setGameRound(''); setErr(null); setResult(null); }
+    if (!open) { setGameUid(''); setUserQuery(''); setBetAmount('10'); setWinAmount('0'); setGameRound(''); setFailure(null); setResult(null); }
   }, [open]);
 
   const onRun = async () => {
-    setBusy(true); setErr(null); setResult(null);
+    setBusy(true); setFailure(null); setResult(null);
     try {
       const body: Record<string, unknown> = {
         gameUid: gameUid.trim(),
@@ -485,15 +499,35 @@ function SimulateCallbackModal({ open, onOpenChange, providerId, onDone }: { ope
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),
       });
-      const j = await r.json().catch(() => null);
-      if (!r.ok) { setErr(j?.message ?? j?.code ?? 'Simulate failed'); return; }
-      setResult(j as SimulateResult);
-      // Auto-fill gameRound so the operator can immediately re-run to test the duplicate path.
-      if (j?.gameRound) setGameRound(j.gameRound);
+      const j = await r.json().catch(() => null) as Record<string, unknown> | null;
+      if (!r.ok) {
+        setFailure({
+          code: (j?.code as string) ?? `HTTP_${r.status}`,
+          message: (j?.message as string) ?? 'Simulate failed',
+          httpStatus: r.status,
+          body: j,
+        });
+        return;
+      }
+      setResult(j as unknown as SimulateResult);
+      if (typeof j?.gameRound === 'string') setGameRound(j.gameRound);
       onDone();
-    } catch (e) { setErr(e instanceof Error ? e.message : 'Simulate failed'); }
+    } catch (e) {
+      setFailure({
+        code: 'NETWORK',
+        message: e instanceof Error ? e.message : 'Simulate failed',
+        httpStatus: 0,
+        body: null,
+      });
+    }
     finally { setBusy(false); }
   };
+
+  const statusBorder = (s: SimulateResult['status']) => s === 'accepted'
+    ? 'border-emerald-400/60'
+    : s === 'duplicate'
+      ? 'border-amber-400/60'
+      : 'border-rose-400/60';
 
   return (
     <Modal
@@ -503,18 +537,30 @@ function SimulateCallbackModal({ open, onOpenChange, providerId, onDone }: { ope
       description="Builds a callback body the provider would send and runs it through the live wallet pipeline. Idempotency, blocked users and mapping checks all apply."
       footer={
         <>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>Close</Button>
-          <Button variant="gold" loading={busy} leftIcon={<PlayCircle className="h-3.5 w-3.5" />} onClick={onRun}>Run simulation</Button>
+          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>Close</Button>
+          <Button variant="gold" loading={busy} leftIcon={<PlayCircle className="h-3.5 w-3.5" />} onClick={onRun} disabled={busy}>
+            {busy ? 'Running...' : 'Run simulation'}
+          </Button>
         </>
       }
     >
       <Card padding="sm" className="mb-3 border-l-4 border-amber-400/60">
         <p className="text-[11px] font-semibold text-ink-mid">
-          Simulation moves real money in the test user's wallet. Use a sandbox user or re-run with the same Game round value to exercise the duplicate-protection path without spending more.
+          Simulation moves real money in the test user's wallet. Use a sandbox user or re-run with the same Game round + same bet/win shape to exercise the duplicate-protection path without spending more.
         </p>
       </Card>
 
-      {err ? <p className="mb-3 text-sm text-signal-danger">{err}</p> : null}
+      {failure ? (
+        <Card padding="sm" className="mb-3 border-l-4 border-rose-400/60">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-ink-lo">Simulation failed</p>
+          <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+            <Totals label="HTTP status" value={String(failure.httpStatus)} />
+            <Totals label="Error code" value={failure.code} />
+            <Totals label="Message" value={failure.message} />
+          </div>
+          <pre className="mt-2 max-h-40 overflow-auto rounded border border-neon/10 bg-black/40 p-2 text-[10px] text-ink-mid">{JSON.stringify(failure.body, null, 2)}</pre>
+        </Card>
+      ) : null}
 
       <div className="grid gap-3 md:grid-cols-2">
         <Field label="Game UID"><input value={gameUid} onChange={(e) => setGameUid(e.target.value)} className={inputCls} placeholder="784512" /></Field>
@@ -528,18 +574,30 @@ function SimulateCallbackModal({ open, onOpenChange, providerId, onDone }: { ope
 
       {result ? (
         <div className="mt-4 space-y-3">
-          <Card padding="sm" className={cn('border-l-4', result.result.status === 'accepted' ? 'border-emerald-400/60' : result.result.status === 'duplicate' ? 'border-amber-400/60' : 'border-rose-400/60')}>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-ink-lo">Wallet pipeline</p>
+          <Card padding="sm" className={cn('border-l-4', statusBorder(result.status))}>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-ink-lo">Wallet pipeline result</p>
             <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
-              <Totals label="Status" value={result.result.status + (result.result.errorCode ? ` (${result.result.errorCode})` : '')} />
-              <Totals label="Round" value={result.gameRound} />
-              <Totals label="Member" value={result.memberAccount} />
-              <Totals label="Tester" value={result.testUser.username} />
-              <Totals label="Wallet before" value={fmt(result.result.walletBefore)} />
-              <Totals label="Wallet after" value={fmt(result.result.walletAfter)} positive={result.result.walletAfter >= result.result.walletBefore} />
-              <Totals label="Net" value={fmt(result.result.netResult)} positive={result.result.netResult >= 0} />
-              <Totals label="Provider tx" value={result.result.providerTxId} />
+              <Totals label="Status" value={result.status.toUpperCase()} />
+              <Totals label="Type" value={result.type} />
+              <Totals label="Error code" value={result.errorCode ?? '-'} />
+              <Totals label="Game UID" value={result.gameUid + (result.gameCatalogHit ? '' : ' (not in catalog)')} />
+              <Totals label="Game round" value={result.gameRound} />
+              <Totals label="Member account" value={result.memberAccount} />
+              <Totals label="Test user" value={result.testUser.username} />
+              <Totals label="Bet amount" value={fmt(result.betAmount)} />
+              <Totals label="Win amount" value={fmt(result.winAmount)} positive={result.winAmount > 0} />
+              <Totals label="Wallet before" value={fmt(result.walletBefore)} />
+              <Totals label="Wallet after" value={fmt(result.walletAfter)} positive={result.walletAfter >= result.walletBefore} />
+              <Totals label="Net" value={fmt(result.netResult)} positive={result.netResult >= 0} />
+              <Totals label="Provider transaction" value={result.providerTransactionId ?? '-'} />
+              <Totals label="Callback log" value={result.callbackLogId ?? '-'} />
             </div>
+            {!result.providerActiveOnSimulate ? (
+              <p className="mt-2 text-[11px] text-amber-400">Provider is in Maintenance. Simulate forced the wallet pipeline to run anyway; real provider traffic stays blocked until the provider is flipped Live.</p>
+            ) : null}
+            {!result.gameCatalogHit ? (
+              <p className="mt-2 text-[11px] text-amber-400">Game UID is not yet in the catalog. The wallet pipeline still ran. Sync games from Brands to import the catalog.</p>
+            ) : null}
           </Card>
           <Card padding="sm">
             <p className="text-[10px] font-bold uppercase tracking-wider text-ink-lo">Callback body sent</p>
@@ -549,7 +607,7 @@ function SimulateCallbackModal({ open, onOpenChange, providerId, onDone }: { ope
             <p className="text-[10px] font-bold uppercase tracking-wider text-ink-lo">Callback response returned</p>
             <pre className="mt-1 max-h-40 overflow-auto rounded border border-neon/10 bg-black/40 p-2 text-[10px] text-ink-mid">{JSON.stringify(result.callbackResponse, null, 2)}</pre>
           </Card>
-          <p className="text-[11px] text-ink-mid">Tip: keep this modal open and click <strong>Run simulation</strong> again to re-send the same Game round - the status should flip to <strong>duplicate</strong> and the wallet should not move.</p>
+          <p className="text-[11px] text-ink-mid">Tip: keep this modal open and click <strong>Run simulation</strong> again with the same Game round and same bet/win shape to flip the status to <strong>duplicate</strong>. Switching bet to 0 and win to a value with the same Game round creates a second accepted row of type <strong>win</strong>.</p>
         </div>
       ) : null}
     </Modal>

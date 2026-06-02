@@ -1,27 +1,16 @@
 // Built by Anointed Coder.
 //
-// POST /api/admin/providers/[id]/simulate-callback
-// Body: { gameUid, userQuery?, betAmount, winAmount, gameRound? }
+// POST /api/admin/providers/[id]/simulate-callback/direct
 //
-// Admin-only callback rehearsal. Forwards to lib/providers/simulate.ts
-// which runs the body through adapter.parseCallback +
-// processProviderCallback inside the live wallet pipeline.
+// Fallback admin-only endpoint that exposes the same simulation
+// pipeline as /simulate-callback. Useful for direct API testing
+// (curl, integration tests) when the admin UI is unreliable, and
+// for ops verification on a fresh DB before any games are imported.
 //
-// Phase 3N hardening:
-//   - Missing gameUid in the ExternalGame catalog is soft. We warn
-//     on the response but proceed with the wallet pipeline.
-//   - Missing test-user wallet returns WALLET_NOT_FOUND visibly.
-//   - ProviderCallbackLog is always written, even on early errors.
-//   - simCreds forces active=true so the wallet pipeline does not
-//     short-circuit when the provider is still in Maintenance.
-//   - Response carries every field the modal needs to render the
-//     result panel.
-//
-// This is NOT a synthetic dry-run: a successful simulation DEBITS
-// the test user's wallet exactly like a real provider callback
-// would. Run it against a sandbox user, or use the duplicate path
-// (re-send the same gameRound + type) to verify the no-double-debit
-// guard without spending more money.
+// Identical body, identical response shape. Same permission gate
+// (settings.write). Same audit row (PROVIDER_CALLBACK_SIMULATE
+// with a `viaDirect` flag so the operator can distinguish UI runs
+// from direct API runs).
 
 export const dynamic = 'force-dynamic';
 
@@ -71,6 +60,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       target: parsed.data.gameUid,
       meta: {
         providerId: params.id,
+        viaDirect: true,
         status: outcome.payload.status,
         type: outcome.payload.type,
         errorCode: outcome.payload.errorCode ?? null,
