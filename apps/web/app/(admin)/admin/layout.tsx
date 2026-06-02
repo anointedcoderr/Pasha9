@@ -21,11 +21,18 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     return () => { document.body.classList.remove('theme-admin'); };
   }, []);
 
-  if (pathname === '/admin/login') return <>{children}</>;
+  if (pathname === '/admin/login') {
+    return <div className="notranslate" translate="no">{children}</div>;
+  }
 
   return (
     <TooltipProvider>
-      <div className="font-admin min-h-screen">
+      {/* notranslate + translate=no on the admin shell: Pasha 9 has
+          its own bilingual dictionaries. External translators
+          (Google Translate, etc.) replace text nodes inside React-
+          owned trees, which then crashes the reconciler with a
+          `removeChild` null error on the next state change. */}
+      <div className="font-admin min-h-screen notranslate" translate="no">
         <div className="flex">
           <AdminSidebar />
           <AdminMobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />

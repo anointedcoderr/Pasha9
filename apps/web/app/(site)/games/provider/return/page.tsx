@@ -17,7 +17,7 @@ export default function ProviderReturnPage() {
   const { lang } = useLang();
   const params = useSearchParams();
   const router = useRouter();
-  const providerKey = params.get('p');
+  const providerKey = params?.get('p') ?? null;
 
   useEffect(() => {
     // Best-effort wallet refresh trigger so the lobby reads the

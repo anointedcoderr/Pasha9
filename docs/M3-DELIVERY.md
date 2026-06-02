@@ -259,6 +259,70 @@ render an empty state; the error boundary captures the failure if
 something deeper raises. **Always run `prisma db push` on the
 deploy host after pulling a new commit.**
 
+## Browser-translation safety + null .get() (M3 Phase 3I)
+
+Production reproduced two distinct errors after commit `028f738`:
+
+- `/admin` . `Cannot read properties of null (reading 'get')`
+- `/admin/transactions` . `Cannot read properties of null (reading 'removeChild')`
+
+Both have the same root cause: Google Chrome's translate engine
+was active and replaced text nodes inside React-owned trees. React
+expects the exact text node it created when later updating or
+unmounting. After translation:
+
+- The reconciler tries `parent.removeChild(child)` and the new
+  parent is null because the child has been moved or wrapped by
+  Translate. -> `removeChild` error.
+- Radix internals (Dropdown, Tooltip, Modal portals) keep a Map of
+  rendered elements. After Translate mutates a DOM node, the next
+  Map.get returns null and the code calls `.get(...)` on it. ->
+  `'get'` error.
+
+The fix is to opt the entire app out of browser translation. Pasha
+9 ships its own EN/BN dictionaries, so the only thing external
+translation could do is break things.
+
+Three places now declare opt-out:
+
+- `apps/web/app/layout.tsx` . `<html translate="no" class="notranslate">`,
+  `<meta name="google" content="notranslate">` in `<head>`, and
+  `<body translate="no" class="notranslate">`. Metadata also sets
+  `other: { google: 'notranslate' }`.
+- `apps/web/app/(admin)/admin/layout.tsx` . `notranslate
+  translate="no"` on the admin shell wrapper AND on the login-only
+  branch.
+
+A secondary nullable that surfaced in tests was
+`useSearchParams()` returning null during the brief window before
+client hydration finishes. We patched every call site to use
+optional chaining:
+
+- `apps/web/app/(admin)/admin/login/page.tsx` . exports
+  `dynamic = 'force-dynamic'` AND uses `params?.get(...)`.
+- `apps/web/components/site/AuthModal.tsx` . `params?.get(...)`.
+- `apps/web/components/site/Header.tsx` . same in the deps array
+  and useEffect.
+- `apps/web/app/(site)/games/provider/return/page.tsx` . same.
+
+### Acceptance checklist
+
+- [ ] Fresh incognito Chrome with Translate available: open
+      `https://pasha9.com/admin`. No "Cannot read properties of
+      null" overlay. Either renders the login form (if
+      unauthenticated) or the dashboard.
+- [ ] Same browser, click Chrome's Translate icon. The page does
+      not translate (`notranslate` opt-out honoured) and React
+      does not throw.
+- [ ] `/admin/transactions`, `/admin/withdrawal-limits`, `/admin`
+      all open directly without first-load crash.
+- [ ] Toggling the in-app EN/BN switch still works (the dictionary
+      is internal; the `notranslate` only blocks BROWSER
+      translation engines).
+- [ ] `/games/provider` JILI launch flow still works end-to-end.
+- [ ] Logs tab `Reprocess` and `Manual repair` actions still work
+      on /admin/providers/[id].
+
 ## Stability sprint (M3 Phase 3H)
 
 Three production safety nets after the type-aware idempotency and

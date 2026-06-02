@@ -82,7 +82,7 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
   const completeSuccess = () => {
     onSuccess();
     triggerWalletRefresh();
-    const next = params.get('next') ?? '/dashboard';
+    const next = params?.get('next') ?? '/dashboard';
     router.push(next);
     router.refresh();
   };
@@ -241,7 +241,7 @@ function SignupForm({ onSuccess, onSwitch }: { onSuccess: () => void; onSwitch: 
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState<ApiError | null>(null);
 
-  const referralFromUrl = params.get('r') ?? '';
+  const referralFromUrl = params?.get('r') ?? '';
 
   const {
     register,

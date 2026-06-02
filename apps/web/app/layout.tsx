@@ -22,6 +22,17 @@ export const metadata: Metadata = {
     apple: '/favicon.svg',
   },
   manifest: '/manifest.webmanifest',
+  // Block browser translation engines (Google Translate, Edge,
+  // Safari). Pasha 9 ships its own EN/BN dictionaries; the React
+  // tree expects to own every text node. When Google Translate
+  // replaces text nodes it makes React's reconciler unable to find
+  // them later, producing 'Cannot read properties of null (reading
+  // removeChild)' on the next unmount. Belt + suspenders on the
+  // admin shell below pins this for translated browsers that
+  // ignore the meta hint.
+  other: {
+    google: 'notranslate',
+  },
 };
 
 export const viewport: Viewport = {
@@ -54,8 +65,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const bodyFont = initialLang === 'bn' ? 'font-bn' : 'font-en';
 
   return (
-    <html lang={initialLang} data-lang={initialLang} className={`${fontBn.variable} ${fontEn.variable} ${fontAdmin.variable}`}>
-      <body className={`${bodyFont} antialiased`}>
+    <html lang={initialLang} data-lang={initialLang} translate="no" className={`${fontBn.variable} ${fontEn.variable} ${fontAdmin.variable} notranslate`}>
+      <head>
+        {/* Belt + suspenders translation block; some browsers honour
+            the meta name=google but not the translate attribute,
+            and vice versa. The platform ships its own EN/BN
+            dictionaries, so external translation only mutates DOM
+            nodes that React owns and breaks reconciliation. */}
+        <meta name="google" content="notranslate" />
+      </head>
+      <body className={`${bodyFont} antialiased notranslate`} translate="no">
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
         <DynamicFavicon />
         <TrackingScripts />

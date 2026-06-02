@@ -60,12 +60,12 @@ export function Header() {
 
   // Open auth modal from query params (?login=1 or ?signup=1) used by drawer + bottom nav
   useEffect(() => {
-    const l = params.get('login');
-    const s = params.get('signup');
+    const l = params?.get('login');
+    const s = params?.get('signup');
     if (l === '1') { setTab('login'); auth.onOpen(); }
     else if (s === '1') { setTab('signup'); auth.onOpen(); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.get('login'), params.get('signup')]);
+  }, [params?.get('login'), params?.get('signup')]);
 
   const loadMe = () => {
     fetch('/api/auth/me', { cache: 'no-store' })

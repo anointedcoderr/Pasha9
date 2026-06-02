@@ -9,6 +9,11 @@
 
 'use client';
 
+// Login form needs the live URL. force-dynamic stops Next.js from
+// attempting to prerender and ensures useSearchParams() resolves to
+// a real URLSearchParams object instead of null.
+export const dynamic = 'force-dynamic';
+
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
@@ -62,7 +67,7 @@ export default function AdminLoginPage() {
         return;
       }
       // No 2FA - cookies are already set.
-      const next = params.get('next') ?? '/admin';
+      const next = params?.get('next') ?? '/admin';
       router.push(next);
       router.refresh();
     } catch {
@@ -94,7 +99,7 @@ export default function AdminLoginPage() {
         setError(data.message ?? data.code ?? '2FA verification failed.');
         return;
       }
-      const next = params.get('next') ?? '/admin';
+      const next = params?.get('next') ?? '/admin';
       router.push(next);
       router.refresh();
     } catch {
