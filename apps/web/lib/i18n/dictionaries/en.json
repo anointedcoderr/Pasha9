@@ -349,6 +349,8 @@
     "providers": "Providers",
     "homepage": "Homepage Content",
     "homepageSections": "Homepage Sections",
+    "depositNotice": "Deposit Notice",
+    "depositBonusTiers": "Deposit Bonus Tiers",
     "promoText": "Promo Text",
     "ambassador": "Ambassador and Video",
     "lotto": "Lotto Draws",

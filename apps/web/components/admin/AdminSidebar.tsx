@@ -66,6 +66,8 @@ const GROUPS = [
       { key: 'paymentMethods', href: ROUTES.admin.paymentMethods, icon: CreditCard },
       { key: 'withdrawalLimits', href: ROUTES.admin.withdrawalLimits, icon: SlidersHorizontal },
       { key: 'paymentsReconciliation', href: ROUTES.admin.paymentsReconciliation, icon: FileCheck },
+      { key: 'depositNotice', href: ROUTES.admin.depositNotice, icon: Bell },
+      { key: 'depositBonusTiers', href: ROUTES.admin.depositBonusTiers, icon: Gift },
     ],
   },
   {

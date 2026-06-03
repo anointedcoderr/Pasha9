@@ -19,11 +19,16 @@ interface DepositRow {
   username: string;
   phone: string;
   amount: number;
+  // M4 Phase C: bonus snapshot at submit + total credit + admin proof + reject reason.
+  bonusPercentage?: number;
+  bonusAmount?: number;
+  totalCredit?: number;
   method: string;
   transactionId: string;
   proofUrl?: string | null;
   status: 'pending' | 'approved' | 'rejected';
   adminNote?: string | null;
+  rejectionReason?: string | null;
   reviewerId?: string | null;
   reviewedAt?: string | null;
   createdAt: string;
@@ -64,15 +69,32 @@ export default function AdminDepositsPage() {
 
   const confirm = async (note: string) => {
     if (!item || !action) return;
+    const trimmed = note.trim();
+    // M4 Phase C: reject endpoint requires a clear reason. Validate
+    // client-side so the operator sees the message immediately
+    // instead of bouncing off a 400.
+    if (action === 'reject' && trimmed.length < 3) {
+      setToast({ kind: 'err', text: 'Rejection reason is required (3 characters or more).' });
+      setTimeout(() => setToast(null), 4500);
+      return;
+    }
     const url = `/api/admin/deposits/${item.id}/${action}`;
+    const payload = action === 'reject'
+      ? { rejectionReason: trimmed }
+      : { adminNote: trimmed || undefined };
     try {
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ adminNote: note || undefined }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data?.message ?? data?.code ?? 'Action failed');
+      if (!res.ok) {
+        if (data?.code === 'REASON_REQUIRED') {
+          throw new Error(data.message ?? 'Rejection reason is required.');
+        }
+        throw new Error(data?.message ?? data?.code ?? 'Action failed');
+      }
       if (action === 'approve') {
         const generated = data?.accrual?.generated ?? 0;
         const bonus = data?.bonuses ?? null;
@@ -138,8 +160,35 @@ export default function AdminDepositsPage() {
           </div>
         ) },
       { header: 'Amount', accessorKey: 'amount', cell: ({ getValue }) => <span className="font-semibold text-gradient-gold">{formatBDT(Number(getValue()))}</span> },
+      // M4 Phase C: surface the bonus snapshot and total credit so
+      // reviewers see what the player was promised at submit time.
+      { header: 'Bonus', id: 'bonus', cell: ({ row }) => {
+          const b = Number(row.original.bonusAmount ?? 0);
+          const p = Number(row.original.bonusPercentage ?? 0);
+          return b > 0
+            ? <span className="text-xs text-emerald-300">+{formatBDT(b)} ({p}%)</span>
+            : <span className="text-xs text-ink-lo">-</span>;
+        } },
+      { header: 'Total credit', id: 'totalCredit', cell: ({ row }) => {
+          const total = Number(row.original.totalCredit ?? row.original.amount);
+          return <span className="font-semibold text-ink-hi">{formatBDT(total)}</span>;
+        } },
       { header: 'Method', accessorKey: 'method', cell: ({ getValue }) => <span className="text-ink-mid">{String(getValue())}</span> },
       { header: 'TX ID', accessorKey: 'transactionId', cell: ({ getValue }) => <code className="font-mono text-xs text-ink-mid">{String(getValue())}</code> },
+      { header: 'Proof', id: 'proof', cell: ({ row }) => {
+          const url = row.original.proofUrl;
+          if (!url) return <span className="text-xs text-ink-lo">-</span>;
+          return (
+            <a
+              href={url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 rounded-md border border-brand-divider px-2 py-1 text-[11px] text-brand-inkSoft hover:text-brand-ink"
+            >
+              View
+            </a>
+          );
+        } },
       { header: 'Status', accessorKey: 'status', cell: ({ getValue }) => {
           const v = String(getValue());
           return <Chip tone={v === 'approved' ? 'ok' : v === 'pending' ? 'warn' : 'danger'}>{v}</Chip>;

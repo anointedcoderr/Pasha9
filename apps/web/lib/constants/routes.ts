@@ -72,6 +72,8 @@ export const ROUTES = {
     integrations: '/admin/integrations',
     nativeGames: '/admin/native-games',
     depositPrompt: '/admin/deposit-prompt',
+    depositNotice: '/admin/deposit-notice',
+    depositBonusTiers: '/admin/deposit-bonus-tiers',
     whatsapp: '/admin/whatsapp',
     // M3: tracking lives as a tab inside /admin/notifications. We
     // surface it as its own sidebar entry pointing at the deep link

@@ -44,8 +44,17 @@ export function ApprovalModal({ open, onOpenChange, action, title, summary, amou
           ))}
         </dl>
 
-        <FormField label="Admin note" hint="Optional, visible on the request record.">
-          <Textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder={approve ? 'Verified payment in sender wallet' : 'TX ID mismatch with sender record'} />
+        <FormField
+          label={approve ? 'Admin note' : 'Rejection reason'}
+          hint={approve ? 'Optional. Visible on the request record.' : 'Required. Shown to the player on their deposit history.'}
+        >
+          <Textarea
+            rows={3}
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder={approve ? 'Verified payment in sender wallet' : 'TX ID mismatch with sender record'}
+            invalid={!approve && note.trim().length > 0 && note.trim().length < 3}
+          />
         </FormField>
 
         <div className="flex justify-end gap-2 pt-1">

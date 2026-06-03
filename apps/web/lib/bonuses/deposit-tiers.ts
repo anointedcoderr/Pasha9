@@ -1,0 +1,150 @@
+// Built by Anointed Coder.
+//
+// M4 Phase C deposit-tier service. DepositBonusTier is the admin
+// surface; the bonus engine still reads BonusRule. This module:
+//
+//   - pickBestTier(amount)
+//     returns the active tier with the highest minDeposit <= amount.
+//     Used by /api/content/deposit-preview and /api/deposits to
+//     snapshot the promised bonus at submit time.
+//
+//   - syncTierToBonusRule(tier)
+//     materialises a tier row into a BonusRule of type='reload' so
+//     the existing applyDepositBonuses engine grants the bonus on
+//     approval. Code key is stable per tier (`deposit_tier_<id>`)
+//     so re-saving the same tier upserts rather than creating dupes.
+//
+//   - removeTierBonusRule(tierId)
+//     drops the matching BonusRule when the tier is deleted.
+//
+// The engine picks the highest-priority matching reload rule, so we
+// stamp `priority = max(100, minDeposit / 100)` to keep "bigger tier
+// wins" the natural outcome.
+
+import { Prisma } from '@prisma/client';
+import { db } from '@/lib/db/client';
+
+export interface ActiveTier {
+  id: string;
+  minDeposit: number;
+  percentage: number;
+  position: number;
+}
+
+export interface PreviewResult {
+  tier: ActiveTier | null;
+  bonusPercentage: number;
+  bonusAmount: number;
+  totalCredit: number;
+}
+
+function tierToCode(tierId: string): string {
+  return `deposit_tier_${tierId}`;
+}
+
+function rowToActive(row: { id: string; minDeposit: Prisma.Decimal; percentage: number; position: number }): ActiveTier {
+  return {
+    id: row.id,
+    minDeposit: Number(row.minDeposit),
+    percentage: row.percentage,
+    position: row.position,
+  };
+}
+
+/** Compute the deposit preview for a given amount. Returns a zero
+ *  bonus when no active tier matches. */
+export async function pickBestTier(amount: number): Promise<PreviewResult> {
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return { tier: null, bonusPercentage: 0, bonusAmount: 0, totalCredit: Math.max(0, amount || 0) };
+  }
+  const rows = await db.depositBonusTier.findMany({
+    where: { isActive: true, minDeposit: { lte: new Prisma.Decimal(amount) } },
+    orderBy: [{ minDeposit: 'desc' }, { percentage: 'desc' }, { position: 'desc' }],
+    take: 1,
+  });
+  const row = rows[0];
+  if (!row) {
+    return { tier: null, bonusPercentage: 0, bonusAmount: 0, totalCredit: amount };
+  }
+  const tier = rowToActive(row);
+  const bonusAmount = Math.round((amount * tier.percentage) / 100 * 100) / 100;
+  return {
+    tier,
+    bonusPercentage: tier.percentage,
+    bonusAmount,
+    totalCredit: amount + bonusAmount,
+  };
+}
+
+/** Upsert the BonusRule row that backs a tier so the bonus engine
+ *  grants the bonus on deposit approval. Idempotent: re-saving a
+ *  tier updates the existing rule by code, never duplicates. */
+export async function syncTierToBonusRule(tier: {
+  id: string;
+  minDeposit: Prisma.Decimal | number;
+  percentage: number;
+  isActive: boolean;
+  position: number;
+}): Promise<void> {
+  const code = tierToCode(tier.id);
+  const minDeposit = tier.minDeposit instanceof Prisma.Decimal ? tier.minDeposit : new Prisma.Decimal(tier.minDeposit);
+  const minDepositNumber = Number(minDeposit);
+  const priority = Math.max(100, Math.floor(minDepositNumber / 100));
+  const name = `Deposit tier ${tier.percentage}% (>= ${minDepositNumber.toLocaleString()} BDT)`;
+  const description = `Auto-managed by /admin/deposit-bonus-tiers. Tier ${tier.id}.`;
+
+  const data = {
+    name,
+    type: 'reload' as const,
+    percentage: new Prisma.Decimal(tier.percentage),
+    amount: new Prisma.Decimal(0),
+    minDeposit,
+    maxBonus: new Prisma.Decimal(0),
+    status: (tier.isActive ? 'active' : 'hidden') as 'active' | 'hidden',
+    description,
+    turnoverX: new Prisma.Decimal(0),
+    validityDays: 30,
+    priority,
+    meta: { managedBy: 'deposit_bonus_tier', tierId: tier.id } as Prisma.JsonObject,
+  };
+
+  await db.bonusRule.upsert({
+    where: { code },
+    update: data,
+    create: { ...data, code },
+  });
+}
+
+/** Drops the BonusRule row tied to a deleted tier. No-op when the
+ *  row never existed (e.g. tier saved then deleted before its rule
+ *  materialised). */
+export async function removeTierBonusRule(tierId: string): Promise<void> {
+  const code = tierToCode(tierId);
+  await db.bonusRule.deleteMany({ where: { code } });
+}
+
+/** Re-sync every tier to its BonusRule. Used by the admin "Resync"
+ *  button so a stuck row can be reconciled on demand. */
+export async function resyncAllTiers(): Promise<{ synced: number; removed: number }> {
+  const tiers = await db.depositBonusTier.findMany();
+  for (const t of tiers) {
+    await syncTierToBonusRule(t);
+  }
+  // Drop any orphaned tier-coded BonusRule rows whose tier no longer
+  // exists. Limit to deposit_tier_* code prefix so unrelated rules
+  // stay untouched.
+  const tierIds = new Set(tiers.map((t) => t.id));
+  const orphanRules = await db.bonusRule.findMany({
+    where: { code: { startsWith: 'deposit_tier_' } },
+    select: { id: true, code: true },
+  });
+  let removed = 0;
+  for (const r of orphanRules) {
+    const tierId = r.code?.replace('deposit_tier_', '') ?? '';
+    if (!tierIds.has(tierId)) {
+      await db.bonusRule.delete({ where: { id: r.id } });
+      removed += 1;
+    }
+  }
+  return { synced: tiers.length, removed };
+}

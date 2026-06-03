@@ -331,6 +331,18 @@ model Deposit {
   proofUrl      String?
   status        RequestStatus @default(pending)
   adminNote     String?
+  // M4 Phase C additive: rejectionReason is required when the admin
+  // rejects a deposit. Stored separately from adminNote so the
+  // freeform admin-only note semantics stay intact. Visible to the
+  // player on their deposit history.
+  rejectionReason   String?
+  // Snapshot of the bonus tier that matched at submit time. The
+  // actual grant on approval still runs through the bonus engine
+  // and may differ if the rule changed between submit and approval.
+  // Surfaced on the admin deposits table so reviewers see the
+  // promised bonus + total credit at a glance.
+  bonusPercentage   Decimal?      @db.Decimal(5, 2)
+  bonusAmount       Decimal?      @db.Decimal(14, 2)
   reviewerId    String?
   reviewedAt    DateTime?
   createdAt     DateTime      @default(now())

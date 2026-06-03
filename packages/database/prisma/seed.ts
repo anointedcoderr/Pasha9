@@ -324,8 +324,9 @@ async function seedPaymentMethods() {
     { name: 'bKash', type: 'mobile', number: '01700-000001', instruction: 'Send Money to the displayed bKash number, then enter the TX ID.', position: 1 },
     { name: 'Nagad', type: 'mobile', number: '01710-000002', instruction: 'Use Send Money on the Nagad app to the displayed number.', position: 2 },
     { name: 'Rocket', type: 'mobile', number: '01720-000003', instruction: 'Send to the Rocket account and submit the receipt screenshot.', position: 3 },
-    { name: 'Bank Transfer', type: 'bank', number: 'Account 200-122-998877', instruction: 'Transfer to the displayed account. Reference your username in the description.', position: 4 },
-    { name: 'USDT TRC20', type: 'crypto', number: 'TRC20 wallet to be configured', instruction: 'Send only USDT on TRC20 network. Confirmation may take up to 10 minutes.', position: 5 },
+    { name: 'Upay', type: 'mobile', number: '01730-000004', instruction: 'Use Send Money on the Upay app to the displayed number.', position: 4 },
+    { name: 'Bank Transfer', type: 'bank', number: 'Account 200-122-998877', instruction: 'Transfer to the displayed account. Reference your username in the description.', position: 5 },
+    { name: 'USDT TRC20', type: 'crypto', number: 'TRC20 wallet to be configured', instruction: 'Send only USDT on TRC20 network. Confirmation may take up to 10 minutes.', position: 6 },
   ];
   for (const m of methods) {
     await db.paymentMethod.upsert({ where: { name: m.name }, update: m, create: m });
