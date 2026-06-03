@@ -1400,6 +1400,15 @@ model PaymentMethod {
   minWithdrawal   Decimal? @db.Decimal(14, 2)
   maxWithdrawal   Decimal? @db.Decimal(14, 2)
   payoutInstruction String? @db.Text
+  // Babu88-style icon picker. iconUrl is the small square logo on the
+  // /deposit + /withdraw method tiles; bannerUrl is the wide banner
+  // shown on the SelectedPaymentMethodDetails panel. Bn variants of
+  // both instruction fields let the operator localise without losing
+  // the existing single-language rows.
+  iconUrl     String?
+  bannerUrl   String?
+  instructionBn       String? @db.Text
+  payoutInstructionBn String? @db.Text
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 

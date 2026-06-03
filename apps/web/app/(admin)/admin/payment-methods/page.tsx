@@ -29,7 +29,11 @@ interface MethodRow {
   status: Status;
   number: string;
   instruction: string;
+  instructionBn: string | null;
   payoutInstruction: string | null;
+  payoutInstructionBn: string | null;
+  iconUrl: string | null;
+  bannerUrl: string | null;
   position: number;
   depositEnabled: boolean;
   payoutEnabled: boolean;
@@ -46,7 +50,11 @@ const BLANK: MethodRow = {
   status: 'active',
   number: '',
   instruction: '',
+  instructionBn: '',
   payoutInstruction: '',
+  payoutInstructionBn: '',
+  iconUrl: '',
+  bannerUrl: '',
   position: 0,
   depositEnabled: true,
   payoutEnabled: false,
@@ -92,7 +100,11 @@ export default function AdminPaymentMethodsPage() {
       status: editor.status,
       number: editor.number,
       instruction: editor.instruction,
+      instructionBn: editor.instructionBn || undefined,
       payoutInstruction: editor.payoutInstruction || undefined,
+      payoutInstructionBn: editor.payoutInstructionBn || undefined,
+      iconUrl: editor.iconUrl || undefined,
+      bannerUrl: editor.bannerUrl || undefined,
       position: Number(editor.position) || 0,
       depositEnabled: editor.depositEnabled,
       payoutEnabled: editor.payoutEnabled,
@@ -167,7 +179,7 @@ export default function AdminPaymentMethodsPage() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <Button size="sm" variant="neon" leftIcon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditor({ ...m, payoutInstruction: m.payoutInstruction ?? '' })}>Edit</Button>
+                <Button size="sm" variant="neon" leftIcon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditor({ ...m, payoutInstruction: m.payoutInstruction ?? '', instructionBn: m.instructionBn ?? '', payoutInstructionBn: m.payoutInstructionBn ?? '', iconUrl: m.iconUrl ?? '', bannerUrl: m.bannerUrl ?? '' })}>Edit</Button>
                 <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => remove(m.id)}>Delete</Button>
               </div>
             </Card>
@@ -196,8 +208,14 @@ export default function AdminPaymentMethodsPage() {
                 </Select>
               </FormField>
             </div>
-            <FormField label="Deposit instructions" required><Textarea rows={2} value={editor.instruction} onChange={(e) => setEditor({ ...editor, instruction: e.target.value })} /></FormField>
-            <FormField label="Payout instructions (optional)" hint="Shown to admin when paying the user out of band."><Textarea rows={2} value={editor.payoutInstruction ?? ''} onChange={(e) => setEditor({ ...editor, payoutInstruction: e.target.value })} /></FormField>
+            <div className="grid gap-3 md:grid-cols-2">
+              <FormField label="Icon URL (square logo, ~64px)" hint="Shown on the public /deposit + /withdraw method tiles."><Input value={editor.iconUrl ?? ''} onChange={(e) => setEditor({ ...editor, iconUrl: e.target.value })} placeholder="https://..." /></FormField>
+              <FormField label="Banner URL (wide, ~1200x300)" hint="Shown on the selected-method detail panel header."><Input value={editor.bannerUrl ?? ''} onChange={(e) => setEditor({ ...editor, bannerUrl: e.target.value })} placeholder="https://..." /></FormField>
+            </div>
+            <FormField label="Deposit instructions (EN)" required><Textarea rows={2} value={editor.instruction} onChange={(e) => setEditor({ ...editor, instruction: e.target.value })} /></FormField>
+            <FormField label="Deposit instructions (BN, optional)"><Textarea rows={2} value={editor.instructionBn ?? ''} onChange={(e) => setEditor({ ...editor, instructionBn: e.target.value })} /></FormField>
+            <FormField label="Payout instructions (EN, optional)" hint="Shown to admin when paying the user out of band."><Textarea rows={2} value={editor.payoutInstruction ?? ''} onChange={(e) => setEditor({ ...editor, payoutInstruction: e.target.value })} /></FormField>
+            <FormField label="Payout instructions (BN, optional)"><Textarea rows={2} value={editor.payoutInstructionBn ?? ''} onChange={(e) => setEditor({ ...editor, payoutInstructionBn: e.target.value })} /></FormField>
 
             <div className="grid gap-3 md:grid-cols-2">
               <div className="rounded-xl border border-neon/10 bg-base-deep/40 p-3">

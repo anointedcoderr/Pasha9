@@ -14,7 +14,11 @@ const createSchema = z.object({
   status: z.enum(['active', 'hidden', 'paused']).default('active'),
   number: z.string().trim().min(1).max(120),
   instruction: z.string().trim().min(1).max(2000),
+  instructionBn: z.string().trim().max(2000).optional().nullable(),
   payoutInstruction: z.string().trim().max(2000).optional().nullable(),
+  payoutInstructionBn: z.string().trim().max(2000).optional().nullable(),
+  iconUrl: z.string().trim().max(500).optional().nullable(),
+  bannerUrl: z.string().trim().max(500).optional().nullable(),
   position: z.coerce.number().int().min(0).max(99).default(0),
   depositEnabled: z.boolean().default(true),
   payoutEnabled: z.boolean().default(false),
@@ -57,7 +61,11 @@ function serialize(m: {
   status: string;
   number: string;
   instruction: string;
+  instructionBn?: string | null;
   payoutInstruction: string | null;
+  payoutInstructionBn?: string | null;
+  iconUrl?: string | null;
+  bannerUrl?: string | null;
   position: number;
   depositEnabled: boolean;
   payoutEnabled: boolean;
@@ -73,7 +81,11 @@ function serialize(m: {
     status: m.status,
     number: m.number,
     instruction: m.instruction,
+    instructionBn: m.instructionBn ?? null,
     payoutInstruction: m.payoutInstruction,
+    payoutInstructionBn: m.payoutInstructionBn ?? null,
+    iconUrl: m.iconUrl ?? null,
+    bannerUrl: m.bannerUrl ?? null,
     position: m.position,
     depositEnabled: m.depositEnabled,
     payoutEnabled: m.payoutEnabled,

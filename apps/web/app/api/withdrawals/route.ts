@@ -26,7 +26,11 @@ const schema = z.object({
   amount: z.coerce.number().min(1).max(10_000_000),
   method: z.string().trim().min(1).max(60),
   accountNumber: z.string().trim().min(6).max(40),
-  accountName: z.string().trim().min(2).max(60),
+  // Public form no longer collects accountName after the Babu88-style
+  // redesign; we accept it when sent (admin tooling may still post it)
+  // and fall back to "-" so the DB column and existing admin readers
+  // stay populated.
+  accountName: z.string().trim().max(60).optional().default('-'),
 });
 
 const DEFAULT_MIN = 500;

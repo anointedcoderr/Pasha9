@@ -5,16 +5,17 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { PageHeader } from '@/components/site/PageHeader';
 import { FormField, Input } from '@/components/ui/Input';
-import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { withdrawalSchema, type WithdrawalInput } from '@/lib/utils/validation';
-import { useT } from '@/lib/i18n/context';
+import { useT, useLang } from '@/lib/i18n/context';
 import { triggerWalletRefresh } from '@/components/site/WalletStrip';
-import { AlertTriangle, ArrowUpToLine, CheckCircle2, Lock, LogIn, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Lock, LogIn } from 'lucide-react';
 import { formatBDT } from '@/lib/utils/format';
+import { DepositWithdrawTabs } from '@/components/wallet/DepositWithdrawTabs';
+import { PaymentMethodPicker } from '@/components/wallet/PaymentMethodPicker';
+import { SelectedMethodCard } from '@/components/wallet/SelectedMethodCard';
 
 const QUICK = [500, 1000, 2500, 5000, 10000];
 
@@ -27,7 +28,13 @@ interface PayoutMethod {
   id: string;
   name: string;
   type: string;
+  number: string | null;
+  iconUrl: string | null;
+  bannerUrl: string | null;
+  instruction: string | null;
+  instructionBn: string | null;
   payoutInstruction: string | null;
+  payoutInstructionBn: string | null;
   minWithdrawal: number | null;
   maxWithdrawal: number | null;
 }
@@ -42,6 +49,7 @@ const DEFAULT_LIMITS: GlobalLimits = { min: 500, max: 200000, policy: '' };
 
 export default function WithdrawPage() {
   const t = useT();
+  const { lang } = useLang();
   const router = useRouter();
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -120,6 +128,7 @@ export default function WithdrawPage() {
   } = useForm<WithdrawalInput>({
     resolver: zodResolver(withdrawalSchema),
     defaultValues: { amount: 0, method: '', account: '', holder: '' },
+    shouldUnregister: false,
   });
 
   // Once live methods load, default the form to the first one so the
@@ -160,7 +169,9 @@ export default function WithdrawPage() {
           amount: Number(values.amount),
           method: values.method,
           accountNumber: values.account,
-          accountName: values.holder,
+          // accountName is no longer collected from the public form
+          // after the Babu88-style redesign; the API defaults to "-"
+          // when omitted so admin tooling still gets a string.
         }),
       });
       const data = await res.json().catch(() => ({} as Record<string, unknown>));
@@ -236,7 +247,7 @@ export default function WithdrawPage() {
 
   return (
     <>
-      <PageHeader title={t('withdraw.title')} subtitle="Cash out is reviewed by admin before payout" icon={<ArrowUpToLine className="h-5 w-5" />} />
+      <DepositWithdrawTabs active="withdraw" />
 
       {auth.kind === 'guest' ? (
         <Card padding="md" className="mb-4 border border-amber-300/60 bg-amber-50">
@@ -268,8 +279,8 @@ export default function WithdrawPage() {
           <Button className="mt-6" variant="neon" onClick={newRequest}>New Request</Button>
         </Card>
       ) : (
-        <div className="grid gap-6 lg:grid-cols-3">
-          <form onSubmit={handleSubmit(onSubmit)} className="lg:col-span-2 space-y-6" noValidate>
+        <div className="mx-auto w-full max-w-2xl pb-24">
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6" noValidate>
             <Card padding="lg">
               <CardHeader title="Amount" subtitle={`${t('withdraw.balance')}: ${balanceLabel}`} />
               <div className="mb-4 flex flex-wrap gap-2">
@@ -295,27 +306,43 @@ export default function WithdrawPage() {
             </Card>
 
             <Card padding="lg">
-              <CardHeader title={t('withdraw.method')} subtitle={methodsLoading ? 'Loading payout channels...' : `${methods.length} active payout channel${methods.length === 1 ? '' : 's'}`} />
-              <FormField label={t('withdraw.method')} required error={errors.method?.message}>
-                <Select {...register('method')} invalid={!!errors.method} disabled={methods.length === 0}>
-                  {methods.length === 0 ? (
-                    <option value="">No payout channels available</option>
-                  ) : (
-                    methods.map((m) => (
-                      <option key={m.id} value={m.name}>{m.name}</option>
-                    ))
-                  )}
-                </Select>
-              </FormField>
-              {selectedMethod?.payoutInstruction ? (
-                <p className="mt-2 text-xs text-ink-mid">{selectedMethod.payoutInstruction}</p>
+              <CardHeader
+                title={t('withdraw.method')}
+                subtitle={methodsLoading
+                  ? (lang === 'bn' ? 'পেআউট চ্যানেল লোড হচ্ছে...' : 'Loading payout channels...')
+                  : `${methods.length} ${lang === 'bn' ? 'অ্যাক্টিভ পেআউট চ্যানেল' : `active payout channel${methods.length === 1 ? '' : 's'}`}`}
+              />
+              {methods.length === 0 ? (
+                <p className="text-sm text-ink-mid">{lang === 'bn' ? 'কোনো পেআউট চ্যানেল উপলব্ধ নেই।' : 'No payout channels available.'}</p>
+              ) : (
+                <PaymentMethodPicker
+                  methods={methods.map((m) => ({ id: m.id, name: m.name, type: m.type, iconUrl: m.iconUrl }))}
+                  selectedName={watch('method') ?? ''}
+                  onSelect={(name) => setValue('method', name, { shouldValidate: true })}
+                />
+              )}
+              {selectedMethod ? (
+                <SelectedMethodCard
+                  mode="withdraw"
+                  showCopy={false}
+                  className="mt-4"
+                  method={{
+                    id: selectedMethod.id,
+                    name: selectedMethod.name,
+                    type: selectedMethod.type,
+                    number: selectedMethod.number,
+                    iconUrl: selectedMethod.iconUrl,
+                    bannerUrl: selectedMethod.bannerUrl,
+                    instruction: selectedMethod.instruction,
+                    instructionBn: selectedMethod.instructionBn,
+                    payoutInstruction: selectedMethod.payoutInstruction,
+                    payoutInstructionBn: selectedMethod.payoutInstructionBn,
+                  }}
+                />
               ) : null}
-              <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <div className="mt-4">
                 <FormField label={t('withdraw.account')} required error={errors.account?.message}>
                   <Input placeholder="01XXXXXXXXX" {...register('account')} invalid={!!errors.account} />
-                </FormField>
-                <FormField label={t('withdraw.holder')} required error={errors.holder?.message}>
-                  <Input placeholder="Full name on account" {...register('holder')} invalid={!!errors.holder} />
                 </FormField>
               </div>
             </Card>
@@ -344,39 +371,6 @@ export default function WithdrawPage() {
               {t('withdraw.submit')}
             </Button>
           </form>
-
-          <aside className="space-y-4">
-            <Card tone="elev" padding="lg">
-              <h3 className="flex items-center gap-2 text-sm font-semibold text-ink-hi">
-                <ShieldCheck className="h-4 w-4 text-neon" /> Admin Approval
-              </h3>
-              <p className="mt-2 text-sm text-ink-mid">{t('withdraw.notice')}</p>
-            </Card>
-            <Card padding="md">
-              <h4 className="text-sm font-semibold text-ink-hi">Limits</h4>
-              <ul className="mt-2 space-y-1.5 text-xs text-ink-mid">
-                <li>{`Minimum withdrawal: ৳ ${limits.min.toLocaleString()}`}</li>
-                <li>{`Maximum per request: ৳ ${limits.max.toLocaleString()}`}</li>
-                <li>Standard review window: under 30 minutes</li>
-              </ul>
-              {limits.policy ? (
-                <p className="mt-3 border-t border-neon/10 pt-3 text-xs text-ink-mid">{limits.policy}</p>
-              ) : null}
-            </Card>
-            {selectedMethod && (selectedMethod.minWithdrawal != null || selectedMethod.maxWithdrawal != null) ? (
-              <Card padding="md">
-                <h4 className="text-sm font-semibold text-ink-hi">{selectedMethod.name} limits</h4>
-                <ul className="mt-2 space-y-1.5 text-xs text-ink-mid">
-                  {selectedMethod.minWithdrawal != null ? (
-                    <li>{`Minimum: ৳ ${selectedMethod.minWithdrawal.toLocaleString()}`}</li>
-                  ) : null}
-                  {selectedMethod.maxWithdrawal != null ? (
-                    <li>{`Maximum: ৳ ${selectedMethod.maxWithdrawal.toLocaleString()}`}</li>
-                  ) : null}
-                </ul>
-              </Card>
-            ) : null}
-          </aside>
         </div>
       )}
     </>

@@ -41,7 +41,10 @@ export const withdrawalSchema = z.object({
   amount: z.coerce.number().min(500, 'Minimum 500 BDT').max(200000, 'Maximum 200000 BDT'),
   method: z.string().min(1, 'Select a method'),
   account: z.string().min(6, 'Account number required').max(40),
-  holder: z.string().min(2, 'Holder name required').max(60),
+  // Per the Babu88-style redesign the public form no longer asks for the
+  // holder name; the API accepts a default fallback so existing admin
+  // tooling that reads accountName still gets a string.
+  holder: z.string().max(60).optional().default(''),
 });
 
 export const balanceAdjustSchema = z.object({

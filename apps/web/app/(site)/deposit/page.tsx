@@ -19,15 +19,16 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { PageHeader } from '@/components/site/PageHeader';
 import { FormField, Input } from '@/components/ui/Input';
-import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
 import { depositSchema, type DepositInput } from '@/lib/utils/validation';
 import { useT, useLang } from '@/lib/i18n/context';
 import { triggerWalletRefresh } from '@/components/site/WalletStrip';
-import { AlertTriangle, ArrowDownToLine, CheckCircle2, Info, Lock, LogIn, Upload, X, ExternalLink } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Lock, LogIn, Upload, X, ExternalLink } from 'lucide-react';
 import { Card, CardHeader } from '@/components/ui/Card';
+import { DepositWithdrawTabs } from '@/components/wallet/DepositWithdrawTabs';
+import { PaymentMethodPicker } from '@/components/wallet/PaymentMethodPicker';
+import { SelectedMethodCard } from '@/components/wallet/SelectedMethodCard';
 
 const QUICK = [500, 1000, 2000, 5000, 10000, 25000];
 
@@ -37,6 +38,9 @@ interface PublicMethod {
   type: string;
   number: string | null;
   instruction: string | null;
+  instructionBn: string | null;
+  iconUrl: string | null;
+  bannerUrl: string | null;
   minDeposit: number | null;
   maxDeposit: number | null;
 }
@@ -316,7 +320,7 @@ export default function DepositPage() {
 
   return (
     <>
-      <PageHeader title={t('deposit.title')} subtitle="Send funds, paste TX ID, upload proof, submit" icon={<ArrowDownToLine className="h-5 w-5" />} />
+      <DepositWithdrawTabs active="deposit" />
 
       {auth.kind === 'guest' ? (
         <Card padding="md" className="mb-4 border border-amber-300/60 bg-amber-50">
@@ -348,8 +352,8 @@ export default function DepositPage() {
           </div>
         </Card>
       ) : (
-        <div className="grid gap-6 lg:grid-cols-3">
-          <form onSubmit={handleSubmit(onSubmit)} className="lg:col-span-2 space-y-6" noValidate>
+        <div className="mx-auto w-full max-w-2xl pb-24">
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6" noValidate>
             <Card padding="lg">
               <CardHeader title="Amount" subtitle="Choose a preset or enter a custom value" />
               <div className="mb-4 flex flex-wrap gap-2">
@@ -396,38 +400,40 @@ export default function DepositPage() {
             </Card>
 
             <Card padding="lg">
-              <CardHeader title={t('deposit.method')} subtitle="Pick how you sent the payment" />
+              <CardHeader title={t('deposit.method')} subtitle={lang === 'bn' ? 'যে মাধ্যমে পেমেন্ট পাঠিয়েছেন সেটি বেছে নিন' : 'Pick how you sent the payment'} />
               {!methodsLoaded ? (
-                <p className="text-sm text-ink-mid">Loading methods...</p>
+                <p className="text-sm text-ink-mid">{lang === 'bn' ? 'মাধ্যম লোড হচ্ছে...' : 'Loading methods...'}</p>
               ) : methods.length === 0 ? (
-                <p className="text-sm text-ink-mid">No deposit methods configured.</p>
+                <p className="text-sm text-ink-mid">{lang === 'bn' ? 'কোনো ডিপোজিট মাধ্যম কনফিগার করা নেই।' : 'No deposit methods configured.'}</p>
               ) : (
                 <>
-                  <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
-                    {methods.map((m) => {
-                      const active = watch('method') === m.name;
-                      return (
-                        <button
-                          key={m.id}
-                          type="button"
-                          onClick={() => setValue('method', m.name, { shouldValidate: true })}
-                          className={`flex flex-col items-start gap-1 rounded-xl border p-3 text-left transition ${
-                            active
-                              ? 'border-neon/50 bg-neon/10 shadow-glow-neon'
-                              : 'border-neon/15 bg-base-deep/40 hover:border-neon/30 hover:text-ink-hi'
-                          }`}
-                        >
-                          <span className="text-sm font-semibold text-ink-hi">{m.name}</span>
-                          <span className="break-all text-xs text-ink-lo">{m.number}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <Select className="mt-3 md:hidden" {...register('method')}>
-                    {methods.map((m) => (
-                      <option key={m.id} value={m.name}>{m.name}</option>
-                    ))}
-                  </Select>
+                  <PaymentMethodPicker
+                    methods={methods.map((m) => ({ id: m.id, name: m.name, type: m.type, iconUrl: m.iconUrl }))}
+                    selectedName={watchedMethodName ?? ''}
+                    onSelect={(name) => setValue('method', name, { shouldValidate: true })}
+                  />
+                  {method ? (
+                    <SelectedMethodCard
+                      mode="deposit"
+                      className="mt-4"
+                      method={{
+                        id: method.id,
+                        name: method.name,
+                        type: method.type,
+                        number: method.number,
+                        iconUrl: method.iconUrl,
+                        bannerUrl: method.bannerUrl,
+                        instruction: method.instruction,
+                        instructionBn: method.instructionBn,
+                      }}
+                    />
+                  ) : null}
+                  {method?.minDeposit ? (
+                    <p className="mt-2 text-[11px] text-ink-lo">
+                      {lang === 'bn' ? 'এই মাধ্যমের সীমা: ' : 'This method: '} Min BDT {method.minDeposit.toLocaleString()}
+                      {method.maxDeposit ? ` . Max BDT ${method.maxDeposit.toLocaleString()}` : ''}
+                    </p>
+                  ) : null}
                 </>
               )}
             </Card>
@@ -503,33 +509,6 @@ export default function DepositPage() {
               {t('deposit.submit')}
             </Button>
           </form>
-
-          <aside className="space-y-4">
-            <Card tone="elev" padding="lg">
-              <h3 className="flex items-center gap-2 text-sm font-semibold text-ink-hi">
-                <Info className="h-4 w-4 text-neon" /> {t('deposit.instructions')}
-              </h3>
-              <p className="mt-2 text-sm text-ink-mid">{t('deposit.instructionsBody')}</p>
-              {method ? (
-                <div className="mt-4 space-y-2 rounded-xl border border-gold-500/25 bg-gold-500/5 p-3 text-sm">
-                  <p className="text-xs uppercase tracking-wider text-gold-300">{method.name}</p>
-                  <p className="break-all font-mono text-ink-hi">{method.number ?? ''}</p>
-                  <p className="text-xs text-ink-mid">{method.instruction ?? ''}</p>
-                  {method.minDeposit ? (
-                    <p className="text-[11px] text-ink-lo">Min BDT {method.minDeposit.toLocaleString()}{method.maxDeposit ? ` . Max BDT ${method.maxDeposit.toLocaleString()}` : ''}</p>
-                  ) : null}
-                </div>
-              ) : null}
-            </Card>
-            <Card padding="md">
-              <h4 className="text-sm font-semibold text-ink-hi">Tips</h4>
-              <ul className="mt-2 space-y-1.5 text-xs text-ink-mid">
-                <li>Always double check the TX ID before submitting.</li>
-                <li>Most requests are reviewed within 5 to 15 minutes.</li>
-                <li>For urgent issues, use the Telegram or WhatsApp button.</li>
-              </ul>
-            </Card>
-          </aside>
         </div>
       )}
 
