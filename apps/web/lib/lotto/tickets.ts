@@ -196,8 +196,15 @@ function round2(n: number): number {
  */
 async function findOpenDraw() {
   const now = new Date();
+  // Cutoff window: tickets generated within `cutoffMinutes` of drawsAt
+  // do NOT join that draw. The next-future draw (or a new one seeded
+  // by rollover) catches them instead. Default 10 minutes; admin can
+  // adjust via the lotto_cutoff_minutes SystemSetting.
+  const settings = await loadLottoSettings();
+  const cutoffMs = Math.max(0, settings.cutoffMinutes) * 60 * 1000;
+  const cutoffThreshold = new Date(now.getTime() + cutoffMs);
   const future = await db.lottoDraw.findFirst({
-    where: { status: 'active', result: { is: null }, drawsAt: { gte: now }, closedAt: null },
+    where: { status: 'active', result: { is: null }, drawsAt: { gte: cutoffThreshold }, closedAt: null },
     orderBy: { drawsAt: 'asc' },
   });
   if (future) return future;

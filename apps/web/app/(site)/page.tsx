@@ -19,7 +19,6 @@ import { PromoTicker } from '@/components/site/PromoTicker';
 import { JackpotStrip } from '@/components/site/JackpotStrip';
 import { WalletStrip } from '@/components/site/WalletStrip';
 import { CategorySlider } from '@/components/site/CategorySlider';
-import { HomeNativeGamesSection } from '@/components/site/HomeNativeGamesSection';
 import { ProviderGamesSection } from '@/components/site/ProviderGamesSection';
 import { AmbassadorVideoSection } from '@/components/site/AmbassadorVideoSection';
 import { PromoPair } from '@/components/site/PromoPair';
@@ -90,7 +89,11 @@ export default function HomePage() {
 
       <JackpotStrip />
 
-      <HomeNativeGamesSection />
+      {/* Pasha Originals (HomeNativeGamesSection) is intentionally
+          gated behind the native_games_public_enabled SystemSetting
+          flag and OFF by default. Operator flips it on once real
+          custom games are ready. Admin tooling at /admin/native-games
+          stays available unchanged. */}
 
       <ProviderGamesSection />
 

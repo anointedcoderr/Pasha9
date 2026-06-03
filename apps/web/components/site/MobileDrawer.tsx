@@ -15,7 +15,6 @@ import {
   Trophy,
   Users,
   Star,
-  Sparkles,
   Ticket,
   Briefcase,
   Cherry,
@@ -53,13 +52,16 @@ const MAIN: Item[] = [
 ];
 
 const GAMES: Item[] = [
-  { key: 'pashaOriginals', href: '/games', icon: Sparkles },
+  // Pasha Originals is intentionally omitted from the public drawer
+  // until real custom games launch. The admin tooling at
+  // /admin/native-games remains available so the operator can flip
+  // native_games_public_enabled=true once games are ready.
   { key: 'slots', href: '/slots', icon: Cherry },
   { key: 'casino', href: '/live-casino', icon: Tv2 },
-  { key: 'crash', href: '/games/crash', icon: Zap },
+  { key: 'crash', href: '/games/provider?category=crash', icon: Zap },
   { key: 'cricket', href: '/sports', icon: Activity },
-  { key: 'tableGames', href: '/games/table', icon: Dice5 },
-  { key: 'fast', href: '/games/fast', icon: Gauge },
+  { key: 'tableGames', href: '/games/provider?category=table', icon: Dice5 },
+  { key: 'fast', href: '/games/provider?category=flash', icon: Gauge },
   { key: 'fishing', href: '/fishing', icon: Fish },
 ];
 

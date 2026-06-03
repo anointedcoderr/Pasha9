@@ -175,6 +175,10 @@ model User {
   blockedAt         DateTime?
   country           String     @default("BD")
   language          Lang       @default(bn)
+  // Public avatar URL. Stored as a server-relative /uploads/avatars/...
+  // path so the frontend can hot-swap CDN/storage providers without
+  // touching DB content. Default null falls back to initials.
+  avatarUrl         String?
   referralCode      String     @unique
   referredById      String?
   isAffiliate       Boolean    @default(false)
@@ -263,11 +267,22 @@ model PasswordResetToken {
   expiresAt  DateTime
   consumedAt DateTime?
   createdAt  DateTime  @default(now())
+  // Admin-assisted reset workflow. Public submit creates a row with
+  // status='pending'. Admin reviews from /admin/password-resets and
+  // approves (status='approved') which issues a one-time token that
+  // the user redeems via /api/auth/reset-password. status='rejected'
+  // closes the request without issuing a token.
+  status        String  @default("pending") // pending | approved | rejected | consumed
+  identifier    String?
+  adminNote     String?
+  approvedById  String?
+  approvedAt    DateTime?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([expiresAt])
+  @@index([status, createdAt])
 }
 
 model OtpCode {

@@ -11,6 +11,7 @@
 
 import { db } from '@/lib/db/client';
 import type { HomeSectionGame } from './sections';
+import { isNativeGamesPublic } from '@/lib/native-games/flag';
 
 const DEFAULT_LIMIT = 12;
 const MAX_LIMIT = 30;
@@ -216,6 +217,11 @@ export async function buildHomeBlocks(): Promise<HomeBlock[]> {
   });
   if (blocks.length === 0) return [];
 
+  // When the public native flag is off, filter native games out of
+  // every manual block so the operator does not have to clean up
+  // historical selections one by one. Existing external picks stay.
+  const showNative = await isNativeGamesPublic();
+
   const brandIds = blocks.filter((b) => b.brandId).map((b) => b.brandId as string);
   const brands = brandIds.length
     ? await db.providerBrand.findMany({ where: { id: { in: brandIds } }, select: { id: true, brandKey: true, displayName: true } })
@@ -232,6 +238,8 @@ export async function buildHomeBlocks(): Promise<HomeBlock[]> {
     else if (sourceType === 'brand' && b.brandId) games = await fillBrand(b.brandId, limit);
     else if (sourceType === 'jackpot') games = await fillJackpot(limit);
     else if (sourceType === 'featured') games = await fillFeatured(limit);
+
+    if (!showNative) games = games.filter((g) => g.source !== 'native');
 
     if (games.length === 0) continue;
 

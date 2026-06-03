@@ -24,3 +24,21 @@ export async function setNativeGamesEnabled(enabled: boolean): Promise<void> {
     create: { key: NATIVE_GAMES_ENABLED_KEY, value: enabled ? 'true' : 'false', type: 'boolean', category: 'general' },
   });
 }
+
+// Separate flag that gates only the PUBLIC visibility (mobile drawer,
+// /games strip, homepage Pasha Originals row, /games/<code> friendly
+// routes). The admin SystemSetting native_games_enabled flag stays
+// independent so the operator can keep tooling alive while hiding the
+// games from players. Default OFF so the platform shows provider
+// games only until the operator flips it on.
+export const NATIVE_GAMES_PUBLIC_KEY = 'native_games_public_enabled';
+
+export async function isNativeGamesPublic(): Promise<boolean> {
+  try {
+    const row = await db.systemSetting.findUnique({ where: { key: NATIVE_GAMES_PUBLIC_KEY }, select: { value: true } });
+    if (!row) return false;
+    return (row.value ?? '').trim().toLowerCase() === 'true';
+  } catch {
+    return false;
+  }
+}

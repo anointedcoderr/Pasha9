@@ -600,7 +600,7 @@ export default function AdminLottoPage() {
             </div>
 
             <div className="rounded-xl border border-amber-300/30 bg-amber-300/5 p-3">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-amber-200">Public display - Babu88 style prize numbers (optional)</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-amber-200">Public display - extra prize numbers (optional)</p>
               <p className="mt-1 text-[11px] text-brand-inkMute">
                 The settlement engine derives every prize tier from the winning number above. These extra numbers are display-only on the public result history card.
               </p>

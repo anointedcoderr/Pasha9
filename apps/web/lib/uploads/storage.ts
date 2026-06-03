@@ -26,7 +26,8 @@ export type UploadCategory =
   | 'ambassadors'
   | 'sponsors'
   | 'payment_icons'
-  | 'provider_banners';
+  | 'provider_banners'
+  | 'avatars';
 
 const IMG = new Set(['image/png', 'image/jpeg', 'image/webp']);
 const IMG_PLUS_SVG = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml']);
@@ -48,6 +49,7 @@ const MIME_BY_CATEGORY: Record<UploadCategory, Set<string>> = {
   sponsors: IMG_PLUS_SVG,
   payment_icons: IMG_PLUS_SVG,
   provider_banners: IMG,
+  avatars: IMG,
 };
 
 const MAX_BYTES_BY_CATEGORY: Record<UploadCategory, number> = {
@@ -67,6 +69,7 @@ const MAX_BYTES_BY_CATEGORY: Record<UploadCategory, number> = {
   sponsors: 1 * 1024 * 1024,
   payment_icons: 512 * 1024,
   provider_banners: 3 * 1024 * 1024,
+  avatars: 2 * 1024 * 1024,
 };
 
 const EXT_BY_MIME: Record<string, string> = {

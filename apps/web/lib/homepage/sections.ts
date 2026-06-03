@@ -26,6 +26,7 @@
 // a maintenance row by mistake.
 
 import { db } from '@/lib/db/client';
+import { isNativeGamesPublic } from '@/lib/native-games/flag';
 
 export interface HomeSectionGame {
   key: string;
@@ -322,12 +323,12 @@ export async function buildHomeSections(): Promise<HomeSectionsBundle> {
       }
       case 'homepage_crash': {
         const external = await loadExternalByCategoryMatch(CATEGORY_MATCHERS[s.key]);
-        const native = await loadNativeCrash();
+        const native = (await isNativeGamesPublic()) ? await loadNativeCrash() : [];
         games = [...native, ...external].slice(0, STRIP_LIMIT);
         break;
       }
       case 'homepage_lottery': {
-        games = await loadNativeLottery();
+        games = (await isNativeGamesPublic()) ? await loadNativeLottery() : [];
         break;
       }
       // brand / video / upcoming are layout markers; no game list.

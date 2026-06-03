@@ -22,6 +22,12 @@ const schema = z.object({
   claimMode: z.enum(['auto', 'manual']).optional(),
   ticketRateAmount: z.coerce.number().int().min(100).max(1_000_000).optional(),
   ticketRateCount: z.coerce.number().int().min(1).max(100).optional(),
+  cutoffMinutes: z.coerce.number().int().min(0).max(720).optional(),
+  multFirst: z.coerce.number().int().min(1).max(100_000).optional(),
+  multSecond: z.coerce.number().int().min(1).max(100_000).optional(),
+  multThird: z.coerce.number().int().min(1).max(100_000).optional(),
+  multSpecial: z.coerce.number().int().min(1).max(100_000).optional(),
+  multConsolation: z.coerce.number().int().min(1).max(100_000).optional(),
 });
 
 export async function GET() {
@@ -72,6 +78,20 @@ export async function PATCH(req: NextRequest) {
         create: { key: 'lotto_ticket_rate_count', value: String(parsed.data.ticketRateCount), type: 'number' },
       }));
     }
+    const upsertNumeric = (key: string, value: number | undefined) => {
+      if (value === undefined) return;
+      writes.push(db.systemSetting.upsert({
+        where: { key },
+        update: { value: String(value), type: 'number' },
+        create: { key, value: String(value), type: 'number' },
+      }));
+    };
+    upsertNumeric('lotto_cutoff_minutes', parsed.data.cutoffMinutes);
+    upsertNumeric('lotto_mult_first', parsed.data.multFirst);
+    upsertNumeric('lotto_mult_second', parsed.data.multSecond);
+    upsertNumeric('lotto_mult_third', parsed.data.multThird);
+    upsertNumeric('lotto_mult_special', parsed.data.multSpecial);
+    upsertNumeric('lotto_mult_consolation', parsed.data.multConsolation);
     await Promise.all(writes);
 
     const settings = await loadLottoSettings();
