@@ -11,6 +11,7 @@
     "seed:prod": "tsx prisma/seed.ts",
     "import:jili": "tsx scripts/import-jili-games.ts",
     "import:provider-games": "tsx scripts/import-provider-games.ts",
+    "rename:igamingapis-provider": "tsx scripts/rename-igamingapis-provider.ts",
     "referral:backfill": "tsx scripts/backfill-referral-balance.ts"
   },
   "prisma": {

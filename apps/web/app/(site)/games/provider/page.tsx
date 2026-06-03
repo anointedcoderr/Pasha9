@@ -22,6 +22,7 @@ import { CategoryHeroArt, type CategoryCode } from '@/components/site/CategoryHe
 import { DepositRequiredModal, isInsufficientFundsError } from '@/components/native-games/DepositRequiredModal';
 
 interface ProviderRow { providerKey: string; name: string; launchMinBalance: number }
+interface BrandRow { brandKey: string; brandName: string; count: number; providerKey: string }
 interface LobbyGame {
   providerKey: string;
   providerName: string;
@@ -57,6 +58,8 @@ export default function ProviderLobbyPage() {
   const { lang } = useLang();
   const [providers, setProviders] = useState<ProviderRow[]>([]);
   const [providerKey, setProviderKey] = useState<string>('');
+  const [brandKey, setBrandKey] = useState<string>('');
+  const [brands, setBrands] = useState<BrandRow[]>([]);
   const [category, setCategory] = useState<string>('');
   const [q, setQ] = useState('');
   const [debouncedQ, setDebouncedQ] = useState('');
@@ -105,10 +108,12 @@ export default function ProviderLobbyPage() {
       const collected: LobbyGame[] = [];
       let aggregatedTotal = 0;
       const cats: Record<string, number> = {};
+      const aggregatedBrands: BrandRow[] = [];
       for (const p of targets) {
         const params = new URLSearchParams();
         if (debouncedQ) params.set('q', debouncedQ);
         if (category) params.set('category', category);
+        if (brandKey) params.set('brand', brandKey);
         params.set('offset', String(nextOffset));
         params.set('limit', String(PAGE_SIZE));
         const r = await fetch(`/api/providers/${encodeURIComponent(p.providerKey)}/games?${params}`, { cache: 'no-store' });
@@ -131,19 +136,24 @@ export default function ProviderLobbyPage() {
         aggregatedTotal += Number(j?.counts?.total ?? 0);
         const cb = j?.counts?.byCategory ?? {};
         for (const k of Object.keys(cb)) cats[k] = (cats[k] ?? 0) + Number(cb[k]);
+        const bb = Array.isArray(j?.counts?.byBrand) ? j.counts.byBrand as Array<{ brandKey: string; brandName: string; count: number }> : [];
+        for (const b of bb) aggregatedBrands.push({ providerKey: p.providerKey, brandKey: b.brandKey, brandName: b.brandName, count: b.count });
       }
       setGames((prev) => (append ? [...prev, ...collected] : collected));
       setTotal(aggregatedTotal);
       setByCategory(cats);
+      // Only refresh the brand list on the first page so the dropdown
+      // stays stable while the user pages.
+      if (!append) setBrands(aggregatedBrands.sort((a, b) => b.count - a.count));
       setOffset(nextOffset + PAGE_SIZE);
     } finally { setBusy(false); }
-  }, [loaded, providerKey, providers, debouncedQ, category]);
+  }, [loaded, providerKey, providers, debouncedQ, category, brandKey]);
 
   useEffect(() => {
     if (!loaded) return;
     setFailedImages(new Set());
     loadPage(0, false);
-  }, [loaded, providerKey, category, debouncedQ, loadPage]);
+  }, [loaded, providerKey, brandKey, category, debouncedQ, loadPage]);
 
   const markImageFailed = (key: string) => setFailedImages((prev) => {
     if (prev.has(key)) return prev;
@@ -232,8 +242,8 @@ export default function ProviderLobbyPage() {
       <h1 className="text-2xl font-extrabold text-brand-ink md:text-3xl">{lang === 'bn' ? 'প্রোভাইডার গেমস' : 'Provider Games'}</h1>
       <p className="mt-1 text-xs text-brand-inkMute md:text-sm">
         {lang === 'bn'
-          ? `${providers.length} অ্যাক্টিভ প্রোভাইডার . সার্চ, ক্যাটাগরি এবং পেজ লোড দিয়ে সব ${total} গেম ব্রাউজ করুন।`
-          : `${providers.length} active provider . Browse all ${total} games with search, category and Load More.`}
+          ? `${providers.length} অ্যাক্টিভ প্রোভাইডার . ${brands.length} ব্র্যান্ড . সার্চ, ক্যাটাগরি, ব্র্যান্ড এবং পেজ লোড দিয়ে সব ${total} গেম ব্রাউজ করুন।`
+          : `${providers.length} active provider . ${brands.length} brand${brands.length === 1 ? '' : 's'} . Browse all ${total} games with search, category, brand and Load More.`}
       </p>
 
       <div className="mt-4 flex flex-wrap items-end gap-2">
@@ -251,9 +261,21 @@ export default function ProviderLobbyPage() {
             value={providerKey}
             onChange={(e) => setProviderKey(e.target.value)}
             className="h-10 rounded-xl border border-brand-divider bg-brand-paper px-3 text-sm font-semibold text-brand-ink"
+            aria-label={lang === 'bn' ? 'প্রোভাইডার' : 'Provider'}
           >
             <option value="">{lang === 'bn' ? 'সব প্রোভাইডার' : 'All providers'}</option>
             {providers.map((p) => <option key={p.providerKey} value={p.providerKey}>{p.name}</option>)}
+          </select>
+        ) : null}
+        {brands.length > 0 ? (
+          <select
+            value={brandKey}
+            onChange={(e) => setBrandKey(e.target.value)}
+            className="h-10 rounded-xl border border-brand-divider bg-brand-paper px-3 text-sm font-semibold text-brand-ink"
+            aria-label={lang === 'bn' ? 'ব্র্যান্ড' : 'Brand'}
+          >
+            <option value="">{lang === 'bn' ? 'সব ব্র্যান্ড' : 'All brands'}</option>
+            {brands.map((b) => <option key={`${b.providerKey}:${b.brandKey}`} value={b.brandKey}>{b.brandName} ({b.count})</option>)}
           </select>
         ) : null}
       </div>

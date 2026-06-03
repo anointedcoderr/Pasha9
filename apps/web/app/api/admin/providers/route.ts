@@ -86,9 +86,76 @@ export async function GET() {
   return withAuth(async () => {
     await ensurePermission('settings.write');
     const rows = await db.gameProvider.findMany({ orderBy: { name: 'asc' } });
+
+    // Brand + game summaries so the overview card can show
+    // "10 brands, 1228 games (1183 active)" plus the brand-name pill
+    // strip without each card making N more requests on mount. Cheap
+    // group-by; aggregated server-side.
+    const providerIds = rows.map((r) => r.id);
+    const [brandRows, gameStatusRows, brandGameCountRows] = await Promise.all([
+      providerIds.length === 0 ? Promise.resolve([]) : db.providerBrand.findMany({
+        where: { providerId: { in: providerIds } },
+        select: { id: true, providerId: true, brandKey: true, displayName: true, status: true },
+        orderBy: [{ displayName: 'asc' }],
+      }),
+      providerIds.length === 0 ? Promise.resolve([]) : db.externalGame.groupBy({
+        by: ['providerId', 'status'],
+        where: { providerId: { in: providerIds } },
+        _count: { _all: true },
+      }),
+      providerIds.length === 0 ? Promise.resolve([]) : db.externalGame.groupBy({
+        by: ['providerId', 'brandId'],
+        where: { providerId: { in: providerIds } },
+        _count: { _all: true },
+      }),
+    ]);
+
+    type BrandRow = { id: string; providerId: string; brandKey: string; displayName: string; status: string };
+    const brandsByProvider = new Map<string, BrandRow[]>();
+    for (const b of brandRows as BrandRow[]) {
+      const arr = brandsByProvider.get(b.providerId) ?? [];
+      arr.push(b);
+      brandsByProvider.set(b.providerId, arr);
+    }
+
+    const gamesByProvider = new Map<string, { total: number; active: number }>();
+    for (const r of gameStatusRows as Array<{ providerId: string; status: string; _count: { _all: number } }>) {
+      const prev = gamesByProvider.get(r.providerId) ?? { total: 0, active: 0 };
+      prev.total += r._count._all;
+      if (r.status === 'active') prev.active += r._count._all;
+      gamesByProvider.set(r.providerId, prev);
+    }
+
+    const brandGameCounts = new Map<string, number>();
+    for (const r of brandGameCountRows as Array<{ providerId: string; brandId: string | null; _count: { _all: number } }>) {
+      if (!r.brandId) continue;
+      brandGameCounts.set(`${r.providerId}:${r.brandId}`, r._count._all);
+    }
+
+    const summaries = rows.map((r) => {
+      const brandList = brandsByProvider.get(r.id) ?? [];
+      const games = gamesByProvider.get(r.id) ?? { total: 0, active: 0 };
+      const brands = brandList.map((b) => ({
+        id: b.id,
+        brandKey: b.brandKey,
+        displayName: b.displayName,
+        status: b.status,
+        gameCount: brandGameCounts.get(`${r.id}:${b.id}`) ?? 0,
+      })).sort((a, b) => b.gameCount - a.gameCount || a.displayName.localeCompare(b.displayName));
+      return {
+        providerId: r.id,
+        brandCount: brands.length,
+        activeBrandCount: brands.filter((b) => b.status === 'active').length,
+        totalGames: games.total,
+        activeGames: games.active,
+        brands,
+      };
+    });
+
     return jsonOk({
       adapters: listAdapters(),
       providers: rows.map(rowToView),
+      summaries,
     });
   });
 }

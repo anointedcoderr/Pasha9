@@ -23,19 +23,41 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       where: { providerId: params.id },
       orderBy: [{ displayName: 'asc' }],
     });
-    const counts = await db.externalGame.groupBy({
-      by: ['brandId'],
-      where: { providerId: params.id },
-      _count: { _all: true },
-    });
-    const countMap = new Map(counts.map((c) => [c.brandId, c._count._all]));
+    const [totalCounts, activeCounts, categoryCounts] = await Promise.all([
+      db.externalGame.groupBy({
+        by: ['brandId'],
+        where: { providerId: params.id },
+        _count: { _all: true },
+      }),
+      db.externalGame.groupBy({
+        by: ['brandId'],
+        where: { providerId: params.id, status: 'active' },
+        _count: { _all: true },
+      }),
+      db.externalGame.groupBy({
+        by: ['brandId', 'category'],
+        where: { providerId: params.id },
+        _count: { _all: true },
+      }),
+    ]);
+    const totalMap = new Map(totalCounts.map((c) => [c.brandId, c._count._all]));
+    const activeMap = new Map(activeCounts.map((c) => [c.brandId, c._count._all]));
+    const catMap = new Map<string, Record<string, number>>();
+    for (const r of categoryCounts) {
+      if (!r.brandId) continue;
+      const prev = catMap.get(r.brandId) ?? {};
+      prev[r.category ?? 'uncategorized'] = (prev[r.category ?? 'uncategorized'] ?? 0) + r._count._all;
+      catMap.set(r.brandId, prev);
+    }
     return jsonOk({
       brands: rows.map((b) => ({
         id: b.id,
         brandKey: b.brandKey,
         displayName: b.displayName,
         status: b.status,
-        gameCount: countMap.get(b.id) ?? 0,
+        gameCount: totalMap.get(b.id) ?? 0,
+        activeGameCount: activeMap.get(b.id) ?? 0,
+        categories: catMap.get(b.id) ?? {},
         lastSyncAt: b.lastSyncAt,
         createdAt: b.createdAt,
       })),

@@ -30,9 +30,26 @@ interface ProviderRow {
   lastHealthCheckOk: boolean | null;
 }
 
+interface BrandSummary {
+  id: string;
+  brandKey: string;
+  displayName: string;
+  status: string;
+  gameCount: number;
+}
+interface ProviderSummary {
+  providerId: string;
+  brandCount: number;
+  activeBrandCount: number;
+  totalGames: number;
+  activeGames: number;
+  brands: BrandSummary[];
+}
+
 interface ListResponse {
   adapters: AdapterChoice[];
   providers: ProviderRow[];
+  summaries?: ProviderSummary[];
 }
 
 export default function AdminProvidersPage() {
@@ -78,6 +95,10 @@ export default function AdminProvidersPage() {
         </Card>
       ) : null}
 
+      <Card padding="md" className="mb-3 border-l-4 border-emerald-400/60">
+        <p className="text-sm font-semibold text-ink-hi">iGamingAPIs is one aggregator credential. Each enabled brand under it (JILI, PGSoft, JDB, Habanero, Spribe, Evolution Live, Pragmatic Play Asia, BTI Sports, 9Wickets, etc.) is managed as a brand under the same provider. Open the provider to see brands, games and per-brand counts.</p>
+      </Card>
+
       <Card padding="md" className="mb-4 border-l-4 border-amber-400/60">
         <p className="text-sm font-semibold text-ink-hi inline-flex items-center gap-2">
           <AlertCircle className="h-4 w-4 text-amber-300" /> Provider becomes &quot;Live&quot; only after Test connection succeeds AND Sync brands/games returns rows.
@@ -93,34 +114,62 @@ export default function AdminProvidersPage() {
         <Card padding="lg"><p className="text-sm text-ink-mid">No providers configured. Click &quot;Add provider&quot; to register iGamingAPIs.</p></Card>
       ) : (
         <div className="grid gap-3 xl:grid-cols-2">
-          {data.providers.map((p) => (
-            <Card key={p.id} padding="lg">
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div className="min-w-0 max-w-full">
-                  <p className="break-words text-base font-extrabold text-ink-hi">{p.name}</p>
-                  <p className="mt-1 break-all font-mono text-[10px] uppercase tracking-wider text-ink-lo">
-                    {p.providerKey ?? '(no key)'} . {p.adapterKey ?? '(no adapter)'}
-                  </p>
+          {data.providers.map((p) => {
+            const summary = data.summaries?.find((s) => s.providerId === p.id);
+            const visibleBrands = summary?.brands.slice(0, 6) ?? [];
+            const extraBrands = (summary?.brands.length ?? 0) - visibleBrands.length;
+            return (
+              <Card key={p.id} padding="lg">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0 max-w-full">
+                    <p className="break-words text-base font-extrabold text-ink-hi">{p.name}</p>
+                    <p className="mt-1 break-all font-mono text-[10px] uppercase tracking-wider text-ink-lo">
+                      {p.providerKey ?? '(no key)'} . {p.adapterKey ?? '(no adapter)'}
+                    </p>
+                  </div>
+                  <Chip tone={p.status === 'active' ? 'ok' : 'warn'}>{p.status === 'active' ? 'Live' : 'Maintenance'}</Chip>
                 </div>
-                <Chip tone={p.status === 'active' ? 'ok' : 'warn'}>{p.status === 'active' ? 'Live' : 'Maintenance'}</Chip>
-              </div>
-              <div className="mt-3 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-                <Stat label="Base URL" value={p.apiBase ?? '-'} mono breakAll className="sm:col-span-2" />
-                <Stat label="Last sync" value={p.lastSyncAt ? new Date(p.lastSyncAt).toLocaleString() : 'Never'} />
-                <Stat
-                  label="Health"
-                  value={p.lastHealthCheckAt ? `${p.lastHealthCheckOk ? 'OK' : 'FAIL'} . ${new Date(p.lastHealthCheckAt).toLocaleString()}` : 'Not tested'}
-                  positive={p.lastHealthCheckOk === true}
-                  negative={p.lastHealthCheckOk === false}
-                />
-              </div>
-              <div className="mt-4">
-                <Link href={`/admin/providers/${p.id}`} className="block sm:inline-block">
-                  <Button size="sm" variant="neon" leftIcon={<ArrowRight className="h-3.5 w-3.5" />} className="w-full sm:w-auto">Open</Button>
-                </Link>
-              </div>
-            </Card>
-          ))}
+                {summary ? (
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                    <SummaryTile label="Brands" value={summary.brandCount} hint={summary.activeBrandCount === summary.brandCount ? 'all active' : `${summary.activeBrandCount} active`} />
+                    <SummaryTile label="Games" value={summary.totalGames} hint={`${summary.activeGames} active`} positive={summary.activeGames > 0} />
+                    <SummaryTile label="Active %" value={summary.totalGames > 0 ? Math.round((summary.activeGames / summary.totalGames) * 100) : 0} suffix="%" />
+                  </div>
+                ) : null}
+                {visibleBrands.length > 0 ? (
+                  <div className="mt-3">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-ink-lo">Brands inside this provider</p>
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      {visibleBrands.map((b) => (
+                        <span key={b.id} className={cn('inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold', b.status === 'active' ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-100' : 'border-neon/15 bg-base-panel/40 text-ink-mid')}>
+                          {b.displayName}
+                          <span className="font-mono text-[9px] text-ink-lo">{b.gameCount}</span>
+                        </span>
+                      ))}
+                      {extraBrands > 0 ? (
+                        <span className="inline-flex items-center rounded-full border border-neon/15 bg-base-panel/40 px-2 py-0.5 text-[10px] font-semibold text-ink-mid">+{extraBrands} more</span>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
+                <div className="mt-3 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+                  <Stat label="Base URL" value={p.apiBase ?? '-'} mono breakAll className="sm:col-span-2" />
+                  <Stat label="Last sync" value={p.lastSyncAt ? new Date(p.lastSyncAt).toLocaleString() : 'Never'} />
+                  <Stat
+                    label="Health"
+                    value={p.lastHealthCheckAt ? `${p.lastHealthCheckOk ? 'OK' : 'FAIL'} . ${new Date(p.lastHealthCheckAt).toLocaleString()}` : 'Not tested'}
+                    positive={p.lastHealthCheckOk === true}
+                    negative={p.lastHealthCheckOk === false}
+                  />
+                </div>
+                <div className="mt-4">
+                  <Link href={`/admin/providers/${p.id}`} className="block sm:inline-block">
+                    <Button size="sm" variant="neon" leftIcon={<ArrowRight className="h-3.5 w-3.5" />} className="w-full sm:w-auto">Open</Button>
+                  </Link>
+                </div>
+              </Card>
+            );
+          })}
         </div>
       )}
 
@@ -131,6 +180,16 @@ export default function AdminProvidersPage() {
         onCreated={() => { setOpenCreate(false); load(); }}
       />
     </>
+  );
+}
+
+function SummaryTile({ label, value, hint, positive, suffix }: { label: string; value: number; hint?: string; positive?: boolean; suffix?: string }) {
+  return (
+    <div className="rounded-lg border border-neon/15 bg-base-panel/40 px-2 py-2">
+      <p className="text-[9px] font-bold uppercase tracking-wider text-ink-lo">{label}</p>
+      <p className={cn('mt-0.5 text-lg font-extrabold', positive ? 'text-emerald-200' : 'text-ink-hi')}>{value}{suffix ?? ''}</p>
+      {hint ? <p className="text-[9px] text-ink-mid">{hint}</p> : null}
+    </div>
   );
 }
 
@@ -157,7 +216,7 @@ function CreateProviderModal({ open, onOpenChange, adapters, onCreated }: { open
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const [name, setName] = useState('iGamingAPIs JILI');
+  const [name, setName] = useState('iGamingAPIs Aggregator');
   const [providerKey, setProviderKey] = useState('igamingapis');
   const [adapterKey, setAdapterKey] = useState('igamingapis');
   const [apiBase, setApiBase] = useState('https://igamingapis.live/api/v1');

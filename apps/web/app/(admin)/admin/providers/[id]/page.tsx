@@ -58,6 +58,8 @@ export default function AdminProviderDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [tab, setTab] = useState<string>('setup');
+  const [gamesInitialBrandId, setGamesInitialBrandId] = useState<string>('');
 
   const showToast = (m: string) => { setToast(m); setTimeout(() => setToast(null), 4000); };
 
@@ -133,7 +135,7 @@ export default function AdminProviderDetailPage() {
             </div>
           </Card>
 
-          <Tabs defaultValue="setup">
+          <Tabs value={tab} onValueChange={setTab}>
             <TabsList>
               <TabsTrigger value="setup">Setup</TabsTrigger>
               <TabsTrigger value="brands">Brands</TabsTrigger>
@@ -146,8 +148,15 @@ export default function AdminProviderDetailPage() {
             <TabsContent value="setup">
               <SetupPanel provider={provider} onSaved={(msg) => { showToast(msg); load(); }} onError={(m) => setError(m)} />
             </TabsContent>
-            <TabsContent value="brands"><BrandsPanel providerId={id} /></TabsContent>
-            <TabsContent value="games"><GamesPanel providerId={id} /></TabsContent>
+            <TabsContent value="brands">
+              <BrandsPanel
+                providerId={id}
+                onViewGames={(brandId) => { setGamesInitialBrandId(brandId); setTab('games'); }}
+              />
+            </TabsContent>
+            <TabsContent value="games">
+              <GamesPanel providerId={id} initialBrandId={gamesInitialBrandId} onConsumeInitialBrand={() => setGamesInitialBrandId('')} />
+            </TabsContent>
             <TabsContent value="logs"><LogsPanel providerId={id} /></TabsContent>
             <TabsContent value="transactions"><TransactionsPanel providerId={id} /></TabsContent>
             <TabsContent value="reports"><ReportsPanel providerId={id} /></TabsContent>
@@ -614,9 +623,9 @@ function SimulateCallbackModal({ open, onOpenChange, providerId, onDone }: { ope
   );
 }
 
-interface BrandRow { id: string; brandKey: string; displayName: string; status: string; gameCount: number; lastSyncAt: string | null; createdAt: string }
+interface BrandRow { id: string; brandKey: string; displayName: string; status: string; gameCount: number; activeGameCount?: number; categories?: Record<string, number>; lastSyncAt: string | null; createdAt: string }
 
-function BrandsPanel({ providerId }: { providerId: string }) {
+function BrandsPanel({ providerId, onViewGames }: { providerId: string; onViewGames?: (brandId: string) => void }) {
   const [rows, setRows] = useState<BrandRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -679,16 +688,42 @@ function BrandsPanel({ providerId }: { providerId: string }) {
         <p className="text-sm text-ink-mid">No brands yet. Sync or Add Manual Brand.</p>
       ) : (
         <ul className="space-y-2">
-          {rows.map((b) => (
-            <li key={b.id} className="flex items-center justify-between rounded-lg border border-neon/10 bg-base-panel/40 px-3 py-2 text-sm">
-              <div>
-                <span className="font-semibold text-ink-hi">{b.displayName}</span>
-                <span className="ml-2 font-mono text-[10px] text-ink-lo">{b.brandKey}</span>
-                <span className="ml-2 text-[10px] text-ink-lo">. {b.gameCount} game{b.gameCount === 1 ? '' : 's'}</span>
-              </div>
-              <span className="text-[10px] text-ink-lo">{b.lastSyncAt ? safeDate(b.lastSyncAt) : 'Never'}</span>
-            </li>
-          ))}
+          {rows.map((b) => {
+            const cats = Object.entries(b.categories ?? {}).sort((a, c) => c[1] - a[1]);
+            return (
+              <li key={b.id} className="rounded-lg border border-neon/10 bg-base-panel/40 px-3 py-3 text-sm">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold text-ink-hi">{b.displayName}</span>
+                      <Chip tone={b.status === 'active' ? 'ok' : 'neutral'}>{b.status}</Chip>
+                    </div>
+                    <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-ink-lo">{b.brandKey}</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-full border border-neon/15 bg-base-panel/40 px-2 py-0.5 text-[10px] font-semibold text-ink-mid">
+                      {b.gameCount} game{b.gameCount === 1 ? '' : 's'}
+                      {typeof b.activeGameCount === 'number' ? ` . ${b.activeGameCount} active` : ''}
+                    </span>
+                    <span className="text-[10px] text-ink-lo">{b.lastSyncAt ? safeDate(b.lastSyncAt) : 'Never'}</span>
+                    {onViewGames ? (
+                      <Button size="sm" variant="ghost" onClick={() => onViewGames(b.id)}>View games</Button>
+                    ) : null}
+                  </div>
+                </div>
+                {cats.length > 0 ? (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {cats.map(([cat, n]) => (
+                      <span key={cat} className="inline-flex items-center gap-1 rounded-full border border-neon/15 bg-base-panel/30 px-2 py-0.5 text-[10px] text-ink-mid">
+                        <span className="font-semibold text-ink-hi">{cat}</span>
+                        <span className="text-ink-lo">{n}</span>
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </li>
+            );
+          })}
         </ul>
       )}
 
@@ -740,12 +775,23 @@ function ManualBrandModal({ open, onOpenChange, providerId, onCreated }: { open:
 interface GameRow { id: string; gameUid: string; brandId: string | null; displayName: string; category: string | null; imageUrl: string | null; status: string; isFeatured?: boolean; sortOrder?: number; lastSyncAt: string | null }
 interface GamesCounts { total: number; filtered: number; byStatus: Record<string, number>; byCategory: Record<string, number> }
 
-function GamesPanel({ providerId }: { providerId: string }) {
+function GamesPanel({ providerId, initialBrandId, onConsumeInitialBrand }: { providerId: string; initialBrandId?: string; onConsumeInitialBrand?: () => void }) {
   const [brands, setBrands] = useState<BrandRow[]>([]);
   const [games, setGames] = useState<GameRow[]>([]);
   const [counts, setCounts] = useState<GamesCounts | null>(null);
   const [brandKey, setBrandKey] = useState('');
   const [filterBrandId, setFilterBrandId] = useState<string>('');
+
+  // Honour a brand pre-selection coming from the Brands tab ("View
+  // games for this brand"). Consumed once on mount so manually
+  // clearing the filter later doesn't re-apply on re-render.
+  useEffect(() => {
+    if (initialBrandId && filterBrandId === '') {
+      setFilterBrandId(initialBrandId);
+      onConsumeInitialBrand?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialBrandId]);
   const [filterCategory, setFilterCategory] = useState<string>('');
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [q, setQ] = useState('');
