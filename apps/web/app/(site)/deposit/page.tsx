@@ -369,25 +369,27 @@ export default function DepositPage() {
               </FormField>
 
               {preview.bonusAmount > 0 ? (
-                <div className="mt-3 rounded-xl border border-emerald-300/40 bg-emerald-500/10 p-3 text-sm">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-200">{lang === 'bn' ? 'বোনাস প্রিভিউ' : 'Bonus preview'}</p>
+                <div className="mt-3 rounded-xl border border-emerald-500/60 bg-gradient-to-br from-emerald-500/25 to-emerald-700/35 p-3 text-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-emerald-50">
+                    {lang === 'bn' ? 'বোনাস প্রিভিউ' : 'Bonus preview'}
+                  </p>
                   <div className="mt-2 grid grid-cols-3 gap-2 text-center">
                     <div>
-                      <p className="text-[10px] uppercase text-emerald-100/70">{lang === 'bn' ? 'বোনাস %' : 'Bonus %'}</p>
-                      <p className="font-bold text-emerald-50">{preview.bonusPercentage}%</p>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-white/85">{lang === 'bn' ? 'বোনাস %' : 'Bonus %'}</p>
+                      <p className="text-base font-extrabold text-white">{preview.bonusPercentage}%</p>
                     </div>
                     <div>
-                      <p className="text-[10px] uppercase text-emerald-100/70">{lang === 'bn' ? 'বোনাস' : 'Bonus'}</p>
-                      <p className="font-bold text-emerald-50">+ BDT {preview.bonusAmount.toLocaleString()}</p>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-white/85">{lang === 'bn' ? 'বোনাস' : 'Bonus'}</p>
+                      <p className="text-base font-extrabold text-white">+ BDT {preview.bonusAmount.toLocaleString()}</p>
                     </div>
                     <div>
-                      <p className="text-[10px] uppercase text-emerald-100/70">{lang === 'bn' ? 'মোট ক্রেডিট' : 'Total credit'}</p>
-                      <p className="font-bold text-emerald-50">BDT {preview.totalCredit.toLocaleString()}</p>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-white/85">{lang === 'bn' ? 'মোট ক্রেডিট' : 'Total credit'}</p>
+                      <p className="text-base font-extrabold text-white">BDT {preview.totalCredit.toLocaleString()}</p>
                     </div>
                   </div>
                 </div>
               ) : (Number(watchedAmount) || 0) > 0 ? (
-                <p className="mt-2 text-[11px] text-ink-lo">
+                <p className="mt-2 text-[11px] font-semibold text-ink-mid">
                   {lang === 'bn' ? 'এই পরিমাণের জন্য সক্রিয় বোনাস টিয়ার নেই।' : 'No active bonus tier matches this amount.'}
                 </p>
               ) : null}

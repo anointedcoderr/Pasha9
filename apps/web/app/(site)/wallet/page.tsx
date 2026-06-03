@@ -1,20 +1,46 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { PageHeader } from '@/components/site/PageHeader';
 import { useMe, walletBalance, walletBonus, walletLocked } from '@/lib/hooks/useMe';
-import { userTransactions } from '@/lib/mock/transactions';
 import { useT, useLang } from '@/lib/i18n/context';
 import { formatBDT, formatDateTime } from '@/lib/utils/format';
 import { Wallet, ArrowDownToLine, ArrowUpToLine, Lock, Sparkles } from 'lucide-react';
 import { ROUTES } from '@/lib/constants/routes';
 import { Chip } from '@/components/ui/Chip';
 
+interface LedgerRow {
+  id: string;
+  type: 'deposit' | 'withdraw' | 'bonus' | 'referral' | 'bet' | 'win' | 'adjust';
+  amount: number;
+  status: 'pending' | 'completed' | 'failed';
+  reference: string | null;
+  createdAt: string;
+}
+
 export default function WalletPage() {
   const t = useT();
   const { lang } = useLang();
   const { me } = useMe();
-  const txs = userTransactions(me?.id ?? 'u_demo').slice(0, 8);
+  const [txs, setTxs] = useState<LedgerRow[]>([]);
+
+  useEffect(() => {
+    let alive = true;
+    const load = () => {
+      fetch('/api/me/transactions?take=8', { cache: 'no-store', credentials: 'include' })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => {
+          if (!alive) return;
+          if (Array.isArray(j?.transactions)) setTxs(j.transactions as LedgerRow[]);
+        })
+        .catch(() => { /* keep empty */ });
+    };
+    load();
+    const handler = () => load();
+    window.addEventListener('pasha9:wallet-refresh', handler);
+    return () => { alive = false; window.removeEventListener('pasha9:wallet-refresh', handler); };
+  }, []);
 
   return (
     <>
@@ -64,11 +90,16 @@ export default function WalletPage() {
               </tr>
             </thead>
             <tbody>
+              {txs.length === 0 ? (
+                <tr><td colSpan={5} className="px-6 py-6 text-center text-sm text-ink-mid">
+                  {lang === 'bn' ? 'এখনো কোনো ট্রানজ্যাকশন নেই।' : 'No transactions yet.'}
+                </td></tr>
+              ) : null}
               {txs.map((tx) => (
                 <tr key={tx.id} className="table-row">
                   <td className="px-6 py-3 capitalize text-ink-hi">{tx.type}</td>
-                  <td className={`px-6 py-3 tabular-nums ${tx.amount > 0 ? 'text-neon' : 'text-signal-danger'}`}>{formatBDT(tx.amount, { sign: true })}</td>
-                  <td className="px-6 py-3 font-mono text-xs text-ink-lo">{tx.reference}</td>
+                  <td className={`px-6 py-3 tabular-nums ${tx.amount > 0 ? 'text-emerald-500 font-semibold' : tx.amount < 0 ? 'text-rose-500 font-semibold' : 'text-ink-lo'}`}>{tx.amount === 0 ? '-' : formatBDT(tx.amount, { sign: true })}</td>
+                  <td className="px-6 py-3 font-mono text-xs text-ink-lo">{tx.reference ?? '-'}</td>
                   <td className="px-6 py-3 text-ink-lo">{formatDateTime(tx.createdAt, lang)}</td>
                   <td className="px-6 py-3"><Chip tone={tx.status === 'completed' ? 'ok' : tx.status === 'pending' ? 'warn' : 'danger'}>{tx.status}</Chip></td>
                 </tr>

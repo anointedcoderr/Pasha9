@@ -1,67 +1,175 @@
+// Built by Anointed Coder.
+//
+// /transactions and /dashboard/transactions both render this page.
+//
+// M2A shipped a mock-driven view as a placeholder. This now reads the
+// canonical Transaction table for the signed-in user via
+// /api/me/transactions. Pending withdrawal requests + rejected
+// deposit / withdrawal records are merged on top by the endpoint so
+// the in-flight state is visible without writing extra rows.
+
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { PageHeader } from '@/components/site/PageHeader';
-import { userTransactions } from '@/lib/mock/transactions';
-import { useMe } from '@/lib/hooks/useMe';
 import { formatBDT, formatDateTime } from '@/lib/utils/format';
 import { useT, useLang } from '@/lib/i18n/context';
 import { Chip } from '@/components/ui/Chip';
-import { ReceiptText } from 'lucide-react';
+import { ReceiptText, RefreshCw, LogIn } from 'lucide-react';
 import { Select } from '@/components/ui/Select';
+import { Card } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
+import Link from 'next/link';
+
+interface LedgerRow {
+  id: string;
+  type: 'deposit' | 'withdraw' | 'bonus' | 'referral' | 'bet' | 'win' | 'adjust';
+  amount: number;
+  status: 'pending' | 'completed' | 'failed';
+  reference: string | null;
+  description: string | null;
+  createdAt: string;
+}
 
 const TYPES = ['all', 'deposit', 'withdraw', 'bonus', 'referral', 'bet', 'win', 'adjust'] as const;
+
+function typeLabel(t: LedgerRow['type'], lang: 'en' | 'bn'): string {
+  if (lang === 'bn') {
+    const map: Record<LedgerRow['type'], string> = {
+      deposit: 'ডিপোজিট', withdraw: 'উইথড্র', bonus: 'বোনাস',
+      referral: 'রেফারেল', bet: 'বেট', win: 'উইন', adjust: 'অ্যাডজাস্ট',
+    };
+    return map[t];
+  }
+  return t;
+}
+
+function statusTone(s: LedgerRow['status']): 'ok' | 'warn' | 'danger' {
+  if (s === 'completed') return 'ok';
+  if (s === 'pending') return 'warn';
+  return 'danger';
+}
 
 export default function TransactionsPage() {
   const t = useT();
   const { lang } = useLang();
-  const { me } = useMe();
   const [type, setType] = useState<(typeof TYPES)[number]>('all');
-  // M2A-stub: read endpoint for the real Transaction ledger ships in M2B.
-  const all = userTransactions(me?.id ?? 'u_demo');
-  const filtered = type === 'all' ? all : all.filter((tx) => tx.type === type);
+  const [rows, setRows] = useState<LedgerRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [needsLogin, setNeedsLogin] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const load = useCallback(async (filter: (typeof TYPES)[number]) => {
+    setRefreshing(true);
+    setError(null);
+    try {
+      const url = filter === 'all' ? '/api/me/transactions' : `/api/me/transactions?type=${filter}`;
+      const r = await fetch(url, { cache: 'no-store', credentials: 'include' });
+      if (r.status === 401) { setNeedsLogin(true); setRows([]); return; }
+      const j = await r.json().catch(() => null);
+      if (!r.ok) throw new Error(j?.message ?? j?.code ?? 'Failed to load');
+      setNeedsLogin(false);
+      setRows(Array.isArray(j?.transactions) ? (j.transactions as LedgerRow[]) : []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => { load(type); }, [load, type]);
+
+  const totalIn = useMemo(() => rows.filter((r) => r.amount > 0 && r.status === 'completed').reduce((acc, r) => acc + r.amount, 0), [rows]);
+  const totalOut = useMemo(() => rows.filter((r) => r.amount < 0 && r.status === 'completed').reduce((acc, r) => acc + r.amount, 0), [rows]);
+
+  if (needsLogin) {
+    return (
+      <>
+        <PageHeader title={t('wallet.history')} subtitle="Sign in to view your wallet activity" icon={<ReceiptText className="h-5 w-5" />} />
+        <Card padding="lg" className="mx-auto max-w-md text-center">
+          <p className="text-sm text-ink-mid">{lang === 'bn' ? 'আপনার ট্রানজ্যাকশন দেখতে লগইন করুন।' : 'Log in to see your transaction history.'}</p>
+          <div className="mt-4">
+            <Link href="/?login=1" className="btn-yellow inline-flex h-10 items-center rounded-lg px-4 text-sm">
+              <LogIn className="mr-1.5 h-4 w-4" /> {lang === 'bn' ? 'লগইন' : 'Log in'}
+            </Link>
+          </div>
+        </Card>
+      </>
+    );
+  }
 
   return (
     <>
-      <PageHeader title={t('wallet.history')} subtitle={`${all.length} entries (live ledger ships in M2)`} icon={<ReceiptText className="h-5 w-5" />} />
+      <PageHeader title={t('wallet.history')} subtitle={`${rows.length} ${lang === 'bn' ? 'এন্ট্রি' : 'entries'}`} icon={<ReceiptText className="h-5 w-5" />} />
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <div className="w-44">
           <Select value={type} onChange={(e) => setType(e.target.value as (typeof TYPES)[number])}>
             {TYPES.map((tp) => (
-              <option key={tp} value={tp}>{tp}</option>
+              <option key={tp} value={tp}>{tp === 'all' ? (lang === 'bn' ? 'সব' : 'All') : typeLabel(tp as LedgerRow['type'], lang)}</option>
             ))}
           </Select>
         </div>
-        <p className="text-xs text-ink-lo">{filtered.length} matching</p>
+        <Button size="sm" variant="ghost" leftIcon={<RefreshCw className="h-3.5 w-3.5" />} onClick={() => load(type)} loading={refreshing}>
+          {lang === 'bn' ? 'রিফ্রেশ' : 'Refresh'}
+        </Button>
+        <div className="ml-auto flex flex-wrap items-center gap-3 text-xs text-ink-mid">
+          <span><span className="text-ink-lo">{lang === 'bn' ? 'মোট ইন' : 'Total in'}:</span> <span className="font-semibold text-emerald-500">+{formatBDT(totalIn)}</span></span>
+          <span><span className="text-ink-lo">{lang === 'bn' ? 'মোট আউট' : 'Total out'}:</span> <span className="font-semibold text-rose-500">{formatBDT(totalOut)}</span></span>
+        </div>
       </div>
 
-      <section className="card-glow overflow-hidden p-0">
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead>
-              <tr className="border-b border-neon/10 bg-base-deep/40 text-xs uppercase tracking-wider text-ink-lo">
-                <th className="px-6 py-3 text-left">Type</th>
-                <th className="px-6 py-3 text-left">{t('common.amount')}</th>
-                <th className="px-6 py-3 text-left">Reference</th>
-                <th className="px-6 py-3 text-left">{t('common.date')}</th>
-                <th className="px-6 py-3 text-left">{t('common.status')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((tx) => (
-                <tr key={tx.id} className="table-row">
-                  <td className="px-6 py-3 capitalize text-ink-hi">{tx.type}</td>
-                  <td className={`px-6 py-3 tabular-nums ${tx.amount > 0 ? 'text-neon' : 'text-signal-danger'}`}>{formatBDT(tx.amount, { sign: true })}</td>
-                  <td className="px-6 py-3 font-mono text-xs text-ink-lo">{tx.reference}</td>
-                  <td className="px-6 py-3 text-ink-lo">{formatDateTime(tx.createdAt, lang)}</td>
-                  <td className="px-6 py-3"><Chip tone={tx.status === 'completed' ? 'ok' : tx.status === 'pending' ? 'warn' : 'danger'}>{tx.status}</Chip></td>
+      {error ? (
+        <Card padding="md" className="mb-4">
+          <p className="text-sm text-signal-danger">{error}</p>
+        </Card>
+      ) : null}
+
+      {loading ? (
+        <Card padding="lg"><p className="text-sm text-ink-mid">Loading...</p></Card>
+      ) : rows.length === 0 ? (
+        <Card padding="lg" className="text-center">
+          <p className="text-sm text-ink-mid">
+            {lang === 'bn' ? 'এখনো কোনো ট্রানজ্যাকশন নেই।' : 'No transactions yet.'}
+          </p>
+          <p className="mt-1 text-xs text-ink-lo">
+            {lang === 'bn' ? 'একটি ডিপোজিট অনুমোদিত হওয়ার সাথে সাথে এখানে দেখা যাবে।' : 'Approved deposits, bonuses, bets, wins and withdrawals will appear here.'}
+          </p>
+        </Card>
+      ) : (
+        <section className="card-glow overflow-hidden p-0">
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="border-b border-neon/10 bg-base-deep/40 text-xs uppercase tracking-wider text-ink-lo">
+                  <th className="px-6 py-3 text-left">{lang === 'bn' ? 'ধরন' : 'Type'}</th>
+                  <th className="px-6 py-3 text-left">{lang === 'bn' ? 'বিবরণ' : 'Description'}</th>
+                  <th className="px-6 py-3 text-left">{t('common.amount')}</th>
+                  <th className="px-6 py-3 text-left">{lang === 'bn' ? 'রেফারেন্স' : 'Reference'}</th>
+                  <th className="px-6 py-3 text-left">{t('common.date')}</th>
+                  <th className="px-6 py-3 text-left">{t('common.status')}</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+              </thead>
+              <tbody>
+                {rows.map((tx) => (
+                  <tr key={tx.id} className="table-row">
+                    <td className="px-6 py-3 capitalize text-ink-hi">{typeLabel(tx.type, lang)}</td>
+                    <td className="px-6 py-3 text-ink-mid">{tx.description ?? '-'}</td>
+                    <td className={`px-6 py-3 tabular-nums ${tx.amount > 0 ? 'text-emerald-500' : tx.amount < 0 ? 'text-rose-500' : 'text-ink-lo'}`}>
+                      {tx.amount === 0 ? '-' : formatBDT(tx.amount, { sign: true })}
+                    </td>
+                    <td className="px-6 py-3 font-mono text-xs text-ink-lo">{tx.reference ?? '-'}</td>
+                    <td className="px-6 py-3 text-ink-lo">{formatDateTime(tx.createdAt, lang)}</td>
+                    <td className="px-6 py-3"><Chip tone={statusTone(tx.status)}>{tx.status}</Chip></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
     </>
   );
 }

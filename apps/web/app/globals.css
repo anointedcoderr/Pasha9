@@ -201,15 +201,17 @@ body.theme-light .table-row:hover { background: #FAFBFC; }
 
 /* Chips */
 body.theme-admin .chip,
-body.theme-light .chip { background: #F6F7F9; border-color: #E7EAEE; color: #0F1115; }
+body.theme-light .chip { background: #F6F7F9; border-color: #E7EAEE; color: #0F1115; font-weight: 600; }
+/* M4 contrast pass: bump the light-theme chip text + background opacity
+   so admin status pills are readable next to dense rows. */
 body.theme-admin .chip-ok,
-body.theme-light .chip-ok { background: rgba(34, 197, 94, 0.10); border-color: rgba(34, 197, 94, 0.30); color: #15803D; }
+body.theme-light .chip-ok { background: rgba(34, 197, 94, 0.18); border-color: rgba(34, 197, 94, 0.45); color: #0E6B33; font-weight: 700; }
 body.theme-admin .chip-warn,
-body.theme-light .chip-warn { background: rgba(245, 180, 0, 0.12); border-color: rgba(245, 180, 0, 0.30); color: #A16207; }
+body.theme-light .chip-warn { background: rgba(245, 180, 0, 0.20); border-color: rgba(245, 180, 0, 0.45); color: #855D03; font-weight: 700; }
 body.theme-admin .chip-danger,
-body.theme-light .chip-danger { background: rgba(239, 68, 68, 0.10); border-color: rgba(239, 68, 68, 0.30); color: #B91C1C; }
+body.theme-light .chip-danger { background: rgba(239, 68, 68, 0.18); border-color: rgba(239, 68, 68, 0.45); color: #991616; font-weight: 700; }
 body.theme-admin .chip-gold,
-body.theme-light .chip-gold { background: rgba(255, 204, 0, 0.12); border-color: rgba(255, 204, 0, 0.40); color: #A16207; }
+body.theme-light .chip-gold { background: rgba(255, 204, 0, 0.20); border-color: rgba(255, 204, 0, 0.55); color: #7A4E03; font-weight: 700; }
 
 /* Buttons */
 body.theme-admin .btn-gold,
@@ -757,25 +759,33 @@ body.theme-light input[type="checkbox"].accent-neon { accent-color: #1E73E8; }
     background: rgba(54, 255, 154, 0.06);
     color: var(--text-hi);
   }
+  /* M4 contrast pass: dark-theme chips were too faint against the
+     casino dark surfaces. Raise the text colour to a saturated tone
+     (still inside the chip family) and lift the background so the
+     status is readable from across the room. */
   .chip-warn {
-    border-color: rgba(255, 200, 87, 0.30);
-    background: rgba(255, 200, 87, 0.10);
-    color: #ffd97a;
+    border-color: rgba(255, 200, 87, 0.45);
+    background: rgba(255, 200, 87, 0.18);
+    color: #ffd148;
+    font-weight: 700;
   }
   .chip-danger {
-    border-color: rgba(255, 107, 107, 0.30);
-    background: rgba(255, 107, 107, 0.10);
-    color: #ff9a9a;
+    border-color: rgba(255, 107, 107, 0.45);
+    background: rgba(255, 107, 107, 0.18);
+    color: #ff7575;
+    font-weight: 700;
   }
   .chip-gold {
-    border-color: rgba(245, 208, 97, 0.40);
-    background: rgba(245, 208, 97, 0.10);
-    color: #fff0bd;
+    border-color: rgba(245, 208, 97, 0.55);
+    background: rgba(245, 208, 97, 0.20);
+    color: #ffd54a;
+    font-weight: 700;
   }
   .chip-ok {
-    border-color: rgba(54, 255, 154, 0.40);
-    background: rgba(54, 255, 154, 0.10);
-    color: #c8ffe5;
+    border-color: rgba(54, 255, 154, 0.55);
+    background: rgba(54, 255, 154, 0.18);
+    color: #3dff9c;
+    font-weight: 700;
   }
 
   .skeleton {

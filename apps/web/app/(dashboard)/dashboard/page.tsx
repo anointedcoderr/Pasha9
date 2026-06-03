@@ -1,10 +1,10 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { PageHeader } from '@/components/site/PageHeader';
 import { StatTile } from '@/components/ui/StatTile';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Chip } from '@/components/ui/Chip';
-import { userTransactions } from '@/lib/mock/transactions';
 import { formatBDT, formatDateTime, relativeTime } from '@/lib/utils/format';
 import { useT, useLang } from '@/lib/i18n/context';
 import { useMe, walletBalance } from '@/lib/hooks/useMe';
@@ -12,13 +12,38 @@ import { Wallet, Sparkles, TrendingUp, ArrowDownToLine, ArrowUpToLine, Gift, Use
 import Link from 'next/link';
 import { ROUTES } from '@/lib/constants/routes';
 
+interface LedgerRow {
+  id: string;
+  type: 'deposit' | 'withdraw' | 'bonus' | 'referral' | 'bet' | 'win' | 'adjust';
+  amount: number;
+  status: 'pending' | 'completed' | 'failed';
+  createdAt: string;
+}
+
 export default function DashboardOverview() {
   const t = useT();
   const { lang } = useLang();
   const { me } = useMe();
-  // Recent-activity list is mock-seeded for M2A; real transaction
-  // ledger ships in M2B. Stable id so the demo rows are deterministic.
-  const txs = userTransactions(me?.id ?? 'u_demo').slice(0, 6);
+  const [txs, setTxs] = useState<LedgerRow[]>([]);
+
+  // Recent activity from the canonical Transaction ledger.
+  useEffect(() => {
+    let alive = true;
+    const load = () => {
+      fetch('/api/me/transactions?take=6', { cache: 'no-store', credentials: 'include' })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => {
+          if (!alive) return;
+          if (Array.isArray(j?.transactions)) setTxs(j.transactions as LedgerRow[]);
+        })
+        .catch(() => { /* keep empty */ });
+    };
+    load();
+    const handler = () => load();
+    window.addEventListener('pasha9:wallet-refresh', handler);
+    return () => { alive = false; window.removeEventListener('pasha9:wallet-refresh', handler); };
+  }, []);
+
   const username = me?.username ?? '...';
 
   return (
@@ -54,11 +79,16 @@ export default function DashboardOverview() {
         <Card padding="lg" className="lg:col-span-2">
           <CardHeader title={t('dashboard.recentActivity')} subtitle="Last few transactions on your account" action={<Link href={ROUTES.dashboard.transactions} className="text-xs text-neon hover:text-ink-hi">View all</Link>} />
           <ul className="divide-y divide-neon/10">
+            {txs.length === 0 ? (
+              <li className="py-6 text-center text-sm text-ink-mid">
+                {lang === 'bn' ? 'এখনো কোনো ট্রানজ্যাকশন নেই।' : 'No transactions yet.'}
+              </li>
+            ) : null}
             {txs.map((tx) => (
               <li key={tx.id} className="flex items-center justify-between gap-3 py-3">
                 <div className="flex items-center gap-3">
                   <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-neon/15 bg-base-deep/40 text-neon">
-                    {tx.type === 'deposit' || tx.type === 'win' ? <ArrowDownToLine className="h-4 w-4" /> : <ArrowUpToLine className="h-4 w-4" />}
+                    {tx.type === 'deposit' || tx.type === 'win' || tx.type === 'bonus' || tx.type === 'referral' ? <ArrowDownToLine className="h-4 w-4" /> : <ArrowUpToLine className="h-4 w-4" />}
                   </span>
                   <div>
                     <p className="text-sm font-medium capitalize text-ink-hi">{tx.type}</p>
@@ -66,7 +96,7 @@ export default function DashboardOverview() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className={`text-sm font-semibold tabular-nums ${tx.amount > 0 ? 'text-neon' : 'text-signal-danger'}`}>{formatBDT(tx.amount, { sign: true })}</p>
+                  <p className={`text-sm font-semibold tabular-nums ${tx.amount > 0 ? 'text-emerald-500' : tx.amount < 0 ? 'text-rose-500' : 'text-ink-lo'}`}>{tx.amount === 0 ? '-' : formatBDT(tx.amount, { sign: true })}</p>
                   <Chip tone={tx.status === 'completed' ? 'ok' : tx.status === 'pending' ? 'warn' : 'danger'} className="mt-1">{tx.status}</Chip>
                 </div>
               </li>

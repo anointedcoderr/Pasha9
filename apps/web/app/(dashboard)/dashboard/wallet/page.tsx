@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { PageHeader } from '@/components/site/PageHeader';
 import { StatTile } from '@/components/ui/StatTile';
 import { Card, CardHeader } from '@/components/ui/Card';
@@ -11,18 +11,46 @@ import { FormField, Input } from '@/components/ui/Input';
 import { useT, useLang } from '@/lib/i18n/context';
 import { Wallet, Sparkles, Lock, Ticket, ArrowRightLeft } from 'lucide-react';
 import { useMe, walletBalance, walletBonus, walletLocked, walletLotto, triggerWalletRefresh } from '@/lib/hooks/useMe';
-import { userTransactions } from '@/lib/mock/transactions';
 import { formatBDT, formatDateTime } from '@/lib/utils/format';
 
 const MIN_TRANSFER = 100;
+
+interface LedgerRow {
+  id: string;
+  type: 'deposit' | 'withdraw' | 'bonus' | 'referral' | 'bet' | 'win' | 'adjust';
+  amount: number;
+  status: 'pending' | 'completed' | 'failed';
+  reference: string | null;
+  description: string | null;
+  createdAt: string;
+}
 
 export default function DashboardWalletPage() {
   const t = useT();
   const { lang } = useLang();
   const { me, refresh } = useMe();
-  // Transaction history list is M2A-stub. The /Transaction/ ledger
-  // already exists in the DB; the public read endpoint ships in M2B.
-  const txs = userTransactions(me?.id ?? 'u_demo').slice(0, 10);
+  const [txs, setTxs] = useState<LedgerRow[]>([]);
+
+  // Recent activity now reads the canonical Transaction table via
+  // /api/me/transactions. Re-fetched whenever the wallet-refresh
+  // event fires so an approval landing in another tab updates the
+  // recent list without a hard reload.
+  useEffect(() => {
+    let alive = true;
+    const load = () => {
+      fetch('/api/me/transactions?take=10', { cache: 'no-store', credentials: 'include' })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => {
+          if (!alive) return;
+          if (Array.isArray(j?.transactions)) setTxs(j.transactions as LedgerRow[]);
+        })
+        .catch(() => { /* keep empty */ });
+    };
+    load();
+    const handler = () => load();
+    window.addEventListener('pasha9:wallet-refresh', handler);
+    return () => { alive = false; window.removeEventListener('pasha9:wallet-refresh', handler); };
+  }, []);
 
   const lotto = walletLotto(me);
   const [transferOpen, setTransferOpen] = useState(false);
@@ -118,11 +146,16 @@ export default function DashboardWalletPage() {
               </tr>
             </thead>
             <tbody>
+              {txs.length === 0 ? (
+                <tr><td colSpan={5} className="px-6 py-6 text-center text-sm text-ink-mid">
+                  {lang === 'bn' ? 'এখনো কোনো ট্রানজ্যাকশন নেই।' : 'No transactions yet. Approved deposits, bets and wins will appear here.'}
+                </td></tr>
+              ) : null}
               {txs.map((tx) => (
                 <tr key={tx.id} className="table-row">
                   <td className="px-6 py-3 capitalize text-ink-hi">{tx.type}</td>
-                  <td className={`px-6 py-3 tabular-nums ${tx.amount > 0 ? 'text-neon' : 'text-signal-danger'}`}>{formatBDT(tx.amount, { sign: true })}</td>
-                  <td className="px-6 py-3 font-mono text-xs text-ink-lo">{tx.reference}</td>
+                  <td className={`px-6 py-3 tabular-nums ${tx.amount > 0 ? 'text-emerald-500 font-semibold' : tx.amount < 0 ? 'text-rose-500 font-semibold' : 'text-ink-lo'}`}>{tx.amount === 0 ? '-' : formatBDT(tx.amount, { sign: true })}</td>
+                  <td className="px-6 py-3 font-mono text-xs text-ink-lo">{tx.reference ?? '-'}</td>
                   <td className="px-6 py-3 text-ink-lo">{formatDateTime(tx.createdAt, lang)}</td>
                   <td className="px-6 py-3"><Chip tone={tx.status === 'completed' ? 'ok' : tx.status === 'pending' ? 'warn' : 'danger'}>{tx.status}</Chip></td>
                 </tr>
