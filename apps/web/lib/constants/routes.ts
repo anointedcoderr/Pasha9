@@ -51,6 +51,7 @@ export const ROUTES = {
     categories: '/admin/categories',
     providers: '/admin/providers',
     homepage: '/admin/homepage',
+    homepageSections: '/admin/homepage-sections',
     promoText: '/admin/promo-text',
     support: '/admin/support',
     settings: '/admin/settings',
