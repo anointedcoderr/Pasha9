@@ -588,6 +588,189 @@ async function seedRewardItems() {
   }
 }
 
+// =====================================================================
+// M4 Phase A defaults. Idempotent. Every new table gets a safe baseline
+// row so Phase B-G admin pages render against real data on first boot.
+// Re-running the seed never overwrites operator edits: we upsert by
+// stable natural keys (PublicSection.key, UploadConstraint.categoryKey)
+// and create-if-missing-by-name for the rest.
+// =====================================================================
+
+async function seedM4PublicSections() {
+  const rows = [
+    { key: 'homepage_hot',            group: 'homepage',        titleEn: 'Hot Games',          titleBn: 'হট গেমস',           subtitleEn: 'Trending right now', position: 10, layout: 'strip' },
+    { key: 'homepage_slots',          group: 'homepage',        titleEn: 'Popular Slots',      titleBn: 'জনপ্রিয় স্লট',         subtitleEn: 'Big jackpots every day', position: 20, layout: 'strip' },
+    { key: 'homepage_live_casino',    group: 'homepage',        titleEn: 'Live Casino',        titleBn: 'লাইভ ক্যাসিনো',         subtitleEn: 'Real dealers, real action', position: 30, layout: 'strip' },
+    { key: 'homepage_fishing',        group: 'homepage',        titleEn: 'Fishing Games',      titleBn: 'মাছ ধরা গেমস',         subtitleEn: 'Reel in the wins', position: 40, layout: 'strip' },
+    { key: 'homepage_crash',          group: 'homepage',        titleEn: 'Crash Games',        titleBn: 'ক্র্যাশ গেমস',          subtitleEn: 'Cash out before it crashes', position: 50, layout: 'strip' },
+    { key: 'homepage_lottery',        group: 'homepage',        titleEn: 'Lottery Numbers',    titleBn: 'লটারি গেমস',          subtitleEn: 'Daily 4D draws', position: 60, layout: 'strip' },
+    { key: 'homepage_brand',          group: 'homepage',        titleEn: 'Brand Showcase',     titleBn: 'ব্র্যান্ড পরিচিতি',     subtitleEn: 'Our partners',      position: 70, layout: 'banner' },
+    { key: 'homepage_video',          group: 'homepage',        titleEn: 'Video Highlights',   titleBn: 'ভিডিও হাইলাইটস',       subtitleEn: 'Watch the latest action', position: 80, layout: 'video' },
+    { key: 'homepage_upcoming',       group: 'homepage',        titleEn: 'Upcoming Matches',   titleBn: 'আসন্ন ম্যাচ',           subtitleEn: 'Sports + esports schedule', position: 90, layout: 'strip', isVisible: false },
+    { key: 'about_ambassadors',       group: 'about',           titleEn: 'Brand Ambassadors',  titleBn: 'ব্র্যান্ড অ্যাম্বাসেডর', subtitleEn: 'Faces of Pasha 9',  position: 10, layout: 'grid' },
+    { key: 'about_sponsors',          group: 'about',           titleEn: 'Sponsorships',        titleBn: 'স্পনসরশিপ',           subtitleEn: 'Teams we back',     position: 20, layout: 'grid' },
+    { key: 'public_payment_methods',  group: 'payment_display', titleEn: 'Payment Methods',     titleBn: 'পেমেন্ট পদ্ধতি',       subtitleEn: 'Fast and secure',   position: 10, layout: 'pills' },
+  ];
+  for (const r of rows) {
+    await db.publicSection.upsert({
+      where: { key: r.key },
+      update: {
+        group: r.group,
+        titleEn: r.titleEn,
+        titleBn: r.titleBn ?? null,
+        subtitleEn: r.subtitleEn ?? null,
+        layout: r.layout ?? null,
+        position: r.position,
+      },
+      create: {
+        key: r.key,
+        group: r.group,
+        titleEn: r.titleEn,
+        titleBn: r.titleBn ?? null,
+        subtitleEn: r.subtitleEn ?? null,
+        position: r.position,
+        layout: r.layout ?? null,
+        isVisible: r.isVisible ?? true,
+      },
+    });
+  }
+  log(`seed: PublicSection upserted ${rows.length} rows`);
+}
+
+async function seedM4UploadConstraints() {
+  const rows = [
+    { categoryKey: 'banners',         label: 'Hero / Homepage banner',     requiredWidth: 1920, requiredHeight: 720,  acceptedMime: 'image/png,image/jpeg,image/webp', maxBytes: 4_194_304, noteEn: 'Widescreen hero. Centre the focus point.' },
+    { categoryKey: 'banners_mobile',  label: 'Hero / Homepage banner (mobile)', requiredWidth: 750, requiredHeight: 1000, acceptedMime: 'image/png,image/jpeg,image/webp', maxBytes: 3_145_728, noteEn: 'Portrait hero for phone viewports.' },
+    { categoryKey: 'promo_desktop',   label: 'Promotion banner (desktop)', requiredWidth: 1200, requiredHeight: 480,  acceptedMime: 'image/png,image/jpeg,image/webp', maxBytes: 3_145_728, noteEn: 'Used on the promotions grid.' },
+    { categoryKey: 'promo_mobile',    label: 'Promotion banner (mobile)',  requiredWidth: 750,  requiredHeight: 500,  acceptedMime: 'image/png,image/jpeg,image/webp', maxBytes: 2_097_152, noteEn: 'Mobile-first promo card.' },
+    { categoryKey: 'promo_thumbnail', label: 'Promotion thumbnail',        requiredWidth: 400,  requiredHeight: 400,  acceptedMime: 'image/png,image/jpeg,image/webp', maxBytes: 1_048_576, noteEn: 'Square thumbnail for compact tiles.' },
+    { categoryKey: 'promo_background',label: 'Promotion background',       requiredWidth: 1600, requiredHeight: 1000, acceptedMime: 'image/png,image/jpeg,image/webp', maxBytes: 4_194_304, noteEn: 'Background fill for the promo detail panel.' },
+    { categoryKey: 'ambassadors',     label: 'Brand ambassador icon',      requiredWidth: 240,  requiredHeight: 240,  acceptedMime: 'image/png,image/jpeg,image/webp,image/svg+xml', maxBytes: 524_288, noteEn: 'Square icon shown in the About row.' },
+    { categoryKey: 'sponsors',        label: 'Sponsor icon',               requiredWidth: 240,  requiredHeight: 240,  acceptedMime: 'image/png,image/jpeg,image/webp,image/svg+xml', maxBytes: 524_288, noteEn: 'Square sponsor logo.' },
+    { categoryKey: 'payment_icons',   label: 'Payment method icon',        requiredWidth: 200,  requiredHeight: 120,  acceptedMime: 'image/png,image/jpeg,image/webp,image/svg+xml', maxBytes: 262_144, noteEn: 'Wallet brand icon for the public payment pills.' },
+    { categoryKey: 'provider_banners',label: 'Provider banner',            requiredWidth: 1200, requiredHeight: 400,  acceptedMime: 'image/png,image/jpeg,image/webp', maxBytes: 3_145_728, noteEn: 'Used on the provider lobby pages.' },
+    { categoryKey: 'games',           label: 'Game thumbnail',             requiredWidth: 512,  requiredHeight: 512,  acceptedMime: 'image/png,image/jpeg,image/webp', maxBytes: 1_048_576, noteEn: 'Square cover used in lobby cards.' },
+  ];
+  for (const r of rows) {
+    await db.uploadConstraint.upsert({
+      where: { categoryKey: r.categoryKey },
+      update: {
+        label: r.label,
+        requiredWidth: r.requiredWidth,
+        requiredHeight: r.requiredHeight,
+        acceptedMime: r.acceptedMime,
+        maxBytes: r.maxBytes,
+        noteEn: r.noteEn ?? null,
+      },
+      create: {
+        categoryKey: r.categoryKey,
+        label: r.label,
+        requiredWidth: r.requiredWidth,
+        requiredHeight: r.requiredHeight,
+        acceptedMime: r.acceptedMime,
+        maxBytes: r.maxBytes,
+        noteEn: r.noteEn ?? null,
+      },
+    });
+  }
+  log(`seed: UploadConstraint upserted ${rows.length} rows`);
+}
+
+async function seedM4DepositNotice() {
+  // Disabled by default; the operator enables it from /admin/deposit-notice
+  // once they have reviewed the wording.
+  const existing = await db.depositNotice.findFirst({ where: { position: 0 } });
+  const data = {
+    isEnabled: false,
+    titleEn: 'Important deposit notice',
+    titleBn: 'গুরুত্বপূর্ণ নোটিশ',
+    bodyEn: [
+      '1. If your deposit is not credited within 10 minutes, contact our 24/7 live support and share your transaction reference for verification.',
+      '2. Use only official deposit channels listed on our website or app. Never send funds to personal accounts or agents.',
+      '3. Beware of fraud. We never contact players to request money through unofficial channels.',
+      '4. For any concern, message live support before sending payment. Unauthorised channels are entirely at your own risk.',
+    ].join('\n\n'),
+    bodyBn: [
+      '১. যদি আপনার ডিপোজিট ১০ মিনিটের মধ্যে আপনার অ্যাকাউন্টে ক্রেডিট না হয়, তাহলে দয়া করে অবিলম্বে আমাদের ২৪/৭ লাইভ কাস্টমার সাপোর্টের সাথে যোগাযোগ করুন।',
+      '২. শুধুমাত্র অফিসিয়াল জমা চ্যানেল ব্যবহার করুন। ব্যক্তিগত অ্যাকাউন্টে অর্থ পাঠাবেন না।',
+      '৩. প্রতারক ও ভুয়া এজেন্টদের থেকে সাবধান থাকুন।',
+      '৪. যাচাইয়ের জন্য আগে আমাদের সাথে যোগাযোগ করুন।',
+    ].join('\n\n'),
+    ctaLabelEn: 'I understand',
+    ctaLabelBn: 'আমি বুঝেছি',
+    position: 0,
+  };
+  if (existing) {
+    await db.depositNotice.update({ where: { id: existing.id }, data });
+  } else {
+    await db.depositNotice.create({ data });
+  }
+  log('seed: DepositNotice baseline present (disabled by default)');
+}
+
+async function seedM4PublicPaymentMethods() {
+  const rows = [
+    { buttonText: 'bKash',  position: 10 },
+    { buttonText: 'Nagad',  position: 20 },
+    { buttonText: 'Rocket', position: 30 },
+    { buttonText: 'Upay',   position: 40 },
+  ];
+  for (const r of rows) {
+    const existing = await db.publicPaymentMethod.findFirst({ where: { buttonText: r.buttonText } });
+    if (existing) {
+      await db.publicPaymentMethod.update({ where: { id: existing.id }, data: { position: r.position, isActive: true } });
+    } else {
+      await db.publicPaymentMethod.create({ data: r });
+    }
+  }
+  log(`seed: PublicPaymentMethod upserted ${rows.length} rows (Upay included)`);
+}
+
+async function seedM4AboutBaseline() {
+  // Two placeholder rows in each list so the upcoming /admin/about page
+  // renders with non-empty preview cards. Operators replace the
+  // placeholders from the admin UI in Phase G.
+  const ambassadors = [
+    { nameEn: 'Brand Ambassador One', subtitle: '2025/2026', position: 10 },
+    { nameEn: 'Brand Ambassador Two', subtitle: '2025/2026', position: 20 },
+  ];
+  for (const a of ambassadors) {
+    const existing = await db.brandAmbassador.findFirst({ where: { nameEn: a.nameEn } });
+    if (!existing) await db.brandAmbassador.create({ data: a });
+  }
+  const sponsors = [
+    { nameEn: 'Pasha 9 Cricket Partner',  subtitle: '2025/2026', position: 10 },
+    { nameEn: 'Pasha 9 Football Partner', subtitle: '2025/2026', position: 20 },
+    { nameEn: 'Pasha 9 Esports Partner',  subtitle: '2025/2026', position: 30 },
+  ];
+  for (const s of sponsors) {
+    const existing = await db.sponsor.findFirst({ where: { nameEn: s.nameEn } });
+    if (!existing) await db.sponsor.create({ data: s });
+  }
+  log(`seed: BrandAmbassador (${ambassadors.length}) + Sponsor (${sponsors.length}) baseline rows present`);
+}
+
+async function seedM4SystemSettings() {
+  // Knobs the upcoming Phase D/E admin pages will read. Defaults are
+  // conservative: deposit notice OFF until operator enables it; weekly
+  // referral claim cadence with a 7-day maturation window.
+  const settings: Array<{ key: string; value: string; type?: string }> = [
+    { key: 'deposit_notice_enabled',    value: 'false',   type: 'boolean' },
+    { key: 'referral_claim_cadence',    value: 'weekly',  type: 'string'  },
+    { key: 'referral_hold_days',        value: '7',       type: 'number'  },
+    { key: 'referral_turnover_x',       value: '0',       type: 'number'  },
+    { key: 'promotion_claim_engine',    value: 'enabled', type: 'string'  },
+  ];
+  for (const s of settings) {
+    await db.systemSetting.upsert({
+      where: { key: s.key },
+      update: { value: s.value, type: s.type ?? 'string' },
+      create: { key: s.key, value: s.value, type: s.type ?? 'string' },
+    });
+  }
+  log(`seed: SystemSetting upserted ${settings.length} M4 keys`);
+}
+
 async function main() {
   log('starting');
   await seedRolesAndPermissions();
@@ -605,6 +788,13 @@ async function main() {
   await seedLottoDraws();
   await seedRewardItems();
   await seedNativeGames();
+  // M4 Phase A baselines.
+  await seedM4PublicSections();
+  await seedM4UploadConstraints();
+  await seedM4DepositNotice();
+  await seedM4PublicPaymentMethods();
+  await seedM4AboutBaseline();
+  await seedM4SystemSettings();
 
   log(`super admin id: ${admin.id}`);
   log('done');
