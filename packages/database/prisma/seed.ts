@@ -761,6 +761,14 @@ async function seedM4SystemSettings() {
     { key: 'referral_hold_days',        value: '7',       type: 'number'  },
     { key: 'referral_turnover_x',       value: '0',       type: 'number'  },
     { key: 'promotion_claim_engine',    value: 'enabled', type: 'string'  },
+    // M4 Phase F lotto knobs. claim_mode 'auto' preserves the current
+    // behaviour (settlement credits Wallet.lottoBalance instantly);
+    // 'manual' writes LotteryWinning with status='pending_credit' and
+    // the player claims each winning ticket explicitly.
+    { key: 'lotto_enabled',             value: 'true',    type: 'boolean' },
+    { key: 'lotto_claim_mode',          value: 'auto',    type: 'string'  },
+    { key: 'lotto_ticket_rate_amount',  value: '1200',    type: 'number'  },
+    { key: 'lotto_ticket_rate_count',   value: '2',       type: 'number'  },
   ];
   for (const s of settings) {
     await db.systemSetting.upsert({

@@ -51,6 +51,21 @@ interface SettleDraft {
   prize3xMult: string;
   prizeSpecialMult: string;
   prizeConsoMult: string;
+  // M4 Phase F: Babu88-style additional prize numbers (display only,
+  // do not affect prize computation). claimMode optionally overrides
+  // the SystemSetting `lotto_claim_mode` for this settlement.
+  second: string;
+  third: string;
+  specials: string;     // comma-separated list of 4-digit numbers
+  consolations: string; // comma-separated list of 4-digit numbers
+  claimMode: 'inherit' | 'auto' | 'manual';
+}
+
+interface LottoSettings {
+  enabled: boolean;
+  claimMode: 'auto' | 'manual';
+  ticketRateAmount: number;
+  ticketRateCount: number;
 }
 
 interface TierRow { tier: string; label: string; count: number; paid: number }
@@ -88,6 +103,8 @@ export default function AdminLottoPage() {
   const [settling, setSettling] = useState<SettleDraft | null>(null);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [settings, setSettings] = useState<LottoSettings | null>(null);
+  const [settingsBusy, setSettingsBusy] = useState(false);
   const [diagnose, setDiagnose] = useState<DiagnoseResult | null>(null);
   const [diagnoseBusy, setDiagnoseBusy] = useState(false);
   const [rolloverBusy, setRolloverBusy] = useState(false);
@@ -115,6 +132,33 @@ export default function AdminLottoPage() {
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  useEffect(() => {
+    fetch('/api/admin/lotto/settings', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (j?.settings) setSettings(j.settings as LottoSettings); })
+      .catch(() => { /* leave null until user opens settings */ });
+  }, []);
+
+  const saveSettings = async (patch: Partial<LottoSettings>) => {
+    setSettingsBusy(true);
+    try {
+      const r = await fetch('/api/admin/lotto/settings', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(patch),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j?.message ?? j?.code ?? 'Save failed');
+      setSettings(j.settings as LottoSettings);
+      setToast('Lotto settings saved.');
+      setTimeout(() => setToast(null), 3000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Save failed');
+    } finally {
+      setSettingsBusy(false);
+    }
+  };
 
   const save = async () => {
     if (!editor) return;
@@ -167,6 +211,16 @@ export default function AdminLottoPage() {
     setBusy(true);
     setError(null);
     try {
+      const specials = settling.specials.split(',').map((s) => s.trim()).filter((s) => /^\d{4}$/.test(s));
+      const consolations = settling.consolations.split(',').map((s) => s.trim()).filter((s) => /^\d{4}$/.test(s));
+      const extraNumbers = (settling.second || settling.third || specials.length || consolations.length)
+        ? {
+            second: settling.second && /^\d{4}$/.test(settling.second) ? settling.second : null,
+            third: settling.third && /^\d{4}$/.test(settling.third) ? settling.third : null,
+            specials,
+            consolations,
+          }
+        : null;
       const payload = {
         winningNumber: settling.winningNumber,
         ticketBaseValue: Number(settling.ticketBaseValue) || undefined,
@@ -175,6 +229,8 @@ export default function AdminLottoPage() {
         prize3xMult: Number(settling.prize3xMult) || undefined,
         prizeSpecialMult: Number(settling.prizeSpecialMult) || undefined,
         prizeConsoMult: Number(settling.prizeConsoMult) || undefined,
+        extraNumbers,
+        claimMode: settling.claimMode === 'inherit' ? undefined : settling.claimMode,
       };
       const res = await fetch(`/api/admin/lotto/${settling.draw.id}/settle`, {
         method: 'POST',
@@ -298,6 +354,56 @@ export default function AdminLottoPage() {
       {error ? <Card padding="md" className="mb-4"><p className="text-sm text-signal-danger">{error}</p></Card> : null}
 
       <Card padding="md" className="mb-4">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-ink-lo">Lotto engine settings</p>
+        {settings ? (
+          <div className="mt-2 grid gap-3 sm:grid-cols-4">
+            <FormField label="Lotto enabled" hint="Off pauses ticket accrual and the public lotto module.">
+              <Select value={settings.enabled ? 'true' : 'false'} onChange={(e) => saveSettings({ enabled: e.target.value === 'true' })} disabled={settingsBusy}>
+                <option value="true">Enabled</option>
+                <option value="false">Disabled</option>
+              </Select>
+            </FormField>
+            <FormField label="Claim mode" hint="Auto credits lotto balance on settle. Manual writes pending winnings that the player claims explicitly.">
+              <Select value={settings.claimMode} onChange={(e) => saveSettings({ claimMode: e.target.value as 'auto' | 'manual' })} disabled={settingsBusy}>
+                <option value="auto">Auto-credit</option>
+                <option value="manual">Manual claim</option>
+              </Select>
+            </FormField>
+            <FormField label="Deposit per ticket block (BDT)">
+              <Input
+                type="number"
+                min={100}
+                defaultValue={settings.ticketRateAmount}
+                disabled={settingsBusy}
+                onBlur={(e) => {
+                  const v = Number(e.target.value);
+                  if (Number.isFinite(v) && v >= 100 && v !== settings.ticketRateAmount) {
+                    saveSettings({ ticketRateAmount: Math.floor(v) });
+                  }
+                }}
+              />
+            </FormField>
+            <FormField label="Tickets per block">
+              <Input
+                type="number"
+                min={1}
+                defaultValue={settings.ticketRateCount}
+                disabled={settingsBusy}
+                onBlur={(e) => {
+                  const v = Number(e.target.value);
+                  if (Number.isFinite(v) && v >= 1 && v !== settings.ticketRateCount) {
+                    saveSettings({ ticketRateCount: Math.floor(v) });
+                  }
+                }}
+              />
+            </FormField>
+          </div>
+        ) : (
+          <p className="mt-2 text-sm text-ink-mid">Loading settings...</p>
+        )}
+      </Card>
+
+      <Card padding="md" className="mb-4">
         <p className="text-xs text-ink-mid">
           Settling a draw publishes the winning 4-digit number and pays out across six tiers, no double-pay
           (each ticket gets one tier - the highest it qualifies for): <span className="font-semibold text-ink-hi">1st exact</span> (full first-prize multiplier),
@@ -379,6 +485,11 @@ export default function AdminLottoPage() {
                           prize3xMult: '300',
                           prizeSpecialMult: '150',
                           prizeConsoMult: '30',
+                          second: '',
+                          third: '',
+                          specials: '',
+                          consolations: '',
+                          claimMode: 'inherit',
                         })
                       }
                     >
@@ -487,9 +598,58 @@ export default function AdminLottoPage() {
                 <Input type="number" min="1" value={settling.prizeConsoMult} onChange={(e) => setSettling({ ...settling, prizeConsoMult: e.target.value })} />
               </FormField>
             </div>
+
+            <div className="rounded-xl border border-amber-300/30 bg-amber-300/5 p-3">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-amber-200">Public display - Babu88 style prize numbers (optional)</p>
+              <p className="mt-1 text-[11px] text-brand-inkMute">
+                The settlement engine derives every prize tier from the winning number above. These extra numbers are display-only on the public result history card.
+              </p>
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                <FormField label="2nd prize number">
+                  <Input
+                    value={settling.second}
+                    onChange={(e) => setSettling({ ...settling, second: e.target.value.replace(/\D/g, '').slice(0, 4) })}
+                    inputMode="numeric"
+                    placeholder="e.g. 5678"
+                    maxLength={4}
+                  />
+                </FormField>
+                <FormField label="3rd prize number">
+                  <Input
+                    value={settling.third}
+                    onChange={(e) => setSettling({ ...settling, third: e.target.value.replace(/\D/g, '').slice(0, 4) })}
+                    inputMode="numeric"
+                    placeholder="e.g. 1234"
+                    maxLength={4}
+                  />
+                </FormField>
+                <FormField label="Special prize numbers" hint="Comma-separated 4-digit list">
+                  <Input
+                    value={settling.specials}
+                    onChange={(e) => setSettling({ ...settling, specials: e.target.value })}
+                    placeholder="0123, 4567, 8901"
+                  />
+                </FormField>
+                <FormField label="Consolation prize numbers" hint="Comma-separated 4-digit list">
+                  <Input
+                    value={settling.consolations}
+                    onChange={(e) => setSettling({ ...settling, consolations: e.target.value })}
+                    placeholder="0231, 4576, 8910"
+                  />
+                </FormField>
+              </div>
+            </div>
+
+            <FormField label="Claim mode for this settlement" hint="Inherit follows SystemSetting `lotto_claim_mode`. Manual writes pending winnings that the player claims explicitly.">
+              <Select value={settling.claimMode} onChange={(e) => setSettling({ ...settling, claimMode: e.target.value as SettleDraft['claimMode'] })}>
+                <option value="inherit">Inherit from settings</option>
+                <option value="auto">Auto-credit lotto balance</option>
+                <option value="manual">Manual claim required</option>
+              </Select>
+            </FormField>
+
             <p className="text-xs text-brand-inkMute">
-              M2F settles all 6 tiers. Each ticket is paid at most once, highest tier wins. Click <span className="font-semibold text-brand-ink">Diagnose</span> below
-              to dry-run the result before publishing. Once published, the wallet credits cannot be undone (re-settling the same draw is blocked).
+              All 6 tiers are derived from the winning number above. Each ticket is paid at most once; highest tier wins. Click <span className="font-semibold text-brand-ink">Diagnose</span> below to dry-run before publishing. Re-settling the same draw is blocked.
             </p>
 
             {diagnose ? (

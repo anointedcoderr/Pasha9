@@ -20,6 +20,8 @@ import { withAuth, ensurePermission, recordActivity } from '@/lib/auth/guard';
 import { jsonOk, jsonError } from '@/lib/auth/errors';
 import { settleDraw } from '@/lib/lotto/tickets';
 
+const fourDigit = z.string().regex(/^\d{4}$/);
+
 const schema = z.object({
   winningNumber: z.string().regex(/^\d{4}$/, 'Must be 4 digits'),
   ticketBaseValue: z.coerce.number().min(1).max(100000).optional(),
@@ -28,6 +30,19 @@ const schema = z.object({
   prize3xMult: z.coerce.number().min(1).max(100000).optional(),
   prizeSpecialMult: z.coerce.number().min(1).max(100000).optional(),
   prizeConsoMult: z.coerce.number().min(1).max(100000).optional(),
+  // M4 Phase F additive payload. extraNumbers carries the Babu88-
+  // style display blob (separate prize numbers per tier). claimMode
+  // optionally overrides the SystemSetting `lotto_claim_mode`.
+  extraNumbers: z
+    .object({
+      second: fourDigit.nullable().optional(),
+      third: fourDigit.nullable().optional(),
+      specials: z.array(fourDigit).max(20).optional(),
+      consolations: z.array(fourDigit).max(20).optional(),
+    })
+    .nullable()
+    .optional(),
+  claimMode: z.enum(['auto', 'manual']).optional(),
 });
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
@@ -48,6 +63,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         prize3xMult: parsed.data.prize3xMult,
         prizeSpecialMult: parsed.data.prizeSpecialMult,
         prizeConsoMult: parsed.data.prizeConsoMult,
+        extraNumbers: parsed.data.extraNumbers ?? null,
+        claimMode: parsed.data.claimMode,
       });
 
       await recordActivity({

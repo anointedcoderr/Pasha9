@@ -50,7 +50,16 @@ interface ResultRow {
   totalPaid: number;
   ticketBaseValue: number;
   prize1xMult: number;
+  // M4 Phase F: optional Babu88-style display blob.
+  extraNumbers?: {
+    second?: string | null;
+    third?: string | null;
+    specials?: string[];
+    consolations?: string[];
+  } | null;
 }
+
+type ResultRange = 'all' | 'yesterday' | '7d' | '30d';
 
 interface MeResponse {
   rules: { ticketsPerBlock: number; blockAmount: number; digits: number; drawTimeLabel: string };
@@ -127,6 +136,9 @@ export default function LottoPage() {
   const [results, setResults] = useState<ResultRow[]>([]);
   const [me, setMe] = useState<MeResponse | null>(null);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
+  const [resultRange, setResultRange] = useState<ResultRange>('all');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
 
   useEffect(() => {
     let alive = true;
@@ -137,7 +149,12 @@ export default function LottoPage() {
         if (alive) setDraws(live);
       })
       .catch(() => {});
-    fetch('/api/content/lotto/results')
+    const params = new URLSearchParams();
+    if (resultRange !== 'all') params.set('range', resultRange);
+    if (customFrom) params.set('from', customFrom);
+    if (customTo) params.set('to', customTo);
+    params.set('take', '30');
+    fetch(`/api/content/lotto/results?${params.toString()}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (alive && data?.results) setResults(data.results as ResultRow[]);
@@ -152,7 +169,7 @@ export default function LottoPage() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [resultRange, customFrom, customTo]);
 
   const featured = draws[0];
 
@@ -217,11 +234,60 @@ export default function LottoPage() {
 
       {/* Latest results */}
       <section>
-        <div className="mb-3 flex items-center gap-2">
-          <Trophy className="h-4 w-4 text-brand-yellow-600" />
-          <h3 className="text-base font-extrabold text-brand-ink md:text-lg">
-            {lang === 'bn' ? 'সর্বশেষ ফলাফল' : 'Latest results'}
-          </h3>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Trophy className="h-4 w-4 text-brand-yellow-600" />
+            <h3 className="text-base font-extrabold text-brand-ink md:text-lg">
+              {lang === 'bn' ? 'ফলাফলের ইতিহাস' : 'Result history'}
+            </h3>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap gap-1">
+              {[
+                { key: 'all', en: 'All', bn: 'সব' },
+                { key: 'yesterday', en: 'Yesterday', bn: 'গতকাল' },
+                { key: '7d', en: '7 days', bn: '৭ দিন' },
+                { key: '30d', en: '30 days', bn: '৩০ দিন' },
+              ].map((r) => (
+                <button
+                  key={r.key}
+                  type="button"
+                  onClick={() => { setResultRange(r.key as ResultRange); setCustomFrom(''); setCustomTo(''); }}
+                  className="pill-provider"
+                  data-active={resultRange === r.key && !customFrom && !customTo}
+                >
+                  {lang === 'bn' ? r.bn : r.en}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-1">
+              <input
+                type="date"
+                value={customFrom}
+                onChange={(e) => { setCustomFrom(e.target.value); setResultRange('all'); }}
+                className="h-8 rounded-lg border border-brand-divider bg-brand-paper px-2 text-xs text-brand-ink"
+              />
+              <span className="text-[10px] text-brand-inkMute">→</span>
+              <input
+                type="date"
+                value={customTo}
+                onChange={(e) => { setCustomTo(e.target.value); setResultRange('all'); }}
+                className="h-8 rounded-lg border border-brand-divider bg-brand-paper px-2 text-xs text-brand-ink"
+              />
+            </div>
+            <Link
+              href="/lotto/my-tickets"
+              className="inline-flex h-8 items-center gap-1 rounded-full border border-brand-divider bg-brand-paper px-2 text-[11px] font-bold text-brand-ink hover:border-brand-yellow-500"
+            >
+              <Ticket className="h-3 w-3" /> {lang === 'bn' ? 'আমার টিকিট' : 'My tickets'}
+            </Link>
+            <Link
+              href="/lotto/my-winnings"
+              className="inline-flex h-8 items-center gap-1 rounded-full border border-brand-divider bg-brand-paper px-2 text-[11px] font-bold text-brand-ink hover:border-brand-yellow-500"
+            >
+              <Trophy className="h-3 w-3" /> {lang === 'bn' ? 'আমার জয়' : 'My winnings'}
+            </Link>
+          </div>
         </div>
         {results.length === 0 ? (
           <div className="card-light flex items-center gap-3 p-4">
@@ -236,17 +302,46 @@ export default function LottoPage() {
           </div>
         ) : (
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-            {results.slice(0, 6).map((r) => (
+            {results.slice(0, 30).map((r) => (
               <article key={r.id} className="card-light overflow-hidden">
                 <div className="bg-[linear-gradient(135deg,#15171C_0%,#0F1115_100%)] p-4 text-white">
                   <p className="text-[11px] font-semibold uppercase tracking-wider text-white/65">{r.drawName}</p>
-                  <div className="mt-2 flex justify-center gap-2">
+                  <p className="mt-2 text-[10px] uppercase tracking-wider text-white/55">{lang === 'bn' ? '১ম পুরস্কার' : '1st prize'}</p>
+                  <div className="mt-1 flex justify-center gap-2">
                     {r.winningNumber.split('').map((d, i) => (
                       <span key={i} className="flex h-12 w-10 items-center justify-center rounded-lg bg-brand-yellow-500 text-xl font-extrabold text-brand-ink">
                         {d}
                       </span>
                     ))}
                   </div>
+                  {r.extraNumbers ? (
+                    <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
+                      {r.extraNumbers.second ? (
+                        <div className="rounded-md bg-white/5 p-2">
+                          <p className="text-[9px] uppercase text-white/55">{lang === 'bn' ? '২য়' : '2nd'}</p>
+                          <p className="mt-0.5 font-mono text-base font-extrabold text-white">{r.extraNumbers.second}</p>
+                        </div>
+                      ) : null}
+                      {r.extraNumbers.third ? (
+                        <div className="rounded-md bg-white/5 p-2">
+                          <p className="text-[9px] uppercase text-white/55">{lang === 'bn' ? '৩য়' : '3rd'}</p>
+                          <p className="mt-0.5 font-mono text-base font-extrabold text-white">{r.extraNumbers.third}</p>
+                        </div>
+                      ) : null}
+                      {Array.isArray(r.extraNumbers.specials) && r.extraNumbers.specials.length > 0 ? (
+                        <div className="col-span-2 rounded-md bg-white/5 p-2">
+                          <p className="text-[9px] uppercase text-white/55">{lang === 'bn' ? 'বিশেষ পুরস্কার' : 'Special'}</p>
+                          <p className="mt-0.5 break-all font-mono text-[12px] font-bold text-white">{r.extraNumbers.specials.join(' . ')}</p>
+                        </div>
+                      ) : null}
+                      {Array.isArray(r.extraNumbers.consolations) && r.extraNumbers.consolations.length > 0 ? (
+                        <div className="col-span-2 rounded-md bg-white/5 p-2">
+                          <p className="text-[9px] uppercase text-white/55">{lang === 'bn' ? 'সান্ত্বনা' : 'Consolation'}</p>
+                          <p className="mt-0.5 break-all font-mono text-[12px] font-bold text-white">{r.extraNumbers.consolations.join(' . ')}</p>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
                 <div className="px-4 py-3">
                   <p className="text-[11px] text-brand-inkMute">{formatDateTime(r.publishedAt, lang)}</p>

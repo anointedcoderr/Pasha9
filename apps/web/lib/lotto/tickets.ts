@@ -36,7 +36,12 @@
 
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db/client';
+import { loadLottoSettings } from './settings';
 
+// M4 Phase F: live rate now comes from SystemSetting via
+// loadLottoSettings(). These constants stay as the fallback when no
+// settings row is present, and as the value of the LOTTERY_RULES
+// snapshot exported below (still consumed by the public lotto card).
 const TICKETS_PER_BLOCK = 2;
 const BLOCK_AMOUNT = 1200;
 
@@ -210,12 +215,24 @@ async function findOpenDraw() {
  * newly created.
  */
 export async function accrueLotteryTickets(userId: string): Promise<{ generated: number; targetTotal: number; existing: number }> {
+  // M4 Phase F: settings-driven rate. When lotto is disabled at the
+  // admin layer we skip accrual entirely (preserves wallet credit but
+  // no tickets are generated for the deposit). The existing deposit
+  // hook still calls into here; this just makes it a no-op.
+  const settings = await loadLottoSettings();
+  if (!settings.enabled) {
+    const existing = await db.lotteryTicket.count({ where: { userId, source: 'deposit_accrual' } });
+    return { generated: 0, targetTotal: existing, existing };
+  }
+  const blockAmount = settings.ticketRateAmount;
+  const ticketsPerBlock = settings.ticketRateCount;
+
   const agg = await db.deposit.aggregate({
     where: { userId, status: 'approved' },
     _sum: { amount: true },
   });
   const totalApproved = Number(agg._sum.amount ?? 0);
-  const targetTotal = Math.floor(totalApproved / BLOCK_AMOUNT) * TICKETS_PER_BLOCK;
+  const targetTotal = Math.floor(totalApproved / blockAmount) * ticketsPerBlock;
 
   const existing = await db.lotteryTicket.count({
     where: { userId, source: 'deposit_accrual' },
@@ -250,6 +267,23 @@ export interface SettleInput {
   prize3xMult?: number;
   prizeSpecialMult?: number;
   prizeConsoMult?: number;
+  // M4 Phase F additive Babu88-style display blob. Stored on the
+  // result row but does not affect prize computation - the engine
+  // still derives every prize tier from `winningNumber` and the
+  // multipliers. The public lotto result history reads these and
+  // renders them as separate prize cards when present.
+  extraNumbers?: {
+    second?: string | null;
+    third?: string | null;
+    specials?: string[];
+    consolations?: string[];
+  } | null;
+  // M4 Phase F per-settle override of the global lotto_claim_mode.
+  // 'auto' (default) credits Wallet.lottoBalance instantly. 'manual'
+  // writes LotteryWinning rows with status='pending_credit' and the
+  // player claims each ticket via /api/lotto/winnings/[id]/claim.
+  // Undefined falls back to the SystemSetting value.
+  claimMode?: 'auto' | 'manual';
 }
 
 export interface TierBreakdown {
@@ -265,6 +299,10 @@ export interface SettleResult {
   totalPaid: number;
   breakdown: TierBreakdown[];
   uniqueWinners: number;
+  // M4 Phase F: the claim mode that took effect for this settlement.
+  // 'auto' = lottoBalance credited inside the settle txn.
+  // 'manual' = LotteryWinning rows wrote with status='pending_credit'.
+  claimMode: 'auto' | 'manual';
 }
 
 /**
@@ -326,6 +364,22 @@ export async function settleDraw(input: SettleInput): Promise<SettleResult> {
     perUser.set(row.ticket.userId, (perUser.get(row.ticket.userId) ?? 0) + row.calc.amount);
   }
 
+  const settings = await loadLottoSettings();
+  const claimMode: 'auto' | 'manual' = input.claimMode ?? settings.claimMode;
+  const winningStatus = claimMode === 'manual' ? 'pending_credit' : 'credited';
+
+  // Babu88-style display blob. Stored as-is on the result row when
+  // provided; the public lotto card uses it to show 2nd / 3rd /
+  // special / consolation numbers separately.
+  const extraNumbersJson: Prisma.InputJsonValue | null = input.extraNumbers
+    ? ({
+        second: input.extraNumbers.second ?? null,
+        third: input.extraNumbers.third ?? null,
+        specials: Array.isArray(input.extraNumbers.specials) ? input.extraNumbers.specials : [],
+        consolations: Array.isArray(input.extraNumbers.consolations) ? input.extraNumbers.consolations : [],
+      } as Prisma.InputJsonValue)
+    : null;
+
   const result = await db.$transaction(async (tx) => {
     const created = await tx.lotteryDrawResult.create({
       data: {
@@ -340,6 +394,7 @@ export async function settleDraw(input: SettleInput): Promise<SettleResult> {
         publishedById: input.publishedById,
         totalWinners,
         totalPaid: new Prisma.Decimal(totalPaid),
+        extraNumbers: extraNumbersJson ?? Prisma.JsonNull,
       },
     });
 
@@ -352,8 +407,8 @@ export async function settleDraw(input: SettleInput): Promise<SettleResult> {
           ticketNumber: row.ticket.number,
           prizeTier: row.calc.tier,
           amount: new Prisma.Decimal(row.calc.amount),
-          status: 'credited',
-          creditedAt: new Date(),
+          status: winningStatus,
+          creditedAt: claimMode === 'auto' ? new Date() : null,
         })),
       });
     }
@@ -371,18 +426,23 @@ export async function settleDraw(input: SettleInput): Promise<SettleResult> {
       data: { status: 'lost' },
     });
 
-    // Credit user lotto wallets in one shot per user.
-    for (const [userId, amount] of perUser.entries()) {
-      const wallet = await tx.wallet.findUnique({ where: { userId } });
-      if (wallet) {
-        await tx.wallet.update({
-          where: { userId },
-          data: { lottoBalance: { increment: new Prisma.Decimal(amount) } },
-        });
-      } else {
-        await tx.wallet.create({
-          data: { userId, lottoBalance: new Prisma.Decimal(amount) },
-        });
+    // In auto-credit mode the wallet is bumped here. In manual mode
+    // we leave Wallet.lottoBalance untouched; the player walks each
+    // winning ticket through /api/lotto/winnings/[id]/claim which
+    // does the credit + Transaction write inside its own txn.
+    if (claimMode === 'auto') {
+      for (const [userId, amount] of perUser.entries()) {
+        const wallet = await tx.wallet.findUnique({ where: { userId } });
+        if (wallet) {
+          await tx.wallet.update({
+            where: { userId },
+            data: { lottoBalance: { increment: new Prisma.Decimal(amount) } },
+          });
+        } else {
+          await tx.wallet.create({
+            data: { userId, lottoBalance: new Prisma.Decimal(amount) },
+          });
+        }
       }
     }
 
@@ -401,6 +461,7 @@ export async function settleDraw(input: SettleInput): Promise<SettleResult> {
     totalPaid: round2(totalPaid),
     uniqueWinners: perUser.size,
     breakdown,
+    claimMode,
   };
 }
 

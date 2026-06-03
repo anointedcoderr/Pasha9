@@ -1086,6 +1086,14 @@ model LotteryDrawResult {
   // Quick aggregates so the public results card is cheap to render.
   totalWinners      Int       @default(0)
   totalPaid         Decimal   @default(0) @db.Decimal(14, 2)
+  // M4 Phase F additive: Babu88-style display blob. The settlement
+  // engine still derives prizes from `winningNumber` + multipliers,
+  // but admins can publish extra prize numbers (2nd, 3rd, special[],
+  // consolation[]) here for display. Shape:
+  //   { second?: string, third?: string,
+  //     specials?: string[], consolations?: string[] }
+  // Null when only the canonical winning number was published.
+  extraNumbers      Json?
 
   draw      LottoDraw         @relation(fields: [drawId], references: [id])
   winnings  LotteryWinning[]
