@@ -48,7 +48,6 @@ const MAIN: Item[] = [
   { key: 'rewards', href: '/rewards', icon: Trophy },
   { key: 'referralProgram', href: '/referral', icon: Users },
   { key: 'bettingPass', href: '/betting-pass', icon: Star },
-  { key: 'iplBettingPass', href: '/betting-pass/ipl', icon: Sparkles },
   { key: 'affiliate', href: '/affiliate', icon: Briefcase },
   { key: 'lotto', href: '/lotto', icon: Ticket },
 ];
