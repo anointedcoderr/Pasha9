@@ -24,13 +24,29 @@ export async function GET(req: Request, { params }: { params: { providerKey: str
   const url = new URL(req.url);
   const q = (url.searchParams.get('q') ?? '').trim();
   const category = (url.searchParams.get('category') ?? '').trim();
+  const brandKeyParam = (url.searchParams.get('brand') ?? url.searchParams.get('brandKey') ?? '').trim();
   const offset = Math.max(Number(url.searchParams.get('offset') ?? 0) || 0, 0);
   const limit = Math.min(Math.max(Number(url.searchParams.get('limit') ?? 200) || 200, 1), 300);
+
+  // M4 Phase H: resolve brand filter through ProviderBrand. The
+  // /games/provider lobby uses ?brand=PGSOFT etc. so visitors can
+  // browse a single aggregator brand without leaving the page.
+  let brandIdFilter: string | null = null;
+  if (brandKeyParam) {
+    const brand = await db.providerBrand.findUnique({
+      where: { providerId_brandKey: { providerId: provider.id, brandKey: brandKeyParam } },
+      select: { id: true, status: true },
+    });
+    if (!brand) return jsonError(404, 'BRAND_NOT_FOUND');
+    if (brand.status !== 'active') return jsonError(503, 'BRAND_INACTIVE');
+    brandIdFilter = brand.id;
+  }
 
   const where: Prisma.ExternalGameWhereInput = {
     providerId: provider.id,
     status: 'active',
     ...(category ? { category } : {}),
+    ...(brandIdFilter ? { brandId: brandIdFilter } : {}),
     ...(q ? { OR: [
       { displayName: { contains: q, mode: 'insensitive' as const } },
       { gameUid: { contains: q } },
@@ -58,9 +74,25 @@ export async function GET(req: Request, { params }: { params: { providerKey: str
 
   const brands = await db.providerBrand.findMany({
     where: { providerId: provider.id },
-    select: { id: true, brandKey: true, displayName: true },
+    select: { id: true, brandKey: true, displayName: true, status: true },
   });
   const brandMap = new Map(brands.map((b) => [b.id, b]));
+
+  // Per-brand active game counts so the lobby can render a brand
+  // dropdown with totals next to each brand name.
+  const byBrandRaw = await db.externalGame.groupBy({
+    by: ['brandId'],
+    where: { providerId: provider.id, status: 'active' },
+    _count: { _all: true },
+  });
+  const byBrand = byBrandRaw
+    .map((r) => {
+      const brand = r.brandId ? brandMap.get(r.brandId) : null;
+      if (!brand || brand.status !== 'active') return null;
+      return { brandKey: brand.brandKey, brandName: brand.displayName, count: r._count._all };
+    })
+    .filter((x): x is { brandKey: string; brandName: string; count: number } => x != null)
+    .sort((a, b) => b.count - a.count);
 
   const byCategory: Record<string, number> = {};
   for (const r of byCategoryRaw) byCategory[r.category ?? 'uncategorized'] = r._count._all;
@@ -71,7 +103,7 @@ export async function GET(req: Request, { params }: { params: { providerKey: str
       name: provider.name,
       launchMinBalance: provider.launchMinBalance ? Number(provider.launchMinBalance) : 0,
     },
-    counts: { total, returned: games.length, offset, byCategory },
+    counts: { total, returned: games.length, offset, byCategory, byBrand },
     games: games.map((g) => ({
       gameUid: g.gameUid,
       displayName: g.displayName,

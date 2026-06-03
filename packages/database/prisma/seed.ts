@@ -608,6 +608,7 @@ async function seedM4PublicSections() {
     { key: 'homepage_brand',          group: 'homepage',        titleEn: 'Brand Showcase',     titleBn: 'ব্র্যান্ড পরিচিতি',     subtitleEn: 'Our partners',      position: 70, layout: 'banner' },
     { key: 'homepage_video',          group: 'homepage',        titleEn: 'Video Highlights',   titleBn: 'ভিডিও হাইলাইটস',       subtitleEn: 'Watch the latest action', position: 80, layout: 'video' },
     { key: 'homepage_upcoming',       group: 'homepage',        titleEn: 'Upcoming Matches',   titleBn: 'আসন্ন ম্যাচ',           subtitleEn: 'Sports + esports schedule', position: 90, layout: 'strip', isVisible: false },
+    { key: 'homepage_sportsbook',     group: 'homepage',        titleEn: 'Sportsbook',         titleBn: 'স্পোর্টসবুক',          subtitleEn: 'Cricket, football and more', position: 95, layout: 'strip' },
     { key: 'about_ambassadors',       group: 'about',           titleEn: 'Brand Ambassadors',  titleBn: 'ব্র্যান্ড অ্যাম্বাসেডর', subtitleEn: 'Faces of Pasha 9',  position: 10, layout: 'grid' },
     { key: 'about_sponsors',          group: 'about',           titleEn: 'Sponsorships',        titleBn: 'স্পনসরশিপ',           subtitleEn: 'Teams we back',     position: 20, layout: 'grid' },
     { key: 'public_payment_methods',  group: 'payment_display', titleEn: 'Payment Methods',     titleBn: 'পেমেন্ট পদ্ধতি',       subtitleEn: 'Fast and secure',   position: 10, layout: 'pills' },

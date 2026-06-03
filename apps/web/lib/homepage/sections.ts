@@ -78,6 +78,7 @@ const ICON_KEY_BY_SECTION: Record<string, string> = {
   homepage_brand: 'sparkles',
   homepage_video: 'play',
   homepage_upcoming: 'calendar',
+  homepage_sportsbook: 'flag',
 };
 
 const HREF_BY_SECTION: Record<string, string> = {
@@ -90,6 +91,7 @@ const HREF_BY_SECTION: Record<string, string> = {
   homepage_brand: '/promotions',
   homepage_video: '/',
   homepage_upcoming: '/sports',
+  homepage_sportsbook: '/sports',
 };
 
 const CATEGORY_MATCHERS: Record<string, string[]> = {
@@ -97,6 +99,7 @@ const CATEGORY_MATCHERS: Record<string, string[]> = {
   homepage_live_casino: ['live', 'casino', 'table'],
   homepage_fishing: ['fish'],
   homepage_crash: ['crash'],
+  homepage_sportsbook: ['sport'],
 };
 
 function matchesAny(category: string | null | undefined, needles: string[]): boolean {
@@ -290,7 +293,8 @@ export async function buildHomeSections(): Promise<HomeSectionsBundle> {
       }
       case 'homepage_slots':
       case 'homepage_live_casino':
-      case 'homepage_fishing': {
+      case 'homepage_fishing':
+      case 'homepage_sportsbook': {
         games = await loadExternalByCategoryMatch(CATEGORY_MATCHERS[s.key]);
         break;
       }
