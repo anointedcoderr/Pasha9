@@ -23,6 +23,11 @@ const createSchema = z.object({
   percentage: z.coerce.number().int().min(0).max(100),
   isActive: z.boolean().optional(),
   position: z.number().int().min(0).max(9999).optional(),
+  titleEn: z.string().trim().max(120).optional().nullable(),
+  titleBn: z.string().trim().max(120).optional().nullable(),
+  descriptionEn: z.string().trim().max(2000).optional().nullable(),
+  descriptionBn: z.string().trim().max(2000).optional().nullable(),
+  bannerUrl: z.string().trim().max(500).optional().nullable(),
 });
 
 export async function GET() {
@@ -38,6 +43,11 @@ export async function GET() {
         percentage: t.percentage,
         isActive: t.isActive,
         position: t.position,
+        titleEn: t.titleEn,
+        titleBn: t.titleBn,
+        descriptionEn: t.descriptionEn,
+        descriptionBn: t.descriptionBn,
+        bannerUrl: t.bannerUrl,
         updatedAt: t.updatedAt,
       })),
     });
@@ -60,6 +70,11 @@ export async function POST(req: NextRequest) {
         percentage: parsed.data.percentage,
         isActive: parsed.data.isActive ?? true,
         position: parsed.data.position ?? 0,
+        titleEn: parsed.data.titleEn ?? null,
+        titleBn: parsed.data.titleBn ?? null,
+        descriptionEn: parsed.data.descriptionEn ?? null,
+        descriptionBn: parsed.data.descriptionBn ?? null,
+        bannerUrl: parsed.data.bannerUrl ?? null,
       },
     });
 

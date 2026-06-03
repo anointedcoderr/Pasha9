@@ -16,14 +16,22 @@ import { Trophy, Pencil, Trash2, Plus } from 'lucide-react';
 type Accent = 'yellow' | 'blue' | 'red' | 'green';
 type Status = 'active' | 'hidden' | 'paused';
 type Category = 'recharge' | 'spin' | 'bet' | 'physical' | 'misc';
+type RewardType = 'recharge' | 'physical' | 'digital';
 
 interface RewardItem {
   id: string;
   title: string;
+  titleBn?: string | null;
   description?: string | null;
+  descriptionBn?: string | null;
   cost: number;
   category: Category;
+  rewardType: RewardType;
   accent: Accent;
+  imageUrl?: string | null;
+  bannerUrl?: string | null;
+  shortInstructionEn?: string | null;
+  shortInstructionBn?: string | null;
   position: number;
   status: Status;
 }
@@ -31,10 +39,17 @@ interface RewardItem {
 const BLANK: RewardItem = {
   id: '',
   title: '',
+  titleBn: '',
   description: '',
+  descriptionBn: '',
   cost: 1000,
   category: 'misc',
+  rewardType: 'digital',
   accent: 'yellow',
+  imageUrl: '',
+  bannerUrl: '',
+  shortInstructionEn: '',
+  shortInstructionBn: '',
   position: 0,
   status: 'active',
 };
@@ -68,10 +83,17 @@ export default function AdminRewardsPage() {
     setError(null);
     const payload = {
       title: editor.title,
+      titleBn: editor.titleBn || null,
       description: editor.description || null,
+      descriptionBn: editor.descriptionBn || null,
       cost: Number(editor.cost),
       category: editor.category,
+      rewardType: editor.rewardType,
       accent: editor.accent,
+      imageUrl: editor.imageUrl || null,
+      bannerUrl: editor.bannerUrl || null,
+      shortInstructionEn: editor.shortInstructionEn || null,
+      shortInstructionBn: editor.shortInstructionBn || null,
       position: Number(editor.position),
       status: editor.status,
     };
@@ -150,13 +172,35 @@ export default function AdminRewardsPage() {
       <Modal open={!!editor} onOpenChange={(v) => !v && setEditor(null)} title={editor?.id ? 'Edit Reward' : 'New Reward'} size="lg">
         {editor ? (
           <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); void save(); }}>
-            <FormField label="Title" required>
-              <Input value={editor.title} onChange={(e) => setEditor({ ...editor, title: e.target.value })} />
-            </FormField>
-            <FormField label="Description">
+            <div className="grid gap-3 md:grid-cols-2">
+              <FormField label="Title EN" required>
+                <Input value={editor.title} onChange={(e) => setEditor({ ...editor, title: e.target.value })} />
+              </FormField>
+              <FormField label="Title BN">
+                <Input value={editor.titleBn ?? ''} onChange={(e) => setEditor({ ...editor, titleBn: e.target.value })} />
+              </FormField>
+            </div>
+            <FormField label="Description EN">
               <Textarea rows={2} value={editor.description ?? ''} onChange={(e) => setEditor({ ...editor, description: e.target.value })} />
             </FormField>
-            <div className="grid gap-3 md:grid-cols-3">
+            <FormField label="Description BN">
+              <Textarea rows={2} value={editor.descriptionBn ?? ''} onChange={(e) => setEditor({ ...editor, descriptionBn: e.target.value })} />
+            </FormField>
+            <div className="grid gap-3 md:grid-cols-2">
+              <FormField label="Image URL (square thumbnail)">
+                <Input value={editor.imageUrl ?? ''} onChange={(e) => setEditor({ ...editor, imageUrl: e.target.value })} placeholder="https://..." />
+              </FormField>
+              <FormField label="Banner URL (wide reward card image)">
+                <Input value={editor.bannerUrl ?? ''} onChange={(e) => setEditor({ ...editor, bannerUrl: e.target.value })} placeholder="https://..." />
+              </FormField>
+            </div>
+            <FormField label="Short claim instructions EN (shown above the claim form)">
+              <Textarea rows={2} value={editor.shortInstructionEn ?? ''} onChange={(e) => setEditor({ ...editor, shortInstructionEn: e.target.value })} />
+            </FormField>
+            <FormField label="Short claim instructions BN">
+              <Textarea rows={2} value={editor.shortInstructionBn ?? ''} onChange={(e) => setEditor({ ...editor, shortInstructionBn: e.target.value })} />
+            </FormField>
+            <div className="grid gap-3 md:grid-cols-4">
               <FormField label="Cost (coins)">
                 <Input type="number" min="0" step="100" value={String(editor.cost)} onChange={(e) => setEditor({ ...editor, cost: Number(e.target.value) || 0 })} />
               </FormField>
@@ -167,6 +211,13 @@ export default function AdminRewardsPage() {
                   <option value="bet">Free Bet</option>
                   <option value="physical">Physical</option>
                   <option value="misc">Misc</option>
+                </Select>
+              </FormField>
+              <FormField label="Claim flow">
+                <Select value={editor.rewardType} onChange={(e) => setEditor({ ...editor, rewardType: e.target.value as RewardType })}>
+                  <option value="recharge">Mobile recharge (operator + phone)</option>
+                  <option value="physical">Physical (name + address)</option>
+                  <option value="digital">Digital (confirm only)</option>
                 </Select>
               </FormField>
               <FormField label="Accent">

@@ -85,13 +85,24 @@ export async function syncTierToBonusRule(tier: {
   percentage: number;
   isActive: boolean;
   position: number;
+  titleEn?: string | null;
+  titleBn?: string | null;
+  descriptionEn?: string | null;
+  descriptionBn?: string | null;
+  bannerUrl?: string | null;
 }): Promise<void> {
   const code = tierToCode(tier.id);
   const minDeposit = tier.minDeposit instanceof Prisma.Decimal ? tier.minDeposit : new Prisma.Decimal(tier.minDeposit);
   const minDepositNumber = Number(minDeposit);
   const priority = Math.max(100, Math.floor(minDepositNumber / 100));
-  const name = `Deposit tier ${tier.percentage}% (>= ${minDepositNumber.toLocaleString()} BDT)`;
-  const description = `Auto-managed by /admin/deposit-bonus-tiers. Tier ${tier.id}.`;
+  // Admin can override the title from /admin/deposit-bonus-tiers; if
+  // not set we fall back to a clean user-facing summary line. The old
+  // "Auto-managed by /admin/..." description has been retired -
+  // either the operator provides a description or we leave it empty.
+  const name = (tier.titleEn?.trim() || `Deposit tier ${tier.percentage}% (>= ${minDepositNumber.toLocaleString()} BDT)`);
+  const description = tier.descriptionEn?.trim() || null;
+  const descriptionBn = tier.descriptionBn?.trim() || null;
+  const bannerUrl = tier.bannerUrl?.trim() || null;
 
   const data = {
     name,
@@ -102,6 +113,8 @@ export async function syncTierToBonusRule(tier: {
     maxBonus: new Prisma.Decimal(0),
     status: (tier.isActive ? 'active' : 'hidden') as 'active' | 'hidden',
     description,
+    descriptionBn,
+    bannerUrl,
     turnoverX: new Prisma.Decimal(0),
     validityDays: 30,
     priority,

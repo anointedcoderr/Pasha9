@@ -113,7 +113,13 @@ export async function GET() {
         maxBonus: Number(r.maxBonus),
         turnoverX: Number(r.turnoverX),
         validityDays: r.validityDays,
+        // Admin-curated description (operator owns this field; the
+        // old "Auto-managed by /admin/deposit-bonus-tiers" internal
+        // note is no longer written to it). descriptionBn falls back
+        // to the EN copy when empty so legacy rows still localise.
         description: r.description,
+        descriptionBn: r.descriptionBn ?? null,
+        bannerUrl: r.bannerUrl ?? null,
         effective: describe(r),
         startsAt: r.startsAt,
         endsAt: r.endsAt,

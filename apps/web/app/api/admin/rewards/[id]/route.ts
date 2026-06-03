@@ -10,10 +10,17 @@ import { jsonError, jsonOk } from '@/lib/auth/errors';
 
 const updateSchema = z.object({
   title: z.string().min(2).max(120).optional(),
+  titleBn: z.string().max(120).optional().nullable(),
   description: z.string().max(500).optional().nullable(),
+  descriptionBn: z.string().max(500).optional().nullable(),
   cost: z.coerce.number().int().min(0).max(100_000_000).optional(),
   category: z.enum(['recharge', 'spin', 'bet', 'physical', 'misc']).optional(),
+  rewardType: z.enum(['recharge', 'physical', 'digital']).optional(),
   accent: z.enum(['yellow', 'blue', 'red', 'green']).optional(),
+  imageUrl: z.string().trim().max(500).optional().nullable(),
+  bannerUrl: z.string().trim().max(500).optional().nullable(),
+  shortInstructionEn: z.string().max(1000).optional().nullable(),
+  shortInstructionBn: z.string().max(1000).optional().nullable(),
   position: z.coerce.number().int().min(0).max(99).optional(),
   status: z.enum(['active', 'hidden', 'paused']).optional(),
 });

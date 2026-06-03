@@ -97,6 +97,7 @@ enum SettingCategory {
   tracking
   content
   referral
+  rewards
 }
 
 // ---------- Auth and RBAC ----------
@@ -225,6 +226,9 @@ model User {
   referralBalance     ReferralBalance?
   referralClaims      ReferralClaim[]
   promotionClaims     PromotionClaim[]
+  rewardClaims        RewardClaim[]
+  dailyCheckIns       DailyCheckInLog[]
+  spinResults         SpinResult[]
 
   @@index([referredById])
   @@index([roleId])
@@ -422,6 +426,12 @@ model BonusRule {
   maxBonus    Decimal       @default(0) @db.Decimal(14, 2)
   status      ContentStatus @default(active)
   description String?
+  // Operator-controlled Bengali description + banner image. /promotions
+  // renders bannerUrl as a real card image instead of the default
+  // gradient placeholder; descriptionBn falls back to description when
+  // empty so the EN-only rows still render unchanged.
+  descriptionBn String?     @db.Text
+  bannerUrl     String?
   startsAt    DateTime?
   endsAt      DateTime?
   turnoverX   Decimal       @default(0) @db.Decimal(6, 2)
@@ -1134,16 +1144,111 @@ model LotteryWinning {
 model RewardItem {
   id          String        @id @default(cuid())
   title       String
+  titleBn     String?
   description String?
+  descriptionBn String?
   cost        Int           @default(1000) // coin cost
   category    String        @default("misc") // recharge, spin, bet, physical, misc
+  // rewardType controls the public claim flow:
+  //   recharge  -> operator/phone form (Grameenphone, Robi, Banglalink, Airtel, Teletalk)
+  //   physical  -> full name + phone + address + notes form
+  //   digital   -> simple confirm (default; for spin tokens, free bets, etc.)
+  rewardType  String        @default("digital")
   accent      String        @default("yellow") // yellow, blue, red, green
+  imageUrl    String?
+  bannerUrl   String?
+  shortInstructionEn String? @db.Text
+  shortInstructionBn String? @db.Text
   position    Int           @default(0)
   status      ContentStatus @default(active)
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
+  claims      RewardClaim[]
+
   @@index([status, position])
+}
+
+// Reward claim queue. Operator processes manually via admin. Coins
+// are deducted on claim submission; refunded on rejection.
+model RewardClaim {
+  id          String   @id @default(cuid())
+  userId      String
+  itemId      String
+  itemTitle   String
+  rewardType  String
+  costPaid    Int
+  status      String   @default("pending") // pending | approved | rejected | done | cancelled
+  payload     Json     // recharge {operator, phone} | physical {name, phone, address, notes}
+  notes       String?  @db.Text
+  processedAt DateTime?
+  processedBy String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  item RewardItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+
+// Daily check-in history. One row per (userId, day).
+model DailyCheckInLog {
+  id           String   @id @default(cuid())
+  userId       String
+  day          String   // YYYY-MM-DD in UTC
+  coinsAwarded Int
+  streakDay    Int
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, day])
+  @@index([userId, createdAt])
+}
+
+// Spin wheel admin-configurable segments. Engine picks a segment by
+// weight on every spin. payoutType controls what the reward does:
+//   coins      -> credit reward coins
+//   bonus      -> credit Wallet.bonusBalance with turnoverX requirement
+//   freebet    -> issue a free-bet voucher (FUTURE)
+//   freespin   -> issue spin tokens
+//   nothing    -> no payout (consolation)
+model SpinSegment {
+  id           String   @id @default(cuid())
+  label        String   // e.g. "100", "X3"
+  color        String   @default("#FFCC00")
+  weight       Int      @default(1)
+  payoutType   String   @default("coins") // coins | bonus | freebet | freespin | nothing
+  payoutAmount Int      @default(0)
+  turnoverX    Decimal  @default(0) @db.Decimal(6, 2)
+  position     Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  results SpinResult[]
+
+  @@index([isActive, position])
+}
+
+// One row per spin. Used for history + audit.
+model SpinResult {
+  id           String   @id @default(cuid())
+  userId       String
+  segmentId    String
+  segmentLabel String
+  payoutType   String
+  payoutAmount Int
+  cost         Int      @default(0) // 0 = free spin, >0 = paid in coins
+  source       String   @default("manual") // manual | free_daily | login
+  createdAt    DateTime @default(now())
+
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  segment SpinSegment @relation(fields: [segmentId], references: [id])
+
+  @@index([userId, createdAt])
 }
 
 // ---------- Audit and system ----------
@@ -1635,6 +1740,16 @@ model DepositBonusTier {
   percentage   Int
   isActive     Boolean  @default(true)
   position     Int      @default(0)
+  // Admin-curated card data. When set, /promotions and /admin previews
+  // render this content instead of the auto-generated "Auto-managed by
+  // /admin/deposit-bonus-tiers" placeholder. titleEn/Bn override the
+  // synced BonusRule name; descriptionEn/Bn override the description;
+  // bannerUrl replaces the gradient placeholder on the promotion card.
+  titleEn        String?
+  titleBn        String?
+  descriptionEn  String?  @db.Text
+  descriptionBn  String?  @db.Text
+  bannerUrl      String?
   updatedAt    DateTime @updatedAt
 
   @@index([isActive, position])

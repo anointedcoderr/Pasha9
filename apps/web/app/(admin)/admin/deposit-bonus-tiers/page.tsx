@@ -23,6 +23,11 @@ interface TierRow {
   percentage: number;
   isActive: boolean;
   position: number;
+  titleEn: string | null;
+  titleBn: string | null;
+  descriptionEn: string | null;
+  descriptionBn: string | null;
+  bannerUrl: string | null;
   updatedAt: string;
 }
 
@@ -139,50 +144,98 @@ function TierEditor({ row, saving, onPatch, onDelete }: { row: TierRow; saving: 
   const [minDeposit, setMinDeposit] = useState(String(row.minDeposit));
   const [percentage, setPercentage] = useState(String(row.percentage));
   const [position, setPosition] = useState(String(row.position));
+  const [titleEn, setTitleEn] = useState(row.titleEn ?? '');
+  const [titleBn, setTitleBn] = useState(row.titleBn ?? '');
+  const [descriptionEn, setDescriptionEn] = useState(row.descriptionEn ?? '');
+  const [descriptionBn, setDescriptionBn] = useState(row.descriptionBn ?? '');
+  const [bannerUrl, setBannerUrl] = useState(row.bannerUrl ?? '');
 
   useEffect(() => {
     setMinDeposit(String(row.minDeposit));
     setPercentage(String(row.percentage));
     setPosition(String(row.position));
-  }, [row.id, row.minDeposit, row.percentage, row.position]);
+    setTitleEn(row.titleEn ?? '');
+    setTitleBn(row.titleBn ?? '');
+    setDescriptionEn(row.descriptionEn ?? '');
+    setDescriptionBn(row.descriptionBn ?? '');
+    setBannerUrl(row.bannerUrl ?? '');
+  }, [row.id, row.minDeposit, row.percentage, row.position, row.titleEn, row.titleBn, row.descriptionEn, row.descriptionBn, row.bannerUrl]);
 
   const dirty = (
     Number(minDeposit) !== row.minDeposit ||
     Number(percentage) !== row.percentage ||
-    Number(position) !== row.position
+    Number(position) !== row.position ||
+    titleEn !== (row.titleEn ?? '') ||
+    titleBn !== (row.titleBn ?? '') ||
+    descriptionEn !== (row.descriptionEn ?? '') ||
+    descriptionBn !== (row.descriptionBn ?? '') ||
+    bannerUrl !== (row.bannerUrl ?? '')
   );
 
   return (
-    <div className={cn('flex flex-wrap items-end gap-3 rounded-lg border border-brand-divider bg-brand-surface p-3', !row.isActive && 'opacity-70')}>
-      <label className="block w-32">
-        <span className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">Min deposit</span>
-        <input type="number" value={minDeposit} onChange={(e) => setMinDeposit(e.target.value)} className={inputCls} />
-      </label>
-      <label className="block w-24">
-        <span className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">Percent</span>
-        <input type="number" value={percentage} onChange={(e) => setPercentage(e.target.value)} className={inputCls} />
-      </label>
-      <label className="block w-20">
-        <span className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">Position</span>
-        <input type="number" value={position} onChange={(e) => setPosition(e.target.value)} className={inputCls} />
-      </label>
-      <button
-        type="button"
-        onClick={() => onPatch({ isActive: !row.isActive })}
-        disabled={saving}
-        className={cn('inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-bold uppercase tracking-wider transition',
-          row.isActive ? 'border-emerald-400/60 bg-emerald-500/15 text-emerald-100' : 'border-brand-divider text-brand-inkMute')}
-      >
-        {row.isActive ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
-        {row.isActive ? 'Active' : 'Disabled'}
-      </button>
-      <div className="ml-auto flex items-center gap-2">
+    <div className={cn('space-y-3 rounded-lg border border-brand-divider bg-brand-surface p-3', !row.isActive && 'opacity-70')}>
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="block w-32">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">Min deposit</span>
+          <input type="number" value={minDeposit} onChange={(e) => setMinDeposit(e.target.value)} className={inputCls} />
+        </label>
+        <label className="block w-24">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">Percent</span>
+          <input type="number" value={percentage} onChange={(e) => setPercentage(e.target.value)} className={inputCls} />
+        </label>
+        <label className="block w-20">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">Position</span>
+          <input type="number" value={position} onChange={(e) => setPosition(e.target.value)} className={inputCls} />
+        </label>
+        <button
+          type="button"
+          onClick={() => onPatch({ isActive: !row.isActive })}
+          disabled={saving}
+          className={cn('inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-bold uppercase tracking-wider transition',
+            row.isActive ? 'border-emerald-400/60 bg-emerald-500/15 text-emerald-100' : 'border-brand-divider text-brand-inkMute')}
+        >
+          {row.isActive ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
+          {row.isActive ? 'Active' : 'Disabled'}
+        </button>
+      </div>
+      <div className="grid gap-2 md:grid-cols-2">
+        <label className="block">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">Title EN (optional)</span>
+          <input value={titleEn} onChange={(e) => setTitleEn(e.target.value)} className={inputCls} placeholder="Auto-generated when empty" />
+        </label>
+        <label className="block">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">Title BN (optional)</span>
+          <input value={titleBn} onChange={(e) => setTitleBn(e.target.value)} className={inputCls} />
+        </label>
+        <label className="block md:col-span-2">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">Banner URL (replaces gradient on the promotion card)</span>
+          <input value={bannerUrl} onChange={(e) => setBannerUrl(e.target.value)} className={inputCls} placeholder="https://..." />
+        </label>
+        <label className="block md:col-span-2">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">Description EN</span>
+          <textarea rows={2} value={descriptionEn} onChange={(e) => setDescriptionEn(e.target.value)} className={inputCls} placeholder="Get a 3% bonus on deposits of 1,000 BDT or more..." />
+        </label>
+        <label className="block md:col-span-2">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">Description BN</span>
+          <textarea rows={2} value={descriptionBn} onChange={(e) => setDescriptionBn(e.target.value)} className={inputCls} />
+        </label>
+      </div>
+      <div className="flex items-center gap-2">
         <Button
           variant="gold"
           leftIcon={<Save className="h-4 w-4" />}
           disabled={!dirty || saving}
           loading={saving}
-          onClick={() => onPatch({ minDeposit: Number(minDeposit), percentage: Number(percentage), position: Number(position) })}
+          onClick={() => onPatch({
+            minDeposit: Number(minDeposit),
+            percentage: Number(percentage),
+            position: Number(position),
+            titleEn: titleEn || null,
+            titleBn: titleBn || null,
+            descriptionEn: descriptionEn || null,
+            descriptionBn: descriptionBn || null,
+            bannerUrl: bannerUrl || null,
+          })}
         >
           Save
         </Button>

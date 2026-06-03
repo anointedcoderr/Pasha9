@@ -30,6 +30,8 @@ interface Promo {
   name: string;
   type: PromoType;
   description: string | null;
+  descriptionBn: string | null;
+  bannerUrl: string | null;
   percentage: number;
   amount: number;
   minDeposit: number;
@@ -256,7 +258,12 @@ function PromoCard({
     ? `${promo.percentage}%`
     : promo.amount > 0 ? formatBDT(promo.amount) : '-';
 
-  const banner = promo.bannerDesktopUrl ?? promo.bannerMobileUrl ?? promo.thumbnailUrl ?? null;
+  // Operator-owned bannerUrl (from BonusRule.bannerUrl or the synced
+  // DepositBonusTier.bannerUrl) wins over the legacy banner columns.
+  const banner = promo.bannerUrl ?? promo.bannerDesktopUrl ?? promo.bannerMobileUrl ?? promo.thumbnailUrl ?? null;
+  const localisedDescription = lang === 'bn'
+    ? (promo.descriptionBn?.trim() || promo.description || null)
+    : (promo.description || null);
   const terms = lang === 'bn' && promo.termsBn ? promo.termsBn : promo.termsEn;
 
   const claimed = promo.type === 'weekly' ? promo.claimedThisWeek : promo.claimedToday;
@@ -314,7 +321,7 @@ function PromoCard({
 
       <div className="px-5 py-4">
         <h3 className="text-base font-extrabold text-brand-ink">{promo.name}</h3>
-        {promo.description ? <p className="mt-1.5 text-sm text-brand-inkSoft">{promo.description}</p> : null}
+        {localisedDescription ? <p className="mt-1.5 text-sm text-brand-inkSoft whitespace-pre-line">{localisedDescription}</p> : null}
         <p className="mt-2 text-xs text-brand-inkMute">{promo.effective}</p>
 
         <dl className="mt-4 grid grid-cols-2 gap-3 text-xs">

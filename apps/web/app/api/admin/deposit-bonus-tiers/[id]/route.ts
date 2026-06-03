@@ -22,6 +22,11 @@ const patchSchema = z.object({
   percentage: z.coerce.number().int().min(0).max(100).optional(),
   isActive: z.boolean().optional(),
   position: z.number().int().min(0).max(9999).optional(),
+  titleEn: z.string().trim().max(120).optional().nullable(),
+  titleBn: z.string().trim().max(120).optional().nullable(),
+  descriptionEn: z.string().trim().max(2000).optional().nullable(),
+  descriptionBn: z.string().trim().max(2000).optional().nullable(),
+  bannerUrl: z.string().trim().max(500).optional().nullable(),
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
