@@ -12,6 +12,15 @@ import { jsonError, jsonOk } from '@/lib/auth/errors';
 const ALLOWED_TYPES: BonusType[] = ['first_deposit', 'daily', 'weekly', 'referral', 'vip', 'invite', 'reload', 'manual', 'promo'];
 const ALLOWED_STATUSES: ContentStatus[] = ['active', 'hidden', 'paused'];
 
+// M4 Phase D: empty strings clear the column; missing keys leave it unchanged.
+const optionalUrl = z
+  .string()
+  .trim()
+  .max(500)
+  .nullable()
+  .optional()
+  .transform((v) => (v === undefined ? undefined : (v ? v : null)));
+
 const patchSchema = z.object({
   name: z.string().trim().min(1).max(120).optional(),
   type: z.enum(ALLOWED_TYPES as [BonusType, ...BonusType[]]).optional(),
@@ -28,6 +37,12 @@ const patchSchema = z.object({
   startsAt: z.string().datetime().nullable().optional(),
   endsAt: z.string().datetime().nullable().optional(),
   meta: z.record(z.unknown()).nullable().optional(),
+  bannerDesktopUrl: optionalUrl,
+  bannerMobileUrl: optionalUrl,
+  thumbnailUrl: optionalUrl,
+  backgroundUrl: optionalUrl,
+  termsEn: z.string().max(5000).nullable().optional(),
+  termsBn: z.string().max(5000).nullable().optional(),
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
@@ -66,6 +81,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         ...(data.startsAt !== undefined ? { startsAt: data.startsAt ? new Date(data.startsAt) : null } : {}),
         ...(data.endsAt !== undefined ? { endsAt: data.endsAt ? new Date(data.endsAt) : null } : {}),
         ...(data.meta !== undefined ? { meta: (data.meta ?? null) as Prisma.InputJsonValue } : {}),
+        ...(data.bannerDesktopUrl !== undefined ? { bannerDesktopUrl: data.bannerDesktopUrl } : {}),
+        ...(data.bannerMobileUrl !== undefined ? { bannerMobileUrl: data.bannerMobileUrl } : {}),
+        ...(data.thumbnailUrl !== undefined ? { thumbnailUrl: data.thumbnailUrl } : {}),
+        ...(data.backgroundUrl !== undefined ? { backgroundUrl: data.backgroundUrl } : {}),
+        ...(data.termsEn !== undefined ? { termsEn: data.termsEn ?? null } : {}),
+        ...(data.termsBn !== undefined ? { termsBn: data.termsBn ?? null } : {}),
       },
     });
 

@@ -17,6 +17,17 @@ import { jsonError, jsonOk } from '@/lib/auth/errors';
 const ALLOWED_TYPES: BonusType[] = ['first_deposit', 'daily', 'weekly', 'referral', 'vip', 'invite', 'reload', 'manual', 'promo'];
 const ALLOWED_STATUSES: ContentStatus[] = ['active', 'hidden', 'paused'];
 
+// M4 Phase D: promotion presentation assets. Banner / terms columns
+// are optional on every existing rule; clearing a field is allowed
+// by accepting null + ''.
+const optionalUrl = z
+  .string()
+  .trim()
+  .max(500)
+  .nullable()
+  .optional()
+  .transform((v) => (v ? v : null));
+
 const createSchema = z.object({
   name: z.string().trim().min(1).max(120),
   type: z.enum(ALLOWED_TYPES as [BonusType, ...BonusType[]]),
@@ -33,6 +44,12 @@ const createSchema = z.object({
   startsAt: z.string().datetime().optional().nullable(),
   endsAt: z.string().datetime().optional().nullable(),
   meta: z.record(z.unknown()).optional().nullable(),
+  bannerDesktopUrl: optionalUrl,
+  bannerMobileUrl: optionalUrl,
+  thumbnailUrl: optionalUrl,
+  backgroundUrl: optionalUrl,
+  termsEn: z.string().max(5000).nullable().optional().transform((v) => (v ? v : null)),
+  termsBn: z.string().max(5000).nullable().optional().transform((v) => (v ? v : null)),
 });
 
 function serialize(r: Awaited<ReturnType<typeof db.bonusRule.findMany>>[number]) {
@@ -53,6 +70,12 @@ function serialize(r: Awaited<ReturnType<typeof db.bonusRule.findMany>>[number])
     startsAt: r.startsAt,
     endsAt: r.endsAt,
     meta: r.meta,
+    bannerDesktopUrl: r.bannerDesktopUrl,
+    bannerMobileUrl: r.bannerMobileUrl,
+    thumbnailUrl: r.thumbnailUrl,
+    backgroundUrl: r.backgroundUrl,
+    termsEn: r.termsEn,
+    termsBn: r.termsBn,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   };
@@ -76,8 +99,17 @@ export async function GET(req: NextRequest) {
     const rows = await db.bonusRule.findMany({
       where,
       orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }],
+      include: {
+        _count: { select: { userBonuses: true, promotionClaims: true } },
+      },
     });
-    return jsonOk({ rules: rows.map(serialize) });
+    return jsonOk({
+      rules: rows.map((r) => ({
+        ...serialize(r),
+        grantCount: r._count.userBonuses,
+        claimCount: r._count.promotionClaims,
+      })),
+    });
   });
 }
 
@@ -111,6 +143,12 @@ export async function POST(req: NextRequest) {
         startsAt: data.startsAt ? new Date(data.startsAt) : null,
         endsAt: data.endsAt ? new Date(data.endsAt) : null,
         meta: (data.meta ?? null) as Prisma.InputJsonValue,
+        bannerDesktopUrl: data.bannerDesktopUrl,
+        bannerMobileUrl: data.bannerMobileUrl,
+        thumbnailUrl: data.thumbnailUrl,
+        backgroundUrl: data.backgroundUrl,
+        termsEn: data.termsEn,
+        termsBn: data.termsBn,
       },
     });
 

@@ -7,7 +7,12 @@ import { withAuth, ensurePermission, recordActivity } from '@/lib/auth/guard';
 import { storeFile, type UploadCategory } from '@/lib/uploads/storage';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 
-const ALLOWED: UploadCategory[] = ['banners', 'games', 'payment-proofs', 'apk', 'branding', 'categories', 'jackpot'];
+const ALLOWED: UploadCategory[] = [
+  'banners', 'banners_mobile', 'games', 'payment-proofs', 'apk', 'branding', 'categories', 'jackpot',
+  // M4 Phase D upload widget categories.
+  'promo_desktop', 'promo_mobile', 'promo_thumbnail', 'promo_background',
+  'ambassadors', 'sponsors', 'payment_icons', 'provider_banners',
+];
 
 export async function POST(req: NextRequest) {
   return withAuth(async () => {

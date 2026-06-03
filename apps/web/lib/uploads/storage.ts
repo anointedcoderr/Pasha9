@@ -10,34 +10,63 @@ const ROOT = process.env.UPLOAD_ROOT ?? (process.env.NODE_ENV === 'production' ?
 
 export type UploadCategory =
   | 'banners'
+  | 'banners_mobile'
   | 'games'
   | 'payment-proofs'
   | 'apk'
   | 'branding'
   | 'categories'
-  | 'jackpot';
+  | 'jackpot'
+  // M4 Phase D additions. Each ships with a matching UploadConstraint
+  // row so the reusable <ImageUpload> widget enforces dimensions.
+  | 'promo_desktop'
+  | 'promo_mobile'
+  | 'promo_thumbnail'
+  | 'promo_background'
+  | 'ambassadors'
+  | 'sponsors'
+  | 'payment_icons'
+  | 'provider_banners';
+
+const IMG = new Set(['image/png', 'image/jpeg', 'image/webp']);
+const IMG_PLUS_SVG = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml']);
 
 const MIME_BY_CATEGORY: Record<UploadCategory, Set<string>> = {
-  banners: new Set(['image/png', 'image/jpeg', 'image/webp']),
-  games: new Set(['image/png', 'image/jpeg', 'image/webp']),
+  banners: IMG,
+  banners_mobile: IMG,
+  games: IMG,
   'payment-proofs': new Set(['image/png', 'image/jpeg', 'image/webp', 'application/pdf']),
   apk: new Set(['application/vnd.android.package-archive', 'application/octet-stream']),
-  // SVG accepted for branding + categories so the operator can use
-  // crisp vector logos. SVGs are stored as-is and served by Nginx; no
-  // server-side sanitisation in M1.
-  branding: new Set(['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml']),
-  categories: new Set(['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml']),
-  jackpot: new Set(['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml']),
+  branding: IMG_PLUS_SVG,
+  categories: IMG_PLUS_SVG,
+  jackpot: IMG_PLUS_SVG,
+  promo_desktop: IMG,
+  promo_mobile: IMG,
+  promo_thumbnail: IMG,
+  promo_background: IMG,
+  ambassadors: IMG_PLUS_SVG,
+  sponsors: IMG_PLUS_SVG,
+  payment_icons: IMG_PLUS_SVG,
+  provider_banners: IMG,
 };
 
 const MAX_BYTES_BY_CATEGORY: Record<UploadCategory, number> = {
   banners: 4 * 1024 * 1024,
+  banners_mobile: 3 * 1024 * 1024,
   games: 4 * 1024 * 1024,
   'payment-proofs': 8 * 1024 * 1024,
   apk: 80 * 1024 * 1024,
   branding: 2 * 1024 * 1024,
   categories: 1 * 1024 * 1024,
   jackpot: 2 * 1024 * 1024,
+  promo_desktop: 3 * 1024 * 1024,
+  promo_mobile: 2 * 1024 * 1024,
+  promo_thumbnail: 1 * 1024 * 1024,
+  promo_background: 4 * 1024 * 1024,
+  ambassadors: 1 * 1024 * 1024,
+  sponsors: 1 * 1024 * 1024,
+  payment_icons: 512 * 1024,
+  provider_banners: 3 * 1024 * 1024,
 };
 
 const EXT_BY_MIME: Record<string, string> = {

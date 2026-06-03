@@ -24,6 +24,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/Tabs';
 import { Gift, Plus, Pencil, Trash2, RefreshCw, AlertCircle, Settings2, BadgePlus, Ban, ListChecks, Filter, Stethoscope, CheckCircle2, XCircle } from 'lucide-react';
 import { formatBDT } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
+import { ImageUpload } from '@/components/admin/ImageUpload';
 
 interface RuleRow {
   id: string;
@@ -42,6 +43,15 @@ interface RuleRow {
   startsAt: string | null;
   endsAt: string | null;
   meta: unknown;
+  // M4 Phase D presentation assets + terms.
+  bannerDesktopUrl: string | null;
+  bannerMobileUrl: string | null;
+  thumbnailUrl: string | null;
+  backgroundUrl: string | null;
+  termsEn: string | null;
+  termsBn: string | null;
+  // M4 Phase D claim count (read-only summary).
+  claimCount?: number;
 }
 
 interface GrantRow {
@@ -83,6 +93,12 @@ const EMPTY_RULE: Omit<RuleRow, 'id'> & { id: string } = {
   startsAt: null,
   endsAt: null,
   meta: null,
+  bannerDesktopUrl: null,
+  bannerMobileUrl: null,
+  thumbnailUrl: null,
+  backgroundUrl: null,
+  termsEn: '',
+  termsBn: '',
 };
 
 function ruleStatusTone(s: string): 'ok' | 'warn' | 'neutral' {
@@ -177,6 +193,13 @@ export default function AdminBonusesPage() {
         description: form.description ?? '',
         startsAt: form.startsAt ?? null,
         endsAt: form.endsAt ?? null,
+        // M4 Phase D presentation assets.
+        bannerDesktopUrl: form.bannerDesktopUrl,
+        bannerMobileUrl: form.bannerMobileUrl,
+        thumbnailUrl: form.thumbnailUrl,
+        backgroundUrl: form.backgroundUrl,
+        termsEn: form.termsEn ?? '',
+        termsBn: form.termsBn ?? '',
       };
       const res = await fetch(url, {
         method,
@@ -322,6 +345,16 @@ export default function AdminBonusesPage() {
                     </div>
                     <Chip tone={ruleStatusTone(r.status)}>{r.status}</Chip>
                   </div>
+                  {(r.bannerDesktopUrl || r.bannerMobileUrl || r.thumbnailUrl) ? (
+                    <div className="mt-3 overflow-hidden rounded-lg border border-brand-divider bg-brand-surface">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={r.bannerDesktopUrl ?? r.thumbnailUrl ?? r.bannerMobileUrl ?? ''}
+                        alt={r.name}
+                        className="h-28 w-full object-cover"
+                      />
+                    </div>
+                  ) : null}
                   <dl className="mt-4 grid grid-cols-3 gap-2 text-xs">
                     <Field label="Rate" value={r.percentage > 0 ? `${r.percentage}%${r.amount > 0 ? ` + ${formatBDT(r.amount)}` : ''}` : (r.amount > 0 ? formatBDT(r.amount) : '-')} />
                     <Field label="Cap" value={r.maxBonus > 0 ? formatBDT(r.maxBonus) : 'None'} />
@@ -329,9 +362,16 @@ export default function AdminBonusesPage() {
                     <Field label="Turnover" value={r.turnoverX > 0 ? `${r.turnoverX}x` : 'None'} />
                     <Field label="Validity" value={r.validityDays > 0 ? `${r.validityDays} d` : 'No expiry'} />
                     <Field label="Priority" value={String(r.priority)} />
+                    <Field label="Claims" value={String(r.claimCount ?? 0)} />
                   </dl>
                   <div className="mt-4 flex flex-wrap gap-2">
-                    <Button size="sm" variant="neon" leftIcon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditor({ ...r, code: r.code ?? '', description: r.description ?? '' })}>Edit</Button>
+                    <Button size="sm" variant="neon" leftIcon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditor({
+                      ...r,
+                      code: r.code ?? '',
+                      description: r.description ?? '',
+                      termsEn: r.termsEn ?? '',
+                      termsBn: r.termsBn ?? '',
+                    })}>Edit</Button>
                     <Button size="sm" variant="ghost" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => deleteRule(r.id, r.name)}>Delete</Button>
                   </div>
                 </Card>
@@ -520,6 +560,44 @@ function RuleEditor({
       <FormField label="Description (shown on /promotions)">
         <Textarea rows={3} value={value.description ?? ''} onChange={(e) => set('description', e.target.value)} placeholder="Plain text shown to users." />
       </FormField>
+
+      <div className="space-y-4 rounded-xl border border-brand-divider bg-brand-surface p-3">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">Presentation assets</p>
+        <ImageUpload
+          categoryKey="promo_desktop"
+          label="Desktop banner"
+          value={value.bannerDesktopUrl}
+          onChange={(url) => set('bannerDesktopUrl', url)}
+        />
+        <ImageUpload
+          categoryKey="promo_mobile"
+          label="Mobile banner"
+          value={value.bannerMobileUrl}
+          onChange={(url) => set('bannerMobileUrl', url)}
+        />
+        <ImageUpload
+          categoryKey="promo_thumbnail"
+          label="Thumbnail"
+          value={value.thumbnailUrl}
+          onChange={(url) => set('thumbnailUrl', url)}
+        />
+        <ImageUpload
+          categoryKey="promo_background"
+          label="Background"
+          value={value.backgroundUrl}
+          onChange={(url) => set('backgroundUrl', url)}
+        />
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2">
+        <FormField label="Terms (EN)" hint="Shown in the public promotion card's collapsible Terms section.">
+          <Textarea rows={5} value={value.termsEn ?? ''} onChange={(e) => set('termsEn', e.target.value)} placeholder="Plain text. Line breaks are preserved." />
+        </FormField>
+        <FormField label="Terms (BN)" hint="Bangla version. Leave blank to show the English text in both languages.">
+          <Textarea rows={5} value={value.termsBn ?? ''} onChange={(e) => set('termsBn', e.target.value)} placeholder="বাংলা শর্তাবলী।" />
+        </FormField>
+      </div>
+
       <div className="flex justify-end gap-2 pt-2">
         <Button variant="ghost" type="button" onClick={onCancel}>Cancel</Button>
         <Button type="submit" loading={saving}>Save</Button>
