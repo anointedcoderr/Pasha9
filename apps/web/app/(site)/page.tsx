@@ -22,7 +22,6 @@ import { CategorySlider } from '@/components/site/CategorySlider';
 import { HomeNativeGamesSection } from '@/components/site/HomeNativeGamesSection';
 import { ProviderGamesSection } from '@/components/site/ProviderGamesSection';
 import { AmbassadorVideoSection } from '@/components/site/AmbassadorVideoSection';
-import { SportsCardsCarousel } from '@/components/site/SportsCardsCarousel';
 import { PromoPair } from '@/components/site/PromoPair';
 import { AppDownloadSection } from '@/components/site/AppDownloadSection';
 import { HomeDbGameSection } from '@/components/site/HomeDbGameSection';
@@ -52,7 +51,6 @@ export default function HomePage() {
 
   const stripSections = (sections ?? []).filter((s) => !MARKER_SECTIONS.has(s.key));
   const ambassadorSection = (sections ?? []).find((s) => s.key === 'homepage_video');
-  const upcomingSection = (sections ?? []).find((s) => s.key === 'homepage_upcoming');
 
   return (
     <div className="space-y-6">
@@ -70,26 +68,19 @@ export default function HomePage() {
 
       <ProviderGamesSection />
 
-      {/* First half of the DB-driven strip sections. The operator orders
-          them via PublicSection.position, so this maps order 1..N. */}
+      {/* DB-driven strip sections. Every strip pulls from real
+          ExternalGame rows via the section assembler in
+          lib/homepage/sections.ts. A strip auto-hides when it has no
+          matching games; we never fall back to mock placeholders. */}
       {stripSections.slice(0, 3).map((s) => (
         <HomeDbGameSection key={s.id} section={s} />
       ))}
 
       {ambassadorSection?.isVisible !== false ? <AmbassadorVideoSection /> : null}
 
-      <SportsCardsCarousel />
-
       {stripSections.slice(3).map((s) => (
         <HomeDbGameSection key={s.id} section={s} />
       ))}
-
-      {upcomingSection?.isVisible ? (
-        // upcoming-matches section is hidden by default; render the
-        // sports carousel-style placeholder when the operator turns it
-        // on so the heading still has matching content.
-        <SportsCardsCarousel />
-      ) : null}
 
       <PromoPair />
 

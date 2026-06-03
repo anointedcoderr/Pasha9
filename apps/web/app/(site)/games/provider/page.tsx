@@ -13,8 +13,9 @@
 
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { ArrowLeft, ArrowRight, Plug, Play, Search } from 'lucide-react';
 import { useLang } from '@/lib/i18n/context';
 import { cn } from '@/lib/utils/cn';
@@ -38,14 +39,16 @@ interface LobbyGame {
 const CATEGORIES = [
   { key: '', en: 'All', bn: 'সব' },
   { key: 'slots', en: 'Slots', bn: 'স্লট' },
-  { key: 'flash', en: 'Flash', bn: 'ফ্ল্যাশ' },
+  { key: 'live_casino', en: 'Live Casino', bn: 'লাইভ ক্যাসিনো' },
   { key: 'table', en: 'Table', bn: 'টেবিল' },
   { key: 'fishing', en: 'Fishing', bn: 'ফিশিং' },
   { key: 'crash', en: 'Crash', bn: 'ক্র্যাশ' },
+  { key: 'flash', en: 'Fast', bn: 'ফাস্ট' },
+  { key: 'sportsbook', en: 'Sportsbook', bn: 'স্পোর্টসবুক' },
 ];
 
 const CATEGORY_TO_ART: Record<string, CategoryCode> = {
-  slots: 'slots', flash: 'liveCasino', table: 'tableGames', fishing: 'fishing', crash: 'crash',
+  slots: 'slots', live_casino: 'liveCasino', flash: 'liveCasino', table: 'tableGames', fishing: 'fishing', crash: 'crash', sportsbook: 'sportsbook',
 };
 function artFor(cat: string | null | undefined): CategoryCode {
   if (!cat) return 'liveCasino';
@@ -55,13 +58,33 @@ function artFor(cat: string | null | undefined): CategoryCode {
 const PAGE_SIZE = 60;
 
 export default function ProviderLobbyPage() {
+  return (
+    <Suspense fallback={null}>
+      <ProviderLobbyPageInner />
+    </Suspense>
+  );
+}
+
+function ProviderLobbyPageInner() {
   const { lang } = useLang();
+  // Read deep-link filters once. Homepage View All buttons + the public
+  // category routes both arrive here with ?category=, ?brand=, ?q= or
+  // ?featured=1 set. Subsequent dropdown changes update local state
+  // without rewriting the URL so back/forward still works as expected.
+  const searchParams = useSearchParams();
+  const initialCategory = searchParams?.get('category') ?? '';
+  const initialBrand = (searchParams?.get('brand') ?? searchParams?.get('brandKey') ?? '').toUpperCase();
+  const initialQ = searchParams?.get('q') ?? '';
+  const initialProvider = searchParams?.get('provider') ?? searchParams?.get('providerKey') ?? '';
+  const initialFeatured = (searchParams?.get('featured') ?? '') === '1';
+
   const [providers, setProviders] = useState<ProviderRow[]>([]);
-  const [providerKey, setProviderKey] = useState<string>('');
-  const [brandKey, setBrandKey] = useState<string>('');
+  const [providerKey, setProviderKey] = useState<string>(initialProvider);
+  const [brandKey, setBrandKey] = useState<string>(initialBrand);
   const [brands, setBrands] = useState<BrandRow[]>([]);
-  const [category, setCategory] = useState<string>('');
-  const [q, setQ] = useState('');
+  const [category, setCategory] = useState<string>(initialCategory);
+  const [featuredOnly, setFeaturedOnly] = useState<boolean>(initialFeatured);
+  const [q, setQ] = useState(initialQ);
   const [debouncedQ, setDebouncedQ] = useState('');
   const [offset, setOffset] = useState(0);
   const [games, setGames] = useState<LobbyGame[]>([]);
@@ -114,6 +137,7 @@ export default function ProviderLobbyPage() {
         if (debouncedQ) params.set('q', debouncedQ);
         if (category) params.set('category', category);
         if (brandKey) params.set('brand', brandKey);
+        if (featuredOnly) params.set('featured', '1');
         params.set('offset', String(nextOffset));
         params.set('limit', String(PAGE_SIZE));
         const r = await fetch(`/api/providers/${encodeURIComponent(p.providerKey)}/games?${params}`, { cache: 'no-store' });
@@ -147,13 +171,13 @@ export default function ProviderLobbyPage() {
       if (!append) setBrands(aggregatedBrands.sort((a, b) => b.count - a.count));
       setOffset(nextOffset + PAGE_SIZE);
     } finally { setBusy(false); }
-  }, [loaded, providerKey, providers, debouncedQ, category, brandKey]);
+  }, [loaded, providerKey, providers, debouncedQ, category, brandKey, featuredOnly]);
 
   useEffect(() => {
     if (!loaded) return;
     setFailedImages(new Set());
     loadPage(0, false);
-  }, [loaded, providerKey, brandKey, category, debouncedQ, loadPage]);
+  }, [loaded, providerKey, brandKey, category, debouncedQ, featuredOnly, loadPage]);
 
   const markImageFailed = (key: string) => setFailedImages((prev) => {
     if (prev.has(key)) return prev;
@@ -279,6 +303,13 @@ export default function ProviderLobbyPage() {
           </select>
         ) : null}
       </div>
+
+      {featuredOnly ? (
+        <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-amber-300/60 bg-amber-200/15 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-amber-700">
+          {lang === 'bn' ? 'হট গেমস' : 'Featured / Hot games'}
+          <button type="button" onClick={() => setFeaturedOnly(false)} className="rounded-full bg-amber-300/40 px-1.5">×</button>
+        </div>
+      ) : null}
 
       <div className="mt-3 flex flex-wrap gap-2">
         {categoryPills.map((c) => (

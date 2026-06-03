@@ -1,29 +1,13 @@
 // Built by Anointed Coder.
-'use client';
+//
+// /live-casino now resolves to the real Live Casino catalog filtered
+// through /games/provider. Mock cards retired post-M4 multi-brand
+// import.
 
-import { CategoryHero } from '@/components/site/CategoryHero';
-import { CategoryCatalog } from '@/components/site/CategoryCatalog';
-import { mockGames } from '@/lib/mock/games';
-import { useT } from '@/lib/i18n/context';
+import { redirect } from 'next/navigation';
 
-export default function LiveCasinoPage() {
-  const t = useT();
-  const games = mockGames.filter((g) => g.categoryId === 'c_live');
-  return (
-    <div className="space-y-6">
-      <CategoryHero
-        kicker={t('nav.liveCasino')}
-        title={t('home.sectionLive')}
-        description={t('home.sectionLiveDesc')}
-        accent="royal"
-        category="liveCasino"
-        chips={[
-          { label: 'Live', tone: 'rose' },
-          { label: 'Dealer Tables', tone: 'gold' },
-          { label: 'Wallet Connected', tone: 'sky' },
-        ]}
-      />
-      <CategoryCatalog games={games} />
-    </div>
-  );
+export const dynamic = 'force-static';
+
+export default function LiveCasinoPage(): never {
+  redirect('/games/provider?category=live_casino');
 }

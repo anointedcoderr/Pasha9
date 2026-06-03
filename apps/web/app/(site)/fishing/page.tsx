@@ -1,28 +1,12 @@
 // Built by Anointed Coder.
-'use client';
+//
+// /fishing redirects to the real Fishing catalog filtered through
+// /games/provider. Mock cards retired post-M4 multi-brand import.
 
-import { CategoryHero } from '@/components/site/CategoryHero';
-import { CategoryCatalog } from '@/components/site/CategoryCatalog';
-import { mockGames } from '@/lib/mock/games';
-import { useT } from '@/lib/i18n/context';
+import { redirect } from 'next/navigation';
 
-export default function FishingPage() {
-  const t = useT();
-  const games = mockGames.filter((g) => g.categoryId === 'c_fish');
-  return (
-    <div className="space-y-6">
-      <CategoryHero
-        kicker={t('nav.fishing')}
-        title={t('home.sectionFish')}
-        description={t('home.sectionFishDesc')}
-        accent="blue"
-        category="fishing"
-        chips={[
-          { label: 'Arcade', tone: 'sky' },
-          { label: 'Instant Play', tone: 'gold' },
-        ]}
-      />
-      <CategoryCatalog games={games} />
-    </div>
-  );
+export const dynamic = 'force-static';
+
+export default function FishingPage(): never {
+  redirect('/games/provider?category=fishing');
 }

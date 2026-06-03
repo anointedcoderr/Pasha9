@@ -1,16 +1,13 @@
-'use client';
+// Built by Anointed Coder.
+//
+// /lottery is the legacy slug for the real lotto surface. Redirect
+// to /lotto so visitors land on the live draw + ticket + winnings
+// flow instead of mock draws.
 
-import { PageHeader } from '@/components/site/PageHeader';
-import { GameSection } from '@/components/site/GameSection';
-import { mockGames } from '@/lib/mock/games';
-import { Ticket } from 'lucide-react';
+import { redirect } from 'next/navigation';
 
-export default function LotteryPage() {
-  const games = mockGames.filter((g) => g.categoryId === 'c_lottery');
-  return (
-    <>
-      <PageHeader title="Lottery and Number Games" subtitle="Daily and weekly draws with cumulative prize pools" icon={<Ticket className="h-5 w-5" />} />
-      <GameSection title="All draws" games={games} layout="grid" />
-    </>
-  );
+export const dynamic = 'force-static';
+
+export default function LotteryPage(): never {
+  redirect('/lotto');
 }

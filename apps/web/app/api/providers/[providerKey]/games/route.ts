@@ -25,6 +25,7 @@ export async function GET(req: Request, { params }: { params: { providerKey: str
   const q = (url.searchParams.get('q') ?? '').trim();
   const category = (url.searchParams.get('category') ?? '').trim();
   const brandKeyParam = (url.searchParams.get('brand') ?? url.searchParams.get('brandKey') ?? '').trim();
+  const featuredOnly = (url.searchParams.get('featured') ?? '') === '1';
   const offset = Math.max(Number(url.searchParams.get('offset') ?? 0) || 0, 0);
   const limit = Math.min(Math.max(Number(url.searchParams.get('limit') ?? 200) || 200, 1), 300);
 
@@ -47,6 +48,7 @@ export async function GET(req: Request, { params }: { params: { providerKey: str
     status: 'active',
     ...(category ? { category } : {}),
     ...(brandIdFilter ? { brandId: brandIdFilter } : {}),
+    ...(featuredOnly ? { isFeatured: true } : {}),
     ...(q ? { OR: [
       { displayName: { contains: q, mode: 'insensitive' as const } },
       { gameUid: { contains: q } },

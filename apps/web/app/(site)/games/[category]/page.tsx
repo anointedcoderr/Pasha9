@@ -1,97 +1,42 @@
 // Built by Anointed Coder.
-'use client';
+//
+// /games/<category> is a friendly URL that mirrors the public lobby's
+// category filter. We translate the slug into the canonical category
+// the importer normalised onto, then forward to /games/provider with
+// the matching ?category= query so the lobby preselects the filter
+// and lists real ExternalGame rows.
+//
+// Catch-alls (`hot`, unknown slugs) route to the unfiltered lobby
+// where the user can browse everything.
 
-import { useParams } from 'next/navigation';
-import { CategoryHero } from '@/components/site/CategoryHero';
-import { CategoryCatalog } from '@/components/site/CategoryCatalog';
-import { mockGames, gamesByCategory } from '@/lib/mock/games';
-import { mockCategories } from '@/lib/mock/categories';
-import { useT, useLang } from '@/lib/i18n/context';
-import type { CategoryCode } from '@/components/site/CategoryHeroArt';
+import { redirect } from 'next/navigation';
 
-type Accent = 'yellow' | 'blue' | 'royal' | 'red' | 'green' | 'navy';
-type SyntheticSlug = 'crash' | 'table' | 'fast';
+export const dynamic = 'force-static';
 
-const ACCENT_BY_SLUG: Record<string, Accent> = {
-  hot: 'red',
-  slots: 'yellow',
-  'live-casino': 'royal',
-  fishing: 'blue',
-  sports: 'green',
-  lottery: 'yellow',
-  poker: 'navy',
-  esports: 'blue',
-  crash: 'red',
-  table: 'navy',
-  fast: 'red',
-};
-
-// Map category page slug to the CategoryHeroArt code so each
-// /games/<slug> page surfaces game-specific artwork.
-const CATEGORY_BY_SLUG: Record<string, CategoryCode> = {
-  hot: 'hotGames',
+const CANONICAL: Record<string, string> = {
   slots: 'slots',
-  'live-casino': 'liveCasino',
+  slot: 'slots',
+  'live-casino': 'live_casino',
+  live_casino: 'live_casino',
+  live: 'live_casino',
+  casino: 'live_casino',
+  table: 'table',
   fishing: 'fishing',
-  sports: 'sportsbook',
-  lottery: 'lotto',
-  poker: 'tableGames',
-  esports: 'sportsbook',
+  fish: 'fishing',
   crash: 'crash',
-  table: 'tableGames',
-  fast: 'fast',
+  fast: 'flash',
+  flash: 'flash',
+  sports: 'sportsbook',
+  sportsbook: 'sportsbook',
+  esports: 'sportsbook',
+  hot: '',
+  featured: '',
 };
 
-function isSyntheticSlug(s: string): s is SyntheticSlug {
-  return s === 'crash' || s === 'table' || s === 'fast';
-}
-
-function syntheticGames(slug: SyntheticSlug) {
-  if (slug === 'crash') return mockGames.filter((g) => ['c_hot', 'c_lottery'].includes(g.categoryId)).slice(0, 24);
-  if (slug === 'table') return mockGames.filter((g) => ['c_poker', 'c_live'].includes(g.categoryId)).slice(0, 24);
-  return mockGames.filter((g) => ['c_slots', 'c_hot'].includes(g.categoryId)).slice(0, 24);
-}
-
-const SYNTHETIC_TITLES: Record<SyntheticSlug, { bn: string; en: string; desc: string }> = {
-  crash: { bn: 'ক্র্যাশ গেম', en: 'Crash Games', desc: 'Quick rounds and high multipliers' },
-  table: { bn: 'টেবিল গেম', en: 'Table Games', desc: 'Classic table action with multiple variants' },
-  fast: { bn: 'ফাস্ট গেম', en: 'Fast Games', desc: 'Fast paced bets with rapid results' },
-};
-
-export default function CategoryPage() {
-  const params = useParams<{ category: string }>();
-  const slug = params?.category ?? '';
-  const t = useT();
-  const { lang } = useLang();
-
-  const synthetic = isSyntheticSlug(slug);
-  const category = mockCategories.find((c) => c.slug === slug);
-  const games = synthetic ? syntheticGames(slug) : gamesByCategory(slug);
-
-  const title = synthetic
-    ? (lang === 'bn' ? SYNTHETIC_TITLES[slug].bn : SYNTHETIC_TITLES[slug].en)
-    : category
-      ? (lang === 'bn' ? category.nameBn : category.nameEn)
-      : slug;
-
-  const description = synthetic
-    ? SYNTHETIC_TITLES[slug].desc
-    : t('home.sectionHotDesc');
-
-  const accent = ACCENT_BY_SLUG[slug] ?? 'navy';
-  const categoryCode = CATEGORY_BY_SLUG[slug] ?? 'default';
-
-  return (
-    <div className="space-y-6">
-      <CategoryHero
-        kicker={title}
-        title={title}
-        description={description}
-        accent={accent}
-        category={categoryCode}
-        chips={[{ label: 'Wallet Connected', tone: 'sky' }, { label: 'Featured', tone: 'gold' }]}
-      />
-      <CategoryCatalog games={games} />
-    </div>
-  );
+export default function GamesCategoryPage({ params }: { params: { category: string } }): never {
+  const slug = (params?.category ?? '').toLowerCase();
+  const category = CANONICAL[slug];
+  if (category === undefined) redirect('/games/provider');
+  if (slug === 'hot' || slug === 'featured') redirect('/games/provider?featured=1');
+  redirect(category ? `/games/provider?category=${category}` : '/games/provider');
 }

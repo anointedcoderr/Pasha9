@@ -623,7 +623,19 @@ function SimulateCallbackModal({ open, onOpenChange, providerId, onDone }: { ope
   );
 }
 
-interface BrandRow { id: string; brandKey: string; displayName: string; status: string; gameCount: number; activeGameCount?: number; categories?: Record<string, number>; lastSyncAt: string | null; createdAt: string }
+interface BrandRow {
+  id: string;
+  brandKey: string;
+  displayName: string;
+  status: string;
+  gameCount: number;
+  activeGameCount?: number;
+  categories?: Record<string, number>;
+  lastSyncAt: string | null;
+  createdAt: string;
+  activationStatus?: 'no_games' | 'untested' | 'launch_ok' | 'launch_failed';
+  lastLaunchTest?: { status: number | null; ok: boolean; gameUid: string; error: string | null; at: string } | null;
+}
 
 function BrandsPanel({ providerId, onViewGames }: { providerId: string; onViewGames?: (brandId: string) => void }) {
   const [rows, setRows] = useState<BrandRow[]>([]);
@@ -697,8 +709,19 @@ function BrandsPanel({ providerId, onViewGames }: { providerId: string; onViewGa
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-semibold text-ink-hi">{b.displayName}</span>
                       <Chip tone={b.status === 'active' ? 'ok' : 'neutral'}>{b.status}</Chip>
+                      {b.activationStatus === 'launch_ok' ? <Chip tone="ok">launch verified</Chip> : null}
+                      {b.activationStatus === 'launch_failed' ? <Chip tone="warn">launch failed</Chip> : null}
+                      {b.activationStatus === 'untested' ? <Chip tone="neutral">untested</Chip> : null}
+                      {b.activationStatus === 'no_games' ? <Chip tone="neutral">no games</Chip> : null}
                     </div>
                     <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-ink-lo">{b.brandKey}</p>
+                    {b.lastLaunchTest ? (
+                      <p className="mt-0.5 text-[10px] text-ink-lo">
+                        Last launch test: {b.lastLaunchTest.ok ? 'OK' : `FAIL ${b.lastLaunchTest.status ?? '?'}`}
+                        {b.lastLaunchTest.error ? ` . ${b.lastLaunchTest.error.slice(0, 80)}` : ''}
+                        {' . '}{safeDate(b.lastLaunchTest.at)}
+                      </p>
+                    ) : null}
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="rounded-full border border-neon/15 bg-base-panel/40 px-2 py-0.5 text-[10px] font-semibold text-ink-mid">

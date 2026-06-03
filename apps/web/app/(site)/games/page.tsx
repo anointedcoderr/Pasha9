@@ -1,12 +1,21 @@
 // Built by Anointed Coder.
+//
+// /games is the All Games landing surface. It renders:
+//   1. Pasha Originals (in-house native games via /api/native-games)
+//   2. Provider games via <ProviderGamesSection>, which itself fans
+//      out to the real ExternalGame catalog under iGamingAPIs and
+//      shows the brand strip + category pills.
+//
+// All mock game lists were retired with the M4 multi-brand import.
+// The visitor can browse the real catalog from this page or jump
+// into /games/provider with a category/brand filter via the
+// category cards on the homepage.
+
 'use client';
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { CategoryHero } from '@/components/site/CategoryHero';
-import { CategoryCatalog } from '@/components/site/CategoryCatalog';
-import { mockGames } from '@/lib/mock/games';
-import { mockCategories } from '@/lib/mock/categories';
 import { useT, useLang } from '@/lib/i18n/context';
 import { Sparkles, ArrowRight, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
@@ -30,11 +39,20 @@ type ArtCode = 'dice' | 'mines' | 'keno' | 'roulette' | 'slots' | 'crash';
 const SUPPORTED: ReadonlySet<ArtCode> = new Set(['dice', 'mines', 'keno', 'roulette', 'slots', 'crash']);
 function isArtCode(s: string): s is ArtCode { return SUPPORTED.has(s as ArtCode); }
 
+const CATEGORY_CARDS: Array<{ slug: string; en: string; bn: string; href: string }> = [
+  { slug: 'slots', en: 'Slots', bn: 'স্লট', href: '/games/provider?category=slots' },
+  { slug: 'live_casino', en: 'Live Casino', bn: 'লাইভ ক্যাসিনো', href: '/games/provider?category=live_casino' },
+  { slug: 'table', en: 'Table Games', bn: 'টেবিল', href: '/games/provider?category=table' },
+  { slug: 'fishing', en: 'Fishing', bn: 'ফিশিং', href: '/games/provider?category=fishing' },
+  { slug: 'crash', en: 'Crash', bn: 'ক্র্যাশ', href: '/games/provider?category=crash' },
+  { slug: 'flash', en: 'Fast Games', bn: 'ফাস্ট', href: '/games/provider?category=flash' },
+  { slug: 'sportsbook', en: 'Sportsbook', bn: 'স্পোর্টসবুক', href: '/games/provider?category=sportsbook' },
+  { slug: 'featured', en: 'Hot Games', bn: 'হট গেমস', href: '/games/provider?featured=1' },
+];
+
 export default function GamesPage() {
   const t = useT();
   const { lang } = useLang();
-  const [category, setCategory] = useState<string>('all');
-  const filtered = category === 'all' ? mockGames : mockGames.filter((g) => g.categoryId === category);
 
   const [natives, setNatives] = useState<NativeGameSummary[]>([]);
   const [nativesEnabled, setNativesEnabled] = useState<boolean>(true);
@@ -137,29 +155,23 @@ export default function GamesPage() {
         </section>
       ) : null}
 
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => setCategory('all')}
-          className="pill-provider"
-          data-active={category === 'all'}
-        >
-          {t('common.all')}
-        </button>
-        {mockCategories.map((c) => (
-          <button
-            key={c.id}
-            type="button"
-            onClick={() => setCategory(c.id)}
-            className="pill-provider"
-            data-active={category === c.id}
-          >
-            {lang === 'bn' ? c.nameBn : c.nameEn}
-          </button>
-        ))}
-      </div>
-
-      <CategoryCatalog games={filtered} />
+      <section>
+        <h2 className="text-base font-extrabold text-brand-ink md:text-lg">
+          {lang === 'bn' ? 'ক্যাটাগরি ব্রাউজ করুন' : 'Browse by category'}
+        </h2>
+        <div className="mt-3 grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4">
+          {CATEGORY_CARDS.map((c) => (
+            <Link
+              key={c.slug}
+              href={c.href}
+              className="group flex items-center justify-between rounded-2xl border border-brand-divider bg-brand-paper p-4 text-sm font-semibold text-brand-ink shadow-sm transition hover:border-brand-yellow-500 hover:bg-brand-surface"
+            >
+              <span>{lang === 'bn' ? c.bn : c.en}</span>
+              <ArrowRight className="h-4 w-4 text-brand-inkMute group-hover:text-brand-ink" />
+            </Link>
+          ))}
+        </div>
+      </section>
 
       <ProviderGamesSection showAdminLink />
     </div>

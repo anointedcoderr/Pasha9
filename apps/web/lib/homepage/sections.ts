@@ -81,17 +81,21 @@ const ICON_KEY_BY_SECTION: Record<string, string> = {
   homepage_sportsbook: 'flag',
 };
 
+// View All hrefs. After M4 catalog import these route to the real
+// filtered ExternalGame catalog at /games/provider, not the old mock
+// category pages. The lobby preselects the dropdowns from the URL
+// query so the visitor lands directly on the filtered list.
 const HREF_BY_SECTION: Record<string, string> = {
-  homepage_hot: '/games',
-  homepage_slots: '/slots',
-  homepage_live_casino: '/live-casino',
-  homepage_fishing: '/fishing',
-  homepage_crash: '/games/crash',
+  homepage_hot: '/games/provider?featured=1',
+  homepage_slots: '/games/provider?category=slots',
+  homepage_live_casino: '/games/provider?category=live_casino',
+  homepage_fishing: '/games/provider?category=fishing',
+  homepage_crash: '/games/provider?category=crash',
   homepage_lottery: '/lotto',
   homepage_brand: '/promotions',
   homepage_video: '/',
-  homepage_upcoming: '/sports',
-  homepage_sportsbook: '/sports',
+  homepage_upcoming: '/games/provider?category=sportsbook',
+  homepage_sportsbook: '/games/provider?category=sportsbook',
 };
 
 const CATEGORY_MATCHERS: Record<string, string[]> = {

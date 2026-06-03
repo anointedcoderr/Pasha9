@@ -23,6 +23,54 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       where: { providerId: params.id },
       orderBy: [{ displayName: 'asc' }],
     });
+
+    // Attribute the most recent /launch test back to a brand so the
+    // operator can see, per brand, whether a real launch attempt has
+    // been made and what the upstream said. ProviderRequestLog stores
+    // gameUid inside the request payload (set by the adapter), so we
+    // join via ExternalGame.gameUid -> brandId.
+    type LaunchLogRow = {
+      id: string;
+      status: number | null;
+      errorMessage: string | null;
+      requestPayload: unknown;
+      responsePayload: unknown;
+      createdAt: Date;
+    };
+    const recentLaunchLogs: LaunchLogRow[] = await db.providerRequestLog.findMany({
+      where: { providerId: params.id, endpoint: { in: ['/launch', 'launch:test', 'launch'] } },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+      select: { id: true, status: true, errorMessage: true, requestPayload: true, responsePayload: true, createdAt: true },
+    });
+    const gameUidsInLogs = new Set<string>();
+    for (const log of recentLaunchLogs) {
+      const rp = log.requestPayload as { gameUid?: unknown; game_uid?: unknown } | null;
+      const uid = rp && typeof rp === 'object' ? (rp.gameUid ?? rp.game_uid) : null;
+      if (typeof uid === 'string' || typeof uid === 'number') gameUidsInLogs.add(String(uid));
+    }
+    const gamesForLogs = gameUidsInLogs.size === 0 ? [] : await db.externalGame.findMany({
+      where: { providerId: params.id, gameUid: { in: Array.from(gameUidsInLogs) } },
+      select: { gameUid: true, brandId: true },
+    });
+    const gameUidToBrand = new Map(gamesForLogs.map((g) => [g.gameUid, g.brandId]));
+    const lastLaunchByBrand = new Map<string, { status: number | null; ok: boolean; gameUid: string; error: string | null; at: Date }>();
+    for (const log of recentLaunchLogs) {
+      const rp = log.requestPayload as { gameUid?: unknown; game_uid?: unknown } | null;
+      const uid = rp && typeof rp === 'object' ? (rp.gameUid ?? rp.game_uid) : null;
+      const uidStr = typeof uid === 'string' || typeof uid === 'number' ? String(uid) : null;
+      if (!uidStr) continue;
+      const brandId = gameUidToBrand.get(uidStr) ?? null;
+      if (!brandId || lastLaunchByBrand.has(brandId)) continue;
+      const ok = typeof log.status === 'number' && log.status >= 200 && log.status < 300;
+      lastLaunchByBrand.set(brandId, {
+        status: log.status,
+        ok,
+        gameUid: uidStr,
+        error: log.errorMessage,
+        at: log.createdAt,
+      });
+    }
     const [totalCounts, activeCounts, categoryCounts] = await Promise.all([
       db.externalGame.groupBy({
         by: ['brandId'],
@@ -50,17 +98,35 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       catMap.set(r.brandId, prev);
     }
     return jsonOk({
-      brands: rows.map((b) => ({
-        id: b.id,
-        brandKey: b.brandKey,
-        displayName: b.displayName,
-        status: b.status,
-        gameCount: totalMap.get(b.id) ?? 0,
-        activeGameCount: activeMap.get(b.id) ?? 0,
-        categories: catMap.get(b.id) ?? {},
-        lastSyncAt: b.lastSyncAt,
-        createdAt: b.createdAt,
-      })),
+      brands: rows.map((b) => {
+        const ll = lastLaunchByBrand.get(b.id) ?? null;
+        const totalGames = totalMap.get(b.id) ?? 0;
+        const activeGames = activeMap.get(b.id) ?? 0;
+        const activationStatus = totalGames === 0
+          ? 'no_games'
+          : ll
+            ? (ll.ok ? 'launch_ok' : 'launch_failed')
+            : 'untested';
+        return {
+          id: b.id,
+          brandKey: b.brandKey,
+          displayName: b.displayName,
+          status: b.status,
+          gameCount: totalGames,
+          activeGameCount: activeGames,
+          categories: catMap.get(b.id) ?? {},
+          lastSyncAt: b.lastSyncAt,
+          createdAt: b.createdAt,
+          activationStatus,
+          lastLaunchTest: ll ? {
+            status: ll.status,
+            ok: ll.ok,
+            gameUid: ll.gameUid,
+            error: ll.error,
+            at: ll.at,
+          } : null,
+        };
+      }),
     });
   });
 }
