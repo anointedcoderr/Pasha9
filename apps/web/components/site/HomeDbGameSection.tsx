@@ -190,14 +190,16 @@ export function HomeDbGameSection({ section }: Props) {
               {g.isJackpot ? (
                 <span className="absolute right-2 top-9 inline-flex h-5 items-center rounded-full border border-amber-300/60 bg-amber-300/25 px-1.5 text-[9px] font-extrabold uppercase tracking-wider text-amber-50 backdrop-blur">JACKPOT</span>
               ) : null}
-              {g.providerName ? (
+              {/* Brand name leads on the card. The aggregator (iGamingAPIs
+                  Aggregator) is implied and only shown when no brand is
+                  set, so cards never read as "iGamingAPIs Aggreg... / JILI" */}
+              {g.brandName ? (
+                <span className="absolute left-2 top-2 inline-flex h-5 max-w-[80%] items-center truncate rounded-full border border-yellow-300/60 bg-yellow-300/25 px-1.5 text-[9px] font-extrabold uppercase tracking-wider text-yellow-50 backdrop-blur">
+                  {g.brandName}
+                </span>
+              ) : g.providerName ? (
                 <span className="absolute left-2 top-2 inline-flex h-5 max-w-[60%] items-center truncate rounded-full border border-amber-300/60 bg-amber-200/15 px-1.5 text-[9px] font-bold uppercase tracking-wider text-amber-100 backdrop-blur">
                   {g.providerName}
-                </span>
-              ) : null}
-              {g.brandName && g.brandName !== g.providerName ? (
-                <span className="absolute right-2 bottom-2 inline-flex h-5 items-center rounded-full border border-yellow-300/60 bg-yellow-300/25 px-1.5 text-[9px] font-extrabold uppercase tracking-wider text-yellow-50 backdrop-blur">
-                  {g.brandName}
                 </span>
               ) : null}
             </div>

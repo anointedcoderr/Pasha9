@@ -63,6 +63,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         imageUrl: g.imageUrl,
         status: g.status,
         isFeatured: g.isFeatured ?? false,
+        isJackpot: g.isJackpot ?? false,
         sortOrder: g.sortOrder ?? 0,
         lastSyncAt: g.lastSyncAt,
       })),

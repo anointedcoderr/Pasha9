@@ -690,6 +690,11 @@ model ExternalGame {
   // rows render in the same order they did before.
   isFeatured  Boolean  @default(false)
   sortOrder   Int      @default(0)
+  // M4 jackpot tagging. Set per row from the admin Games tab or by the
+  // auto-tag script (titles containing jackpot / mega / grand /
+  // treasure / fortune / crown). Admin can always override.
+  isJackpot   Boolean  @default(false)
+  jackpotLabel String?
   rawMeta     Json?
   lastSyncAt  DateTime?
   createdAt   DateTime @default(now())
@@ -703,6 +708,7 @@ model ExternalGame {
   @@index([brandId])
   @@index([category])
   @@index([isFeatured, sortOrder])
+  @@index([isJackpot, sortOrder])
 }
 
 // Per-provider numeric member account map. iGamingAPIs and most
@@ -1536,6 +1542,58 @@ model HomepageFeaturedGame {
   @@index([position])
   @@index([isHot, position])
   @@index([isJackpot, position])
+}
+
+// Flexible homepage block. Replaces the single-list HomepageFeaturedGame
+// model when the operator needs more than one curated strip. Each block
+// renders on the public homepage in `position` order with its own title
+// + subtitle. `sourceType` controls what fills it:
+//   manual    -> the linked HomepageGameBlockItem rows in this block
+//   category  -> live ExternalGame rows matching `category`
+//   brand     -> live ExternalGame rows for the brand pointed at by `brandId`
+//   jackpot   -> live ExternalGame rows where isJackpot=true
+//   featured  -> top isFeatured rows (no manual curation needed)
+// Empty blocks auto-hide on the public homepage; layout="grid" is the
+// default tile rendering. The existing PublicSection / HomepageFeaturedGame
+// surfaces continue to work unchanged; HomepageGameBlock rows render
+// after them on the public homepage.
+model HomepageGameBlock {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  titleEn     String
+  titleBn     String?
+  subtitleEn  String?
+  subtitleBn  String?
+  sourceType  String   @default("manual")
+  category    String?
+  brandId     String?
+  limit       Int      @default(12)
+  position    Int      @default(0)
+  isVisible   Boolean  @default(true)
+  layout      String?  @default("grid")
+  meta        Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items HomepageGameBlockItem[]
+
+  @@index([isVisible, position])
+}
+
+model HomepageGameBlockItem {
+  id             String   @id @default(cuid())
+  blockId        String
+  source         String
+  externalGameId String?
+  nativeGameCode String?
+  position       Int      @default(0)
+  isHot          Boolean  @default(false)
+  isJackpot      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  block          HomepageGameBlock @relation(fields: [blockId], references: [id], onDelete: Cascade)
+
+  @@index([blockId, position])
 }
 
 // Pre-deposit notice popup. Multiple rows supported so the operator

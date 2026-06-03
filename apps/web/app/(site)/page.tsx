@@ -26,6 +26,7 @@ import { PromoPair } from '@/components/site/PromoPair';
 import { AppDownloadSection } from '@/components/site/AppDownloadSection';
 import { HomeDbGameSection } from '@/components/site/HomeDbGameSection';
 import type { HomeSection } from '@/lib/homepage/sections';
+import type { HomeBlock } from '@/lib/homepage/blocks';
 
 // Section keys that the page handles via marker placeholders (no game
 // grid). Strip sections fall through to <HomeDbGameSection>. The
@@ -33,8 +34,32 @@ import type { HomeSection } from '@/lib/homepage/sections';
 // keys so the operator can hide a strip without breaking layout.
 const MARKER_SECTIONS = new Set(['homepage_brand', 'homepage_video', 'homepage_upcoming']);
 
+function blockToSection(b: HomeBlock): HomeSection {
+  const iconKey = b.sourceType === 'jackpot' ? 'sparkles'
+    : b.sourceType === 'category' ? 'cherry'
+    : b.sourceType === 'brand' ? 'sparkles'
+    : b.sourceType === 'featured' ? 'flame'
+    : 'sparkles';
+  return {
+    id: `block:${b.id}`,
+    key: `block:${b.key}`,
+    group: 'homepage',
+    titleEn: b.titleEn,
+    titleBn: b.titleBn,
+    subtitleEn: b.subtitleEn,
+    subtitleBn: b.subtitleBn,
+    position: b.position,
+    isVisible: true,
+    layout: b.layout,
+    iconKey,
+    href: b.href,
+    games: b.games,
+  };
+}
+
 export default function HomePage() {
   const [sections, setSections] = useState<HomeSection[] | null>(null);
+  const [blocks, setBlocks] = useState<HomeBlock[]>([]);
 
   useEffect(() => {
     let alive = true;
@@ -42,15 +67,16 @@ export default function HomePage() {
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
         if (!alive) return;
-        if (Array.isArray(j?.sections)) setSections(j.sections as HomeSection[]);
-        else setSections([]);
+        setSections(Array.isArray(j?.sections) ? (j.sections as HomeSection[]) : []);
+        setBlocks(Array.isArray(j?.blocks) ? (j.blocks as HomeBlock[]) : []);
       })
-      .catch(() => { if (alive) setSections([]); });
+      .catch(() => { if (alive) { setSections([]); setBlocks([]); } });
     return () => { alive = false; };
   }, []);
 
   const stripSections = (sections ?? []).filter((s) => !MARKER_SECTIONS.has(s.key));
   const ambassadorSection = (sections ?? []).find((s) => s.key === 'homepage_video');
+  const blockSections = blocks.map(blockToSection);
 
   return (
     <div className="space-y-6">
@@ -79,6 +105,10 @@ export default function HomePage() {
       {ambassadorSection?.isVisible !== false ? <AmbassadorVideoSection /> : null}
 
       {stripSections.slice(3).map((s) => (
+        <HomeDbGameSection key={s.id} section={s} />
+      ))}
+
+      {blockSections.map((s) => (
         <HomeDbGameSection key={s.id} section={s} />
       ))}
 

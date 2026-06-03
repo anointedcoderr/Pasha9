@@ -26,6 +26,7 @@ export async function GET(req: Request, { params }: { params: { providerKey: str
   const category = (url.searchParams.get('category') ?? '').trim();
   const brandKeyParam = (url.searchParams.get('brand') ?? url.searchParams.get('brandKey') ?? '').trim();
   const featuredOnly = (url.searchParams.get('featured') ?? '') === '1';
+  const jackpotOnly = (url.searchParams.get('jackpot') ?? '') === '1';
   const offset = Math.max(Number(url.searchParams.get('offset') ?? 0) || 0, 0);
   const limit = Math.min(Math.max(Number(url.searchParams.get('limit') ?? 200) || 200, 1), 300);
 
@@ -49,6 +50,7 @@ export async function GET(req: Request, { params }: { params: { providerKey: str
     ...(category ? { category } : {}),
     ...(brandIdFilter ? { brandId: brandIdFilter } : {}),
     ...(featuredOnly ? { isFeatured: true } : {}),
+    ...(jackpotOnly ? { isJackpot: true } : {}),
     ...(q ? { OR: [
       { displayName: { contains: q, mode: 'insensitive' as const } },
       { gameUid: { contains: q } },
@@ -61,7 +63,7 @@ export async function GET(req: Request, { params }: { params: { providerKey: str
       orderBy: [{ isFeatured: 'desc' }, { sortOrder: 'desc' }, { category: 'asc' }, { displayName: 'asc' }],
       select: {
         id: true, gameUid: true, displayName: true, category: true,
-        imageUrl: true, brandId: true, isFeatured: true, sortOrder: true, lastSyncAt: true,
+        imageUrl: true, brandId: true, isFeatured: true, isJackpot: true, sortOrder: true, lastSyncAt: true,
       },
       skip: offset,
       take: limit,
@@ -114,6 +116,7 @@ export async function GET(req: Request, { params }: { params: { providerKey: str
       brandKey: g.brandId ? brandMap.get(g.brandId)?.brandKey ?? null : null,
       brandName: g.brandId ? brandMap.get(g.brandId)?.displayName ?? null : null,
       isFeatured: g.isFeatured ?? false,
+      isJackpot: g.isJackpot ?? false,
     })),
   });
 }

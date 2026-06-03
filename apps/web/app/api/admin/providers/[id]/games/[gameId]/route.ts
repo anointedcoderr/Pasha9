@@ -26,6 +26,8 @@ const schema = z.object({
   status: z.enum(['active', 'maintenance', 'hidden']).optional(),
   brandKey: z.string().trim().max(120).optional().or(z.literal('')),
   isFeatured: z.boolean().optional(),
+  isJackpot: z.boolean().optional(),
+  jackpotLabel: z.string().trim().max(60).optional().or(z.literal('')),
   sortOrder: z.coerce.number().int().min(-10_000).max(10_000).optional(),
 });
 
@@ -51,6 +53,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (parsed.data.imageUrl !== undefined) data.imageUrl = parsed.data.imageUrl || null;
     if (parsed.data.status !== undefined) data.status = parsed.data.status;
     if (parsed.data.isFeatured !== undefined) data.isFeatured = parsed.data.isFeatured;
+    if (parsed.data.isJackpot !== undefined) data.isJackpot = parsed.data.isJackpot;
+    if (parsed.data.jackpotLabel !== undefined) data.jackpotLabel = parsed.data.jackpotLabel || null;
     if (parsed.data.sortOrder !== undefined) data.sortOrder = parsed.data.sortOrder;
 
     if (parsed.data.brandKey !== undefined) {

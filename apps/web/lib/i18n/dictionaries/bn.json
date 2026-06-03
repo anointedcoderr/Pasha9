@@ -349,6 +349,7 @@
     "providers": "প্রোভাইডার",
     "homepage": "হোমপেজ কন্টেন্ট",
     "homepageSections": "হোমপেজ সেকশন",
+    "homepageBlocks": "কাস্টম গেম ব্লক",
     "depositNotice": "ডিপোজিট নোটিশ",
     "depositBonusTiers": "ডিপোজিট বোনাস টিয়ার",
     "referralClaims": "রেফারেল ক্লেইম",

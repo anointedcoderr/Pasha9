@@ -290,9 +290,27 @@ export async function buildHomeSections(): Promise<HomeSectionsBundle> {
     let games: HomeSectionGame[] = [];
     switch (s.key) {
       case 'homepage_hot': {
-        // Featured curation is the source of truth for Hot. Mark every
-        // row hot so the tile renderer shows the HOT chip.
-        games = featuredGames.slice(0, STRIP_LIMIT).map((g) => ({ ...g, isHot: true }));
+        // Featured curation is the source of truth for Hot. When the
+        // admin has not curated any games (or the curated set is
+        // empty after status filtering) fall back to live ExternalGame
+        // rows flagged isFeatured. We deliberately do NOT fall back to
+        // native game providers here - inactive native games would
+        // surface as "Coming soon" tiles that the visitor cannot
+        // actually launch from the homepage strip.
+        if (featuredGames.length > 0) {
+          games = featuredGames.slice(0, STRIP_LIMIT).map((g) => ({ ...g, isHot: true }));
+        } else {
+          const fallback = await db.externalGame.findMany({
+            where: { status: 'active', provider: { status: 'active' }, isFeatured: true },
+            orderBy: [{ sortOrder: 'desc' }, { displayName: 'asc' }],
+            take: STRIP_LIMIT,
+            include: {
+              provider: { select: { providerKey: true, name: true, status: true } },
+              brand: { select: { displayName: true } },
+            },
+          });
+          games = fallback.map((r) => ({ ...externalToGame(r as ExternalGameRow), isHot: true }));
+        }
         break;
       }
       case 'homepage_slots':

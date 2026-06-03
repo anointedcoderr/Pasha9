@@ -214,6 +214,32 @@ export function HeroSlider() {
 
   useEffect(() => { setI(0); }, [slides.length]);
 
+  // Mobile swipe. Touch handlers are wired directly on the section so
+  // the visitor can flick the hero from the moment the page renders -
+  // not only after scrolling brings the slider into a refreshed
+  // viewport. Vertical scrolls pass through (touch-action: pan-y on
+  // the section) so the page is still scrollable while the user
+  // gestures horizontally.
+  const swipeRef = useRef<{ startX: number; startY: number; t: number } | null>(null);
+  const onTouchStart = (e: React.TouchEvent<HTMLElement>) => {
+    if (e.touches.length !== 1 || slides.length < 2) return;
+    const t = e.touches[0];
+    swipeRef.current = { startX: t.clientX, startY: t.clientY, t: Date.now() };
+  };
+  const onTouchEnd = (e: React.TouchEvent<HTMLElement>) => {
+    const start = swipeRef.current;
+    swipeRef.current = null;
+    if (!start || slides.length < 2) return;
+    const last = e.changedTouches[0];
+    const dx = last.clientX - start.startX;
+    const dy = last.clientY - start.startY;
+    const dt = Date.now() - start.t;
+    if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
+    if (dt > 800) return;
+    if (dx < 0) setI((p) => (p + 1) % slides.length);
+    else setI((p) => (p - 1 + slides.length) % slides.length);
+  };
+
   // Auto-rotate. Use the longer dwell when the active slide is a video so
   // the visitor can actually watch some of it before we move on.
   useEffect(() => {
@@ -234,7 +260,12 @@ export function HeroSlider() {
   const hasImage = slide.mediaType === 'image' && !!slide.imageUrl;
 
   return (
-    <section className="relative overflow-hidden rounded-2xl border border-brand-yellow-500/20 bg-brand-ink text-white shadow-[0_22px_56px_-32px_rgba(245,180,0,0.5)]">
+    <section
+      onTouchStart={onTouchStart}
+      onTouchEnd={onTouchEnd}
+      style={{ touchAction: 'pan-y' }}
+      className="relative overflow-hidden rounded-2xl border border-brand-yellow-500/20 bg-brand-ink text-white shadow-[0_22px_56px_-32px_rgba(245,180,0,0.5)] select-none"
+    >
       {/* Top-edge hairline */}
       <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 z-10 h-px bg-gradient-to-r from-transparent via-brand-yellow-500/60 to-transparent" />
       {/* Media layer */}

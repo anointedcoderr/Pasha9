@@ -77,6 +77,7 @@ function ProviderLobbyPageInner() {
   const initialQ = searchParams?.get('q') ?? '';
   const initialProvider = searchParams?.get('provider') ?? searchParams?.get('providerKey') ?? '';
   const initialFeatured = (searchParams?.get('featured') ?? '') === '1';
+  const initialJackpot = (searchParams?.get('jackpot') ?? '') === '1';
 
   const [providers, setProviders] = useState<ProviderRow[]>([]);
   const [providerKey, setProviderKey] = useState<string>(initialProvider);
@@ -84,6 +85,7 @@ function ProviderLobbyPageInner() {
   const [brands, setBrands] = useState<BrandRow[]>([]);
   const [category, setCategory] = useState<string>(initialCategory);
   const [featuredOnly, setFeaturedOnly] = useState<boolean>(initialFeatured);
+  const [jackpotOnly, setJackpotOnly] = useState<boolean>(initialJackpot);
   const [q, setQ] = useState(initialQ);
   const [debouncedQ, setDebouncedQ] = useState('');
   const [offset, setOffset] = useState(0);
@@ -138,6 +140,7 @@ function ProviderLobbyPageInner() {
         if (category) params.set('category', category);
         if (brandKey) params.set('brand', brandKey);
         if (featuredOnly) params.set('featured', '1');
+        if (jackpotOnly) params.set('jackpot', '1');
         params.set('offset', String(nextOffset));
         params.set('limit', String(PAGE_SIZE));
         const r = await fetch(`/api/providers/${encodeURIComponent(p.providerKey)}/games?${params}`, { cache: 'no-store' });
@@ -171,13 +174,13 @@ function ProviderLobbyPageInner() {
       if (!append) setBrands(aggregatedBrands.sort((a, b) => b.count - a.count));
       setOffset(nextOffset + PAGE_SIZE);
     } finally { setBusy(false); }
-  }, [loaded, providerKey, providers, debouncedQ, category, brandKey, featuredOnly]);
+  }, [loaded, providerKey, providers, debouncedQ, category, brandKey, featuredOnly, jackpotOnly]);
 
   useEffect(() => {
     if (!loaded) return;
     setFailedImages(new Set());
     loadPage(0, false);
-  }, [loaded, providerKey, brandKey, category, debouncedQ, featuredOnly, loadPage]);
+  }, [loaded, providerKey, brandKey, category, debouncedQ, featuredOnly, jackpotOnly, loadPage]);
 
   const markImageFailed = (key: string) => setFailedImages((prev) => {
     if (prev.has(key)) return prev;
@@ -310,6 +313,12 @@ function ProviderLobbyPageInner() {
           <button type="button" onClick={() => setFeaturedOnly(false)} className="rounded-full bg-amber-300/40 px-1.5">×</button>
         </div>
       ) : null}
+      {jackpotOnly ? (
+        <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-amber-400/60 bg-amber-300/15 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-amber-700">
+          {lang === 'bn' ? 'জ্যাকপট গেমস' : 'Jackpot games'}
+          <button type="button" onClick={() => setJackpotOnly(false)} className="rounded-full bg-amber-300/40 px-1.5">×</button>
+        </div>
+      ) : null}
 
       <div className="mt-3 flex flex-wrap gap-2">
         {categoryPills.map((c) => (
@@ -354,14 +363,18 @@ function ProviderLobbyPageInner() {
                   <CategoryHeroArt code={artFor(g.category)} className="absolute inset-0 h-full w-full opacity-65" />
                 )}
                 <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-brand-ink/95 via-brand-ink/40 to-transparent" />
-                <span className="absolute left-2 top-2 inline-flex h-5 max-w-[60%] items-center truncate rounded-full border border-amber-300/60 bg-amber-200/15 px-1.5 text-[9px] font-bold uppercase tracking-wider text-amber-100 backdrop-blur">
-                  {g.providerName}
-                </span>
-                {g.brandKey ? (
-                  <span className="absolute right-2 top-2 inline-flex h-5 items-center rounded-full border border-yellow-300/60 bg-yellow-300/25 px-1.5 text-[9px] font-extrabold uppercase tracking-wider text-yellow-50 backdrop-blur">
-                    {g.brandName ?? g.brandKey}
+                {/* Brand-first labelling. The aggregator name is only
+                    shown when no brand exists, so cards never read as
+                    "iGamingAPIs Aggreg... / JILI" on top of each other. */}
+                {g.brandName ? (
+                  <span className="absolute left-2 top-2 inline-flex h-5 max-w-[80%] items-center truncate rounded-full border border-yellow-300/60 bg-yellow-300/25 px-1.5 text-[9px] font-extrabold uppercase tracking-wider text-yellow-50 backdrop-blur">
+                    {g.brandName}
                   </span>
-                ) : null}
+                ) : (
+                  <span className="absolute left-2 top-2 inline-flex h-5 max-w-[60%] items-center truncate rounded-full border border-amber-300/60 bg-amber-200/15 px-1.5 text-[9px] font-bold uppercase tracking-wider text-amber-100 backdrop-blur">
+                    {g.providerName}
+                  </span>
+                )}
               </div>
               <div className="relative -mt-7 px-3 pb-3 pt-0 text-left">
                 <h3 className="truncate text-sm font-extrabold leading-tight text-white">{g.displayName}</h3>

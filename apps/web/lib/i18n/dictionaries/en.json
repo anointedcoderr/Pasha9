@@ -349,6 +349,7 @@
     "providers": "Providers",
     "homepage": "Homepage Content",
     "homepageSections": "Homepage Sections",
+    "homepageBlocks": "Custom Game Blocks",
     "depositNotice": "Deposit Notice",
     "depositBonusTiers": "Deposit Bonus Tiers",
     "referralClaims": "Referral Claims",

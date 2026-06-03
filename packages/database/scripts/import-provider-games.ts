@@ -181,16 +181,41 @@ const CATEGORY_MAP: Record<string, string> = {
   lobby: 'live_casino',
 };
 
-function normalizeCategory(raw: string | null | undefined): { category: string; original: string | null; warning: string | null } {
+// Name-based overrides. The CSV category alone is not enough for some
+// brands - Spribe tags everything `flash` upstream, but Aviator / JetX
+// / Crash etc. are the canonical crash-genre titles every player
+// recognises, so we route them to category=crash on the way in. Add
+// new patterns here as more brands ship mislabelled rows.
+const NAME_CATEGORY_OVERRIDES: Array<{ test: (name: string) => boolean; category: string }> = [
+  { test: (n) => /\baviator\b/.test(n), category: 'crash' },
+  { test: (n) => /\bjet[\s-]?x\b/.test(n), category: 'crash' },
+  { test: (n) => /\bcrash(?!ing)\b/.test(n), category: 'crash' },
+  { test: (n) => /\brocket\b/.test(n), category: 'crash' },
+  { test: (n) => /\bspaceman\b/.test(n), category: 'crash' },
+  { test: (n) => /\bcash\s?show\b/.test(n), category: 'crash' },
+];
+
+function normalizeCategory(raw: string | null | undefined, displayName?: string): { category: string; original: string | null; warning: string | null } {
   const original = (raw ?? '').trim() || null;
+  let category: string | null = null;
+  if (original) {
+    const lower = original.toLowerCase();
+    if (CATEGORY_MAP[lower]) category = CATEGORY_MAP[lower];
+    else {
+      const singular = lower.endsWith('s') ? lower.slice(0, -1) : lower;
+      if (CATEGORY_MAP[singular]) category = CATEGORY_MAP[singular];
+    }
+  }
+  if (displayName) {
+    const lowerName = displayName.toLowerCase();
+    for (const ov of NAME_CATEGORY_OVERRIDES) {
+      if (ov.test(lowerName)) {
+        return { category: ov.category, original, warning: null };
+      }
+    }
+  }
+  if (category) return { category, original, warning: null };
   if (!original) return { category: 'slots', original: null, warning: null };
-  const lower = original.toLowerCase();
-  if (CATEGORY_MAP[lower]) return { category: CATEGORY_MAP[lower], original, warning: null };
-  const singular = lower.endsWith('s') ? lower.slice(0, -1) : lower;
-  if (CATEGORY_MAP[singular]) return { category: CATEGORY_MAP[singular], original, warning: null };
-  // Unknown values like hex hashes (e.g. a4a67f1259cabed59e338e30149ceb0f)
-  // get mapped to slots so the public lobby still renders them, plus a
-  // warning so the import summary calls them out.
   return { category: 'slots', original, warning: `unknown category "${original}", mapped to slots` };
 }
 
@@ -266,7 +291,7 @@ async function processFile(filePath: string, flags: Flags, providerId: string, a
       continue;
     }
 
-    const norm = normalizeCategory(categoryRaw);
+    const norm = normalizeCategory(categoryRaw, displayName);
 
     if (!allStats.has(brand.key)) {
       allStats.set(brand.key, {

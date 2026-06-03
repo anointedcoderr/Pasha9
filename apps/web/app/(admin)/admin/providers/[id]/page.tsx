@@ -795,7 +795,7 @@ function ManualBrandModal({ open, onOpenChange, providerId, onCreated }: { open:
   );
 }
 
-interface GameRow { id: string; gameUid: string; brandId: string | null; displayName: string; category: string | null; imageUrl: string | null; status: string; isFeatured?: boolean; sortOrder?: number; lastSyncAt: string | null }
+interface GameRow { id: string; gameUid: string; brandId: string | null; displayName: string; category: string | null; imageUrl: string | null; status: string; isFeatured?: boolean; isJackpot?: boolean; sortOrder?: number; lastSyncAt: string | null }
 interface GamesCounts { total: number; filtered: number; byStatus: Record<string, number>; byCategory: Record<string, number> }
 
 function GamesPanel({ providerId, initialBrandId, onConsumeInitialBrand }: { providerId: string; initialBrandId?: string; onConsumeInitialBrand?: () => void }) {
@@ -1261,6 +1261,7 @@ function EditGameModal({ open, onOpenChange, providerId, brands, game, onDone }:
   const [status, setStatus] = useState<'active' | 'maintenance' | 'hidden'>('active');
   const [brandKey, setBrandKey] = useState('');
   const [isFeatured, setIsFeatured] = useState(false);
+  const [isJackpot, setIsJackpot] = useState(false);
   const [sortOrder, setSortOrder] = useState('0');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -1274,6 +1275,7 @@ function EditGameModal({ open, onOpenChange, providerId, brands, game, onDone }:
     const currentBrand = brands.find((b) => b.id === game.brandId);
     setBrandKey(currentBrand?.brandKey ?? '');
     setIsFeatured(Boolean(game.isFeatured));
+    setIsJackpot(Boolean(game.isJackpot));
     setSortOrder(String(safeNumber(game.sortOrder)));
     setErr(null);
   }, [open, game, brands]);
@@ -1290,6 +1292,7 @@ function EditGameModal({ open, onOpenChange, providerId, brands, game, onDone }:
         status,
         brandKey: brandKey.trim(),
         isFeatured,
+        isJackpot,
         sortOrder: Number(sortOrder) || 0,
       };
       const r = await fetch(`/api/admin/providers/${providerId}/games/${game.id}`, {
@@ -1331,6 +1334,12 @@ function EditGameModal({ open, onOpenChange, providerId, brands, game, onDone }:
           <div className="inline-flex rounded-lg border border-neon/15 bg-base-panel p-1 text-xs">
             <button type="button" onClick={() => setIsFeatured(true)} className={cn('rounded-md px-3 py-1.5 font-semibold transition', isFeatured ? 'bg-gold-400 text-base-deep' : 'text-ink-mid')}>Featured</button>
             <button type="button" onClick={() => setIsFeatured(false)} className={cn('rounded-md px-3 py-1.5 font-semibold transition', !isFeatured ? 'bg-gold-400 text-base-deep' : 'text-ink-mid')}>Regular</button>
+          </div>
+        </Field>
+        <Field label="Jackpot (surfaces under /games/provider?jackpot=1 and jackpot homepage blocks)">
+          <div className="inline-flex rounded-lg border border-neon/15 bg-base-panel p-1 text-xs">
+            <button type="button" onClick={() => setIsJackpot(true)} className={cn('rounded-md px-3 py-1.5 font-semibold transition', isJackpot ? 'bg-gold-400 text-base-deep' : 'text-ink-mid')}>Jackpot</button>
+            <button type="button" onClick={() => setIsJackpot(false)} className={cn('rounded-md px-3 py-1.5 font-semibold transition', !isJackpot ? 'bg-gold-400 text-base-deep' : 'text-ink-mid')}>Regular</button>
           </div>
         </Field>
         <Field label="Sort order (higher shows first; default 0)">
