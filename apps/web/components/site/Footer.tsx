@@ -19,33 +19,64 @@ interface ClientContacts {
   email: string | null;
 }
 
+// M4 Phase G: about / sponsor / public-payment-method blocks come
+// from /api/content/about-display. Hardcoded fallback constants
+// removed; nothing renders when the operator hides the section or
+// disables every item.
+interface SectionMeta {
+  isVisible: boolean;
+  titleEn: string;
+  titleBn: string | null;
+}
+
 interface AmbassadorRow {
-  name: string;
-  period: string;
+  id: string;
+  nameEn: string;
+  nameBn: string | null;
+  iconUrl: string | null;
+  subtitle: string | null;
 }
 
 interface SponsorRow {
-  name: string;
-  period: string;
+  id: string;
+  nameEn: string;
+  nameBn: string | null;
+  iconUrl: string | null;
+  subtitle: string | null;
 }
 
-const AMBASSADORS: AmbassadorRow[] = [
-  { name: 'Brand Ambassador One', period: '2025/2026' },
-  { name: 'Brand Ambassador Two', period: '2025/2026' },
-];
+interface PublicPaymentRow {
+  id: string;
+  buttonText: string;
+  iconUrl: string | null;
+}
 
-const SPONSORS: SponsorRow[] = [
-  { name: 'Pasha 9 Cricket Partner', period: '2025/2026' },
-  { name: 'Pasha 9 Football Partner', period: '2025/2026' },
-  { name: 'Pasha 9 Esports Partner', period: '2025/2026' },
-];
+interface AboutDisplay {
+  sections: {
+    ambassadors: SectionMeta | null;
+    sponsors: SectionMeta | null;
+    paymentMethods: SectionMeta | null;
+  };
+  ambassadors: AmbassadorRow[];
+  sponsors: SponsorRow[];
+  paymentMethods: PublicPaymentRow[];
+}
 
-const PAYMENT_METHODS = ['bKash', 'Nagad', 'Rocket', 'Upay'];
+function initialsOf(name: string): string {
+  return name
+    .split(' ')
+    .filter(Boolean)
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+}
 
 export function Footer() {
   const t = useT();
   const { lang } = useLang();
   const [contacts, setContacts] = useState<ClientContacts | null>(null);
+  const [display, setDisplay] = useState<AboutDisplay | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -62,55 +93,114 @@ export function Footer() {
         }
       })
       .catch(() => {});
+
+    // M4 Phase G: about / sponsor / public-payment display blocks.
+    fetch('/api/content/about-display')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!alive || !j) return;
+        setDisplay({
+          sections: j.sections ?? { ambassadors: null, sponsors: null, paymentMethods: null },
+          ambassadors: Array.isArray(j.ambassadors) ? (j.ambassadors as AmbassadorRow[]) : [],
+          sponsors: Array.isArray(j.sponsors) ? (j.sponsors as SponsorRow[]) : [],
+          paymentMethods: Array.isArray(j.paymentMethods) ? (j.paymentMethods as PublicPaymentRow[]) : [],
+        });
+      })
+      .catch(() => { /* footer degrades silently */ });
+
     return () => { alive = false; };
   }, []);
+
+  const ambassadorSection = display?.sections.ambassadors ?? null;
+  const sponsorSection = display?.sections.sponsors ?? null;
+  const paymentSection = display?.sections.paymentMethods ?? null;
+  const ambassadors = (ambassadorSection?.isVisible ?? true) ? (display?.ambassadors ?? []) : [];
+  const sponsors = (sponsorSection?.isVisible ?? true) ? (display?.sponsors ?? []) : [];
+  const paymentMethods = (paymentSection?.isVisible ?? true) ? (display?.paymentMethods ?? []) : [];
+
+  const sectionTitle = (meta: SectionMeta | null, fallback: string): string => {
+    if (!meta) return fallback;
+    if (lang === 'bn' && meta.titleBn) return meta.titleBn;
+    return meta.titleEn || fallback;
+  };
+
+  const nameFor = (en: string, bn: string | null): string => (lang === 'bn' && bn ? bn : en);
 
   return (
     <footer className="mt-16 border-t border-brand-divider bg-brand-navInk text-white">
       <div className="mx-auto max-w-page px-4 py-12 md:px-6">
 
-        <FooterSection label="Brand Ambassadors">
-          <div className="flex flex-wrap gap-x-10 gap-y-4">
-            {AMBASSADORS.map((a) => (
-              <div key={a.name} className="flex items-center gap-3">
-                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-[10px] uppercase text-white">
-                  {a.name.split(' ').map((w) => w[0]).slice(0, 2).join('')}
-                </span>
-                <div>
-                  <p className="text-sm font-semibold text-white">{a.name}</p>
-                  <p className="text-[11px] text-white/60">{a.period}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </FooterSection>
-
-        <FooterSection label="Sponsorships">
-          <div className="grid grid-cols-2 gap-x-8 gap-y-4 md:grid-cols-3 lg:grid-cols-4">
-            {SPONSORS.map((s) => (
-              <div key={s.name} className="flex items-center gap-3">
-                <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/10 text-[10px] uppercase text-white">
-                  {s.name.split(' ').slice(0, 2).map((w) => w[0]).join('')}
-                </span>
-                <div>
-                  <p className="text-sm font-semibold text-white">{s.name}</p>
-                  <p className="text-[11px] text-white/60">{s.period}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </FooterSection>
-
-        <div className="grid gap-8 md:grid-cols-2">
-          <FooterSection label="Payment Methods">
-            <div className="flex flex-wrap gap-3">
-              {PAYMENT_METHODS.map((m) => (
-                <span key={m} className="inline-flex h-10 items-center rounded-md border border-white/15 bg-white/[0.04] px-3 text-xs font-semibold uppercase text-white/85">
-                  {m}
-                </span>
-              ))}
+        {ambassadors.length > 0 ? (
+          <FooterSection label={sectionTitle(ambassadorSection, 'Brand Ambassadors')}>
+            <div className="flex flex-wrap gap-x-10 gap-y-4">
+              {ambassadors.map((a) => {
+                const name = nameFor(a.nameEn, a.nameBn);
+                return (
+                  <div key={a.id} className="flex items-center gap-3">
+                    {a.iconUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={a.iconUrl} alt={name} className="h-10 w-10 rounded-full object-cover" />
+                    ) : (
+                      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-[10px] font-bold uppercase text-white">
+                        {initialsOf(name)}
+                      </span>
+                    )}
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-white">{name}</p>
+                      {a.subtitle ? <p className="text-[11px] text-white/60">{a.subtitle}</p> : null}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </FooterSection>
+        ) : null}
+
+        {sponsors.length > 0 ? (
+          <FooterSection label={sectionTitle(sponsorSection, 'Sponsorships')}>
+            <div className="grid grid-cols-2 gap-x-8 gap-y-4 md:grid-cols-3 lg:grid-cols-4">
+              {sponsors.map((s) => {
+                const name = nameFor(s.nameEn, s.nameBn);
+                return (
+                  <div key={s.id} className="flex items-center gap-3">
+                    {s.iconUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={s.iconUrl} alt={name} className="h-10 w-10 rounded-lg object-cover" />
+                    ) : (
+                      <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/10 text-[10px] font-bold uppercase text-white">
+                        {initialsOf(name)}
+                      </span>
+                    )}
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-white">{name}</p>
+                      {s.subtitle ? <p className="text-[11px] text-white/60">{s.subtitle}</p> : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </FooterSection>
+        ) : null}
+
+        <div className="grid gap-8 md:grid-cols-2">
+          {paymentMethods.length > 0 ? (
+            <FooterSection label={sectionTitle(paymentSection, 'Payment Methods')}>
+              <div className="flex flex-wrap gap-3">
+                {paymentMethods.map((m) => (
+                  <span
+                    key={m.id}
+                    className="inline-flex h-10 items-center gap-2 rounded-md border border-white/15 bg-white/[0.04] px-3 text-xs font-semibold uppercase text-white/85"
+                  >
+                    {m.iconUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={m.iconUrl} alt={m.buttonText} className="h-5 w-5 rounded-sm object-contain" />
+                    ) : null}
+                    <span>{m.buttonText}</span>
+                  </span>
+                ))}
+              </div>
+            </FooterSection>
+          ) : null}
 
           <FooterSection label="Responsible Gaming">
             <div className="flex items-center gap-3">

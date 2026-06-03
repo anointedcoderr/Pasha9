@@ -106,6 +106,9 @@ const GROUPS = [
       { key: 'homepage', href: ROUTES.admin.homepage, icon: Home },
       { key: 'homepageSections', href: ROUTES.admin.homepageSections, icon: Layers },
       { key: 'ambassador', href: '/admin/ambassador', icon: Star },
+      { key: 'brandAmbassadors', href: ROUTES.admin.brandAmbassadors, icon: Star },
+      { key: 'sponsors', href: ROUTES.admin.sponsors, icon: Trophy },
+      { key: 'publicPaymentMethods', href: ROUTES.admin.publicPaymentMethods, icon: CreditCard },
     ],
   },
   {
