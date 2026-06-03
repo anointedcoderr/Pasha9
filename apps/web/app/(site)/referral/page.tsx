@@ -1,89 +1,249 @@
 // Built by Anointed Coder.
+//
+// Public /referral page. M4 Phase E:
+//   - Drops the mock stats; every number is read from
+//     /api/me/referrals (real AffiliateCommission + ReferralBalance).
+//   - Guests see a sign-in banner with no fake numbers behind it.
+//   - Auth'd players see referral code + invite link with copy
+//     buttons, level 1/2/3 counts, real balance tiles, Claim button
+//     gated by cadence + claimable balance.
+//   - Latest referrals table is the masked level-1 invite list.
+
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { PageHeader } from '@/components/site/PageHeader';
 import { BackBar } from '@/components/site/BackBar';
-import { mockReferralChain, referralCode as fallbackCode, referralLink as fallbackLink, referralStats } from '@/lib/mock/referrals';
-import { Users, Copy, Check, Share2, ArrowRight } from 'lucide-react';
-import { useT, useLang } from '@/lib/i18n/context';
-import { formatBDT, formatDate } from '@/lib/utils/format';
+import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { Chip } from '@/components/ui/Chip';
+import { Users, Copy, Check, LogIn, Wallet, Clock, AlertCircle, Share2, ArrowRight, RefreshCw } from 'lucide-react';
+import { useT, useLang } from '@/lib/i18n/context';
+import { formatBDT, formatDate, formatDateTime } from '@/lib/utils/format';
+import { triggerWalletRefresh } from '@/components/site/WalletStrip';
+
+interface MeResponse {
+  user: { username: string; referralCode: string; inviteLink: string };
+  downline: { level1Total: number; level1Active: number; level2Total: number; level3Total: number };
+  level1Invited: Array<{ username: string; phone: string; joinedAt: string }>;
+  tier: { name: string; level1Pct: number; level2Pct: number; level3Pct: number } | null;
+  balance: {
+    pendingAmount: number;
+    claimableAmount: number;
+    claimedAmount: number;
+    totalEarned: number;
+    lastClaimedAt: string | null;
+  };
+  settings: { cadence: 'weekly' | 'monthly' | 'manual' | 'auto'; holdDays: number; turnoverX: number };
+  claim: { cadenceBlocked: boolean; nextClaimAt: string | null };
+  recentCommissions: Array<{ id: string; level: number; amount: number; status: string; ratePct: number | null; createdAt: string }>;
+  recentClaims: Array<{ id: string; amount: number; status: string; errorCode: string | null; createdAt: string; paidAt: string | null }>;
+}
+
+const EMPTY: MeResponse = {
+  user: { username: '', referralCode: '', inviteLink: '' },
+  downline: { level1Total: 0, level1Active: 0, level2Total: 0, level3Total: 0 },
+  level1Invited: [],
+  tier: null,
+  balance: { pendingAmount: 0, claimableAmount: 0, claimedAmount: 0, totalEarned: 0, lastClaimedAt: null },
+  settings: { cadence: 'weekly', holdDays: 7, turnoverX: 0 },
+  claim: { cadenceBlocked: false, nextClaimAt: null },
+  recentCommissions: [],
+  recentClaims: [],
+};
 
 export default function ReferralPage() {
   const t = useT();
   const { lang } = useLang();
   const [copied, setCopied] = useState<string | null>(null);
-  const [referralCode, setReferralCode] = useState(fallbackCode);
-  const [referralLink, setReferralLink] = useState(fallbackLink);
+  const [data, setData] = useState<MeResponse>(EMPTY);
+  const [authed, setAuthed] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [claiming, setClaiming] = useState(false);
+  const [toast, setToast] = useState<{ kind: 'ok' | 'err'; message: string } | null>(null);
 
-  useEffect(() => {
-    fetch('/api/auth/me')
-      .then((r) => r.ok ? r.json() : null)
-      .then((data) => {
-        if (data?.user?.referralCode) {
-          const code = data.user.referralCode as string;
-          setReferralCode(code);
-          const base = typeof window !== 'undefined' ? window.location.origin : 'https://pasha9.com';
-          setReferralLink(`${base}/?r=${code}`);
-        }
-      })
-      .catch(() => {});
+  const load = useCallback(async () => {
+    try {
+      const r = await fetch('/api/me/referrals', { cache: 'no-store', credentials: 'include' });
+      if (r.status === 401) {
+        setAuthed(false);
+        return;
+      }
+      const j = await r.json();
+      if (!r.ok) {
+        setAuthed(false);
+        return;
+      }
+      setAuthed(true);
+      setData(j as MeResponse);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => { load(); }, [load]);
 
   const copy = async (value: string, key: string) => {
     if (typeof navigator !== 'undefined') {
-      await navigator.clipboard.writeText(value);
-      setCopied(key);
-      setTimeout(() => setCopied((c) => (c === key ? null : c)), 1600);
+      try {
+        await navigator.clipboard.writeText(value);
+        setCopied(key);
+        setTimeout(() => setCopied((c) => (c === key ? null : c)), 1600);
+      } catch { /* clipboard blocked */ }
     }
   };
 
+  const claim = async () => {
+    setToast(null);
+    setClaiming(true);
+    try {
+      const r = await fetch('/api/me/referrals/claim', { method: 'POST', credentials: 'include' });
+      const j = await r.json().catch(() => null);
+      if (r.status === 401) { window.location.href = '/?login=1'; return; }
+      if (!r.ok) {
+        const code = j?.code as string | undefined;
+        const message = j?.message as string | undefined;
+        setToast({ kind: 'err', message: message ?? code ?? 'Claim failed' });
+        return;
+      }
+      const status = j?.status as string;
+      if (status === 'paid') {
+        setToast({
+          kind: 'ok',
+          message: lang === 'bn'
+            ? `${formatBDT(Number(j?.amount ?? 0))} মেইন ব্যালেন্সে যোগ হয়েছে।`
+            : `${formatBDT(Number(j?.amount ?? 0))} moved to your main balance.`,
+        });
+        triggerWalletRefresh();
+      } else {
+        setToast({
+          kind: 'ok',
+          message: lang === 'bn'
+            ? 'রিভিউয়ের জন্য পাঠানো হয়েছে। অ্যাডমিন অনুমোদনের পর ব্যালেন্সে যাবে।'
+            : 'Sent for admin review. Funds move to your main balance after approval.',
+        });
+      }
+      await load();
+    } catch (e) {
+      setToast({ kind: 'err', message: e instanceof Error ? e.message : 'Claim failed' });
+    } finally {
+      setClaiming(false);
+    }
+  };
+
+  if (!loading && !authed) {
+    return (
+      <div className="space-y-6 pb-24 md:pb-6">
+        <BackBar title={t('referral.title')} />
+        <PageHeader title={t('referral.title')} subtitle={t('referral.subtitle')} icon={<Users className="h-5 w-5" />} />
+        <Card padding="lg" className="mx-auto max-w-md text-center">
+          <p className="text-sm text-ink-mid">{lang === 'bn' ? 'আপনার রেফারেল ড্যাশবোর্ড দেখতে লগইন করুন।' : 'Log in to see your referral dashboard.'}</p>
+          <div className="mt-4">
+            <Link href="/?login=1" className="btn-yellow inline-flex h-10 items-center rounded-lg px-4 text-sm">
+              <LogIn className="mr-1.5 h-4 w-4" /> {lang === 'bn' ? 'লগইন' : 'Log in'}
+            </Link>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  const claimDisabled = claiming || data.balance.claimableAmount <= 0 || data.claim.cadenceBlocked;
+  const claimReason = (() => {
+    if (data.balance.claimableAmount <= 0) {
+      return lang === 'bn' ? 'বর্তমানে দাবিযোগ্য কোনো ব্যালেন্স নেই।' : 'No claimable balance right now.';
+    }
+    if (data.claim.cadenceBlocked && data.claim.nextClaimAt) {
+      const nxt = formatDateTime(data.claim.nextClaimAt, lang);
+      return lang === 'bn' ? `পরবর্তী দাবি: ${nxt}` : `Next claim available: ${nxt}`;
+    }
+    if (data.settings.cadence === 'manual') {
+      return lang === 'bn' ? 'ম্যানুয়াল কেডেন্স: অ্যাডমিন রিভিউয়ের পর মেইন ব্যালেন্সে যাবে।' : 'Manual cadence: funds release after admin review.';
+    }
+    return null;
+  })();
+
   return (
-    <>
+    <div className="space-y-6 pb-24 md:pb-6">
       <BackBar title={t('referral.title')} />
-      <PageHeader title={t('referral.title')} subtitle={t('referral.subtitle')} icon={<Users className="h-5 w-5" />} />
+      <PageHeader
+        title={t('referral.title')}
+        subtitle={t('referral.subtitle')}
+        icon={<Users className="h-5 w-5" />}
+        action={<Button variant="ghost" leftIcon={<RefreshCw className="h-4 w-4" />} onClick={load}>{lang === 'bn' ? 'রিফ্রেশ' : 'Refresh'}</Button>}
+      />
 
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="card-glow space-y-5 p-6 lg:col-span-2">
           <div className="grid gap-4 md:grid-cols-2">
-            <CopyField label={t('referral.code')} value={referralCode} onCopy={() => copy(referralCode, 'code')} copied={copied === 'code'} />
-            <CopyField label={t('referral.link')} value={referralLink} onCopy={() => copy(referralLink, 'link')} copied={copied === 'link'} />
+            <CopyField label={t('referral.code')} value={data.user.referralCode || '-'} onCopy={() => copy(data.user.referralCode, 'code')} copied={copied === 'code'} />
+            <CopyField label={t('referral.link')} value={data.user.inviteLink || '-'} onCopy={() => copy(data.user.inviteLink, 'link')} copied={copied === 'link'} />
           </div>
 
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <Stat label={t('referral.totalInvited')} value={referralStats.totalInvited.toString()} />
-            <Stat label={t('referral.totalEarned')} value={formatBDT(referralStats.totalEarned)} accent />
-            <Stat label={t('referral.pending')} value={formatBDT(referralStats.pending)} />
-            <Stat label={t('referral.claimed')} value={formatBDT(referralStats.claimed)} accent />
+            <Stat label={t('referral.totalInvited')} value={String(data.downline.level1Total + data.downline.level2Total + data.downline.level3Total)} />
+            <Stat label={t('referral.totalEarned')} value={formatBDT(data.balance.totalEarned)} accent />
+            <Stat label={t('referral.pending')} value={formatBDT(data.balance.pendingAmount)} />
+            <Stat label={lang === 'bn' ? 'দাবিযোগ্য' : 'Claimable'} value={formatBDT(data.balance.claimableAmount)} accent />
           </div>
+
+          <Card padding="md" className="border-l-4 border-emerald-400/60">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-300">{lang === 'bn' ? 'দাবি করুন' : 'Claim referral balance'}</p>
+                <p className="mt-1 text-xl font-extrabold text-ink-hi tabular-nums">{formatBDT(data.balance.claimableAmount)}</p>
+                <p className="mt-1 text-[11px] text-ink-mid">
+                  {lang === 'bn'
+                    ? `কেডেন্স ${data.settings.cadence} . হোল্ড ${data.settings.holdDays} দিন`
+                    : `Cadence ${data.settings.cadence} . hold ${data.settings.holdDays} day${data.settings.holdDays === 1 ? '' : 's'}`}
+                </p>
+              </div>
+              <Button
+                variant="gold"
+                leftIcon={<Wallet className="h-4 w-4" />}
+                disabled={claimDisabled}
+                loading={claiming}
+                onClick={claim}
+              >
+                {lang === 'bn' ? 'মেইন ব্যালেন্সে স্থানান্তর' : 'Transfer to main balance'}
+              </Button>
+            </div>
+            {claimReason ? <p className="mt-2 text-[11px] text-ink-mid"><AlertCircle className="mr-1 inline h-3 w-3" />{claimReason}</p> : null}
+            {toast ? (
+              <p className={`mt-2 text-[12px] ${toast.kind === 'ok' ? 'text-emerald-300' : 'text-rose-300'}`}>{toast.message}</p>
+            ) : null}
+          </Card>
 
           <div>
             <h3 className="mb-3 text-sm font-semibold text-ink-hi">{t('referral.levels')}</h3>
             <div className="grid grid-cols-3 gap-3 text-center">
               {[
-                { key: 'level1', rate: '8%' },
-                { key: 'level2', rate: '4%' },
-                { key: 'level3', rate: '2%' },
+                { key: 'level1', rate: data.tier?.level1Pct ?? 0 },
+                { key: 'level2', rate: data.tier?.level2Pct ?? 0 },
+                { key: 'level3', rate: data.tier?.level3Pct ?? 0 },
               ].map((lvl) => (
                 <div key={lvl.key} className="rounded-xl border border-neon/15 bg-base-deep/40 p-4">
                   <p className="text-xs uppercase tracking-wider text-ink-lo">{t(`referral.${lvl.key}`)}</p>
-                  <p className="mt-1 text-xl font-bold text-gradient-gold">{lvl.rate}</p>
+                  <p className="mt-1 text-xl font-bold text-gradient-gold">{lvl.rate ? `${lvl.rate}%` : '-'}</p>
                 </div>
               ))}
             </div>
+            {!data.tier ? <p className="mt-2 text-[11px] text-ink-mid">{lang === 'bn' ? 'টিয়ার অ্যাসাইন হলে পার্সেন্ট এখানে দেখা যাবে।' : 'Tier rates appear here once an admin assigns you to a commission tier.'}</p> : null}
           </div>
         </div>
 
-        <div className="card-glow p-6">
-          <h3 className="text-sm font-semibold text-ink-hi">Share with</h3>
-          <p className="mt-1 text-xs text-ink-lo">Pick a channel and one-tap invite friends.</p>
-          <div className="mt-4 space-y-2">
+        <div className="card-glow space-y-3 p-6">
+          <h3 className="text-sm font-semibold text-ink-hi">{lang === 'bn' ? 'শেয়ার করুন' : 'Share with'}</h3>
+          <p className="text-xs text-ink-lo">{lang === 'bn' ? 'এক ট্যাপে আপনার লিংক শেয়ার করুন।' : 'One-tap share your invite link.'}</p>
+          <div className="space-y-2">
             {['WhatsApp', 'Telegram', 'Facebook', 'SMS', 'Email'].map((ch) => (
-              <button key={ch} className="flex w-full items-center justify-between rounded-xl border border-neon/15 bg-base-deep/40 px-3 py-2 text-sm text-ink-hi hover:border-neon/40">
-                <span className="inline-flex items-center gap-2">
-                  <Share2 className="h-4 w-4 text-neon" /> {ch}
-                </span>
+              <button
+                key={ch}
+                onClick={() => copy(data.user.inviteLink, `share-${ch}`)}
+                className="flex w-full items-center justify-between rounded-xl border border-neon/15 bg-base-deep/40 px-3 py-2 text-sm text-ink-hi hover:border-neon/40"
+              >
+                <span className="inline-flex items-center gap-2"><Share2 className="h-4 w-4 text-neon" /> {ch}</span>
                 <ArrowRight className="h-4 w-4 text-ink-lo" />
               </button>
             ))}
@@ -91,44 +251,111 @@ export default function ReferralPage() {
         </div>
       </div>
 
-      <section className="card-glow mt-8 p-6">
-        <h2 className="text-lg font-semibold text-ink-hi">{t('referral.chainTitle')}</h2>
-        <p className="mt-1 text-sm text-ink-lo">Three-level visualization of your active downline.</p>
-        <ChainView />
-      </section>
-
-      <section className="card-glow mt-6 overflow-hidden p-0">
+      <section className="card-glow overflow-hidden p-0">
         <div className="border-b border-neon/10 px-6 py-4">
-          <h3 className="text-sm font-semibold text-ink-hi">Latest referrals</h3>
+          <h3 className="text-sm font-semibold text-ink-hi">{lang === 'bn' ? 'সাম্প্রতিক রেফারেল' : 'Latest referrals'}</h3>
+          <p className="text-[11px] text-ink-mid">{lang === 'bn' ? 'লেভেল ১ ইনভাইট তালিকা।' : 'Level 1 invitees (masked).'}</p>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead>
               <tr className="border-b border-neon/10 bg-base-deep/40 text-xs uppercase tracking-wider text-ink-lo">
-                <th className="px-4 py-3 text-left">User</th>
-                <th className="px-4 py-3 text-left">Level</th>
-                <th className="px-4 py-3 text-left">Joined</th>
-                <th className="px-4 py-3 text-left">Earned</th>
-                <th className="px-4 py-3 text-left">Status</th>
+                <th className="px-4 py-3 text-left">{lang === 'bn' ? 'ইউজার' : 'User'}</th>
+                <th className="px-4 py-3 text-left">{lang === 'bn' ? 'ফোন' : 'Phone'}</th>
+                <th className="px-4 py-3 text-left">{lang === 'bn' ? 'যোগ' : 'Joined'}</th>
               </tr>
             </thead>
             <tbody>
-              {mockReferralChain.map((r) => (
-                <tr key={r.id} className="table-row">
-                  <td className="px-4 py-3 text-ink-hi">{r.referredUsername}</td>
-                  <td className="px-4 py-3 text-ink-mid">L{r.level}</td>
-                  <td className="px-4 py-3 text-ink-lo">{formatDate(r.createdAt, lang)}</td>
-                  <td className="px-4 py-3 text-gradient-gold">{formatBDT(r.earned)}</td>
-                  <td className="px-4 py-3">
-                    <span className={r.status === 'active' ? 'chip chip-ok' : 'chip chip-warn'}>{r.status}</span>
-                  </td>
+              {data.level1Invited.length === 0 ? (
+                <tr><td colSpan={3} className="px-4 py-6 text-center text-ink-mid">{lang === 'bn' ? 'এখনো কোনো রেফারেল নেই।' : 'No referrals yet. Share your invite link to start earning.'}</td></tr>
+              ) : null}
+              {data.level1Invited.map((u, idx) => (
+                <tr key={`${u.username}-${idx}`} className="table-row">
+                  <td className="px-4 py-3 text-ink-hi">{u.username}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-ink-lo">{u.phone || '-'}</td>
+                  <td className="px-4 py-3 text-ink-lo">{formatDate(u.joinedAt, lang)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       </section>
-    </>
+
+      <section className="card-glow overflow-hidden p-0">
+        <div className="border-b border-neon/10 px-6 py-4">
+          <h3 className="text-sm font-semibold text-ink-hi">{lang === 'bn' ? 'সাম্প্রতিক কমিশন' : 'Recent commissions'}</h3>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="border-b border-neon/10 bg-base-deep/40 text-xs uppercase tracking-wider text-ink-lo">
+                <th className="px-4 py-3 text-left">Level</th>
+                <th className="px-4 py-3 text-left">Rate</th>
+                <th className="px-4 py-3 text-right">Amount</th>
+                <th className="px-4 py-3 text-left">Status</th>
+                <th className="px-4 py-3 text-left">When</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.recentCommissions.length === 0 ? (
+                <tr><td colSpan={5} className="px-4 py-6 text-center text-ink-mid">{lang === 'bn' ? 'এখনো কোনো কমিশন নেই।' : 'No commission rows yet.'}</td></tr>
+              ) : null}
+              {data.recentCommissions.map((c) => (
+                <tr key={c.id} className="table-row">
+                  <td className="px-4 py-3 text-ink-hi">L{c.level}</td>
+                  <td className="px-4 py-3 text-ink-mid">{c.ratePct ? `${c.ratePct}%` : '-'}</td>
+                  <td className="px-4 py-3 text-right text-gradient-gold tabular-nums">{formatBDT(c.amount)}</td>
+                  <td className="px-4 py-3">
+                    <Chip tone={c.status === 'paid' ? 'ok' : c.status === 'approved' ? 'info' : c.status === 'cancelled' ? 'danger' : 'warn'}>{c.status}</Chip>
+                  </td>
+                  <td className="px-4 py-3 text-ink-lo">{formatDate(c.createdAt, lang)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="card-glow overflow-hidden p-0">
+        <div className="border-b border-neon/10 px-6 py-4">
+          <h3 className="text-sm font-semibold text-ink-hi">{lang === 'bn' ? 'দাবি ইতিহাস' : 'Claim history'}</h3>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="border-b border-neon/10 bg-base-deep/40 text-xs uppercase tracking-wider text-ink-lo">
+                <th className="px-4 py-3 text-right">Amount</th>
+                <th className="px-4 py-3 text-left">Status</th>
+                <th className="px-4 py-3 text-left">When</th>
+                <th className="px-4 py-3 text-left">Paid</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.recentClaims.length === 0 ? (
+                <tr><td colSpan={4} className="px-4 py-6 text-center text-ink-mid">{lang === 'bn' ? 'কোনো দাবি নেই।' : 'No claims yet.'}</td></tr>
+              ) : null}
+              {data.recentClaims.map((c) => (
+                <tr key={c.id} className="table-row">
+                  <td className="px-4 py-3 text-right tabular-nums">{formatBDT(c.amount)}</td>
+                  <td className="px-4 py-3"><Chip tone={c.status === 'paid' ? 'ok' : c.status === 'rejected' ? 'danger' : 'warn'}>{c.status}</Chip></td>
+                  <td className="px-4 py-3 text-ink-lo">{formatDateTime(c.createdAt, lang)}</td>
+                  <td className="px-4 py-3 text-ink-lo">{c.paidAt ? formatDateTime(c.paidAt, lang) : '-'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <Card padding="md">
+        <p className="text-[11px] text-ink-mid">
+          <Clock className="mr-1 inline h-3 w-3" />
+          {lang === 'bn'
+            ? `কমিশন ${data.settings.holdDays} দিনের হোল্ডের পর দাবিযোগ্য হয়। ${data.settings.cadence === 'auto' ? 'অটো কেডেন্সে প্রতিদিন দাবি করা যাবে।' : `কেডেন্স: ${data.settings.cadence}.`}`
+            : `Commissions become claimable after a ${data.settings.holdDays}-day hold. ${data.settings.cadence === 'auto' ? 'Auto cadence: claim whenever a balance is available.' : `Cadence: ${data.settings.cadence}.`}`}
+        </p>
+      </Card>
+    </div>
   );
 }
 
@@ -152,39 +379,7 @@ function Stat({ label, value, accent }: { label: string; value: string; accent?:
   return (
     <div className="rounded-xl border border-neon/10 bg-base-deep/40 p-4">
       <p className="text-[11px] uppercase tracking-wider text-ink-lo">{label}</p>
-      <p className={accent ? 'mt-1 text-lg font-bold text-gradient-gold' : 'mt-1 text-lg font-bold text-ink-hi'}>{value}</p>
-    </div>
-  );
-}
-
-function ChainView() {
-  const l1 = mockReferralChain.filter((r) => r.level === 1).slice(0, 4);
-  const l2 = mockReferralChain.filter((r) => r.level === 2).slice(0, 6);
-  const l3 = mockReferralChain.filter((r) => r.level === 3).slice(0, 6);
-
-  return (
-    <div className="mt-5 space-y-6">
-      <Level label="Level 1 · 8%" items={l1.map((u) => u.referredUsername)} tone="gold" />
-      <Level label="Level 2 · 4%" items={l2.map((u) => u.referredUsername)} tone="neon" />
-      <Level label="Level 3 · 2%" items={l3.map((u) => u.referredUsername)} tone="cool" />
-    </div>
-  );
-}
-
-function Level({ label, items, tone }: { label: string; items: string[]; tone: 'gold' | 'neon' | 'cool' }) {
-  const ringMap = { gold: 'ring-gold-soft', neon: 'ring-neon-soft', cool: 'border-neon/15' } as const;
-  return (
-    <div>
-      <p className="mb-2 text-xs uppercase tracking-wider text-ink-lo">{label}</p>
-      <div className="flex flex-wrap gap-2">
-        {items.length === 0 ? <span className="text-sm text-ink-lo">No referrals at this level yet.</span> : null}
-        {items.map((u) => (
-          <span key={u} className={`inline-flex items-center gap-2 rounded-xl border border-neon/10 bg-base-deep/40 px-3 py-2 text-sm ${ringMap[tone]}`}>
-            <span className="h-2 w-2 rounded-full bg-neon" />
-            {u}
-          </span>
-        ))}
-      </div>
+      <p className={accent ? 'mt-1 text-lg font-bold text-gradient-gold tabular-nums' : 'mt-1 text-lg font-bold text-ink-hi tabular-nums'}>{value}</p>
     </div>
   );
 }

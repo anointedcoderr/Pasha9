@@ -76,6 +76,7 @@ const GROUPS = [
       { key: 'users', href: ROUTES.admin.users, icon: Users },
       { key: 'balance', href: ROUTES.admin.balance, icon: Wallet },
       { key: 'referrals', href: ROUTES.admin.referrals, icon: Network },
+      { key: 'referralClaims', href: ROUTES.admin.referralClaims, icon: Wallet },
       { key: 'recovery', href: ROUTES.admin.recovery, icon: HeartHandshake },
     ],
   },

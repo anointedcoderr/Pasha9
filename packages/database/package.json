@@ -9,7 +9,8 @@
     "studio": "prisma studio",
     "seed": "tsx prisma/seed.ts",
     "seed:prod": "tsx prisma/seed.ts",
-    "import:jili": "tsx scripts/import-jili-games.ts"
+    "import:jili": "tsx scripts/import-jili-games.ts",
+    "referral:backfill": "tsx scripts/backfill-referral-balance.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

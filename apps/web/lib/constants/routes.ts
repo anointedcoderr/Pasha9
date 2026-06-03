@@ -45,6 +45,7 @@ export const ROUTES = {
     withdrawals: '/admin/withdrawals',
     transactions: '/admin/transactions',
     referrals: '/admin/referrals',
+    referralClaims: '/admin/referral-claims',
     bonuses: '/admin/bonuses',
     banners: '/admin/banners',
     popups: '/admin/popups',
