@@ -1,7 +1,9 @@
 // Built by Anointed Coder.
-// Top app-download strip that appears only on small screens and only until
-// the visitor dismisses it. The download link comes from the
-// `apk_download_url` system setting; if it's empty the strip stays hidden.
+//
+// Mobile app-download strip. Sits ABOVE the sticky header. The strip
+// reserves a fixed slot on first paint to prevent a layout shift when
+// the localStorage dismissal check runs in useEffect - the header
+// used to jump downward after hydration on a fresh refresh.
 
 'use client';
 
@@ -11,31 +13,51 @@ import { useT } from '@/lib/i18n/context';
 
 const DISMISS_KEY = 'pasha9_app_strip_dismissed';
 
+// Visual states:
+//   'pending'   - effect has not run; render a hidden skeleton at the
+//                 same height as 'open' so the header sits at its
+//                 final Y from frame 1
+//   'open'      - real strip visible
+//   'closed'    - strip dismissed; height collapses to 0 and the
+//                 header rises to top
+type State = 'pending' | 'open' | 'closed';
+
 export function MobileTopBar() {
   const t = useT();
-  const [open, setOpen] = useState(false);
+  const [state, setState] = useState<State>('pending');
   const [apkUrl, setApkUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && localStorage.getItem(DISMISS_KEY) === '1') return;
-    setOpen(true);
+    let alive = true;
+    const dismissed = typeof window !== 'undefined' && localStorage.getItem(DISMISS_KEY) === '1';
+    if (dismissed) { setState('closed'); return; }
+    setState('open');
     fetch('/api/content/apk')
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        if (data?.url) setApkUrl(data.url as string);
+        if (alive && data?.url) setApkUrl(data.url as string);
       })
       .catch(() => {});
+    return () => { alive = false; };
   }, []);
-
-  if (!open) return null;
 
   const dismiss = () => {
     if (typeof window !== 'undefined') localStorage.setItem(DISMISS_KEY, '1');
-    setOpen(false);
+    setState('closed');
   };
 
+  if (state === 'closed') return null;
+
+  // Pre-hydration skeleton holds the same height + border so the
+  // header below does not shift when the real strip materialises.
+  if (state === 'pending') {
+    return (
+      <div aria-hidden className="flex h-[57px] items-center border-b border-brand-divider bg-brand-paper lg:hidden" />
+    );
+  }
+
   return (
-    <div className="flex items-center gap-2 border-b border-brand-divider bg-brand-paper px-3 py-2 lg:hidden">
+    <div className="flex h-[57px] items-center gap-2 border-b border-brand-divider bg-brand-paper px-3 py-2 lg:hidden">
       <button
         type="button"
         aria-label="Dismiss app download"

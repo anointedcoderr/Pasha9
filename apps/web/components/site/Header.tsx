@@ -57,6 +57,12 @@ export function Header() {
   const [tab, setTab] = useState<'login' | 'signup'>('login');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [me, setMe] = useState<Me | null>(null);
+  // Auth probe completion flag. Until the /api/auth/me round-trip
+  // returns the header renders a fixed-width placeholder so the
+  // guest/authed button swap does not cause a visible width jump
+  // after hydration (the cause of the "header becomes unstable
+  // after refresh" report).
+  const [authLoaded, setAuthLoaded] = useState(false);
 
   // Open auth modal from query params (?login=1 or ?signup=1) used by drawer + bottom nav
   useEffect(() => {
@@ -82,9 +88,11 @@ export function Header() {
     fetch('/api/auth/me', { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        if (alive && data?.user) setMe(data.user as Me);
+        if (!alive) return;
+        if (data?.user) setMe(data.user as Me);
+        setAuthLoaded(true);
       })
-      .catch(() => {});
+      .catch(() => { if (alive) setAuthLoaded(true); });
     return () => { alive = false; };
   }, []);
 
@@ -125,8 +133,17 @@ export function Header() {
 
           <Logo tone="dark" size="md" />
 
-          <div className="ml-auto flex items-center gap-2">
-            {me ? (
+          <div className="ml-auto flex min-h-[40px] min-w-[200px] items-center justify-end gap-2">
+            {!authLoaded ? (
+              // Skeleton placeholder. Matches the visual footprint of
+              // either auth state (guest or authed) so the right
+              // column does not jump width when the probe resolves.
+              <>
+                <span aria-hidden className="inline-flex h-10 w-10 animate-pulse rounded-xl bg-brand-surface/60" />
+                <span aria-hidden className="inline-flex h-10 w-10 animate-pulse rounded-xl bg-brand-surface/60" />
+                <span aria-hidden className="inline-flex h-10 w-10 animate-pulse rounded-xl bg-brand-surface/60" />
+              </>
+            ) : me ? (
               <>
                 <div className="hidden md:block">
                   <LanguageToggle compact />

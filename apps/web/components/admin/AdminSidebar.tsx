@@ -133,6 +133,7 @@ const GROUPS = [
     labelKey: 'groupSecurityAndStaff',
     items: [
       { key: 'security', href: ROUTES.admin.security, icon: ShieldCheck },
+      { key: 'passwordResets', href: ROUTES.admin.passwordResets, icon: FileKey2 },
       { key: 'staff', href: ROUTES.admin.staff, icon: Users },
     ],
   },

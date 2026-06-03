@@ -71,7 +71,7 @@ export function FloatingContact() {
   return (
     <div
       ref={panelRef}
-      className="fixed bottom-[96px] right-3 z-40 flex flex-col items-end gap-3 lg:bottom-6 lg:right-6"
+      className="fixed bottom-[calc(120px+env(safe-area-inset-bottom))] right-3 z-50 flex flex-col items-end gap-3 lg:bottom-6 lg:right-6"
     >
       <div
         className={cn(

@@ -19,13 +19,14 @@ interface NavItem {
 }
 
 const ITEMS: NavItem[] = [
-  { key: 'pashaOriginals', href: ROUTES.games, marker: 'hot' },
+  // pashaOriginals intentionally omitted while
+  // native_games_public_enabled defaults to false.
   { key: 'slots', href: ROUTES.slots },
   { key: 'liveCasino', href: ROUTES.liveCasino },
-  { key: 'crash', href: '/games/crash', marker: 'new' },
+  { key: 'crash', href: '/games/provider?category=crash', marker: 'new' },
   { key: 'cricket', href: '/sports' },
-  { key: 'tableGames', href: '/games/table' },
-  { key: 'fast', href: '/games/fast', marker: 'new' },
+  { key: 'tableGames', href: '/games/provider?category=table' },
+  { key: 'fast', href: '/games/provider?category=flash', marker: 'new' },
   { key: 'fishing', href: ROUTES.fishing },
   { key: 'sportsbook', href: ROUTES.sports },
   { key: 'promotions', href: ROUTES.promotions },

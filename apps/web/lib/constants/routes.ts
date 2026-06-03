@@ -57,6 +57,7 @@ export const ROUTES = {
     homepage: '/admin/homepage',
     homepageSections: '/admin/homepage-sections',
     homepageBlocks: '/admin/homepage-blocks',
+    passwordResets: '/admin/password-resets',
     promoText: '/admin/promo-text',
     support: '/admin/support',
     settings: '/admin/settings',
