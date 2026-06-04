@@ -187,8 +187,15 @@ async function loadFeaturedGames(): Promise<HomeSectionGame[]> {
   });
   if (rows.length === 0) return [];
 
-  const externalIds = rows.filter((r) => r.source === 'external' && r.externalGameId).map((r) => r.externalGameId as string);
-  const nativeCodes = rows.filter((r) => r.source === 'native' && r.nativeGameCode).map((r) => r.nativeGameCode as string);
+  // Native games stay hidden from the public Hot Games strip while the
+  // native_games_public_enabled flag is off, even if a previous admin
+  // added a native row. Without this guard a flag-flip back to false
+  // would leak Pasha Originals onto the homepage strip.
+  const nativePublic = await isNativeGamesPublic();
+  const usable = rows.filter((r) => (r.source === 'native' ? nativePublic : true));
+
+  const externalIds = usable.filter((r) => r.source === 'external' && r.externalGameId).map((r) => r.externalGameId as string);
+  const nativeCodes = usable.filter((r) => r.source === 'native' && r.nativeGameCode).map((r) => r.nativeGameCode as string);
 
   const [externals, natives] = await Promise.all([
     externalIds.length
@@ -212,7 +219,7 @@ async function loadFeaturedGames(): Promise<HomeSectionGame[]> {
   const nativeByCode = new Map(natives.map((g) => [g.gameCode, g as NativeGameRow]));
 
   const games: HomeSectionGame[] = [];
-  for (const r of rows) {
+  for (const r of usable) {
     if (r.source === 'external' && r.externalGameId) {
       const g = externalById.get(r.externalGameId);
       if (!g) continue;
@@ -224,6 +231,28 @@ async function loadFeaturedGames(): Promise<HomeSectionGame[]> {
     }
   }
   return games;
+}
+
+// Synthetic Hot Games section used when the PublicSection seed row is
+// missing in production but HomepageFeaturedGame already has rows.
+// Without this fallback the operator's curation is silently dropped
+// because the assembler key-loop never reaches the `homepage_hot` case.
+function syntheticHotSection(games: HomeSectionGame[]): HomeSection {
+  return {
+    id: 'synthetic:homepage_hot',
+    key: 'homepage_hot',
+    group: 'homepage',
+    titleEn: 'Hot Games',
+    titleBn: 'হট গেমস',
+    subtitleEn: 'Trending right now',
+    subtitleBn: null,
+    position: 10,
+    isVisible: true,
+    layout: 'strip',
+    iconKey: ICON_KEY_BY_SECTION.homepage_hot,
+    href: HREF_BY_SECTION.homepage_hot,
+    games,
+  };
 }
 
 async function loadExternalByCategoryMatch(needles: string[]): Promise<HomeSectionGame[]> {
@@ -351,6 +380,20 @@ export async function buildHomeSections(): Promise<HomeSectionsBundle> {
       href: HREF_BY_SECTION[s.key] ?? '/games',
       games,
     });
+  }
+
+  // Resilience: if the operator's database is missing the
+  // `homepage_hot` PublicSection row (Phase A seed never ran or the
+  // row was deleted) but the admin has already curated games via
+  // HomepageFeaturedGame, surface those games anyway. The operator
+  // should still re-run the seed - the warning on /admin/homepage-sections
+  // stays - but the public homepage cannot silently drop curation.
+  const hasHotRow = sections.some((s) => s.key === 'homepage_hot');
+  if (!hasHotRow && featuredGames.length > 0) {
+    const synthetic = syntheticHotSection(
+      featuredGames.slice(0, STRIP_LIMIT).map((g) => ({ ...g, isHot: true })),
+    );
+    sections.unshift(synthetic);
   }
 
   return { sections, featuredCount: featuredGames.length };

@@ -57,7 +57,25 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
     const existing = await db.homepageFeaturedGame.findUnique({ where: { id: params.id } });
     if (!existing) return jsonError(404, 'NOT_FOUND');
 
-    await db.homepageFeaturedGame.delete({ where: { id: params.id } });
+    // Remove the row and renormalize positions to 10, 20, 30, ... so
+    // the curated list has no gaps and no duplicate positions. Without
+    // renormalization repeated swap-position reorders eventually
+    // collide on the same value and the public ordering becomes
+    // ambiguous between requests.
+    await db.$transaction(async (tx) => {
+      await tx.homepageFeaturedGame.delete({ where: { id: params.id } });
+      const remaining = await tx.homepageFeaturedGame.findMany({
+        orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
+        select: { id: true, position: true },
+      });
+      let next = 10;
+      for (const row of remaining) {
+        if (row.position !== next) {
+          await tx.homepageFeaturedGame.update({ where: { id: row.id }, data: { position: next } });
+        }
+        next += 10;
+      }
+    });
 
     await recordActivity({
       actorId: claims.sub,

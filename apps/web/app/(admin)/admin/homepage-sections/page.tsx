@@ -15,7 +15,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
 import { Modal } from '@/components/ui/Modal';
-import { LayoutGrid, Eye, EyeOff, Save, Trash2, Plus, Search, Flame, Award, ArrowUp, ArrowDown } from 'lucide-react';
+import { LayoutGrid, Eye, EyeOff, Save, Trash2, Plus, Search, Flame, Award, ArrowUp, ArrowDown, AlertTriangle, Activity } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 
 interface SectionRow {
@@ -68,6 +68,13 @@ interface SearchNative {
 const FEATURED_LIMIT = 20;
 const inputCls = 'w-full rounded-lg border border-brand-divider bg-brand-paper px-3 py-2 text-sm text-brand-ink placeholder:text-brand-inkMute focus:outline-none focus:ring-2 focus:ring-brand-blue-500';
 
+interface DebugSnapshot {
+  publicSection: { count: number; homepageHotPresent: boolean };
+  homepageFeaturedGame: { count: number; renderableCount: number; rows: Array<{ id: string; position: number; source: string; gameName: string; brand: string | null; renderable: boolean; blockedReason: string | null }> };
+  flags: { nativeGamesPublicEnabled: boolean };
+  health: { seedMissing: boolean; renderingSynthetic: boolean };
+}
+
 export default function AdminHomepageSectionsPage() {
   const [sections, setSections] = useState<SectionRow[]>([]);
   const [featured, setFeatured] = useState<FeaturedRow[]>([]);
@@ -76,6 +83,9 @@ export default function AdminHomepageSectionsPage() {
   const [savingSectionId, setSavingSectionId] = useState<string | null>(null);
   const [savingFeaturedId, setSavingFeaturedId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [seeding, setSeeding] = useState(false);
+  const [debug, setDebug] = useState<DebugSnapshot | null>(null);
+  const [debugBusy, setDebugBusy] = useState(false);
 
   const refresh = useCallback(async () => {
     setError(null);
@@ -96,6 +106,35 @@ export default function AdminHomepageSectionsPage() {
       setLoading(false);
     }
   }, []);
+
+  const onSeedSections = async () => {
+    setSeeding(true);
+    setError(null);
+    try {
+      const r = await fetch('/api/admin/homepage-sections/seed', { method: 'POST' });
+      const j = await r.json().catch(() => null);
+      if (!r.ok) throw new Error(j?.message ?? j?.code ?? 'Seed failed');
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Seed failed');
+    } finally {
+      setSeeding(false);
+    }
+  };
+
+  const onLoadDebug = async () => {
+    setDebugBusy(true);
+    try {
+      const r = await fetch('/api/admin/homepage-featured/debug', { cache: 'no-store' });
+      const j = await r.json().catch(() => null);
+      if (!r.ok) throw new Error(j?.message ?? j?.code ?? 'Debug load failed');
+      setDebug(j as DebugSnapshot);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Debug load failed');
+    } finally {
+      setDebugBusy(false);
+    }
+  };
 
   useEffect(() => { refresh(); }, [refresh]);
 
@@ -149,20 +188,35 @@ export default function AdminHomepageSectionsPage() {
     }
   };
 
-  const onReorder = (id: string, dir: 'up' | 'down') => {
+  const onReorder = async (id: string, dir: 'up' | 'down') => {
     const rows = [...featured];
     const idx = rows.findIndex((r) => r.id === id);
     if (idx < 0) return;
     const swap = dir === 'up' ? idx - 1 : idx + 1;
     if (swap < 0 || swap >= rows.length) return;
-    const a = rows[idx];
-    const b = rows[swap];
-    const newAPos = b.position;
-    const newBPos = a.position;
-    void Promise.all([
-      onFeaturedPatch(a.id, { position: newAPos }),
-      onFeaturedPatch(b.id, { position: newBPos }),
-    ]);
+
+    // Optimistic move: swap the two rows locally so the operator sees
+    // the new order immediately, then write the full ordered id list
+    // to the atomic reorder endpoint. On failure, refresh from DB.
+    const reordered = rows.slice();
+    [reordered[idx], reordered[swap]] = [reordered[swap], reordered[idx]];
+    setFeatured(reordered);
+    setSavingFeaturedId(id);
+    try {
+      const r = await fetch('/api/admin/homepage-featured/reorder', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ids: reordered.map((row) => row.id) }),
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok) throw new Error(j?.message ?? j?.code ?? 'Reorder failed');
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Reorder failed');
+      await refresh();
+    } finally {
+      setSavingFeaturedId(null);
+    }
   };
 
   const remaining = FEATURED_LIMIT - featured.length;
@@ -188,8 +242,18 @@ export default function AdminHomepageSectionsPage() {
         </div>
 
         <div className="mt-4 space-y-3">
-          {sections.length === 0 && !loading ? (
-            <p className="text-sm text-brand-inkMute">No PublicSection rows in group=&apos;homepage&apos;. Did the Phase A seed run?</p>
+          {(sections.length === 0 || !sections.some((s) => s.key === 'homepage_hot')) && !loading ? (
+            <div className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-400/50 bg-amber-500/10 px-3 py-3 text-sm">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-amber-300" />
+              <p className="grow text-amber-100">
+                {sections.length === 0
+                  ? 'No PublicSection rows in group=‘homepage’. The Phase A seed has not run on this database. Re-seed to publish the homepage strips.'
+                  : 'PublicSection ‘homepage_hot’ row missing. The public homepage falls back to a synthetic strip from your curation, but re-seed to restore the editable section row.'}
+              </p>
+              <Button variant="gold" loading={seeding} onClick={onSeedSections}>
+                Seed homepage sections
+              </Button>
+            </div>
           ) : null}
           {sections.map((s) => (
             <SectionEditorRow
@@ -301,6 +365,83 @@ export default function AdminHomepageSectionsPage() {
         remaining={remaining}
         onAdded={async () => { await refresh(); }}
       />
+
+      <Card padding="md">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">Verification</p>
+            <h2 className="text-lg font-extrabold text-brand-ink">Public render diagnostics</h2>
+            <p className="text-xs text-brand-inkMute">
+              Confirms each curated game is actually renderable on the public homepage. Use this before a session if a recent edit does not appear.
+            </p>
+          </div>
+          <Button variant="ghost" leftIcon={<Activity className="h-4 w-4" />} loading={debugBusy} onClick={onLoadDebug}>
+            {debug ? 'Refresh diagnostics' : 'Run diagnostics'}
+          </Button>
+        </div>
+
+        {debug ? (
+          <div className="mt-4 space-y-3">
+            <div className="grid gap-2 text-xs md:grid-cols-3">
+              <div className="rounded-lg border border-brand-divider bg-brand-surface px-3 py-2">
+                <p className="text-[10px] uppercase tracking-wider text-brand-inkMute">PublicSection rows</p>
+                <p className="text-lg font-extrabold text-brand-ink">{debug.publicSection.count}</p>
+                <p className={cn('text-[11px]', debug.publicSection.homepageHotPresent ? 'text-emerald-300' : 'text-amber-300')}>
+                  homepage_hot {debug.publicSection.homepageHotPresent ? 'present' : 'missing (synthetic fallback active)'}
+                </p>
+              </div>
+              <div className="rounded-lg border border-brand-divider bg-brand-surface px-3 py-2">
+                <p className="text-[10px] uppercase tracking-wider text-brand-inkMute">Curated games</p>
+                <p className="text-lg font-extrabold text-brand-ink">{debug.homepageFeaturedGame.count}</p>
+                <p className="text-[11px] text-brand-inkMute">{debug.homepageFeaturedGame.renderableCount} renderable on public site</p>
+              </div>
+              <div className="rounded-lg border border-brand-divider bg-brand-surface px-3 py-2">
+                <p className="text-[10px] uppercase tracking-wider text-brand-inkMute">Pasha Originals flag</p>
+                <p className={cn('text-lg font-extrabold', debug.flags.nativeGamesPublicEnabled ? 'text-emerald-300' : 'text-brand-ink')}>
+                  {debug.flags.nativeGamesPublicEnabled ? 'Public ON' : 'Public OFF'}
+                </p>
+                <p className="text-[11px] text-brand-inkMute">native_games_public_enabled</p>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto rounded-lg border border-brand-divider">
+              <table className="min-w-full text-left text-[11px]">
+                <thead className="bg-brand-surface text-[10px] uppercase tracking-wider text-brand-inkMute">
+                  <tr>
+                    <th className="px-2 py-2">#</th>
+                    <th className="px-2 py-2">Pos</th>
+                    <th className="px-2 py-2">Source</th>
+                    <th className="px-2 py-2">Game</th>
+                    <th className="px-2 py-2">Brand</th>
+                    <th className="px-2 py-2">Renderable</th>
+                    <th className="px-2 py-2">Blocked reason</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-brand-divider text-brand-ink">
+                  {debug.homepageFeaturedGame.rows.map((r, i) => (
+                    <tr key={r.id} className={cn(!r.renderable && 'bg-rose-500/10')}>
+                      <td className="px-2 py-1">{i + 1}</td>
+                      <td className="px-2 py-1 font-mono text-[10px]">{r.position}</td>
+                      <td className="px-2 py-1">{r.source}</td>
+                      <td className="px-2 py-1">{r.gameName}</td>
+                      <td className="px-2 py-1 text-brand-inkMute">{r.brand ?? '.'}</td>
+                      <td className={cn('px-2 py-1 font-bold', r.renderable ? 'text-emerald-300' : 'text-rose-300')}>
+                        {r.renderable ? 'YES' : 'NO'}
+                      </td>
+                      <td className="px-2 py-1 text-[10px] text-brand-inkMute">{r.blockedReason ?? ''}</td>
+                    </tr>
+                  ))}
+                  {debug.homepageFeaturedGame.rows.length === 0 ? (
+                    <tr><td className="px-2 py-2 text-brand-inkMute" colSpan={7}>No curated rows.</td></tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : (
+          <p className="mt-3 text-xs text-brand-inkMute">Click Run diagnostics to compare curation rows against the public render path.</p>
+        )}
+      </Card>
     </div>
   );
 }
