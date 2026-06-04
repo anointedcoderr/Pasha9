@@ -10,12 +10,14 @@
 
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BackBar } from '@/components/site/BackBar';
 import { useT, useLang } from '@/lib/i18n/context';
 import { Trophy, Gift, Calendar, Disc, Check, AlertCircle, X } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { triggerWalletRefresh } from '@/components/site/WalletStrip';
+import { SpinWheel, type SpinWheelSegment } from '@/components/site/SpinWheel';
+import { SpinTierSelector, SpinWinnersFeed, SpinHowToGetCoins, SpinTermsAccordion, type SpinTierDef } from '@/components/site/SpinSections';
 
 type Tab = 'store' | 'checkin' | 'spin';
 type RewardType = 'recharge' | 'physical' | 'digital';
@@ -55,12 +57,8 @@ interface SpinConfig {
   rulesEn: string; rulesBn: string;
 }
 
-interface SpinSegment {
-  id: string;
-  label: string;
-  color: string;
-  payoutType: string;
-  payoutAmount: number;
+interface PublicSpinTier extends SpinTierDef {
+  segments: SpinWheelSegment[];
 }
 
 interface RewardsMe {
@@ -84,12 +82,18 @@ export default function RewardsPage() {
   const [tab, setTab] = useState<Tab>('store');
   const [items, setItems] = useState<PublicRewardItem[]>([]);
   const [me, setMe] = useState<RewardsMe | null>(null);
-  const [segments, setSegments] = useState<SpinSegment[]>([]);
+  const [tiers, setTiers] = useState<PublicSpinTier[]>([]);
+  const [legacySegments, setLegacySegments] = useState<SpinWheelSegment[]>([]);
+  const [selectedTierKey, setSelectedTierKey] = useState<string | null>(null);
+  const [freeRemainingByTier, setFreeRemainingByTier] = useState<Record<string, number>>({});
   const [claimItem, setClaimItem] = useState<PublicRewardItem | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [spinResult, setSpinResult] = useState<{ label: string; payoutType: string; payoutAmount: number } | null>(null);
   const [spinning, setSpinning] = useState(false);
+  const [landingIndex, setLandingIndex] = useState<number | null>(null);
+  const [winnersRefreshKey, setWinnersRefreshKey] = useState(0);
+  const pendingResultRef = useRef<{ label: string; payoutType: string; payoutAmount: number } | null>(null);
 
   const loadMe = useCallback(async () => {
     const r = await fetch('/api/rewards/me', { cache: 'no-store', credentials: 'include' });
@@ -104,7 +108,15 @@ export default function RewardsPage() {
       .catch(() => {});
     fetch('/api/content/spin-wheel', { cache: 'no-store' })
       .then((r) => r.json())
-      .then((j) => { if (alive) setSegments((j?.segments ?? []) as SpinSegment[]); })
+      .then((j) => {
+        if (!alive) return;
+        const loadedTiers = Array.isArray(j?.tiers) ? (j.tiers as PublicSpinTier[]) : [];
+        setTiers(loadedTiers);
+        setLegacySegments(Array.isArray(j?.legacySegments) ? (j.legacySegments as SpinWheelSegment[]) : []);
+        if (loadedTiers.length > 0 && !selectedTierKey) {
+          setSelectedTierKey(loadedTiers[0].key);
+        }
+      })
       .catch(() => {});
     loadMe();
     return () => { alive = false; };
@@ -113,6 +125,34 @@ export default function RewardsPage() {
   const coins = me?.coins ?? 0;
   const checkInCfg = me?.checkIn.config;
   const spinCfg = me?.spin.config;
+
+  const selectedTier = useMemo(
+    () => tiers.find((t) => t.key === selectedTierKey) ?? null,
+    [tiers, selectedTierKey],
+  );
+  const activeSegments: SpinWheelSegment[] = useMemo(() => {
+    if (selectedTier) return selectedTier.segments;
+    // No tiers configured at all -> show legacy untiered segments
+    // so an operator that has not yet seeded tiers still has a wheel.
+    if (tiers.length === 0) return legacySegments;
+    return [];
+  }, [selectedTier, tiers.length, legacySegments]);
+
+  // Seed the per-tier free-spin counter from the global RewardsMe
+  // response: when only one tier exists, the global counter applies.
+  // For multi-tier, each tier's value is updated after each spin via
+  // the POST response's freeSpinsRemaining field.
+  useEffect(() => {
+    if (!me) return;
+    if (tiers.length === 0) return;
+    setFreeRemainingByTier((prev) => {
+      const next = { ...prev };
+      for (const t of tiers) {
+        if (next[t.key] == null) next[t.key] = t.freeSpinsPerDay;
+      }
+      return next;
+    });
+  }, [me, tiers]);
 
   const insufficientText = useMemo(() => {
     return bn
@@ -159,14 +199,19 @@ export default function RewardsPage() {
 
   const onSpin = async () => {
     if (spinning) return;
-    setError(null); setSpinResult(null);
+    setError(null); setSpinResult(null); setLandingIndex(null);
     setSpinning(true);
     try {
-      const r = await fetch('/api/rewards/spin', { method: 'POST', credentials: 'include' });
+      const r = await fetch('/api/rewards/spin', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(selectedTierKey ? { tierKey: selectedTierKey } : {}),
+      });
       const j = await r.json().catch(() => null);
       if (!r.ok) {
         const code = j?.code as string | undefined;
-        if (code === 'NO_SEGMENTS' || code === 'SPIN_DISABLED') {
+        if (code === 'NO_SEGMENTS' || code === 'SPIN_DISABLED' || code === 'TIER_NOT_FOUND') {
           setError(bn ? 'স্পিন এখনও কনফিগার করা হয়নি। অনুগ্রহ করে কিছুক্ষণ পরে আবার চেষ্টা করুন।' : 'Spin is not configured yet. Please try again later.');
         } else if (code === 'INSUFFICIENT_COINS') {
           const need = Number(j?.coinsNeeded ?? 0);
@@ -177,18 +222,52 @@ export default function RewardsPage() {
         } else {
           setError(j?.message ?? code ?? 'Spin failed');
         }
+        setSpinning(false);
         return;
       }
-      // Brief animation pause so the wheel UI feels like it lands on
-      // the result instead of flipping instantly.
-      await new Promise((resolve) => setTimeout(resolve, 1400));
-      setSpinResult({ label: j.segmentLabel, payoutType: j.payoutType, payoutAmount: j.payoutAmount });
-      await loadMe();
-      triggerWalletRefresh();
-    } finally {
+      // Set the landing index BEFORE flipping spinning so the SpinWheel
+      // animates straight to the server-selected wedge. The wheel's
+      // onLandingComplete callback flips spinning back to false and
+      // surfaces the result card.
+      const idx: number | null = typeof j?.segmentIndex === 'number' ? j.segmentIndex : null;
+      if (idx == null) {
+        // Server returned no index (extremely defensive); just resolve
+        // immediately so the user is not stuck.
+        setSpinResult({ label: j.segmentLabel, payoutType: j.payoutType, payoutAmount: j.payoutAmount });
+        setSpinning(false);
+        await loadMe();
+        triggerWalletRefresh();
+        setWinnersRefreshKey((k) => k + 1);
+        return;
+      }
+      setLandingIndex(idx);
+      const tierK: string | null = typeof j?.tierKey === 'string' ? j.tierKey : selectedTierKey;
+      const freeRemaining: number = typeof j?.freeSpinsRemaining === 'number' ? j.freeSpinsRemaining : 0;
+      if (tierK) {
+        setFreeRemainingByTier((prev) => ({ ...prev, [tierK]: freeRemaining }));
+      }
+      // Stash the result for the onLandingComplete handler.
+      pendingResultRef.current = {
+        label: j.segmentLabel,
+        payoutType: j.payoutType,
+        payoutAmount: j.payoutAmount,
+      };
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Spin failed');
       setSpinning(false);
     }
   };
+
+  const onWheelLandingComplete = useCallback(() => {
+    if (pendingResultRef.current) {
+      setSpinResult(pendingResultRef.current);
+      pendingResultRef.current = null;
+    }
+    setSpinning(false);
+    loadMe();
+    triggerWalletRefresh();
+    setWinnersRefreshKey((k) => k + 1);
+  }, [loadMe]);
 
   return (
     <div className="space-y-6 pb-24">
@@ -299,7 +378,7 @@ export default function RewardsPage() {
       ) : null}
 
       {tab === 'spin' ? (
-        segments.length === 0 ? (
+        activeSegments.length === 0 && tiers.length === 0 ? (
           <section className="rounded-2xl border border-amber-300/60 bg-amber-50 p-6 text-amber-900">
             <p className="text-sm font-bold">
               {bn ? 'স্পিন হুইল কনফিগার করা হয়নি।' : 'Spin wheel is not configured yet.'}
@@ -311,53 +390,91 @@ export default function RewardsPage() {
             </p>
           </section>
         ) : (
-          <section className="grid gap-4 md:grid-cols-[1fr_320px]">
-            <div className="rounded-2xl border border-brand-divider bg-brand-paper p-6">
-              <h2 className="text-lg font-extrabold text-brand-ink">{bn ? (spinCfg?.titleBn ?? 'লাকি স্পিন') : (spinCfg?.titleEn ?? 'Lucky Spin')}</h2>
-              <p className="mt-1 whitespace-pre-line text-sm text-brand-inkSoft">{bn ? (spinCfg?.rulesBn ?? '') : (spinCfg?.rulesEn ?? '')}</p>
-              <ul className="mt-4 space-y-2 text-sm text-brand-inkSoft">
-                <li>{bn ? `১ স্পিন = ${spinCfg?.costPerSpinCoins ?? 100} কয়েন` : `1 spin costs ${spinCfg?.costPerSpinCoins ?? 100} coins`}</li>
-                <li>{bn ? `প্রতিদিন ${spinCfg?.freeSpinsPerDay ?? 3}টি ফ্রি স্পিন` : `${spinCfg?.freeSpinsPerDay ?? 3} free spins every day`}</li>
-                <li>{bn ? `টার্নওভার ${spinCfg?.defaultTurnoverX ?? 3}x` : `${spinCfg?.defaultTurnoverX ?? 3}x turnover on wallet credits`}</li>
-                <li>{bn ? `অবশিষ্ট ফ্রি স্পিন: ${me?.spin.freeSpinsRemaining ?? 0}` : `Free spins remaining today: ${me?.spin.freeSpinsRemaining ?? 0}`}</li>
-              </ul>
-              <button
-                type="button"
-                onClick={onSpin}
-                disabled={spinning}
-                className={cn('mt-5 inline-flex h-11 items-center rounded-lg btn-yellow px-6 text-sm font-semibold transition', spinning && 'opacity-70')}
-              >
-                {spinning
-                  ? (bn ? 'স্পিন হচ্ছে...' : 'Spinning...')
-                  : (bn ? 'এখন স্পিন করুন' : 'Spin now')}
-              </button>
-              {spinResult ? (
-                <div className="mt-3 rounded-lg border border-emerald-400/60 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-                  <p className="font-bold">
-                    {bn ? `অভিনন্দন! আপনি জিতেছেন ${spinResult.label}` : `You won ${spinResult.label}!`}
+          <section className="space-y-4">
+            {tiers.length > 0 ? (
+              <SpinTierSelector
+                tiers={tiers}
+                selectedKey={selectedTierKey}
+                onSelect={(k) => { setSelectedTierKey(k); setSpinResult(null); setLandingIndex(null); }}
+                coinBalance={coins}
+                freeRemainingByTier={freeRemainingByTier}
+              />
+            ) : null}
+
+            <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
+              <div className="rounded-2xl border border-brand-divider bg-gradient-to-b from-[#1a1107] to-[#0c0805] p-5 text-amber-50 shadow-[inset_0_1px_0_rgba(255,200,90,0.18),0_20px_50px_-30px_rgba(245,180,0,0.55)]">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <h2 className="text-lg font-extrabold uppercase tracking-wider text-amber-200">
+                    {selectedTier
+                      ? (bn && selectedTier.nameBn ? selectedTier.nameBn : selectedTier.nameEn)
+                      : (bn ? (spinCfg?.titleBn ?? 'লাকি স্পিন') : (spinCfg?.titleEn ?? 'Lucky Spin'))}
+                  </h2>
+                  <p className="text-[11px] text-amber-300/80">
+                    {bn ? 'কয়েন ব্যালেন্স' : 'Coin balance'}: <span className="font-bold text-amber-100">{coins.toLocaleString()}</span>
                   </p>
-                  {spinResult.payoutAmount > 0 ? (
-                    <p className="mt-0.5 text-xs">
-                      {spinResult.payoutType === 'bonus'
-                        ? (bn
-                            ? `+${spinResult.payoutAmount} বোনাস লকড। উইথড্রয়াল আগে টার্নওভার সম্পূর্ণ করুন।`
-                            : `+${spinResult.payoutAmount} bonus locked. Complete turnover before withdrawal.`)
-                        : spinResult.payoutType === 'coins'
-                          ? (bn ? `+${spinResult.payoutAmount} কয়েন আপনার ব্যালেন্সে যোগ হয়েছে।` : `+${spinResult.payoutAmount} coins added to your balance.`)
-                          : (bn ? `+${spinResult.payoutAmount}` : `+${spinResult.payoutAmount}`)}
-                    </p>
-                  ) : (
-                    <p className="mt-0.5 text-xs">
-                      {bn ? 'পরের বার শুভকামনা।' : 'Better luck next time.'}
-                    </p>
-                  )}
                 </div>
-              ) : null}
+                <p className="mt-1 text-[11px] text-amber-200/70">
+                  {selectedTier
+                    ? (bn && selectedTier.descriptionBn ? selectedTier.descriptionBn : selectedTier.descriptionEn)
+                    : (bn ? (spinCfg?.rulesBn ?? '') : (spinCfg?.rulesEn ?? ''))}
+                </p>
+
+                <div className="mt-5 flex flex-col items-center gap-4">
+                  <SpinWheel
+                    segments={activeSegments}
+                    spinning={spinning}
+                    landingIndex={landingIndex}
+                    onLandingComplete={onWheelLandingComplete}
+                    size={320}
+                    disabled={spinning || activeSegments.length === 0}
+                    onSpinClick={onSpin}
+                    centerLabel={bn ? 'স্পিন' : 'SPIN'}
+                  />
+                  <div className="flex flex-wrap items-center justify-center gap-2 text-[11px]">
+                    <span className="rounded-full border border-amber-300/40 bg-amber-300/10 px-2.5 py-1 font-bold uppercase tracking-wider text-amber-200">
+                      {selectedTier
+                        ? (bn ? `প্রতি স্পিন ${selectedTier.costPerSpin} কয়েন` : `${selectedTier.costPerSpin} coins / spin`)
+                        : (bn ? `প্রতি স্পিন ${spinCfg?.costPerSpinCoins ?? 100} কয়েন` : `${spinCfg?.costPerSpinCoins ?? 100} coins / spin`)}
+                    </span>
+                    <span className="rounded-full border border-emerald-300/40 bg-emerald-300/10 px-2.5 py-1 font-bold uppercase tracking-wider text-emerald-200">
+                      {selectedTier
+                        ? (bn ? `${freeRemainingByTier[selectedTier.key] ?? selectedTier.freeSpinsPerDay} ফ্রি স্পিন বাকি` : `${freeRemainingByTier[selectedTier.key] ?? selectedTier.freeSpinsPerDay} free spins left`)
+                        : (bn ? `${me?.spin.freeSpinsRemaining ?? 0} ফ্রি স্পিন বাকি` : `${me?.spin.freeSpinsRemaining ?? 0} free spins left`)}
+                    </span>
+                  </div>
+
+                  {spinResult ? (
+                    <div className="w-full max-w-md rounded-xl border border-emerald-400/40 bg-emerald-500/15 px-4 py-3 text-emerald-100">
+                      <p className="text-sm font-extrabold">
+                        {bn ? `অভিনন্দন! আপনি জিতেছেন ${spinResult.label}` : `You won ${spinResult.label}!`}
+                      </p>
+                      {spinResult.payoutAmount > 0 ? (
+                        <p className="mt-1 text-[11px] text-emerald-200/90">
+                          {spinResult.payoutType === 'bonus'
+                            ? (bn
+                                ? `+${spinResult.payoutAmount} বোনাস লকড। উইথড্রয়াল আগে টার্নওভার সম্পূর্ণ করুন।`
+                                : `+${spinResult.payoutAmount} bonus locked. Complete turnover before withdrawal.`)
+                            : spinResult.payoutType === 'coins'
+                              ? (bn ? `+${spinResult.payoutAmount} কয়েন আপনার ব্যালেন্সে যোগ হয়েছে।` : `+${spinResult.payoutAmount} coins added to your balance.`)
+                              : `+${spinResult.payoutAmount}`}
+                        </p>
+                      ) : (
+                        <p className="mt-1 text-[11px] text-emerald-200/90">
+                          {bn ? 'পরের বার শুভকামনা।' : 'Better luck next time.'}
+                        </p>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <SpinWinnersFeed tierKey={selectedTierKey} refreshKey={winnersRefreshKey} />
+              </div>
             </div>
 
-            <div className={cn('flex items-center justify-center rounded-2xl border border-brand-divider bg-brand-paper p-4', spinning && 'animate-pulse')}>
-              <SpinWheel segments={segments} />
-            </div>
+            <SpinHowToGetCoins />
+            <SpinTermsAccordion />
           </section>
         )
       ) : null}
@@ -460,49 +577,3 @@ function ClaimModal({ item, coins, insufficientText, onClose, onConfirm }: {
   );
 }
 
-function SpinWheel({ segments }: { segments: SpinSegment[] }) {
-  const wedges = segments.length > 0
-    ? segments
-    : [
-      { id: 'd1', label: '100', color: '#FFCC00', payoutType: 'coins', payoutAmount: 100 },
-      { id: 'd2', label: '50',  color: '#1E73E8', payoutType: 'coins', payoutAmount: 50 },
-      { id: 'd3', label: 'X2',  color: '#FF4E3A', payoutType: 'bonus', payoutAmount: 2 },
-      { id: 'd4', label: '200', color: '#23C26B', payoutType: 'coins', payoutAmount: 200 },
-      { id: 'd5', label: '10',  color: '#0F1115', payoutType: 'coins', payoutAmount: 10 },
-      { id: 'd6', label: '500', color: '#F5B400', payoutType: 'coins', payoutAmount: 500 },
-      { id: 'd7', label: '25',  color: '#1659C2', payoutType: 'coins', payoutAmount: 25 },
-      { id: 'd8', label: 'X3',  color: '#FF7A1A', payoutType: 'bonus', payoutAmount: 3 },
-    ];
-  const cx = 140; const cy = 140; const r = 130;
-  const slice = (2 * Math.PI) / wedges.length;
-  return (
-    <svg viewBox="0 0 280 280" className="h-[260px] w-[260px]">
-      <defs>
-        <radialGradient id="rim" cx="50%" cy="50%" r="55%">
-          <stop offset="80%" stopColor="rgba(0,0,0,0)" />
-          <stop offset="100%" stopColor="rgba(0,0,0,0.35)" />
-        </radialGradient>
-      </defs>
-      {wedges.map((w, i) => {
-        const a0 = i * slice - Math.PI / 2;
-        const a1 = a0 + slice;
-        const x0 = cx + r * Math.cos(a0); const y0 = cy + r * Math.sin(a0);
-        const x1 = cx + r * Math.cos(a1); const y1 = cy + r * Math.sin(a1);
-        const labelA = a0 + slice / 2;
-        const lx = cx + r * 0.62 * Math.cos(labelA);
-        const ly = cy + r * 0.62 * Math.sin(labelA);
-        const fill = w.color || '#FFCC00';
-        const light = ['#FFCC00', '#F5B400'].includes(fill);
-        return (
-          <g key={w.id}>
-            <path d={`M${cx} ${cy} L${x0} ${y0} A${r} ${r} 0 0 1 ${x1} ${y1} Z`} fill={fill} stroke="#FFFFFF" strokeWidth="2" />
-            <text x={lx} y={ly} textAnchor="middle" alignmentBaseline="middle" fontSize="14" fontWeight="800" fill={light ? '#0F1115' : '#FFFFFF'}>{w.label}</text>
-          </g>
-        );
-      })}
-      <circle cx={cx} cy={cy} r={r} fill="url(#rim)" />
-      <circle cx={cx} cy={cy} r="26" fill="#0F1115" />
-      <polygon points={`${cx},10 ${cx - 10},36 ${cx + 10},36`} fill="#0F1115" />
-    </svg>
-  );
-}

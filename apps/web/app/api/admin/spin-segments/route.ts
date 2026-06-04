@@ -23,14 +23,22 @@ const createSchema = z.object({
   turnoverX: z.coerce.number().min(0).max(50).default(0),
   position: z.coerce.number().int().min(0).max(99).default(0),
   isActive: z.boolean().default(true),
+  tierId: z.string().trim().min(1).max(60).nullable().optional(),
 });
 
 const patchSchema = createSchema.partial();
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   return withAuth(async () => {
     await ensurePermission('rewards.write');
-    const rows = await db.spinSegment.findMany({ orderBy: [{ position: 'asc' }] });
+    const url = new URL(req.url);
+    const tierFilter = url.searchParams.get('tierId');
+    const where = tierFilter === 'null'
+      ? { tierId: null }
+      : tierFilter
+        ? { tierId: tierFilter }
+        : {};
+    const rows = await db.spinSegment.findMany({ where, orderBy: [{ position: 'asc' }] });
     return jsonOk({
       segments: rows.map((s) => ({
         id: s.id,
@@ -42,6 +50,7 @@ export async function GET() {
         turnoverX: Number(s.turnoverX),
         position: s.position,
         isActive: s.isActive,
+        tierId: s.tierId,
       })),
     });
   });

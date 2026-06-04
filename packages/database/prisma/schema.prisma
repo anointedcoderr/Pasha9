@@ -1233,6 +1233,32 @@ model DailyCheckInLog {
 //   freebet    -> issue a free-bet voucher (FUTURE)
 //   freespin   -> issue spin tokens
 //   nothing    -> no payout (consolation)
+// Three-tier wheel ladder. Each tier holds its own SpinSegment rows
+// + per-tier cost and free-spin allowance. Operator tunes from
+// /admin/spin-segments. Legacy SpinSegment rows that pre-date this
+// model keep tierId=null and continue to work via the engine fallback.
+model SpinWheelTier {
+  id              String   @id @default(cuid())
+  key             String   @unique  // 'lucky' | 'grand' | 'supreme'
+  nameEn          String
+  nameBn          String?
+  descriptionEn   String?
+  descriptionBn   String?
+  costPerSpin     Int      @default(0)
+  freeSpinsPerDay Int      @default(0)
+  color           String   @default("#FFCC00")
+  iconUrl         String?
+  position        Int      @default(0)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  segments SpinSegment[]
+  results  SpinResult[]
+
+  @@index([isActive, position])
+}
+
 model SpinSegment {
   id           String   @id @default(cuid())
   label        String   // e.g. "100", "X3"
@@ -1243,12 +1269,15 @@ model SpinSegment {
   turnoverX    Decimal  @default(0) @db.Decimal(6, 2)
   position     Int      @default(0)
   isActive     Boolean  @default(true)
+  tierId       String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  tier    SpinWheelTier? @relation(fields: [tierId], references: [id], onDelete: SetNull)
   results SpinResult[]
 
   @@index([isActive, position])
+  @@index([tierId, isActive, position])
 }
 
 // One row per spin. Used for history + audit.
@@ -1261,12 +1290,15 @@ model SpinResult {
   payoutAmount Int
   cost         Int      @default(0) // 0 = free spin, >0 = paid in coins
   source       String   @default("manual") // manual | free_daily | login
+  tierId       String?
   createdAt    DateTime @default(now())
 
-  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  segment SpinSegment @relation(fields: [segmentId], references: [id])
+  user    User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  segment SpinSegment    @relation(fields: [segmentId], references: [id])
+  tier    SpinWheelTier? @relation(fields: [tierId], references: [id], onDelete: SetNull)
 
   @@index([userId, createdAt])
+  @@index([tierId, createdAt])
 }
 
 // ---------- Audit and system ----------

@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { formatBDT, formatDateTime } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
+import { LottoWinnerOfTheDay, LottoExtraPrizeGrid, LottoTabBar, type LottoTabKey } from '@/components/site/LottoSections';
 
 interface LiveDraw {
   id: string;
@@ -139,6 +140,7 @@ export default function LottoPage() {
   const [resultRange, setResultRange] = useState<ResultRange>('all');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
+  const [activeTab, setActiveTab] = useState<LottoTabKey>('latest');
 
   useEffect(() => {
     let alive = true;
@@ -232,8 +234,103 @@ export default function LottoPage() {
         </div>
       </section>
 
-      {/* Latest results */}
-      <section>
+      {/* Winner of the Day + tab navigator. The WOTD card is the
+          opening visual for every visit; the tab bar lets the visitor
+          drill into Latest Results, My Tickets, My Winnings without
+          extra navigation. */}
+      <LottoWinnerOfTheDay result={results[0] ?? null} lang={lang} />
+
+      {results[0]?.extraNumbers?.specials && results[0].extraNumbers.specials.length > 0 ? (
+        <LottoExtraPrizeGrid
+          titleEn="Special Prize"
+          titleBn="বিশেষ পুরস্কার"
+          numbers={results[0].extraNumbers.specials}
+          multiplier={150}
+          accent="special"
+          lang={lang}
+        />
+      ) : null}
+
+      {results[0]?.extraNumbers?.consolations && results[0].extraNumbers.consolations.length > 0 ? (
+        <LottoExtraPrizeGrid
+          titleEn="Consolation Prize"
+          titleBn="সান্ত্বনা পুরস্কার"
+          numbers={results[0].extraNumbers.consolations}
+          multiplier={30}
+          accent="consolation"
+          lang={lang}
+        />
+      ) : null}
+
+      <LottoTabBar
+        active={activeTab}
+        onChange={setActiveTab}
+        counts={{ tickets: me?.summary.ticketCount ?? 0, winnings: me?.summary.winningCount ?? 0 }}
+        lang={lang}
+        signedIn={Boolean(me)}
+      />
+
+      {/* My Tickets quick view */}
+      {activeTab === 'tickets' && me ? (
+        <section className="rounded-2xl border border-brand-divider bg-brand-paper p-4 shadow-sm">
+          <h3 className="mb-2 text-sm font-extrabold uppercase tracking-wider text-brand-ink">
+            {lang === 'bn' ? 'আমার সক্রিয় টিকেট' : 'My active tickets'}
+          </h3>
+          {me.tickets.length === 0 ? (
+            <p className="text-[11px] text-brand-inkMute">
+              {lang === 'bn' ? 'এই মুহূর্তে কোনো টিকেট নেই। ১,২০০ টাকা ডিপোজিট অনুমোদন হলে ২টি টিকেট পাবেন।' : 'No tickets yet. Every accumulated 1,200 BDT of approved deposits earns you 2 tickets.'}
+            </p>
+          ) : (
+            <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {me.tickets.slice(0, 12).map((tk) => (
+                <li key={tk.id} className="rounded-lg border border-brand-divider bg-brand-surface p-2 text-center">
+                  <p className="font-mono text-lg font-extrabold tabular-nums text-brand-ink">{tk.number}</p>
+                  <p className="mt-0.5 text-[10px] text-brand-inkMute">{tk.draw?.name ?? (lang === 'bn' ? 'অপেক্ষমান' : 'Pending')}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="mt-2 text-right">
+            <Link href="/lotto/my-tickets" className="text-[11px] font-bold uppercase tracking-wider text-brand-yellow-700 hover:text-brand-ink">
+              {lang === 'bn' ? 'সব টিকেট দেখুন' : 'View all tickets'}
+            </Link>
+          </p>
+        </section>
+      ) : null}
+
+      {/* My Winnings quick view */}
+      {activeTab === 'winnings' && me ? (
+        <section className="rounded-2xl border border-brand-divider bg-brand-paper p-4 shadow-sm">
+          <h3 className="mb-2 text-sm font-extrabold uppercase tracking-wider text-brand-ink">
+            {lang === 'bn' ? 'আমার পুরস্কার' : 'My winnings'}
+          </h3>
+          {me.winnings.length === 0 ? (
+            <p className="text-[11px] text-brand-inkMute">
+              {lang === 'bn' ? 'এখনও কোনো পুরস্কার নেই। শুভকামনা!' : 'No winnings yet. Good luck on the next draw!'}
+            </p>
+          ) : (
+            <ul className="space-y-1.5">
+              {me.winnings.slice(0, 8).map((w) => (
+                <li key={w.id} className="flex flex-wrap items-center gap-2 rounded-md border border-brand-divider bg-brand-surface px-2 py-1.5 text-[11px]">
+                  <span className="font-mono font-bold text-brand-ink">{w.ticketNumber}</span>
+                  <span className="rounded-full bg-brand-yellow-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-brand-yellow-700">{w.prizeTier}</span>
+                  <span className="ml-auto font-extrabold tabular-nums text-brand-ink">{formatBDT(Number(w.amount))}</span>
+                  <span className="text-[10px] text-brand-inkMute">{formatDateTime(w.publishedAt)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="mt-2 text-right">
+            <Link href="/lotto/my-winnings" className="text-[11px] font-bold uppercase tracking-wider text-brand-yellow-700 hover:text-brand-ink">
+              {lang === 'bn' ? 'সব পুরস্কার দেখুন' : 'View all winnings'}
+            </Link>
+          </p>
+        </section>
+      ) : null}
+
+      {/* Latest results (only visible when the matching tab is active
+          or when no specific tab is chosen) */}
+      <section className={cn(activeTab === 'wotd' && 'hidden')}>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Trophy className="h-4 w-4 text-brand-yellow-600" />

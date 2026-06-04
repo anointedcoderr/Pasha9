@@ -32,7 +32,23 @@ interface Segment {
   turnoverX: number;
   position: number;
   isActive: boolean;
+  tierId: string | null;
 }
+
+interface Tier {
+  id: string;
+  key: string;
+  nameEn: string;
+  nameBn: string | null;
+  costPerSpin: number;
+  freeSpinsPerDay: number;
+  color: string;
+  position: number;
+  isActive: boolean;
+  segmentCount: number;
+}
+
+const LEGACY_TAB = 'legacy';
 
 const BLANK: Segment = {
   id: '',
@@ -44,10 +60,13 @@ const BLANK: Segment = {
   turnoverX: 0,
   position: 0,
   isActive: true,
+  tierId: null,
 };
 
 export default function AdminSpinSegmentsPage() {
   const [segments, setSegments] = useState<Segment[]>([]);
+  const [tiers, setTiers] = useState<Tier[]>([]);
+  const [activeTab, setActiveTab] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [seeding, setSeeding] = useState(false);
@@ -59,19 +78,33 @@ export default function AdminSpinSegmentsPage() {
     setRefreshing(true);
     setError(null);
     try {
-      const r = await fetch('/api/admin/spin-segments', { cache: 'no-store' });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j?.message ?? j?.code ?? 'Failed to load');
-      setSegments(j.segments as Segment[]);
+      const [a, b] = await Promise.all([
+        fetch('/api/admin/spin-tiers', { cache: 'no-store' }),
+        fetch('/api/admin/spin-segments', { cache: 'no-store' }),
+      ]);
+      const ja = await a.json();
+      const jb = await b.json();
+      if (!a.ok) throw new Error(ja?.message ?? ja?.code ?? 'Failed to load tiers');
+      if (!b.ok) throw new Error(jb?.message ?? jb?.code ?? 'Failed to load segments');
+      const loadedTiers = (ja.tiers as Tier[]) ?? [];
+      setTiers(loadedTiers);
+      setSegments(jb.segments as Segment[]);
+      // Default tab: first tier if any tiers exist, else legacy.
+      if (!activeTab) {
+        setActiveTab(loadedTiers[0]?.id ?? LEGACY_TAB);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load');
     } finally {
       setRefreshing(false);
       setLoading(false);
     }
-  }, []);
+  }, [activeTab]);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => { refresh(); /* eslint-disable-line react-hooks/exhaustive-deps */ }, []);
+
+  const visibleSegments = segments.filter((s) => (activeTab === LEGACY_TAB ? s.tierId == null : s.tierId === activeTab));
+  const hasLegacyRows = segments.some((s) => s.tierId == null);
 
   const onSeedDefaults = async () => {
     setSeeding(true);
@@ -102,6 +135,7 @@ export default function AdminSpinSegmentsPage() {
         turnoverX: Number(editor.turnoverX),
         position: Number(editor.position),
         isActive: editor.isActive,
+        tierId: editor.tierId ?? null,
       };
       const r = editor.id
         ? await fetch('/api/admin/spin-segments', {
@@ -140,11 +174,12 @@ export default function AdminSpinSegmentsPage() {
   };
 
   const reorder = async (id: string, dir: 'up' | 'down') => {
-    const idx = segments.findIndex((s) => s.id === id);
+    // Reorder within the visible tier so swaps stay inside one wheel.
+    const idx = visibleSegments.findIndex((s) => s.id === id);
     const swap = dir === 'up' ? idx - 1 : idx + 1;
-    if (idx < 0 || swap < 0 || swap >= segments.length) return;
-    const a = segments[idx];
-    const b = segments[swap];
+    if (idx < 0 || swap < 0 || swap >= visibleSegments.length) return;
+    const a = visibleSegments[idx];
+    const b = visibleSegments[swap];
     setError(null);
     try {
       await Promise.all([
@@ -168,15 +203,24 @@ export default function AdminSpinSegmentsPage() {
   return (
     <>
       <PageHeader
-        title="Spin Segments"
-        subtitle={loading ? 'Loading...' : `${segments.length} segment${segments.length === 1 ? '' : 's'} . ${segments.filter((s) => s.isActive).length} active`}
+        title="Spin Wheel"
+        subtitle={loading
+          ? 'Loading...'
+          : `${tiers.length} tier${tiers.length === 1 ? '' : 's'} . ${segments.length} segment${segments.length === 1 ? '' : 's'} . ${segments.filter((s) => s.isActive).length} active`}
         icon={<Sparkles className="h-5 w-5" />}
         action={
           <div className="flex items-center gap-2">
             <Button variant="ghost" leftIcon={<RefreshCw className={cn('h-3.5 w-3.5', refreshing && 'animate-spin')} />} onClick={refresh}>
               Refresh
             </Button>
-            <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setEditor({ ...BLANK, position: segments.length })}>
+            <Button
+              leftIcon={<Plus className="h-4 w-4" />}
+              onClick={() => setEditor({
+                ...BLANK,
+                position: visibleSegments.length,
+                tierId: activeTab === LEGACY_TAB ? null : activeTab,
+              })}
+            >
               New Segment
             </Button>
           </div>
@@ -185,18 +229,72 @@ export default function AdminSpinSegmentsPage() {
 
       {error ? <Card padding="md" className="mb-4 border-l-4 border-rose-500"><p className="text-sm text-rose-300">{error}</p></Card> : null}
 
-      {segments.length === 0 && !loading ? (
+      {tiers.length === 0 && !loading ? (
         <Card padding="md" className="mb-4 border border-amber-400/50 bg-amber-500/10">
           <div className="flex flex-wrap items-center gap-3">
             <AlertTriangle className="h-5 w-5 shrink-0 text-amber-300" />
             <div className="grow">
-              <p className="text-sm font-bold text-amber-100">No spin segments configured.</p>
+              <p className="text-sm font-bold text-amber-100">No spin wheel configured.</p>
               <p className="text-xs text-amber-200">
-                The public /rewards Spin tab shows {'"Spin wheel is not configured"'} until at least one active segment exists. Seed the default 8-segment wheel below or add segments manually.
+                Seed the default 3-tier wheel (Lucky / Grand / Supreme) below. The seed is idempotent and migrates any legacy untiered segments to the Lucky tier.
               </p>
             </div>
-            <Button variant="gold" loading={seeding} onClick={onSeedDefaults}>Seed default wheel</Button>
+            <Button variant="gold" loading={seeding} onClick={onSeedDefaults}>Seed default 3-tier wheel</Button>
           </div>
+        </Card>
+      ) : null}
+
+      {tiers.length > 0 ? (
+        <Card padding="sm" className="mb-3">
+          <div role="tablist" aria-label="Spin wheel tiers" className="flex flex-wrap gap-1">
+            {tiers.map((t) => {
+              const active = activeTab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setActiveTab(t.id)}
+                  className={cn(
+                    'inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-xs font-bold uppercase tracking-wider transition',
+                    active
+                      ? 'border-brand-yellow-500 bg-brand-yellow-500/15 text-brand-ink'
+                      : 'border-brand-divider text-brand-inkSoft hover:text-brand-ink',
+                  )}
+                >
+                  <span aria-hidden className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: t.color }} />
+                  {t.nameEn}
+                  <span className="rounded-full bg-brand-surface px-1.5 py-0.5 text-[10px] text-brand-inkMute">{t.segmentCount}</span>
+                </button>
+              );
+            })}
+            {hasLegacyRows ? (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === LEGACY_TAB}
+                onClick={() => setActiveTab(LEGACY_TAB)}
+                className={cn(
+                  'inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-xs font-bold uppercase tracking-wider transition',
+                  activeTab === LEGACY_TAB
+                    ? 'border-brand-yellow-500 bg-brand-yellow-500/15 text-brand-ink'
+                    : 'border-brand-divider text-brand-inkSoft hover:text-brand-ink',
+                )}
+              >
+                Legacy (untiered)
+              </button>
+            ) : null}
+          </div>
+          {activeTab !== LEGACY_TAB ? (() => {
+            const t = tiers.find((x) => x.id === activeTab);
+            if (!t) return null;
+            return (
+              <p className="mt-2 text-[11px] text-brand-inkMute">
+                key <code className="font-mono">{t.key}</code> . cost {t.costPerSpin} coins . {t.freeSpinsPerDay} free spins/day . pos {t.position} . {t.isActive ? 'active' : 'paused'}
+              </p>
+            );
+          })() : null}
         </Card>
       ) : null}
 
@@ -204,7 +302,10 @@ export default function AdminSpinSegmentsPage() {
         <Card padding="lg">Loading...</Card>
       ) : (
         <div className="space-y-2">
-          {segments.map((s, i) => (
+          {visibleSegments.length === 0 && tiers.length > 0 ? (
+            <Card padding="md"><p className="text-sm text-brand-inkMute">No segments on this tier yet. Use New Segment to add wedges.</p></Card>
+          ) : null}
+          {visibleSegments.map((s, i) => (
             <Card key={s.id} padding="md" className={cn('flex flex-wrap items-center gap-3', !s.isActive && 'opacity-60')}>
               <span
                 aria-hidden
