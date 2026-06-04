@@ -16,6 +16,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Layers, Plus, Save, Trash2, Eye, EyeOff, RefreshCcw } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
+import { AdminMediaUpload } from '@/components/admin/AdminMediaUpload';
 
 interface TierRow {
   id: string;
@@ -207,10 +208,16 @@ function TierEditor({ row, saving, onPatch, onDelete }: { row: TierRow; saving: 
           <span className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">Title BN (optional)</span>
           <input value={titleBn} onChange={(e) => setTitleBn(e.target.value)} className={inputCls} />
         </label>
-        <label className="block md:col-span-2">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">Banner URL (replaces gradient on the promotion card)</span>
-          <input value={bannerUrl} onChange={(e) => setBannerUrl(e.target.value)} className={inputCls} placeholder="https://..." />
-        </label>
+        <div className="md:col-span-2">
+          <AdminMediaUpload
+            label="Banner image"
+            hint="Replaces the gradient on the promotion card."
+            value={bannerUrl}
+            category="banners"
+            constraintHint="PNG / JPG / WEBP, ~1200x480, max 3 MB"
+            onChange={(url) => setBannerUrl(url ?? '')}
+          />
+        </div>
         <label className="block md:col-span-2">
           <span className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">Description EN</span>
           <textarea rows={2} value={descriptionEn} onChange={(e) => setDescriptionEn(e.target.value)} className={inputCls} placeholder="Get a 3% bonus on deposits of 1,000 BDT or more..." />

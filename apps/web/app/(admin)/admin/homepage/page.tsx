@@ -7,6 +7,7 @@ import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { FormField, Input, Textarea } from '@/components/ui/Input';
 import { Home, Save } from 'lucide-react';
+import { AdminMediaUpload } from '@/components/admin/AdminMediaUpload';
 
 interface Section {
   section: string;
@@ -127,9 +128,15 @@ export default function AdminHomepagePage() {
                   <FormField label="Body (English)">
                     <Textarea rows={3} value={s.bodyEn ?? ''} onChange={(e) => setField(k.key, 'bodyEn', e.target.value)} />
                   </FormField>
-                  <FormField label="Image URL">
-                    <Input value={s.imageUrl ?? ''} onChange={(e) => setField(k.key, 'imageUrl', e.target.value)} placeholder="/uploads/banners/..." />
-                  </FormField>
+                  <div>
+                    <AdminMediaUpload
+                      label="Section image"
+                      value={s.imageUrl ?? ''}
+                      category="banners"
+                      constraintHint="PNG / JPG / WEBP, ~1920x720, max 4 MB"
+                      onChange={(url) => setField(k.key, 'imageUrl', url ?? '')}
+                    />
+                  </div>
                   <FormField label="Link">
                     <Input value={s.link ?? ''} onChange={(e) => setField(k.key, 'link', e.target.value)} placeholder="/promotions" />
                   </FormField>

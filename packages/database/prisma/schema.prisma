@@ -233,6 +233,9 @@ model User {
   rewardClaims        RewardClaim[]
   dailyCheckIns       DailyCheckInLog[]
   spinResults         SpinResult[]
+  bettingPassProgress UserBettingPassProgress?
+  bettingPassEvents   BettingPassEvent[]
+  bettingPassClaims   BettingPassClaim[]
 
   @@index([referredById])
   @@index([roleId])
@@ -1893,4 +1896,101 @@ model PublicPaymentMethod {
   updatedAt   DateTime @updatedAt
 
   @@index([isActive, position])
+}
+
+// ==========================================================================
+// Betting Pass. Operator-configurable tier ladder. Players earn points by
+// depositing and wagering. Each tier unlocks a one-time reward (coins,
+// bonus or freebet) the player claims through /betting-pass.
+//
+// Three tables, all additive. Idempotency keys on BettingPassEvent block
+// double-awarding the same deposit or the same bet. UserBettingPassProgress
+// holds the rolling totals so the user page does not have to aggregate
+// the event log on every render.
+// ==========================================================================
+
+// Admin-tunable tier rule. One row per tier. `pointsRequired` is the
+// cumulative threshold (player needs `pointsRequired` lifetime points
+// to unlock this tier). `rewardKind` decides what the claim does:
+//   coins      -> Wallet.bonusBalance increment
+//   bonus      -> grantBonusInTx via BonusRule with name `betting_pass:<ruleId>`
+//   freebet    -> Wallet.lockedBalance increment (legacy parity with spin)
+//   physical   -> no wallet movement, RewardClaim-style payload only
+model BettingPassRule {
+  id              String   @id @default(cuid())
+  tier            Int      @unique
+  nameEn          String
+  nameBn          String?
+  descriptionEn   String?
+  descriptionBn   String?
+  iconUrl         String?
+  pointsRequired  Int      // lifetime points to unlock
+  rewardKind      String   @default("coins")  // coins|bonus|freebet|physical
+  rewardAmount    Decimal  @default(0) @db.Decimal(14, 2)
+  bonusRuleId     String?  // optional reference if rewardKind=bonus
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  claims BettingPassClaim[]
+
+  @@index([isActive, pointsRequired])
+}
+
+// Per-user accumulated points + current tier. Updated whenever
+// BettingPassEvent rows are written. Read by /api/betting-pass/me.
+model UserBettingPassProgress {
+  userId           String   @id
+  pointsTotal      Decimal  @default(0) @db.Decimal(14, 2)
+  pointsFromDeposit Decimal @default(0) @db.Decimal(14, 2)
+  pointsFromBet    Decimal  @default(0) @db.Decimal(14, 2)
+  currentTier      Int      @default(0)
+  lastEventAt      DateTime?
+  updatedAt        DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Ledger row for every point award. idempotencyKey is unique so a
+// re-fired deposit-approve or duplicate provider settle never
+// double-awards points. source tells the engine where the points came
+// from: 'deposit' (depositId) or 'bet' (providerTransactionId).
+model BettingPassEvent {
+  id               String   @id @default(cuid())
+  userId           String
+  source           String              // 'deposit' | 'bet' | 'manual'
+  sourceId         String?             // Deposit.id or ProviderTransaction.id
+  points           Decimal  @db.Decimal(14, 2)
+  pointsFromDeposit Decimal @default(0) @db.Decimal(14, 2)
+  pointsFromBet    Decimal  @default(0) @db.Decimal(14, 2)
+  idempotencyKey   String   @unique
+  createdAt        DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([source, sourceId])
+}
+
+// Records each tier reward claim. The (userId, ruleId) pair is unique
+// so a tier reward can only be claimed once per player. status flips
+// to 'paid' after the wallet/bonus credit succeeds.
+model BettingPassClaim {
+  id          String   @id @default(cuid())
+  userId      String
+  ruleId      String
+  tier        Int
+  rewardKind  String
+  rewardAmount Decimal @db.Decimal(14, 2)
+  status      String   @default("paid")
+  walletTxId  String?
+  bonusGrantId String?
+  errorCode   String?
+  createdAt   DateTime @default(now())
+
+  user User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rule BettingPassRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, ruleId])
+  @@index([userId, createdAt])
 }

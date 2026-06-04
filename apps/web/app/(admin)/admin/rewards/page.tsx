@@ -9,6 +9,7 @@ import { Chip } from '@/components/ui/Chip';
 import { Modal } from '@/components/ui/Modal';
 import { FormField, Input, Textarea } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
+import { AdminMediaUpload } from '@/components/admin/AdminMediaUpload';
 import { Switch } from '@/components/ui/Switch';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Trophy, Pencil, Trash2, Plus } from 'lucide-react';
@@ -187,12 +188,22 @@ export default function AdminRewardsPage() {
               <Textarea rows={2} value={editor.descriptionBn ?? ''} onChange={(e) => setEditor({ ...editor, descriptionBn: e.target.value })} />
             </FormField>
             <div className="grid gap-3 md:grid-cols-2">
-              <FormField label="Image URL (square thumbnail)">
-                <Input value={editor.imageUrl ?? ''} onChange={(e) => setEditor({ ...editor, imageUrl: e.target.value })} placeholder="https://..." />
-              </FormField>
-              <FormField label="Banner URL (wide reward card image)">
-                <Input value={editor.bannerUrl ?? ''} onChange={(e) => setEditor({ ...editor, bannerUrl: e.target.value })} placeholder="https://..." />
-              </FormField>
+              <AdminMediaUpload
+                label="Reward thumbnail (square)"
+                hint="Shown in the rewards grid."
+                value={editor.imageUrl}
+                category="promo_thumbnail"
+                constraintHint="PNG / JPG / WEBP, ~400x400, max 1 MB"
+                onChange={(url) => setEditor({ ...editor, imageUrl: url ?? '' })}
+              />
+              <AdminMediaUpload
+                label="Reward banner (wide)"
+                hint="Header on the reward detail panel."
+                value={editor.bannerUrl}
+                category="promo_background"
+                constraintHint="PNG / JPG / WEBP, ~1600x1000, max 4 MB"
+                onChange={(url) => setEditor({ ...editor, bannerUrl: url ?? '' })}
+              />
             </div>
             <FormField label="Short claim instructions EN (shown above the claim form)">
               <Textarea rows={2} value={editor.shortInstructionEn ?? ''} onChange={(e) => setEditor({ ...editor, shortInstructionEn: e.target.value })} />

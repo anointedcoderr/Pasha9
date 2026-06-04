@@ -11,6 +11,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Switch } from '@/components/ui/Switch';
 import { Image as ImageIcon, Plus, Pencil, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 import { Chip } from '@/components/ui/Chip';
+import { AdminMediaUpload } from '@/components/admin/AdminMediaUpload';
 import { EmptyState } from '@/components/ui/EmptyState';
 
 type Accent = 'gold' | 'neon' | 'mixed' | 'royal' | 'red';
@@ -228,17 +229,27 @@ export default function AdminBannersPage() {
                 </Select>
               </FormField>
               {editor.mediaType === 'image' ? (
-                <FormField label="Image URL" hint="Recommended 1600x600 JPG or PNG.">
-                  <Input value={editor.imageUrl ?? ''} onChange={(e) => setEditor({ ...editor, imageUrl: e.target.value })} placeholder="/uploads/banners/..." />
-                </FormField>
+                <AdminMediaUpload
+                  label="Banner image"
+                  hint="Recommended 1600x600 JPG / PNG / WEBP."
+                  value={editor.imageUrl}
+                  category="banners"
+                  constraintHint="PNG / JPG / WEBP, ~1920x720, max 4 MB"
+                  onChange={(url) => setEditor({ ...editor, imageUrl: url ?? '' })}
+                />
               ) : (
                 <>
-                  <FormField label="Video URL" hint="MP4 / WebM. Autoplay-muted on the public slider.">
+                  <FormField label="Video URL" hint="MP4 / WebM. Autoplay-muted on the public slider. Use absolute or /uploads/... path.">
                     <Input value={editor.videoUrl ?? ''} onChange={(e) => setEditor({ ...editor, videoUrl: e.target.value })} placeholder="/uploads/banners/promo.mp4" />
                   </FormField>
-                  <FormField label="Poster URL" hint="Still frame shown while the video loads.">
-                    <Input value={editor.posterUrl ?? ''} onChange={(e) => setEditor({ ...editor, posterUrl: e.target.value })} placeholder="/uploads/banners/promo-poster.jpg" />
-                  </FormField>
+                  <AdminMediaUpload
+                    label="Video poster"
+                    hint="Still frame shown while the video loads."
+                    value={editor.posterUrl}
+                    category="banners"
+                    constraintHint="PNG / JPG / WEBP, ~1920x720, max 4 MB"
+                    onChange={(url) => setEditor({ ...editor, posterUrl: url ?? '' })}
+                  />
                 </>
               )}
               <FormField label="Position">

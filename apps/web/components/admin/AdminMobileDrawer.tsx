@@ -118,6 +118,7 @@ const GROUPS = [
       { key: 'lotto', href: '/admin/lotto', icon: Ticket },
       { key: 'rewards', href: '/admin/rewards', icon: Trophy },
       { key: 'rewardClaims', href: ROUTES.admin.rewardClaims, icon: Gift },
+      { key: 'bettingPass', href: ROUTES.admin.bettingPass, icon: Sparkles },
       { key: 'nativeGames', href: ROUTES.admin.nativeGames, icon: Gamepad2 },
     ],
   },

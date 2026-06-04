@@ -148,18 +148,30 @@ export async function accrueCommissionsOnDeposit(
     return result;
   }
 
+  // Default tier used when an affiliate upline has no tier explicitly
+  // assigned. Operators set this implicitly by ordering CommissionTier
+  // rows in /admin/affiliate/tiers - the active row at the lowest
+  // `position` is the default. Loaded once per accrual so the loop
+  // does not hit the DB per ancestor.
+  const defaultTier = await db.commissionTier.findFirst({
+    where: { status: 'active' },
+    orderBy: { position: 'asc' },
+    select: { id: true, name: true, level1Pct: true, level2Pct: true, level3Pct: true },
+  });
+
   for (const a of chain) {
     if (!a.user.isAffiliate) {
       result.skipped.push({ affiliateId: a.user.id, level: a.level, reason: 'not_affiliate' });
       console.info('[affiliate] skip', { affiliateId: a.user.id, level: a.level, reason: 'not_affiliate' });
       continue;
     }
-    if (!a.user.affiliateTier) {
-      result.skipped.push({ affiliateId: a.user.id, level: a.level, reason: 'no_tier_assigned' });
-      console.info('[affiliate] skip', { affiliateId: a.user.id, level: a.level, reason: 'no_tier_assigned' });
+    const effectiveTier = a.user.affiliateTier ?? defaultTier;
+    if (!effectiveTier) {
+      result.skipped.push({ affiliateId: a.user.id, level: a.level, reason: 'no_tier_assigned_and_no_default' });
+      console.info('[affiliate] skip', { affiliateId: a.user.id, level: a.level, reason: 'no_tier_and_no_default' });
       continue;
     }
-    const rate = tierRateForLevel(a.user.affiliateTier, a.level);
+    const rate = tierRateForLevel(effectiveTier, a.level);
     if (!rate || rate.lte(0)) {
       result.skipped.push({ affiliateId: a.user.id, level: a.level, reason: `rate_zero_at_level_${a.level}` });
       continue;
@@ -181,10 +193,11 @@ export async function accrueCommissionsOnDeposit(
           basis: 'deposit_share',
           status: DEFAULT_COMMISSION_STATUS,
           depositId,
-          tierId: a.user.affiliateTier.id,
+          tierId: effectiveTier.id,
           ratePct: rate,
           meta: {
-            tierName: a.user.affiliateTier.name,
+            tierName: effectiveTier.name,
+            tierIsDefaultFallback: !a.user.affiliateTier,
             depositAmount: Number(depositAmount),
           } as Prisma.JsonObject,
         },
@@ -192,7 +205,7 @@ export async function accrueCommissionsOnDeposit(
       result.accrued.push({
         affiliateId: a.user.id,
         level: a.level,
-        tierName: a.user.affiliateTier.name,
+        tierName: effectiveTier.name,
         ratePct: Number(rate),
         amount: Number(amount),
         commissionId: row.id,
@@ -200,9 +213,10 @@ export async function accrueCommissionsOnDeposit(
       console.info('[affiliate] accrued', {
         affiliateId: a.user.id,
         level: a.level,
-        tier: a.user.affiliateTier.name,
+        tier: effectiveTier.name,
         rate: Number(rate),
         amount: Number(amount),
+        defaultFallback: !a.user.affiliateTier,
       });
     } catch (err) {
       const msg = err instanceof Error ? `${err.message}\n${err.stack ?? ''}` : String(err);

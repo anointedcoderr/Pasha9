@@ -64,6 +64,31 @@ export async function POST() {
     const payoutCoins = chosen.payoutType === 'coins' ? chosen.payoutAmount : 0;
     const payoutBonus = chosen.payoutType === 'bonus' ? chosen.payoutAmount : 0;
 
+    // Ensure a stable BonusRule for spin bonus payouts so each
+    // UserBonus created from a spin can be traced and turnover-tracked
+    // by the existing bonus engine. Upserted by `code='spin_payout'`.
+    // turnoverX on the rule stays 0; the per-spin segment turnoverX is
+    // captured per UserBonus via turnoverRequired below.
+    let spinBonusRuleId: string | null = null;
+    if (payoutBonus > 0) {
+      const rule = await db.bonusRule.upsert({
+        where: { code: 'spin_payout' },
+        update: {},
+        create: {
+          code: 'spin_payout',
+          name: 'Spin Reward',
+          type: 'manual',
+          status: 'active',
+          amount: 0,
+          turnoverX: 0,
+          validityDays: 30,
+          description: 'Bonus issued by the spin wheel. Locked balance until per-segment turnover is met.',
+        },
+        select: { id: true },
+      });
+      spinBonusRuleId = rule.id;
+    }
+
     const result = await db.$transaction(async (tx) => {
       if (cost > 0 || payoutCoins > 0) {
         await tx.wallet.upsert({
@@ -72,18 +97,55 @@ export async function POST() {
           create: { userId, balance: 0, bonusBalance: Math.max(0, payoutCoins - cost), lockedBalance: 0, currency: 'BDT' },
         });
       }
-      if (payoutBonus > 0) {
-        // Bonus payout credits the main balance but locks it until the
-        // configured turnoverX is met. Phase 1: emit the lockedBalance
-        // delta only - the existing turnover engine handles the rest
-        // once the operator wires a BonusGrant for the segment.
+
+      let bonusGrantId: string | null = null;
+      if (payoutBonus > 0 && spinBonusRuleId) {
+        // Wallet locked balance + traceable UserBonus row. The
+        // turnover engine (addTurnover) updates turnoverProgress
+        // automatically as the player wagers, and the standard
+        // release path flips the grant to status='completed' once
+        // turnoverRequired is met. No more orphaned lockedBalance.
         await tx.wallet.upsert({
           where: { userId },
           update: { lockedBalance: { increment: payoutBonus } },
           create: { userId, balance: 0, bonusBalance: 0, lockedBalance: payoutBonus, currency: 'BDT' },
         });
+
+        const turnoverX = Number(chosen.turnoverX ?? 0);
+        const turnoverRequired = payoutBonus * turnoverX;
+        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+        const grant = await tx.userBonus.create({
+          data: {
+            userId,
+            bonusRuleId: spinBonusRuleId,
+            amount: payoutBonus,
+            expiresAt,
+            status: 'active',
+            turnoverRequired,
+            turnoverProgress: 0,
+            sourceType: 'spin_result',
+            sourceId: chosen.id,
+            note: `Spin segment ${chosen.label}`,
+          },
+        });
+        bonusGrantId = grant.id;
+
+        // Ledger row for the bonus credit (parity with applyDepositBonuses).
+        await tx.transaction.create({
+          data: {
+            userId,
+            type: 'bonus',
+            amount: payoutBonus,
+            status: 'completed',
+            reference: `spin:${chosen.id}`,
+            description: `Spin reward: ${chosen.label}`,
+            meta: { spinSegmentId: chosen.id, spinSegmentLabel: chosen.label, turnoverRequired, bonusGrantId: grant.id },
+          },
+        });
       }
-      return tx.spinResult.create({
+
+      const spinRow = await tx.spinResult.create({
         data: {
           userId,
           segmentId: chosen.id,
@@ -94,14 +156,15 @@ export async function POST() {
           source,
         },
       });
+      return { spinRow, bonusGrantId };
     });
 
     await recordActivity({
       actorId: userId,
       actorRole: session.role,
       action: 'SPIN_RESULT',
-      target: result.id,
-      meta: { segmentLabel: chosen.label, payoutAmount: chosen.payoutAmount, payoutType: chosen.payoutType, cost, source },
+      target: result.spinRow.id,
+      meta: { segmentLabel: chosen.label, payoutAmount: chosen.payoutAmount, payoutType: chosen.payoutType, cost, source, bonusGrantId: result.bonusGrantId ?? null },
     });
 
     return jsonOk({
@@ -111,6 +174,7 @@ export async function POST() {
       payoutAmount: chosen.payoutAmount,
       cost,
       source,
+      bonusGrantId: result.bonusGrantId ?? null,
       freeSpinsRemaining: Math.max(0, freeAvailable - (source === 'free_daily' ? 1 : 0)),
     });
   });

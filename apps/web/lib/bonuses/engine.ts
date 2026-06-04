@@ -538,6 +538,20 @@ export async function addTurnover(opts: AddTurnoverOpts): Promise<{
     }
 
     return { applied, unallocated: Number(remaining) };
+  }).then(async (result) => {
+    // Betting Pass bet-points accrual runs outside the bonus
+    // transaction so a Betting Pass failure can never roll back the
+    // bonus progress. Idempotency on BettingPassEvent prevents
+    // double-awarding when the caller retries.
+    if (opts.reference) {
+      try {
+        const { accrueBettingPassOnBet } = await import('@/lib/betting-pass/engine');
+        await accrueBettingPassOnBet(opts.userId, opts.reference, Number(opts.amount));
+      } catch (err) {
+        console.error('[addTurnover] betting-pass bet accrual failed', err);
+      }
+    }
+    return result;
   });
 }
 

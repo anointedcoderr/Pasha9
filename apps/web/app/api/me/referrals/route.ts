@@ -67,6 +67,21 @@ export async function GET() {
       },
     });
 
+    // Default-tier fallback. If the user has not been assigned a
+    // CommissionTier, surface the lowest-position active tier so the
+    // dashboard always shows the percentages the user would earn under
+    // the platform default. Operators no longer have to assign a tier
+    // to every normal user just so the dashboard reads correctly.
+    let displayTier = user.affiliateTier;
+    if (!displayTier) {
+      const defaultTier = await db.commissionTier.findFirst({
+        where: { status: 'active' },
+        orderBy: { position: 'asc' },
+        select: { name: true, level1Pct: true, level2Pct: true, level3Pct: true },
+      });
+      if (defaultTier) displayTier = defaultTier;
+    }
+
     // Refresh the cached balance from AffiliateCommission so the page
     // is always live even before the next cron run.
     const snap = await refreshReferralBalance(userId, settings.holdDays);
@@ -124,12 +139,13 @@ export async function GET() {
         phone: maskPhone(u.phone),
         joinedAt: u.createdAt,
       })),
-      tier: user.affiliateTier
+      tier: displayTier
         ? {
-            name: user.affiliateTier.name,
-            level1Pct: Number(user.affiliateTier.level1Pct),
-            level2Pct: Number(user.affiliateTier.level2Pct),
-            level3Pct: Number(user.affiliateTier.level3Pct),
+            name: displayTier.name,
+            level1Pct: Number(displayTier.level1Pct),
+            level2Pct: Number(displayTier.level2Pct),
+            level3Pct: Number(displayTier.level3Pct),
+            isDefault: !user.affiliateTier,
           }
         : null,
       balance: {

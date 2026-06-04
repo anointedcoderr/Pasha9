@@ -28,6 +28,7 @@ import { jsonOk, jsonError } from '@/lib/auth/errors';
 import { accrueLotteryTickets } from '@/lib/lotto/tickets';
 import { applyDepositBonuses, type ApplyDepositResult } from '@/lib/bonuses/engine';
 import { accrueCommissionsOnDeposit, type AccrualResult as CommissionAccrualResult } from '@/lib/affiliate/engine';
+import { accrueBettingPassOnDeposit } from '@/lib/betting-pass/engine';
 import { sendSms } from '@/lib/sms/service';
 import { fireEvent } from '@/lib/tracking/dispatcher';
 
@@ -140,6 +141,28 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       commissionResult.error = `engine_threw: ${msg.slice(0, 300)}`;
     }
 
+    // Betting Pass points accrual. Uses BettingPassEvent.idempotencyKey
+    // = `<season>:deposit:<depositId>` so re-approving the same deposit
+    // never double-awards points. Fail-safe: errors are logged and the
+    // approve response still ships.
+    let bettingPassDeposit: { pointsAwarded: number; pointsTotalAfter: number; newTier: number; error?: string } = {
+      pointsAwarded: 0,
+      pointsTotalAfter: 0,
+      newTier: 0,
+    };
+    try {
+      const r = await accrueBettingPassOnDeposit(deposit.userId, deposit.id, Number(amount));
+      bettingPassDeposit = {
+        pointsAwarded: r.pointsAwarded,
+        pointsTotalAfter: r.pointsTotalAfter,
+        newTier: r.newTier,
+      };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[deposit-approve] betting-pass accrual failed', err);
+      bettingPassDeposit.error = `engine_threw: ${msg.slice(0, 300)}`;
+    }
+
     // Headline ActivityLog row (existing M1 behaviour).
     await recordActivity({
       actorId: session.sub,
@@ -157,6 +180,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         commissionsAccrued: commissionResult.accrued.length,
         commissionTotal: commissionResult.accrued.reduce((acc, c) => acc + c.amount, 0),
         commissionEngineError: commissionResult.error,
+        bettingPassPointsAwarded: bettingPassDeposit.pointsAwarded,
+        bettingPassTotal: bettingPassDeposit.pointsTotalAfter,
+        bettingPassNewTier: bettingPassDeposit.newTier,
+        bettingPassError: bettingPassDeposit.error ?? null,
       },
     });
 

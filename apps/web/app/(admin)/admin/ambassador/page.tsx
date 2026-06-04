@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { FormField, Input, Textarea } from '@/components/ui/Input';
 import { Switch } from '@/components/ui/Switch';
 import { Star, Save, CheckCircle2 } from 'lucide-react';
+import { AdminMediaUpload } from '@/components/admin/AdminMediaUpload';
 
 interface Values {
   ambassador_name: string;
@@ -122,9 +123,14 @@ export default function AdminAmbassadorPage() {
                 <Textarea rows={3} value={values.ambassador_caption} onChange={(e) => set('ambassador_caption', e.target.value)} placeholder="Official ambassador of Pasha 9 for the season" />
               </FormField>
 
-              <FormField label="Image URL" hint="Upload via Banner uploader or paste an external URL. Leave empty to use the brand placeholder.">
-                <Input value={values.ambassador_image_url} onChange={(e) => set('ambassador_image_url', e.target.value)} placeholder="/uploads/banners/ambassador.png" />
-              </FormField>
+              <AdminMediaUpload
+                label="Ambassador photo"
+                hint="Leave empty to use the brand placeholder."
+                value={values.ambassador_image_url}
+                category="ambassadors"
+                constraintHint="PNG / JPG / WEBP / SVG, square ~240x240, max 1 MB"
+                onChange={(url) => set('ambassador_image_url', url ?? '')}
+              />
             </div>
           </Card>
 
@@ -143,9 +149,14 @@ export default function AdminAmbassadorPage() {
                 <Input value={values.video_promo_url} onChange={(e) => set('video_promo_url', e.target.value)} placeholder="https://www.youtube.com/watch?v=..." />
               </FormField>
 
-              <FormField label="Poster image URL" hint="Optional thumbnail shown before the video plays">
-                <Input value={values.video_promo_poster_url} onChange={(e) => set('video_promo_poster_url', e.target.value)} placeholder="/uploads/banners/video-poster.jpg" />
-              </FormField>
+              <AdminMediaUpload
+                label="Video poster image"
+                hint="Optional thumbnail shown before the video plays."
+                value={values.video_promo_poster_url}
+                category="banners"
+                constraintHint="PNG / JPG / WEBP, ~1920x720, max 4 MB"
+                onChange={(url) => set('video_promo_poster_url', url ?? '')}
+              />
             </div>
           </Card>
         </div>

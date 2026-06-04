@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/Button';
 import { Switch } from '@/components/ui/Switch';
 import { AlertCircle, RefreshCw, Save, Wallet, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
+import { AdminMediaUpload } from '@/components/admin/AdminMediaUpload';
 
 interface Settings {
   titleEn: string;
@@ -157,15 +158,14 @@ export default function DepositPromptAdminPage() {
                   </select>
                 </Field>
                 <div className="md:col-span-2">
-                  <Field label="Background image URL">
-                    <input
-                      type="url"
-                      placeholder="https://..."
-                      value={data.bgImageUrl}
-                      onChange={(e) => update('bgImageUrl', e.target.value)}
-                      className={inputCls}
-                    />
-                  </Field>
+                  <AdminMediaUpload
+                    label="Background image"
+                    hint="Renders at 55% opacity over the gradient when the overlay switch is ON."
+                    value={data.bgImageUrl}
+                    category="promo_background"
+                    constraintHint="PNG / JPG / WEBP, ~1600x1000, max 4 MB"
+                    onChange={(url) => update('bgImageUrl', url ?? '')}
+                  />
                 </div>
                 <div className="md:col-span-2 flex items-center justify-between rounded-lg border border-neon/10 bg-base-panel/60 p-3">
                   <div>
