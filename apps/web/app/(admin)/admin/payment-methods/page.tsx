@@ -18,6 +18,7 @@ import { Chip } from '@/components/ui/Chip';
 import { Switch } from '@/components/ui/Switch';
 import { Banknote, Plus, Pencil, Trash2, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
+import { AdminMediaUpload } from '@/components/admin/AdminMediaUpload';
 
 type Status = 'active' | 'hidden' | 'paused';
 type MethodType = 'mobile' | 'bank' | 'crypto';
@@ -209,8 +210,22 @@ export default function AdminPaymentMethodsPage() {
               </FormField>
             </div>
             <div className="grid gap-3 md:grid-cols-2">
-              <FormField label="Icon URL (square logo, ~64px)" hint="Shown on the public /deposit + /withdraw method tiles."><Input value={editor.iconUrl ?? ''} onChange={(e) => setEditor({ ...editor, iconUrl: e.target.value })} placeholder="https://..." /></FormField>
-              <FormField label="Banner URL (wide, ~1200x300)" hint="Shown on the selected-method detail panel header."><Input value={editor.bannerUrl ?? ''} onChange={(e) => setEditor({ ...editor, bannerUrl: e.target.value })} placeholder="https://..." /></FormField>
+              <AdminMediaUpload
+                label="Icon (square logo)"
+                hint="Shown on the public /deposit + /withdraw method tiles."
+                value={editor.iconUrl}
+                category="payment_icons"
+                constraintHint="PNG / JPG / WEBP / SVG, ~200x120, max 512 KB"
+                onChange={(url) => setEditor({ ...editor, iconUrl: url ?? '' })}
+              />
+              <AdminMediaUpload
+                label="Banner (wide header)"
+                hint="Shown on the selected-method detail panel header."
+                value={editor.bannerUrl}
+                category="banners"
+                constraintHint="PNG / JPG / WEBP, ~1200x300, max 4 MB"
+                onChange={(url) => setEditor({ ...editor, bannerUrl: url ?? '' })}
+              />
             </div>
             <FormField label="Deposit instructions (EN)" required><Textarea rows={2} value={editor.instruction} onChange={(e) => setEditor({ ...editor, instruction: e.target.value })} /></FormField>
             <FormField label="Deposit instructions (BN, optional)"><Textarea rows={2} value={editor.instructionBn ?? ''} onChange={(e) => setEditor({ ...editor, instructionBn: e.target.value })} /></FormField>

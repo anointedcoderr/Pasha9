@@ -10,6 +10,7 @@
 
 'use client';
 
+import { useState } from 'react';
 import { cn } from '@/lib/utils/cn';
 
 export interface PickerMethod {
@@ -45,14 +46,28 @@ function initials(name: string): string {
 }
 
 export function PaymentMethodPicker({ methods, selectedName, onSelect, emptyLabel }: Props) {
+  // Track icons that failed to load (e.g., admin set an external URL
+  // that 404s or got blocked by mixed-content rules). Without this the
+  // browser renders its native broken-image glyph in the tile. We
+  // fall back to the coloured monogram instead.
+  const [failed, setFailed] = useState<Set<string>>(new Set());
   if (methods.length === 0) {
     return <p className="text-sm text-brand-inkMute">{emptyLabel ?? 'No active methods.'}</p>;
   }
+  const markFailed = (id: string) => {
+    setFailed((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+  };
   return (
     <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
       {methods.map((m) => {
         const active = m.name === selectedName;
         const colours = fallbackColours(m.name);
+        const useIcon = m.iconUrl && !failed.has(m.id);
         return (
           <button
             key={m.id}
@@ -67,9 +82,14 @@ export function PaymentMethodPicker({ methods, selectedName, onSelect, emptyLabe
                 : 'border-brand-divider hover:border-brand-yellow-500/60',
             )}
           >
-            {m.iconUrl ? (
+            {useIcon ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={m.iconUrl} alt="" className="h-10 w-10 object-contain" />
+              <img
+                src={m.iconUrl ?? ''}
+                alt=""
+                onError={() => markFailed(m.id)}
+                className="h-10 w-10 object-contain"
+              />
             ) : (
               <span
                 aria-hidden

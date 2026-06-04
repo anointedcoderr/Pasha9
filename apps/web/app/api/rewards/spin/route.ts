@@ -13,11 +13,20 @@ import { db } from '@/lib/db/client';
 import { withAuth, ensureUser, recordActivity } from '@/lib/auth/guard';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 import { loadSpinConfig } from '@/lib/rewards/config';
+import { rateLimit } from '@/lib/auth/rate-limit';
 
 export async function POST() {
   return withAuth(async () => {
     const session = await ensureUser();
     const userId = session.sub;
+
+    // Double-click guard: cap at 1 spin per 3 seconds per user. The UI
+    // already disables the button while a spin animates, but a quick
+    // double-tap before the loading state flips could otherwise fire
+    // two credits in flight at the same time.
+    const limit = rateLimit(`spin:${userId}`, 1, 3_000);
+    if (!limit.ok) return jsonError(429, 'SPIN_COOLDOWN', 'Please wait a moment before spinning again.');
+
     const config = await loadSpinConfig();
     if (!config.enabled) return jsonError(503, 'SPIN_DISABLED', 'Spin wheel is currently disabled.');
 

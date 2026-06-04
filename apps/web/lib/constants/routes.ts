@@ -77,6 +77,7 @@ export const ROUTES = {
     notifications: '/admin/notifications',
     integrations: '/admin/integrations',
     nativeGames: '/admin/native-games',
+    rewardClaims: '/admin/reward-claims',
     depositPrompt: '/admin/deposit-prompt',
     depositNotice: '/admin/deposit-notice',
     depositBonusTiers: '/admin/deposit-bonus-tiers',

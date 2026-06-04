@@ -45,7 +45,24 @@ interface GlobalLimits {
   policy: string;
 }
 
+interface TurnoverState {
+  loaded: boolean;
+  isMet: boolean;
+  multiplier: number;
+  requiredTurnover: number;
+  completedTurnover: number;
+  remainingTurnover: number;
+}
+
 const DEFAULT_LIMITS: GlobalLimits = { min: 500, max: 200000, policy: '' };
+const DEFAULT_TURNOVER: TurnoverState = {
+  loaded: false,
+  isMet: true,
+  multiplier: 1,
+  requiredTurnover: 0,
+  completedTurnover: 0,
+  remainingTurnover: 0,
+};
 
 export default function WithdrawPage() {
   const t = useT();
@@ -60,6 +77,7 @@ export default function WithdrawPage() {
   const [methods, setMethods] = useState<PayoutMethod[]>([]);
   const [methodsLoading, setMethodsLoading] = useState(true);
   const [limits, setLimits] = useState<GlobalLimits>(DEFAULT_LIMITS);
+  const [turnover, setTurnover] = useState<TurnoverState>(DEFAULT_TURNOVER);
 
   useEffect(() => {
     let alive = true;
@@ -117,6 +135,40 @@ export default function WithdrawPage() {
 
     return () => { alive = false; };
   }, []);
+
+  // Refresh turnover eligibility whenever auth resolves to a real
+  // session and on every wallet-refresh event so a fresh bet updates
+  // the warning without a hard reload.
+  useEffect(() => {
+    if (auth.kind !== 'authed') {
+      setTurnover(DEFAULT_TURNOVER);
+      return;
+    }
+    let alive = true;
+    const probe = () => {
+      fetch('/api/withdrawals/eligibility', { cache: 'no-store', credentials: 'include' })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (!alive || !data) return;
+          setTurnover({
+            loaded: true,
+            isMet: Boolean(data.isMet),
+            multiplier: Number(data.multiplier ?? 1),
+            requiredTurnover: Number(data.requiredTurnover ?? 0),
+            completedTurnover: Number(data.completedTurnover ?? 0),
+            remainingTurnover: Number(data.remainingTurnover ?? 0),
+          });
+        })
+        .catch(() => { /* keep defaults */ });
+    };
+    probe();
+    const handler = () => probe();
+    window.addEventListener('pasha9:wallet-refresh', handler);
+    return () => {
+      alive = false;
+      window.removeEventListener('pasha9:wallet-refresh', handler);
+    };
+  }, [auth.kind]);
 
   const {
     register,
@@ -194,6 +246,27 @@ export default function WithdrawPage() {
           setServerDetail('HTTP 400 . INSUFFICIENT_FUNDS');
           return;
         }
+        if (code === 'TURNOVER_NOT_MET') {
+          setServerError(message ?? 'Your turnover requirement has not been completed yet.');
+          setServerDetail('HTTP 403 . TURNOVER_NOT_MET');
+          // Re-fetch eligibility so the on-page warning reflects the
+          // server-side numbers used in the rejection.
+          fetch('/api/withdrawals/eligibility', { cache: 'no-store', credentials: 'include' })
+            .then((r) => (r.ok ? r.json() : null))
+            .then((data) => {
+              if (!data) return;
+              setTurnover({
+                loaded: true,
+                isMet: Boolean(data.isMet),
+                multiplier: Number(data.multiplier ?? 1),
+                requiredTurnover: Number(data.requiredTurnover ?? 0),
+                completedTurnover: Number(data.completedTurnover ?? 0),
+                remainingTurnover: Number(data.remainingTurnover ?? 0),
+              });
+            })
+            .catch(() => { /* keep current */ });
+          return;
+        }
         if (code === 'BELOW_MIN' || code === 'ABOVE_MAX' || code === 'METHOD_BELOW_MIN' || code === 'METHOD_ABOVE_MAX' || code === 'METHOD_PAYOUT_DISABLED') {
           setServerError(message ?? 'Amount or method is not allowed.');
           setServerDetail(`HTTP 400 . ${code}`);
@@ -236,7 +309,8 @@ export default function WithdrawPage() {
   };
 
   const balanceLabel = auth.kind === 'authed' ? formatBDT(auth.balance) : '-';
-  const canSubmit = auth.kind === 'authed' && !loading && methods.length > 0;
+  const turnoverBlocks = turnover.loaded && !turnover.isMet;
+  const canSubmit = auth.kind === 'authed' && !loading && methods.length > 0 && !turnoverBlocks;
 
   const effectiveMin = selectedMethod?.minWithdrawal != null
     ? Math.max(limits.min, selectedMethod.minWithdrawal)
@@ -260,6 +334,40 @@ export default function WithdrawPage() {
             <Link href="/?login=1" className="btn-yellow inline-flex h-9 items-center rounded-lg px-3 text-sm">
               <LogIn className="mr-1.5 h-4 w-4" /> Log in
             </Link>
+          </div>
+        </Card>
+      ) : null}
+
+      {turnoverBlocks ? (
+        <Card padding="md" className="mb-4 border-l-4 border-rose-500 bg-rose-50">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 text-rose-600" />
+            <div className="flex-1">
+              <p className="text-sm font-bold text-rose-900">
+                {lang === 'bn'
+                  ? 'আপনার টার্নওভার সম্পূর্ণ হয়নি।'
+                  : 'Your turnover requirement has not been completed yet.'}
+              </p>
+              <p className="mt-1 text-xs text-rose-800">
+                {lang === 'bn'
+                  ? `উইথড্রয়াল রিকোয়েস্ট জমা দেওয়ার আগে আরও ৳ ${turnover.remainingTurnover.toLocaleString(undefined, { maximumFractionDigits: 2 })} টার্নওভার সম্পূর্ণ করুন।`
+                  : `You need to complete ৳ ${turnover.remainingTurnover.toLocaleString(undefined, { maximumFractionDigits: 2 })} more turnover before you can submit a withdrawal request.`}
+              </p>
+              <div className="mt-2 grid gap-1 text-[11px] text-rose-900 sm:grid-cols-3">
+                <div className="rounded-md bg-white/50 px-2 py-1">
+                  <span className="block font-bold uppercase tracking-wider text-rose-700">{lang === 'bn' ? 'প্রয়োজনীয়' : 'Required'}</span>
+                  ৳ {turnover.requiredTurnover.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                </div>
+                <div className="rounded-md bg-white/50 px-2 py-1">
+                  <span className="block font-bold uppercase tracking-wider text-rose-700">{lang === 'bn' ? 'সম্পূর্ণ' : 'Completed'}</span>
+                  ৳ {turnover.completedTurnover.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                </div>
+                <div className="rounded-md bg-white/50 px-2 py-1">
+                  <span className="block font-bold uppercase tracking-wider text-rose-700">{lang === 'bn' ? 'বাকি' : 'Remaining'}</span>
+                  ৳ {turnover.remainingTurnover.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                </div>
+              </div>
+            </div>
           </div>
         </Card>
       ) : null}

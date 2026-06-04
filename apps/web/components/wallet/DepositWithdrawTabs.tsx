@@ -1,10 +1,10 @@
 // Built by Anointed Coder.
 //
-// Babu88-style Deposit / Withdrawal tab bar shown at the top of both
-// /deposit and /withdraw. Active tab is highlighted in brand yellow
-// with an underline. The active variant is decided by the consuming
-// page, not by inspecting the pathname, so the bar stays a pure
-// presentational component.
+// Cashier tab bar shown at the top of /deposit and /withdraw. Both
+// labels stay readable at all times. The active tab gets a gold pill
+// and the inactive tab keeps a high-contrast ink colour against the
+// brand-paper surface. Earlier rev used a deep ink fill with low-alpha
+// white text which read as a blank dark strip on mobile.
 
 'use client';
 
@@ -20,37 +20,40 @@ export interface DepositWithdrawTabsProps {
 export function DepositWithdrawTabs({ active, className }: DepositWithdrawTabsProps) {
   const t = useT();
   return (
-    <div className={cn('mb-4 overflow-hidden rounded-2xl border border-brand-divider bg-brand-ink', className)}>
-      <div role="tablist" aria-label="Cashier" className="grid grid-cols-2">
-        <Link
-          role="tab"
-          aria-selected={active === 'deposit'}
-          href="/deposit"
-          className={cn(
-            'relative flex h-12 items-center justify-center text-sm font-extrabold uppercase tracking-wider transition',
-            active === 'deposit' ? 'text-white' : 'text-white/60 hover:text-white',
-          )}
-        >
-          {t('deposit.title')}
-          {active === 'deposit' ? (
-            <span aria-hidden className="absolute inset-x-3 bottom-0 h-1 rounded-full bg-brand-yellow-500" />
-          ) : null}
-        </Link>
-        <Link
-          role="tab"
-          aria-selected={active === 'withdraw'}
-          href="/withdraw"
-          className={cn(
-            'relative flex h-12 items-center justify-center text-sm font-extrabold uppercase tracking-wider transition',
-            active === 'withdraw' ? 'text-white' : 'text-white/60 hover:text-white',
-          )}
-        >
-          {t('withdraw.title')}
-          {active === 'withdraw' ? (
-            <span aria-hidden className="absolute inset-x-3 bottom-0 h-1 rounded-full bg-brand-yellow-500" />
-          ) : null}
-        </Link>
-      </div>
+    <div
+      role="tablist"
+      aria-label="Cashier"
+      className={cn(
+        'mb-4 grid grid-cols-2 gap-1 rounded-2xl border border-brand-divider bg-brand-paper p-1 shadow-sm',
+        className,
+      )}
+    >
+      <Link
+        role="tab"
+        aria-selected={active === 'deposit'}
+        href="/deposit"
+        className={cn(
+          'relative inline-flex h-11 items-center justify-center rounded-xl text-sm font-extrabold uppercase tracking-wider transition',
+          active === 'deposit'
+            ? 'bg-gradient-to-b from-amber-300 to-amber-500 text-[#3A1F00] shadow-[inset_0_1px_0_rgba(255,255,255,0.55),0_4px_10px_-4px_rgba(245,180,0,0.55)]'
+            : 'text-brand-inkSoft hover:bg-brand-surface hover:text-brand-ink',
+        )}
+      >
+        {t('deposit.title')}
+      </Link>
+      <Link
+        role="tab"
+        aria-selected={active === 'withdraw'}
+        href="/withdraw"
+        className={cn(
+          'relative inline-flex h-11 items-center justify-center rounded-xl text-sm font-extrabold uppercase tracking-wider transition',
+          active === 'withdraw'
+            ? 'bg-gradient-to-b from-amber-300 to-amber-500 text-[#3A1F00] shadow-[inset_0_1px_0_rgba(255,255,255,0.55),0_4px_10px_-4px_rgba(245,180,0,0.55)]'
+            : 'text-brand-inkSoft hover:bg-brand-surface hover:text-brand-ink',
+        )}
+      >
+        {t('withdraw.title')}
+      </Link>
     </div>
   );
 }

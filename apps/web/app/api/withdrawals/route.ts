@@ -21,6 +21,7 @@ import { requireActiveUser } from '@/lib/auth/rbac';
 import { withAuth, recordActivity } from '@/lib/auth/guard';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 import { rateLimit } from '@/lib/auth/rate-limit';
+import { computeDepositTurnover } from '@/lib/turnover/deposit-gate';
 
 const schema = z.object({
   amount: z.coerce.number().min(1).max(10_000_000),
@@ -92,6 +93,28 @@ export async function POST(req: NextRequest) {
     const available = wallet ? Number(wallet.balance) - Number(wallet.lockedBalance) : 0;
     if (available < parsed.data.amount) {
       return jsonError(400, 'INSUFFICIENT_FUNDS', 'Withdrawable balance is lower than the requested amount.');
+    }
+
+    // Deposit turnover gate. Lifetime aggregate, configurable via the
+    // deposit_turnover_multiplier SystemSetting (default 1.0). Returns
+    // 403 TURNOVER_NOT_MET so the client can display the precise
+    // shortfall - the frontend already disables the button when the
+    // /api/withdrawals/eligibility endpoint says isMet=false, but this
+    // server-side enforcement is the authoritative gate.
+    const turnover = await computeDepositTurnover(session.sub);
+    if (!turnover.isMet) {
+      return jsonError(
+        403,
+        'TURNOVER_NOT_MET',
+        `Complete ${turnover.remainingTurnover.toFixed(2)} BDT more turnover before submitting a withdrawal.`,
+        {
+          multiplier: turnover.multiplier,
+          approvedDepositTotal: turnover.approvedDepositTotal,
+          requiredTurnover: turnover.requiredTurnover,
+          completedTurnover: turnover.completedTurnover,
+          remainingTurnover: turnover.remainingTurnover,
+        },
+      );
     }
 
     const withdrawal = await db.withdrawal.create({

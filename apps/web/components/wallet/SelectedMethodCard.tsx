@@ -52,6 +52,8 @@ function fallbackColour(name: string): string {
 export function SelectedMethodCard({ method, mode, showCopy = true, className }: Props) {
   const { lang } = useLang();
   const [copied, setCopied] = useState(false);
+  const [bannerFailed, setBannerFailed] = useState(false);
+  const [iconFailed, setIconFailed] = useState(false);
   const bn = lang === 'bn';
   const numberLabel = bn
     ? mode === 'deposit' ? 'ওয়ালেট নম্বর' : 'পেমেন্ট নম্বর'
@@ -73,17 +75,30 @@ export function SelectedMethodCard({ method, mode, showCopy = true, className }:
     } catch { /* clipboard not available */ }
   };
 
+  const useBanner = method.bannerUrl && !bannerFailed;
+  const useIcon = method.iconUrl && !iconFailed;
+
   return (
     <div className={cn('overflow-hidden rounded-2xl border border-brand-divider bg-brand-paper shadow-sm', className)}>
-      {method.bannerUrl ? (
+      {useBanner ? (
         <div className="relative">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={method.bannerUrl} alt="" className="h-32 w-full object-cover" />
+          <img
+            src={method.bannerUrl ?? ''}
+            alt=""
+            onError={() => setBannerFailed(true)}
+            className="h-32 w-full object-cover"
+          />
           <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-black/20 to-transparent" />
           <div className="absolute inset-x-4 bottom-3 flex items-center gap-3">
-            {method.iconUrl ? (
+            {useIcon ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={method.iconUrl} alt="" className="h-12 w-12 rounded-xl bg-white p-1 shadow" />
+              <img
+                src={method.iconUrl ?? ''}
+                alt=""
+                onError={() => setIconFailed(true)}
+                className="h-12 w-12 rounded-xl bg-white p-1 shadow"
+              />
             ) : null}
             <p className="text-lg font-extrabold uppercase tracking-wider text-white drop-shadow">
               {method.name} {mode === 'deposit' ? (bn ? 'ডিপোজিট' : 'Deposit') : (bn ? 'উইথড্রয়াল' : 'Withdrawal')}
@@ -92,9 +107,14 @@ export function SelectedMethodCard({ method, mode, showCopy = true, className }:
         </div>
       ) : (
         <div className="flex items-center gap-3 px-4 py-4" style={{ background: accent }}>
-          {method.iconUrl ? (
+          {useIcon ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={method.iconUrl} alt="" className="h-10 w-10 rounded-lg bg-white p-1" />
+            <img
+              src={method.iconUrl ?? ''}
+              alt=""
+              onError={() => setIconFailed(true)}
+              className="h-10 w-10 rounded-lg bg-white p-1"
+            />
           ) : (
             <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/15 text-base font-extrabold text-white">
               {method.name.slice(0, 2).toUpperCase()}
