@@ -75,6 +75,21 @@ interface DebugSnapshot {
   health: { seedMissing: boolean; renderingSynthetic: boolean };
 }
 
+interface SyncSnapshot {
+  inSync: boolean;
+  sameOrder: boolean;
+  curatedCount: number;
+  renderableCuratedCount: number;
+  publicCount: number;
+  missingFromPublic: string[];
+  extraInPublic: string[];
+  adminRows: Array<{ curatedId: string; source: 'external' | 'native'; ref: string; expectedKey: string | null; displayName: string | null; resolvedReason: string | null }>;
+  publicKeys: string[];
+  hotSection: { present: boolean; isVisible: boolean | null; gamesLength: number; sourceRowExists: boolean; sourceRowIsVisible: boolean | null; sourceRowTitleEn: string | null };
+  flags: { nativeGamesPublicEnabled: boolean };
+  blockedCuratedRows: Array<{ curatedId: string; source: string; ref: string; reason: string }>;
+}
+
 export default function AdminHomepageSectionsPage() {
   const [sections, setSections] = useState<SectionRow[]>([]);
   const [featured, setFeatured] = useState<FeaturedRow[]>([]);
@@ -86,13 +101,15 @@ export default function AdminHomepageSectionsPage() {
   const [seeding, setSeeding] = useState(false);
   const [debug, setDebug] = useState<DebugSnapshot | null>(null);
   const [debugBusy, setDebugBusy] = useState(false);
+  const [sync, setSync] = useState<SyncSnapshot | null>(null);
 
   const refresh = useCallback(async () => {
     setError(null);
     try {
-      const [a, b] = await Promise.all([
+      const [a, b, c] = await Promise.all([
         fetch('/api/admin/homepage-sections', { cache: 'no-store' }),
         fetch('/api/admin/homepage-featured', { cache: 'no-store' }),
+        fetch('/api/admin/homepage-featured/sync-check', { cache: 'no-store' }),
       ]);
       const ja = await a.json();
       const jb = await b.json();
@@ -100,6 +117,15 @@ export default function AdminHomepageSectionsPage() {
       if (!b.ok) throw new Error(jb?.message ?? jb?.code ?? 'Failed to load featured games');
       setSections(ja.sections as SectionRow[]);
       setFeatured(jb.featured as FeaturedRow[]);
+      // sync-check is best-effort: a non-2xx response from this
+      // endpoint must NOT prevent the rest of the admin from loading.
+      // Render the banner only when the endpoint actually returned ok.
+      if (c.ok) {
+        try {
+          const jc = await c.json();
+          if (jc?.ok) setSync(jc as SyncSnapshot);
+        } catch { /* ignore parse errors */ }
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load');
     } finally {
@@ -230,6 +256,43 @@ export default function AdminHomepageSectionsPage() {
       />
 
       {error ? <Card padding="sm" className="border-l-4 border-rose-400/60"><p className="text-sm text-rose-300">{error}</p></Card> : null}
+
+      {sync && !sync.inSync && sync.curatedCount > 0 ? (
+        <Card padding="md" className="border-l-4 border-rose-500 bg-rose-500/10">
+          <div className="flex flex-wrap items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose-300" />
+            <div className="grow text-sm text-rose-100">
+              <p className="font-bold">Public Hot Games strip is out of sync with the Manager.</p>
+              <p className="mt-1 text-[11px] text-rose-200">
+                Admin curated {sync.curatedCount} game{sync.curatedCount === 1 ? '' : 's'}, public strip rendering {sync.publicCount}.
+                {sync.sameOrder ? '' : ' Order does not match.'}
+                {sync.hotSection.sourceRowIsVisible === false ? ' homepage_hot PublicSection is hidden (auto-overridden by the assembler).' : ''}
+                {sync.flags.nativeGamesPublicEnabled ? '' : ' native_games_public_enabled is OFF, so native curation is excluded.'}
+              </p>
+              {sync.adminRows.some((r) => r.expectedKey === null) ? (
+                <div className="mt-2 space-y-1">
+                  <p className="text-[10px] uppercase tracking-wider text-rose-300">Blocked curated rows</p>
+                  <ul className="space-y-0.5 text-[11px]">
+                    {sync.adminRows.filter((r) => r.expectedKey === null).map((r) => (
+                      <li key={r.curatedId} className="font-mono">
+                        {r.source}:{r.ref} {r.displayName ? `(${r.displayName})` : ''} . {r.resolvedReason}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </Card>
+      ) : null}
+
+      {sync && sync.inSync && sync.curatedCount > 0 ? (
+        <Card padding="sm" className="border-l-4 border-emerald-400/60 bg-emerald-500/10">
+          <p className="text-xs text-emerald-100">
+            Public Hot Games strip mirrors the Manager. {sync.curatedCount} curated . {sync.publicCount} rendered.
+          </p>
+        </Card>
+      ) : null}
 
       <Card padding="md">
         <div className="flex flex-wrap items-end justify-between gap-3">

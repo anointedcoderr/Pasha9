@@ -63,7 +63,19 @@ export interface HomeSection {
 
 export interface HomeSectionsBundle {
   sections: HomeSection[];
+  // Number of HomepageFeaturedGame rows that resolved to a renderable
+  // game (post status/native filter). This is what landed in the
+  // homepage_hot section's games array.
   featuredCount: number;
+  // Raw HomepageFeaturedGame row count, INDEPENDENT of native flag /
+  // status filtering. Use this to decide "operator has curation" -
+  // featuredCount can be 0 while curatedCount is non-zero when all
+  // curation is native and the public flag is off.
+  curatedCount: number;
+  // Per-row diagnostics for rows the assembler dropped silently. The
+  // public API route forwards this in a non-load-bearing field so the
+  // admin sync-check can surface drift without re-querying the DB.
+  blockedCuratedRows: Array<{ curatedId: string; source: 'external' | 'native'; ref: string; reason: string }>;
 }
 
 const STRIP_LIMIT = 12;
@@ -180,19 +192,42 @@ function nativeToGame(row: NativeGameRow): HomeSectionGame {
   };
 }
 
-async function loadFeaturedGames(): Promise<HomeSectionGame[]> {
+interface LoadFeaturedResult {
+  games: HomeSectionGame[];
+  curatedCount: number;
+  blocked: Array<{ curatedId: string; source: 'external' | 'native'; ref: string; reason: string }>;
+}
+
+async function loadFeaturedGames(nativePublicArg?: boolean): Promise<LoadFeaturedResult> {
   const rows = await db.homepageFeaturedGame.findMany({
     orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
     take: FEATURED_LIMIT,
   });
-  if (rows.length === 0) return [];
+  const curatedCount = rows.length;
+  if (curatedCount === 0) return { games: [], curatedCount: 0, blocked: [] };
 
   // Native games stay hidden from the public Hot Games strip while the
   // native_games_public_enabled flag is off, even if a previous admin
-  // added a native row. Without this guard a flag-flip back to false
-  // would leak Pasha Originals onto the homepage strip.
-  const nativePublic = await isNativeGamesPublic();
-  const usable = rows.filter((r) => (r.source === 'native' ? nativePublic : true));
+  // added a native row. The caller (buildHomeSections) resolves the
+  // flag once and passes it in so every per-section decision sees the
+  // same snapshot.
+  const nativePublic = nativePublicArg ?? (await isNativeGamesPublic());
+
+  const blocked: LoadFeaturedResult['blocked'] = [];
+  const usable = rows.filter((r) => {
+    if (r.source === 'native') {
+      if (!nativePublic) {
+        blocked.push({
+          curatedId: r.id,
+          source: 'native',
+          ref: r.nativeGameCode ?? '',
+          reason: 'native_games_public_enabled=false',
+        });
+        return false;
+      }
+    }
+    return true;
+  });
 
   const externalIds = usable.filter((r) => r.source === 'external' && r.externalGameId).map((r) => r.externalGameId as string);
   const nativeCodes = usable.filter((r) => r.source === 'native' && r.nativeGameCode).map((r) => r.nativeGameCode as string);
@@ -222,15 +257,43 @@ async function loadFeaturedGames(): Promise<HomeSectionGame[]> {
   for (const r of usable) {
     if (r.source === 'external' && r.externalGameId) {
       const g = externalById.get(r.externalGameId);
-      if (!g) continue;
+      if (!g) {
+        blocked.push({
+          curatedId: r.id,
+          source: 'external',
+          ref: r.externalGameId,
+          reason: 'external_game_or_provider_inactive_or_missing',
+        });
+        continue;
+      }
       games.push({ ...externalToGame(g), isHot: r.isHot, isJackpot: r.isJackpot });
     } else if (r.source === 'native' && r.nativeGameCode) {
       const g = nativeByCode.get(r.nativeGameCode);
-      if (!g) continue;
+      if (!g) {
+        blocked.push({
+          curatedId: r.id,
+          source: 'native',
+          ref: r.nativeGameCode,
+          reason: 'native_game_inactive_or_missing',
+        });
+        continue;
+      }
       games.push({ ...nativeToGame(g), isHot: r.isHot, isJackpot: r.isJackpot });
     }
   }
-  return games;
+
+  // One aggregated warn per request when at least one curated row was
+  // dropped, so production logs surface drift without per-row spam.
+  if (blocked.length > 0) {
+    console.warn('[homepage] curated rows blocked from Hot Games strip', {
+      curatedCount,
+      renderedCount: games.length,
+      blockedCount: blocked.length,
+      blocked: blocked.slice(0, 10),
+    });
+  }
+
+  return { games, curatedCount, blocked };
 }
 
 // Synthetic Hot Games section used when the PublicSection seed row is
@@ -313,21 +376,26 @@ export async function buildHomeSections(): Promise<HomeSectionsBundle> {
     orderBy: [{ position: 'asc' }, { titleEn: 'asc' }],
   });
 
-  const featuredGames = await loadFeaturedGames();
+  // Snapshot the native flag once so every per-section decision sees
+  // the same value, even if an admin toggles it mid-assembly.
+  const nativePublic = await isNativeGamesPublic();
+  const featured = await loadFeaturedGames(nativePublic);
+  const featuredGames = featured.games;
+  const curatedCount = featured.curatedCount;
 
   const sections: HomeSection[] = [];
   for (const s of sectionRows) {
     let games: HomeSectionGame[] = [];
     switch (s.key) {
       case 'homepage_hot': {
-        // Featured curation is the source of truth for Hot. When the
-        // admin has not curated any games (or the curated set is
-        // empty after status filtering) fall back to live ExternalGame
-        // rows flagged isFeatured. We deliberately do NOT fall back to
-        // native game providers here - inactive native games would
-        // surface as "Coming soon" tiles that the visitor cannot
-        // actually launch from the homepage strip.
-        if (featuredGames.length > 0) {
+        // Operator curation is the SINGLE source of truth. As soon as
+        // any HomepageFeaturedGame row exists we render only those
+        // rows and never fall back to ExternalGame.isFeatured, even if
+        // every curated row was filtered out (e.g. all-native curation
+        // while native_games_public_enabled=false). The empty-games
+        // case here cascades to the route filter which the route now
+        // short-circuits via bundle.curatedCount.
+        if (curatedCount > 0) {
           games = featuredGames.slice(0, STRIP_LIMIT).map((g) => ({ ...g, isHot: true }));
         } else {
           const fallback = await db.externalGame.findMany({
@@ -352,12 +420,12 @@ export async function buildHomeSections(): Promise<HomeSectionsBundle> {
       }
       case 'homepage_crash': {
         const external = await loadExternalByCategoryMatch(CATEGORY_MATCHERS[s.key]);
-        const native = (await isNativeGamesPublic()) ? await loadNativeCrash() : [];
+        const native = nativePublic ? await loadNativeCrash() : [];
         games = [...native, ...external].slice(0, STRIP_LIMIT);
         break;
       }
       case 'homepage_lottery': {
-        games = (await isNativeGamesPublic()) ? await loadNativeLottery() : [];
+        games = nativePublic ? await loadNativeLottery() : [];
         break;
       }
       // brand / video / upcoming are layout markers; no game list.
@@ -382,19 +450,41 @@ export async function buildHomeSections(): Promise<HomeSectionsBundle> {
     });
   }
 
-  // Resilience: if the operator's database is missing the
-  // `homepage_hot` PublicSection row (Phase A seed never ran or the
-  // row was deleted) but the admin has already curated games via
-  // HomepageFeaturedGame, surface those games anyway. The operator
-  // should still re-run the seed - the warning on /admin/homepage-sections
-  // stays - but the public homepage cannot silently drop curation.
-  const hasHotRow = sections.some((s) => s.key === 'homepage_hot');
-  if (!hasHotRow && featuredGames.length > 0) {
-    const synthetic = syntheticHotSection(
-      featuredGames.slice(0, STRIP_LIMIT).map((g) => ({ ...g, isHot: true })),
-    );
-    sections.unshift(synthetic);
+  // Resilience: HomepageFeaturedGame curation must reach the visitor
+  // whenever the operator has added rows, regardless of the
+  // PublicSection.homepage_hot row's visibility state. Cover both
+  // missing-row and hidden-row cases here so the public API filter
+  // never silently drops curated games.
+  if (curatedCount > 0) {
+    const hotIdx = sections.findIndex((s) => s.key === 'homepage_hot');
+    const hotGames = featuredGames.slice(0, STRIP_LIMIT).map((g) => ({ ...g, isHot: true }));
+    if (hotIdx === -1) {
+      sections.unshift(syntheticHotSection(hotGames));
+    } else {
+      const row = sections[hotIdx];
+      const needsForce = !row.isVisible || row.games.length === 0;
+      if (needsForce) {
+        // The operator either staged curation with the strip hidden
+        // (overridden so curation reaches the visitor) or every curated
+        // row was filtered out at this snapshot (overridden with the
+        // resolved games array, which may be empty). Either way the
+        // homepage_hot row MUST land in the public payload so the
+        // operator can confirm changes propagate.
+        console.warn('[homepage] forcing homepage_hot visible because curation exists', {
+          curatedCount,
+          resolvedGames: hotGames.length,
+          sectionWasVisible: row.isVisible,
+          sectionHadGames: row.games.length,
+        });
+        sections[hotIdx] = { ...row, isVisible: true, games: hotGames };
+      }
+    }
   }
 
-  return { sections, featuredCount: featuredGames.length };
+  return {
+    sections,
+    featuredCount: featuredGames.length,
+    curatedCount,
+    blockedCuratedRows: featured.blocked,
+  };
 }

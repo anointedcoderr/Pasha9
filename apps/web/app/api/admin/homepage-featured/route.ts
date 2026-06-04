@@ -3,8 +3,13 @@
 // GET  /api/admin/homepage-featured   list current featured curation
 // POST /api/admin/homepage-featured   add a game to the curation
 //
-// The curation is capped at 20 rows. POST returns 409 FEATURED_LIMIT
-// when the operator tries to add a 21st game.
+// The curation is capped at 20 rows. POST returns 409 DUPLICATE when
+// the operator tries to add a game that is already on the list (the
+// dedupe check runs BEFORE the limit check so a full-list re-add gets
+// the accurate 409 code, not the misleading FEATURED_LIMIT). On
+// success the response includes both the inserted row AND the full
+// enriched, ordered curation list so the admin client renders the
+// new state in a single roundtrip.
 
 export const dynamic = 'force-dynamic';
 
@@ -30,60 +35,83 @@ const postSchema = z
     message: 'Provide externalGameId for source=external or nativeGameCode for source=native.',
   });
 
+interface EnrichedRow {
+  id: string;
+  source: 'external' | 'native';
+  externalGameId: string | null;
+  nativeGameCode: string | null;
+  isHot: boolean;
+  isJackpot: boolean;
+  position: number;
+  addedBy: string;
+  createdAt: Date;
+  displayName: string;
+  providerName: string;
+  category: string | null;
+  imageUrl: string | null;
+  live: boolean;
+}
+
+// Shared enrichment used by both GET and POST. Always returns rows in
+// canonical (position asc, createdAt asc) order so the admin client can
+// trust the order it receives.
+async function loadEnrichedFeaturedList(): Promise<EnrichedRow[]> {
+  const rows = await db.homepageFeaturedGame.findMany({
+    orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
+    take: FEATURED_LIMIT,
+  });
+
+  const externalIds = rows.filter((r) => r.source === 'external' && r.externalGameId).map((r) => r.externalGameId as string);
+  const nativeCodes = rows.filter((r) => r.source === 'native' && r.nativeGameCode).map((r) => r.nativeGameCode as string);
+
+  const [externals, natives] = await Promise.all([
+    externalIds.length
+      ? db.externalGame.findMany({
+          where: { id: { in: externalIds } },
+          select: { id: true, displayName: true, gameUid: true, category: true, status: true, imageUrl: true, provider: { select: { name: true, providerKey: true, status: true } } },
+        })
+      : Promise.resolve([]),
+    nativeCodes.length
+      ? db.nativeGameProvider.findMany({
+          where: { gameCode: { in: nativeCodes } },
+          select: { gameCode: true, displayName: true, isActive: true },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const externalById = new Map(externals.map((g) => [g.id, g]));
+  const nativeByCode = new Map(natives.map((g) => [g.gameCode, g]));
+
+  return rows.map((r) => {
+    const ext = r.externalGameId ? externalById.get(r.externalGameId) ?? null : null;
+    const nat = r.nativeGameCode ? nativeByCode.get(r.nativeGameCode) ?? null : null;
+    const displayName = ext?.displayName ?? nat?.displayName ?? '(removed)';
+    const providerName = ext?.provider?.name ?? 'Pasha Originals';
+    const live = ext ? ext.status === 'active' && ext.provider?.status === 'active' : nat ? nat.isActive : false;
+    return {
+      id: r.id,
+      source: r.source as 'external' | 'native',
+      externalGameId: r.externalGameId,
+      nativeGameCode: r.nativeGameCode,
+      isHot: r.isHot,
+      isJackpot: r.isJackpot,
+      position: r.position,
+      addedBy: r.addedBy,
+      createdAt: r.createdAt,
+      displayName,
+      providerName,
+      category: ext?.category ?? null,
+      imageUrl: ext?.imageUrl ?? null,
+      live,
+    };
+  });
+}
+
 export async function GET() {
   return withAuth(async () => {
     await ensurePermission('homepage.write');
-    const rows = await db.homepageFeaturedGame.findMany({
-      orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
-      take: FEATURED_LIMIT,
-    });
-
-    const externalIds = rows.filter((r) => r.source === 'external' && r.externalGameId).map((r) => r.externalGameId as string);
-    const nativeCodes = rows.filter((r) => r.source === 'native' && r.nativeGameCode).map((r) => r.nativeGameCode as string);
-
-    const [externals, natives] = await Promise.all([
-      externalIds.length
-        ? db.externalGame.findMany({
-            where: { id: { in: externalIds } },
-            select: { id: true, displayName: true, gameUid: true, category: true, status: true, imageUrl: true, provider: { select: { name: true, providerKey: true, status: true } } },
-          })
-        : Promise.resolve([]),
-      nativeCodes.length
-        ? db.nativeGameProvider.findMany({
-            where: { gameCode: { in: nativeCodes } },
-            select: { gameCode: true, displayName: true, isActive: true },
-          })
-        : Promise.resolve([]),
-    ]);
-
-    const externalById = new Map(externals.map((g) => [g.id, g]));
-    const nativeByCode = new Map(natives.map((g) => [g.gameCode, g]));
-
-    const enriched = rows.map((r) => {
-      const ext = r.externalGameId ? externalById.get(r.externalGameId) ?? null : null;
-      const nat = r.nativeGameCode ? nativeByCode.get(r.nativeGameCode) ?? null : null;
-      const displayName = ext?.displayName ?? nat?.displayName ?? '(removed)';
-      const providerName = ext?.provider?.name ?? 'Pasha Originals';
-      const live = ext ? ext.status === 'active' && ext.provider?.status === 'active' : nat ? nat.isActive : false;
-      return {
-        id: r.id,
-        source: r.source,
-        externalGameId: r.externalGameId,
-        nativeGameCode: r.nativeGameCode,
-        isHot: r.isHot,
-        isJackpot: r.isJackpot,
-        position: r.position,
-        addedBy: r.addedBy,
-        createdAt: r.createdAt,
-        displayName,
-        providerName,
-        category: ext?.category ?? null,
-        imageUrl: ext?.imageUrl ?? null,
-        live,
-      };
-    });
-
-    return jsonOk({ featured: enriched, limit: FEATURED_LIMIT });
+    const featured = await loadEnrichedFeaturedList();
+    return jsonOk({ featured, limit: FEATURED_LIMIT });
   });
 }
 
@@ -97,12 +125,9 @@ export async function POST(req: NextRequest) {
     const parsed = postSchema.safeParse(body);
     if (!parsed.success) return jsonError(400, 'VALIDATION', undefined, { issues: parsed.error.issues });
 
-    const count = await db.homepageFeaturedGame.count();
-    if (count >= FEATURED_LIMIT) {
-      return jsonError(409, 'FEATURED_LIMIT', `Max ${FEATURED_LIMIT} featured games. Remove one before adding another.`);
-    }
-
-    // Reject duplicate of the same underlying game.
+    // Reject duplicate of the same underlying game BEFORE the limit
+    // check. Re-adding an already-curated game on a full list should
+    // surface DUPLICATE 409, not the misleading FEATURED_LIMIT.
     if (parsed.data.source === 'external' && parsed.data.externalGameId) {
       const existing = await db.homepageFeaturedGame.findFirst({ where: { source: 'external', externalGameId: parsed.data.externalGameId } });
       if (existing) return jsonError(409, 'DUPLICATE', 'This game is already on the featured list.');
@@ -122,19 +147,31 @@ export async function POST(req: NextRequest) {
       if (!native.isActive) return jsonError(409, 'GAME_INACTIVE', 'Native game is not active.');
     }
 
-    // Append at the end of the list when no position is provided.
-    const position = parsed.data.position ?? ((await db.homepageFeaturedGame.aggregate({ _max: { position: true } }))._max.position ?? 0) + 10;
+    const count = await db.homepageFeaturedGame.count();
+    if (count >= FEATURED_LIMIT) {
+      return jsonError(409, 'FEATURED_LIMIT', `Max ${FEATURED_LIMIT} featured games. Remove one before adding another.`);
+    }
 
-    const row = await db.homepageFeaturedGame.create({
-      data: {
-        source: parsed.data.source,
-        externalGameId: parsed.data.source === 'external' ? parsed.data.externalGameId ?? null : null,
-        nativeGameCode: parsed.data.source === 'native' ? parsed.data.nativeGameCode ?? null : null,
-        isHot: parsed.data.isHot ?? false,
-        isJackpot: parsed.data.isJackpot ?? false,
-        position,
-        addedBy: claims.sub,
-      },
+    // Wrap the position-aggregate and the create in a single
+    // transaction so two concurrent adds cannot both read the same
+    // max(position) and write the same value. The duplicate check
+    // above protects against the same game racing twice but a
+    // position collision could still happen between two different
+    // games.
+    const row = await db.$transaction(async (tx) => {
+      const max = (await tx.homepageFeaturedGame.aggregate({ _max: { position: true } }))._max.position ?? 0;
+      const position = parsed.data.position ?? max + 10;
+      return tx.homepageFeaturedGame.create({
+        data: {
+          source: parsed.data.source,
+          externalGameId: parsed.data.source === 'external' ? parsed.data.externalGameId ?? null : null,
+          nativeGameCode: parsed.data.source === 'native' ? parsed.data.nativeGameCode ?? null : null,
+          isHot: parsed.data.isHot ?? false,
+          isJackpot: parsed.data.isJackpot ?? false,
+          position,
+          addedBy: claims.sub,
+        },
+      });
     });
 
     await recordActivity({
@@ -145,6 +182,9 @@ export async function POST(req: NextRequest) {
       meta: { source: row.source, externalGameId: row.externalGameId, nativeGameCode: row.nativeGameCode },
     });
 
-    return jsonOk({ featured: row }, 201);
+    // Return the full ordered list so the admin client refreshes
+    // curation in a single roundtrip.
+    const featured = await loadEnrichedFeaturedList();
+    return jsonOk({ featured: row, list: featured }, 201);
   });
 }
