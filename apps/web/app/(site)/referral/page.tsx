@@ -18,7 +18,7 @@ import { BackBar } from '@/components/site/BackBar';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
-import { Users, Copy, Check, LogIn, Wallet, Clock, AlertCircle, Share2, ArrowRight, RefreshCw } from 'lucide-react';
+import { Users, Copy, Check, LogIn, Wallet, Clock, AlertCircle, Share2, ArrowRight, RefreshCw, MessageCircle, Send, Facebook, MessageSquare, Mail } from 'lucide-react';
 import { useT, useLang } from '@/lib/i18n/context';
 import { formatBDT, formatDate, formatDateTime } from '@/lib/utils/format';
 import { triggerWalletRefresh } from '@/components/site/WalletStrip';
@@ -92,6 +92,106 @@ export default function ReferralPage() {
         setTimeout(() => setCopied((c) => (c === key ? null : c)), 1600);
       } catch { /* clipboard blocked */ }
     }
+  };
+
+  // Fallback toast helper for the share flow. Surfaces the copied-link
+  // confirmation when a popup channel cannot be opened (popup blocker,
+  // WebView with no app installed, desktop with no SMS handler, etc).
+  const showCopiedToast = useCallback(() => {
+    setToast({
+      kind: 'ok',
+      message: lang === 'bn'
+        ? 'রেফারেল লিঙ্ক কপি হয়েছে। বন্ধুদের সাথে শেয়ার করুন।'
+        : 'Referral link copied. Share it with your friends.',
+    });
+    setTimeout(() => setToast((c) => (c && c.kind === 'ok' ? null : c)), 2400);
+  }, [lang]);
+
+  // Open a URL in a new tab/window. Some popup blockers refuse
+  // window.open from an async handler unless it was triggered by the
+  // user gesture this call still sits inside, so we return whether the
+  // open succeeded and fall back to clipboard copy + toast when not.
+  const openExternal = useCallback(async (url: string, link: string) => {
+    let opened = false;
+    try {
+      const win = window.open(url, '_blank', 'noopener,noreferrer');
+      opened = Boolean(win);
+    } catch {
+      opened = false;
+    }
+    if (!opened) {
+      try {
+        if (typeof navigator !== 'undefined' && navigator.clipboard) {
+          await navigator.clipboard.writeText(link);
+        }
+      } catch { /* ignore */ }
+      showCopiedToast();
+    }
+  }, [showCopiedToast]);
+
+  // SMS and mailto must use the same window so the OS handler picks
+  // them up reliably across iOS, Android, desktop and WebView.
+  const openSameWindow = useCallback(async (url: string, link: string) => {
+    try {
+      window.location.href = url;
+    } catch {
+      try {
+        if (typeof navigator !== 'undefined' && navigator.clipboard) {
+          await navigator.clipboard.writeText(link);
+        }
+      } catch { /* ignore */ }
+      showCopiedToast();
+    }
+  }, [showCopiedToast]);
+
+  const buildShareMessage = useCallback((link: string) => {
+    return lang === 'bn'
+      ? `আমার রেফারেল লিঙ্ক ব্যবহার করে পাশা ৯-এ যোগ দিন: ${link}`
+      : `Join Pasha 9 using my referral link: ${link}`;
+  }, [lang]);
+
+  const onNativeShare = useCallback(async (link: string) => {
+    const message = buildShareMessage(link);
+    if (typeof navigator !== 'undefined' && typeof (navigator as Navigator & { share?: (data: ShareData) => Promise<void> }).share === 'function') {
+      try {
+        await (navigator as Navigator & { share: (data: ShareData) => Promise<void> }).share({
+          title: 'Pasha 9',
+          text: message,
+          url: link,
+        });
+        return;
+      } catch {
+        // User cancelled or browser refused; fall through to copy.
+      }
+    }
+    try {
+      if (navigator.clipboard) await navigator.clipboard.writeText(link);
+    } catch { /* ignore */ }
+    showCopiedToast();
+  }, [buildShareMessage, showCopiedToast]);
+
+  const onShareWhatsApp = (link: string) => {
+    const message = buildShareMessage(link);
+    openExternal(`https://wa.me/?text=${encodeURIComponent(message)}`, link);
+  };
+  const onShareTelegram = (link: string) => {
+    const message = buildShareMessage(link);
+    openExternal(`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(message)}`, link);
+  };
+  const onShareFacebook = (link: string) => {
+    openExternal(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(link)}`, link);
+  };
+  const onShareSms = (link: string) => {
+    const message = buildShareMessage(link);
+    // sms:?body= is the most broadly supported form across iOS and
+    // Android. Fall back to copy + toast inside openSameWindow if the
+    // OS rejects the scheme.
+    openSameWindow(`sms:?&body=${encodeURIComponent(message)}`, link);
+  };
+  const onShareEmail = (link: string) => {
+    const message = buildShareMessage(link);
+    const subject = lang === 'bn' ? 'পাশা ৯ যোগ দিন' : 'Join me on Pasha 9';
+    openSameWindow(`mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`, link);
   };
 
   const claim = async () => {
@@ -237,16 +337,94 @@ export default function ReferralPage() {
           <h3 className="text-sm font-semibold text-ink-hi">{lang === 'bn' ? 'শেয়ার করুন' : 'Share with'}</h3>
           <p className="text-xs text-ink-lo">{lang === 'bn' ? 'এক ট্যাপে আপনার লিংক শেয়ার করুন।' : 'One-tap share your invite link.'}</p>
           <div className="space-y-2">
-            {['WhatsApp', 'Telegram', 'Facebook', 'SMS', 'Email'].map((ch) => (
-              <button
-                key={ch}
-                onClick={() => copy(data.user.inviteLink, `share-${ch}`)}
-                className="flex w-full items-center justify-between rounded-xl border border-neon/15 bg-base-deep/40 px-3 py-2 text-sm text-ink-hi hover:border-neon/40"
-              >
-                <span className="inline-flex items-center gap-2"><Share2 className="h-4 w-4 text-neon" /> {ch}</span>
-                <ArrowRight className="h-4 w-4 text-ink-lo" />
-              </button>
-            ))}
+            <button
+              type="button"
+              onClick={() => onNativeShare(data.user.inviteLink)}
+              className="flex w-full items-center justify-between rounded-xl border border-neon/40 bg-neon/10 px-3 py-2 text-sm text-ink-hi hover:bg-neon/15"
+            >
+              <span className="inline-flex items-center gap-2">
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-neon/15 text-neon">
+                  <Share2 className="h-3.5 w-3.5" />
+                </span>
+                {lang === 'bn' ? 'শেয়ার করুন' : 'Share via...'}
+              </span>
+              <ArrowRight className="h-4 w-4 text-ink-lo" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onShareWhatsApp(data.user.inviteLink)}
+              className="flex w-full items-center justify-between rounded-xl border border-neon/15 bg-base-deep/40 px-3 py-2 text-sm text-ink-hi hover:border-neon/40"
+              aria-label={`Share on WhatsApp`}
+            >
+              <span className="inline-flex items-center gap-2">
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#25D366]/15 text-[#25D366]">
+                  <MessageCircle className="h-3.5 w-3.5" />
+                </span>
+                WhatsApp
+              </span>
+              <ArrowRight className="h-4 w-4 text-ink-lo" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onShareTelegram(data.user.inviteLink)}
+              className="flex w-full items-center justify-between rounded-xl border border-neon/15 bg-base-deep/40 px-3 py-2 text-sm text-ink-hi hover:border-neon/40"
+              aria-label={`Share on Telegram`}
+            >
+              <span className="inline-flex items-center gap-2">
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#229ED9]/15 text-[#229ED9]">
+                  <Send className="h-3.5 w-3.5" />
+                </span>
+                Telegram
+              </span>
+              <ArrowRight className="h-4 w-4 text-ink-lo" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onShareFacebook(data.user.inviteLink)}
+              className="flex w-full items-center justify-between rounded-xl border border-neon/15 bg-base-deep/40 px-3 py-2 text-sm text-ink-hi hover:border-neon/40"
+              aria-label={`Share on Facebook`}
+            >
+              <span className="inline-flex items-center gap-2">
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#1877F2]/15 text-[#1877F2]">
+                  <Facebook className="h-3.5 w-3.5" />
+                </span>
+                Facebook
+              </span>
+              <ArrowRight className="h-4 w-4 text-ink-lo" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onShareSms(data.user.inviteLink)}
+              className="flex w-full items-center justify-between rounded-xl border border-neon/15 bg-base-deep/40 px-3 py-2 text-sm text-ink-hi hover:border-neon/40"
+              aria-label={`Share via SMS`}
+            >
+              <span className="inline-flex items-center gap-2">
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-300">
+                  <MessageSquare className="h-3.5 w-3.5" />
+                </span>
+                SMS
+              </span>
+              <ArrowRight className="h-4 w-4 text-ink-lo" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onShareEmail(data.user.inviteLink)}
+              className="flex w-full items-center justify-between rounded-xl border border-neon/15 bg-base-deep/40 px-3 py-2 text-sm text-ink-hi hover:border-neon/40"
+              aria-label={`Share via Email`}
+            >
+              <span className="inline-flex items-center gap-2">
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-amber-500/15 text-amber-300">
+                  <Mail className="h-3.5 w-3.5" />
+                </span>
+                Email
+              </span>
+              <ArrowRight className="h-4 w-4 text-ink-lo" />
+            </button>
           </div>
         </div>
       </div>
