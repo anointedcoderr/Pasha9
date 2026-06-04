@@ -15,6 +15,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
+import { Prisma } from '@prisma/client';
 import { withAuth, ensurePermission, recordActivity } from '@/lib/auth/guard';
 import { getCurrentSession } from '@/lib/auth/rbac';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
@@ -152,27 +153,51 @@ export async function POST(req: NextRequest) {
       return jsonError(409, 'FEATURED_LIMIT', `Max ${FEATURED_LIMIT} featured games. Remove one before adding another.`);
     }
 
-    // Wrap the position-aggregate and the create in a single
-    // transaction so two concurrent adds cannot both read the same
-    // max(position) and write the same value. The duplicate check
-    // above protects against the same game racing twice but a
-    // position collision could still happen between two different
-    // games.
-    const row = await db.$transaction(async (tx) => {
-      const max = (await tx.homepageFeaturedGame.aggregate({ _max: { position: true } }))._max.position ?? 0;
-      const position = parsed.data.position ?? max + 10;
-      return tx.homepageFeaturedGame.create({
-        data: {
-          source: parsed.data.source,
-          externalGameId: parsed.data.source === 'external' ? parsed.data.externalGameId ?? null : null,
-          nativeGameCode: parsed.data.source === 'native' ? parsed.data.nativeGameCode ?? null : null,
-          isHot: parsed.data.isHot ?? false,
-          isJackpot: parsed.data.isJackpot ?? false,
-          position,
-          addedBy: claims.sub,
-        },
-      });
+    // Position-allocation race fix. Default Postgres isolation is
+    // READ COMMITTED, so two concurrent POSTs of DIFFERENT games can
+    // both read max(position)=50 and both write position=60. Use
+    // Serializable isolation so the second transaction sees a
+    // serialization failure on commit; retry a bounded number of
+    // times with a fresh max() read each attempt. The duplicate
+    // check above already protects against the SAME game racing.
+    const buildCreateData = () => ({
+      source: parsed.data.source,
+      externalGameId: parsed.data.source === 'external' ? parsed.data.externalGameId ?? null : null,
+      nativeGameCode: parsed.data.source === 'native' ? parsed.data.nativeGameCode ?? null : null,
+      isHot: parsed.data.isHot ?? false,
+      isJackpot: parsed.data.isJackpot ?? false,
+      addedBy: claims.sub,
     });
+
+    let row: Awaited<ReturnType<typeof db.homepageFeaturedGame.create>> | null = null;
+    let lastError: unknown = null;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      try {
+        row = await db.$transaction(
+          async (tx) => {
+            const max = (await tx.homepageFeaturedGame.aggregate({ _max: { position: true } }))._max.position ?? 0;
+            const position = parsed.data.position ?? max + 10;
+            return tx.homepageFeaturedGame.create({ data: { ...buildCreateData(), position } });
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+        break;
+      } catch (err) {
+        // P2034 = transaction failed due to a write conflict or
+        // deadlock (Prisma's surface for Postgres SQLSTATE 40001
+        // serialization failure / 40P01 deadlock). Anything else is a
+        // real error and should not be retried.
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2034') {
+          lastError = err;
+          continue;
+        }
+        throw err;
+      }
+    }
+    if (!row) {
+      console.error('[homepage-featured] POST exhausted serialization retries', lastError);
+      return jsonError(503, 'CONCURRENCY_RETRY_EXHAUSTED', 'Could not allocate a unique position after several attempts. Please try again.');
+    }
 
     await recordActivity({
       actorId: claims.sub,

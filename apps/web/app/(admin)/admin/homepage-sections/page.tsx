@@ -103,20 +103,31 @@ export default function AdminHomepageSectionsPage() {
   const [debugBusy, setDebugBusy] = useState(false);
   const [sync, setSync] = useState<SyncSnapshot | null>(null);
 
-  const refresh = useCallback(async () => {
+  // When the picker has the enriched list in hand (returned inline by
+  // POST), pass it via preloadedFeatured so refresh() skips the
+  // /api/admin/homepage-featured GET roundtrip. Sections and sync-check
+  // still fetch because they have no embedded equivalent.
+  const refresh = useCallback(async (preloadedFeatured?: FeaturedRow[]) => {
     setError(null);
     try {
+      const featuredFetch = preloadedFeatured
+        ? Promise.resolve(null)
+        : fetch('/api/admin/homepage-featured', { cache: 'no-store' });
       const [a, b, c] = await Promise.all([
         fetch('/api/admin/homepage-sections', { cache: 'no-store' }),
-        fetch('/api/admin/homepage-featured', { cache: 'no-store' }),
+        featuredFetch,
         fetch('/api/admin/homepage-featured/sync-check', { cache: 'no-store' }),
       ]);
       const ja = await a.json();
-      const jb = await b.json();
       if (!a.ok) throw new Error(ja?.message ?? ja?.code ?? 'Failed to load sections');
-      if (!b.ok) throw new Error(jb?.message ?? jb?.code ?? 'Failed to load featured games');
       setSections(ja.sections as SectionRow[]);
-      setFeatured(jb.featured as FeaturedRow[]);
+      if (preloadedFeatured) {
+        setFeatured(preloadedFeatured);
+      } else if (b) {
+        const jb = await b.json();
+        if (!b.ok) throw new Error(jb?.message ?? jb?.code ?? 'Failed to load featured games');
+        setFeatured(jb.featured as FeaturedRow[]);
+      }
       // sync-check is best-effort: a non-2xx response from this
       // endpoint must NOT prevent the rest of the admin from loading.
       // Render the banner only when the endpoint actually returned ok.
@@ -301,7 +312,7 @@ export default function AdminHomepageSectionsPage() {
             <h2 className="text-lg font-extrabold text-brand-ink">Strips on /</h2>
             <p className="text-xs text-brand-inkMute">Edit title, subtitle, visibility and order. Strips with no games render hidden on the public site.</p>
           </div>
-          <Button variant="ghost" onClick={refresh} loading={loading}>Refresh</Button>
+          <Button variant="ghost" onClick={() => { void refresh(); }} loading={loading}>Refresh</Button>
         </div>
 
         <div className="mt-4 space-y-3">
@@ -426,7 +437,7 @@ export default function AdminHomepageSectionsPage() {
         onOpenChange={setPickerOpen}
         existing={featured}
         remaining={remaining}
-        onAdded={async () => { await refresh(); }}
+        onAdded={async (preloaded) => { await refresh(preloaded); }}
       />
 
       <Card padding="md">
@@ -602,7 +613,7 @@ function FeaturedPickerModal({
   onOpenChange: (v: boolean) => void;
   existing: FeaturedRow[];
   remaining: number;
-  onAdded: () => Promise<void> | void;
+  onAdded: (preloaded?: FeaturedRow[]) => Promise<void> | void;
 }) {
   const [q, setQ] = useState('');
   const [source, setSource] = useState<'both' | 'external' | 'native'>('both');
@@ -662,7 +673,12 @@ function FeaturedPickerModal({
       });
       const j = await r.json().catch(() => null);
       if (!r.ok) throw new Error(j?.message ?? j?.code ?? 'Add failed');
-      await onAdded();
+      // POST returns { featured: row, list: enrichedList }. Hand the
+      // enriched list directly to the parent so refresh() skips the
+      // redundant /api/admin/homepage-featured GET. Sections and
+      // sync-check still fetch (no embedded equivalent).
+      const preloaded = Array.isArray(j?.list) ? (j.list as FeaturedRow[]) : undefined;
+      await onAdded(preloaded);
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Add failed');
     } finally {
@@ -681,7 +697,8 @@ function FeaturedPickerModal({
       });
       const j = await r.json().catch(() => null);
       if (!r.ok) throw new Error(j?.message ?? j?.code ?? 'Add failed');
-      await onAdded();
+      const preloaded = Array.isArray(j?.list) ? (j.list as FeaturedRow[]) : undefined;
+      await onAdded(preloaded);
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Add failed');
     } finally {
