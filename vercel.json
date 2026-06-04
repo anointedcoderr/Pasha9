@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/lotto-rollover",
+      "schedule": "*/5 * * * *"
+    }
+  ]
+}

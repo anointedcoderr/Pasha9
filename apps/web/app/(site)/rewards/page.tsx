@@ -89,6 +89,7 @@ export default function RewardsPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [spinResult, setSpinResult] = useState<{ label: string; payoutType: string; payoutAmount: number } | null>(null);
+  const [spinning, setSpinning] = useState(false);
 
   const loadMe = useCallback(async () => {
     const r = await fetch('/api/rewards/me', { cache: 'no-store', credentials: 'include' });
@@ -157,13 +158,36 @@ export default function RewardsPage() {
   };
 
   const onSpin = async () => {
+    if (spinning) return;
     setError(null); setSpinResult(null);
-    const r = await fetch('/api/rewards/spin', { method: 'POST', credentials: 'include' });
-    const j = await r.json().catch(() => null);
-    if (!r.ok) { setError(j?.message ?? j?.code ?? 'Spin failed'); return; }
-    setSpinResult({ label: j.segmentLabel, payoutType: j.payoutType, payoutAmount: j.payoutAmount });
-    await loadMe();
-    triggerWalletRefresh();
+    setSpinning(true);
+    try {
+      const r = await fetch('/api/rewards/spin', { method: 'POST', credentials: 'include' });
+      const j = await r.json().catch(() => null);
+      if (!r.ok) {
+        const code = j?.code as string | undefined;
+        if (code === 'NO_SEGMENTS' || code === 'SPIN_DISABLED') {
+          setError(bn ? 'স্পিন এখনও কনফিগার করা হয়নি। অনুগ্রহ করে কিছুক্ষণ পরে আবার চেষ্টা করুন।' : 'Spin is not configured yet. Please try again later.');
+        } else if (code === 'INSUFFICIENT_COINS') {
+          const need = Number(j?.coinsNeeded ?? 0);
+          const have = Number(j?.coinsHave ?? 0);
+          setError(bn ? `যথেষ্ট কয়েন নেই। প্রয়োজন ${need}, আছে ${have}।` : `Not enough coins. Need ${need}, have ${have}.`);
+        } else if (code === 'SPIN_COOLDOWN' || r.status === 429) {
+          setError(bn ? 'একটু পরে আবার স্পিন করুন।' : 'Please wait a moment before spinning again.');
+        } else {
+          setError(j?.message ?? code ?? 'Spin failed');
+        }
+        return;
+      }
+      // Brief animation pause so the wheel UI feels like it lands on
+      // the result instead of flipping instantly.
+      await new Promise((resolve) => setTimeout(resolve, 1400));
+      setSpinResult({ label: j.segmentLabel, payoutType: j.payoutType, payoutAmount: j.payoutAmount });
+      await loadMe();
+      triggerWalletRefresh();
+    } finally {
+      setSpinning(false);
+    }
   };
 
   return (
@@ -275,30 +299,67 @@ export default function RewardsPage() {
       ) : null}
 
       {tab === 'spin' ? (
-        <section className="grid gap-4 md:grid-cols-[1fr_320px]">
-          <div className="rounded-2xl border border-brand-divider bg-brand-paper p-6">
-            <h2 className="text-lg font-extrabold text-brand-ink">{bn ? (spinCfg?.titleBn ?? 'লাকি স্পিন') : (spinCfg?.titleEn ?? 'Lucky Spin')}</h2>
-            <p className="mt-1 whitespace-pre-line text-sm text-brand-inkSoft">{bn ? (spinCfg?.rulesBn ?? '') : (spinCfg?.rulesEn ?? '')}</p>
-            <ul className="mt-4 space-y-2 text-sm text-brand-inkSoft">
-              <li>{bn ? `১ স্পিন = ${spinCfg?.costPerSpinCoins ?? 100} কয়েন` : `1 spin costs ${spinCfg?.costPerSpinCoins ?? 100} coins`}</li>
-              <li>{bn ? `প্রতিদিন ${spinCfg?.freeSpinsPerDay ?? 3}টি ফ্রি স্পিন` : `${spinCfg?.freeSpinsPerDay ?? 3} free spins every day`}</li>
-              <li>{bn ? `টার্নওভার ${spinCfg?.defaultTurnoverX ?? 3}x` : `${spinCfg?.defaultTurnoverX ?? 3}x turnover on wallet credits`}</li>
-              <li>{bn ? `অবশিষ্ট ফ্রি স্পিন: ${me?.spin.freeSpinsRemaining ?? 0}` : `Free spins remaining today: ${me?.spin.freeSpinsRemaining ?? 0}`}</li>
-            </ul>
-            <button type="button" onClick={onSpin} className="mt-5 inline-flex h-11 items-center rounded-lg btn-yellow px-6 text-sm font-semibold">
-              {bn ? 'এখন স্পিন করুন' : 'Spin now'}
-            </button>
-            {spinResult ? (
-              <p className="mt-3 rounded-lg border border-emerald-400/60 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-                {bn ? `আপনি ${spinResult.label} জিতেছেন!` : `You won ${spinResult.label}!`}
-              </p>
-            ) : null}
-          </div>
+        segments.length === 0 ? (
+          <section className="rounded-2xl border border-amber-300/60 bg-amber-50 p-6 text-amber-900">
+            <p className="text-sm font-bold">
+              {bn ? 'স্পিন হুইল কনফিগার করা হয়নি।' : 'Spin wheel is not configured yet.'}
+            </p>
+            <p className="mt-1 text-xs">
+              {bn
+                ? 'অ্যাডমিন শীঘ্রই সেগমেন্ট যোগ করবেন। পরে আবার আসুন।'
+                : 'The operator will add segments shortly. Please check back later.'}
+            </p>
+          </section>
+        ) : (
+          <section className="grid gap-4 md:grid-cols-[1fr_320px]">
+            <div className="rounded-2xl border border-brand-divider bg-brand-paper p-6">
+              <h2 className="text-lg font-extrabold text-brand-ink">{bn ? (spinCfg?.titleBn ?? 'লাকি স্পিন') : (spinCfg?.titleEn ?? 'Lucky Spin')}</h2>
+              <p className="mt-1 whitespace-pre-line text-sm text-brand-inkSoft">{bn ? (spinCfg?.rulesBn ?? '') : (spinCfg?.rulesEn ?? '')}</p>
+              <ul className="mt-4 space-y-2 text-sm text-brand-inkSoft">
+                <li>{bn ? `১ স্পিন = ${spinCfg?.costPerSpinCoins ?? 100} কয়েন` : `1 spin costs ${spinCfg?.costPerSpinCoins ?? 100} coins`}</li>
+                <li>{bn ? `প্রতিদিন ${spinCfg?.freeSpinsPerDay ?? 3}টি ফ্রি স্পিন` : `${spinCfg?.freeSpinsPerDay ?? 3} free spins every day`}</li>
+                <li>{bn ? `টার্নওভার ${spinCfg?.defaultTurnoverX ?? 3}x` : `${spinCfg?.defaultTurnoverX ?? 3}x turnover on wallet credits`}</li>
+                <li>{bn ? `অবশিষ্ট ফ্রি স্পিন: ${me?.spin.freeSpinsRemaining ?? 0}` : `Free spins remaining today: ${me?.spin.freeSpinsRemaining ?? 0}`}</li>
+              </ul>
+              <button
+                type="button"
+                onClick={onSpin}
+                disabled={spinning}
+                className={cn('mt-5 inline-flex h-11 items-center rounded-lg btn-yellow px-6 text-sm font-semibold transition', spinning && 'opacity-70')}
+              >
+                {spinning
+                  ? (bn ? 'স্পিন হচ্ছে...' : 'Spinning...')
+                  : (bn ? 'এখন স্পিন করুন' : 'Spin now')}
+              </button>
+              {spinResult ? (
+                <div className="mt-3 rounded-lg border border-emerald-400/60 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                  <p className="font-bold">
+                    {bn ? `অভিনন্দন! আপনি জিতেছেন ${spinResult.label}` : `You won ${spinResult.label}!`}
+                  </p>
+                  {spinResult.payoutAmount > 0 ? (
+                    <p className="mt-0.5 text-xs">
+                      {spinResult.payoutType === 'bonus'
+                        ? (bn
+                            ? `+${spinResult.payoutAmount} বোনাস লকড। উইথড্রয়াল আগে টার্নওভার সম্পূর্ণ করুন।`
+                            : `+${spinResult.payoutAmount} bonus locked. Complete turnover before withdrawal.`)
+                        : spinResult.payoutType === 'coins'
+                          ? (bn ? `+${spinResult.payoutAmount} কয়েন আপনার ব্যালেন্সে যোগ হয়েছে।` : `+${spinResult.payoutAmount} coins added to your balance.`)
+                          : (bn ? `+${spinResult.payoutAmount}` : `+${spinResult.payoutAmount}`)}
+                    </p>
+                  ) : (
+                    <p className="mt-0.5 text-xs">
+                      {bn ? 'পরের বার শুভকামনা।' : 'Better luck next time.'}
+                    </p>
+                  )}
+                </div>
+              ) : null}
+            </div>
 
-          <div className="flex items-center justify-center rounded-2xl border border-brand-divider bg-brand-paper p-4">
-            <SpinWheel segments={segments} />
-          </div>
-        </section>
+            <div className={cn('flex items-center justify-center rounded-2xl border border-brand-divider bg-brand-paper p-4', spinning && 'animate-pulse')}>
+              <SpinWheel segments={segments} />
+            </div>
+          </section>
+        )
       ) : null}
 
       {claimItem ? (

@@ -79,6 +79,7 @@ export const ROUTES = {
     nativeGames: '/admin/native-games',
     rewardClaims: '/admin/reward-claims',
     bettingPass: '/admin/betting-pass',
+    spinSegments: '/admin/spin-segments',
     depositPrompt: '/admin/deposit-prompt',
     depositNotice: '/admin/deposit-notice',
     depositBonusTiers: '/admin/deposit-bonus-tiers',

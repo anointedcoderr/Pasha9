@@ -222,7 +222,7 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
         />
       </FormField>
       <div className="flex items-center justify-between text-sm">
-        <a href="#" className="font-semibold text-brand-blue-600 hover:text-brand-blue-700">{t('auth.forgot')}</a>
+        <a href="/forgot-password" className="font-semibold text-brand-blue-600 hover:text-brand-blue-700">{t('auth.forgot')}</a>
       </div>
       {apiError ? (
         <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{apiError.message ?? apiError.code}</p>
