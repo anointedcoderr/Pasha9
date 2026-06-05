@@ -6,7 +6,7 @@ import { PageHeader } from '@/components/site/PageHeader';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { FormField, Input, Textarea } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
-import { LifeBuoy, Send, MessageCircle, Mail, ChevronDown, AlertCircle, Phone } from 'lucide-react';
+import { LifeBuoy, Send, MessageCircle, Mail, ChevronDown, AlertCircle, Phone, CheckCircle2 } from 'lucide-react';
 
 interface ClientContacts {
   telegram: string | null;
@@ -23,9 +23,20 @@ const FAQ = [
   { q: 'What is the minimum bet?', a: 'Most games start from 10 BDT minimum bet. Check the game card for the exact range.' },
 ];
 
+interface AuthInfo { signedIn: boolean; username: string | null; phone: string | null }
+
 export default function SupportPage() {
   const [openIdx, setOpenIdx] = useState<number | null>(0);
   const [contacts, setContacts] = useState<ClientContacts | null>(null);
+  const [auth, setAuth] = useState<AuthInfo>({ signedIn: false, username: null, phone: null });
+  const [subject, setSubject] = useState('');
+  const [message, setMessage] = useState('');
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [errors, setErrors] = useState<{ subject?: string; message?: string; email?: string; phone?: string; form?: string }>({});
+  const [submittedId, setSubmittedId] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/content/contacts', { cache: 'no-store' })
@@ -39,7 +50,60 @@ export default function SupportPage() {
         });
       })
       .catch(() => {});
+    fetch('/api/auth/me', { cache: 'no-store', credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.user?.username) {
+          setAuth({ signedIn: true, username: data.user.username, phone: data.user.phone ?? null });
+        } else {
+          setAuth({ signedIn: false, username: null, phone: null });
+        }
+      })
+      .catch(() => {});
   }, []);
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrors({});
+    setSubmittedId(null);
+    // Inline validation mirrors the server schema.
+    const next: typeof errors = {};
+    if (subject.trim().length < 3) next.subject = 'Subject must be at least 3 characters.';
+    if (message.trim().length < 10) next.message = 'Message must be at least 10 characters.';
+    if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) next.email = 'Enter a valid email.';
+    if (!auth.signedIn && !email.trim() && !phone.trim()) next.form = 'Provide an email or phone so we can reach you back.';
+    if (Object.keys(next).length > 0) { setErrors(next); return; }
+    setSubmitting(true);
+    try {
+      const r = await fetch('/api/support/tickets', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          subject: subject.trim(),
+          message: message.trim(),
+          name: name.trim() || null,
+          email: email.trim() || null,
+          phone: phone.trim() || null,
+        }),
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok) {
+        if (r.status === 429) {
+          setErrors({ form: 'Too many submissions. Please wait an hour and try again.' });
+        } else {
+          setErrors({ form: j?.message ?? j?.code ?? 'Could not submit ticket.' });
+        }
+        return;
+      }
+      setSubmittedId(j?.ticket?.id ?? 'ok');
+      setSubject(''); setMessage(''); setName(''); setEmail(''); setPhone('');
+    } catch (err) {
+      setErrors({ form: err instanceof Error ? err.message : 'Network error.' });
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const noContacts = contacts !== null && !contacts.telegram && !contacts.whatsapp && !contacts.email && !contacts.phone;
 
@@ -95,21 +159,49 @@ export default function SupportPage() {
 
       <div className="mt-8 grid gap-6 lg:grid-cols-2">
         <Card padding="lg">
-          <CardHeader title="Send a ticket" subtitle="We usually respond within an hour" />
-          <form
-            className="space-y-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-            }}
-          >
-            <FormField label="Subject" required>
-              <Input placeholder="Deposit not credited, transaction ID, etc." />
-            </FormField>
-            <FormField label="Message" required>
-              <Textarea rows={6} placeholder="Describe what happened, share TX IDs or screenshots references." />
-            </FormField>
-            <Button type="submit">Submit ticket</Button>
-          </form>
+          <CardHeader title="Send a ticket" subtitle={auth.signedIn ? `Posting as ${auth.username}` : 'We usually respond within an hour'} />
+          {submittedId ? (
+            <div className="space-y-3">
+              <div className="rounded-xl border border-emerald-300/40 bg-emerald-500/10 p-4">
+                <p className="inline-flex items-center gap-2 text-sm font-bold text-emerald-200">
+                  <CheckCircle2 className="h-4 w-4" /> Ticket submitted
+                </p>
+                <p className="mt-1 text-xs text-emerald-100/80">
+                  Reference: <code className="font-mono">{submittedId}</code>
+                </p>
+                <p className="mt-1 text-xs text-emerald-100/80">
+                  Our team will respond on the contact you provided. Keep this reference for follow-up.
+                </p>
+              </div>
+              <Button type="button" variant="ghost" onClick={() => setSubmittedId(null)}>Send another</Button>
+            </div>
+          ) : (
+            <form className="space-y-4" onSubmit={onSubmit} noValidate>
+              {!auth.signedIn ? (
+                <div className="grid gap-3 md:grid-cols-2">
+                  <FormField label="Your name (optional)">
+                    <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" />
+                  </FormField>
+                  <FormField label="Email" error={errors.email}>
+                    <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
+                  </FormField>
+                  <FormField label="Phone (optional)" error={errors.phone}>
+                    <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="01XXXXXXXXX" />
+                  </FormField>
+                </div>
+              ) : null}
+              <FormField label="Subject" required error={errors.subject}>
+                <Input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Deposit not credited, transaction ID, etc." />
+              </FormField>
+              <FormField label="Message" required error={errors.message}>
+                <Textarea rows={6} value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Describe what happened, share TX IDs or screenshots references." />
+              </FormField>
+              {errors.form ? (
+                <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{errors.form}</p>
+              ) : null}
+              <Button type="submit" loading={submitting}>Submit ticket</Button>
+            </form>
+          )}
         </Card>
 
         <Card padding="lg" id="faq">
