@@ -945,6 +945,14 @@ model CommissionTier {
   level1Pct          Decimal       @db.Decimal(5, 2)
   level2Pct          Decimal       @db.Decimal(5, 2)
   level3Pct          Decimal       @db.Decimal(5, 2)
+  // One-time fixed reward credited to the direct (level 1) upline
+  // when the referred user's first deposit is approved. Per-tier so
+  // VIP tiers can pay a larger signup reward than Bronze. Null = use
+  // the global `referral_first_deposit_reward_bdt` SystemSetting,
+  // which itself defaults to 0 (disabled). Snapshotted on every
+  // AffiliateCommission row via meta.rewardAmount so admin rate
+  // changes never rewrite historical payouts.
+  firstDepositRewardBdt Decimal?  @db.Decimal(14, 2)
   minActiveReferrals Int           @default(0)
   minMonthlyVolume   Decimal       @default(0) @db.Decimal(14, 2)
   status             ContentStatus @default(active)
@@ -982,6 +990,13 @@ model AffiliateCommission {
   @@index([createdAt])
   @@index([depositId])
   @@index([payoutId])
+  // Dedup guard. Re-running the deposit-approval hook on the same
+  // (affiliate, deposit, level, basis) is a no-op - the second insert
+  // hits P2002 unique violation which the engine swallows. Distinct
+  // bases (deposit_share vs first_deposit_reward) coexist for the
+  // same (affiliate, deposit, level=1) so the level-1 upline gets
+  // both rows on the referred user's first deposit.
+  @@unique([affiliateId, depositId, level, basis])
 }
 
 // M2E: an affiliate's request to cash out approved commissions.

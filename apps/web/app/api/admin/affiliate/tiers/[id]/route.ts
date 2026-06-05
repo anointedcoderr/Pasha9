@@ -14,6 +14,7 @@ const updateSchema = z.object({
   level1Pct: z.coerce.number().min(0).max(100).optional(),
   level2Pct: z.coerce.number().min(0).max(100).optional(),
   level3Pct: z.coerce.number().min(0).max(100).optional(),
+  firstDepositRewardBdt: z.coerce.number().min(0).max(1_000_000).optional().nullable(),
   minActiveReferrals: z.coerce.number().int().min(0).max(100000).optional(),
   minMonthlyVolume: z.coerce.number().min(0).max(1_000_000_000).optional(),
   position: z.coerce.number().int().min(0).max(99).optional(),

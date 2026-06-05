@@ -31,6 +31,7 @@
 
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db/client';
+import { loadReferralSettings } from './balance';
 
 const DEFAULT_COMMISSION_STATUS = 'approved';
 const MAX_LEVELS = 3;
@@ -53,6 +54,7 @@ interface ChainAncestor {
       level1Pct: Prisma.Decimal;
       level2Pct: Prisma.Decimal;
       level3Pct: Prisma.Decimal;
+      firstDepositRewardBdt: Prisma.Decimal | null;
     } | null;
   };
 }
@@ -79,7 +81,7 @@ async function loadChain(userId: string, maxLevels: number): Promise<ChainAncest
             isAffiliate: true,
             affiliateTierId: true,
             affiliateTier: {
-              select: { id: true, name: true, level1Pct: true, level2Pct: true, level3Pct: true },
+              select: { id: true, name: true, level1Pct: true, level2Pct: true, level3Pct: true, firstDepositRewardBdt: true },
             },
           },
         },
@@ -132,6 +134,17 @@ export async function accrueCommissionsOnDeposit(
 ): Promise<AccrualResult> {
   const result: AccrualResult = { accrued: [], skipped: [], chainDepth: 0, error: null };
 
+  // Operator kill-switch. Returns a clean "engine_disabled" no-op so
+  // the deposit approve flow can still record an audit entry.
+  try {
+    const settings = await loadReferralSettings();
+    if (!settings.enabled) {
+      result.error = null;
+      result.skipped.push({ affiliateId: '', level: 0, reason: 'engine_disabled' });
+      return result;
+    }
+  } catch { /* fall through with default-on behaviour */ }
+
   let chain: ChainAncestor[];
   try {
     chain = await loadChain(sourceUserId, MAX_LEVELS);
@@ -156,8 +169,40 @@ export async function accrueCommissionsOnDeposit(
   const defaultTier = await db.commissionTier.findFirst({
     where: { status: 'active' },
     orderBy: { position: 'asc' },
-    select: { id: true, name: true, level1Pct: true, level2Pct: true, level3Pct: true },
+    select: { id: true, name: true, level1Pct: true, level2Pct: true, level3Pct: true, firstDepositRewardBdt: true },
   });
+
+  // Detect whether THIS deposit is the source user's first approved
+  // deposit. If yes, the level-1 upline also gets a one-time fixed
+  // reward (separate row, basis='first_deposit_reward'). The unique
+  // constraint (affiliateId, depositId, level, basis) makes this
+  // idempotent across retries. We check by counting earlier approved
+  // deposits excluding the current one (handles the race where the
+  // hook fires from inside the approve route AFTER the deposit row
+  // flipped to status='approved').
+  let isFirstApprovedDeposit = false;
+  try {
+    const earlierApproved = await db.deposit.count({
+      where: { userId: sourceUserId, status: 'approved', NOT: { id: depositId } },
+    });
+    isFirstApprovedDeposit = earlierApproved === 0;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[affiliate] first-deposit detection failed', msg);
+  }
+
+  // Resolve the global fallback first-deposit reward (operator may
+  // leave tier.firstDepositRewardBdt null and fall back to the
+  // SystemSetting). Loaded once per accrual.
+  let globalFirstDepositReward = 0;
+  try {
+    const row = await db.systemSetting.findUnique({
+      where: { key: 'referral_first_deposit_reward_bdt' },
+      select: { value: true },
+    });
+    const v = Number(row?.value ?? 0);
+    if (Number.isFinite(v) && v > 0) globalFirstDepositReward = v;
+  } catch { /* keep 0 */ }
 
   for (const a of chain) {
     if (!a.user.isAffiliate) {
@@ -219,10 +264,74 @@ export async function accrueCommissionsOnDeposit(
         defaultFallback: !a.user.affiliateTier,
       });
     } catch (err) {
+      // Swallow the unique-constraint violation that protects against
+      // double-firing the approval hook. Anything else is a real error.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        result.skipped.push({ affiliateId: a.user.id, level: a.level, reason: 'duplicate_already_accrued' });
+        console.info('[affiliate] duplicate skipped', { affiliateId: a.user.id, level: a.level, depositId });
+        continue;
+      }
       const msg = err instanceof Error ? `${err.message}\n${err.stack ?? ''}` : String(err);
       console.error('[affiliate] commission write failed', { affiliateId: a.user.id, level: a.level }, msg);
       result.skipped.push({ affiliateId: a.user.id, level: a.level, reason: `write_failed: ${msg.slice(0, 200)}` });
       result.error = result.error ?? `write_failed: ${msg.slice(0, 200)}`;
+    }
+
+    // First-deposit fixed reward. Direct upline only (level 1) AND
+    // this must be the first approved deposit. Per-tier amount with
+    // a global SystemSetting fallback. Snapshotted on the row so
+    // future admin rate changes never rewrite historical payouts.
+    if (a.level === 1 && isFirstApprovedDeposit) {
+      const tierReward = effectiveTier.firstDepositRewardBdt != null
+        ? Number(effectiveTier.firstDepositRewardBdt)
+        : null;
+      const rewardAmount = tierReward != null && tierReward > 0
+        ? tierReward
+        : globalFirstDepositReward;
+      if (rewardAmount > 0) {
+        try {
+          const row = await db.affiliateCommission.create({
+            data: {
+              affiliateId: a.user.id,
+              sourceUserId,
+              level: 1,
+              amount: new Prisma.Decimal(rewardAmount),
+              basis: 'first_deposit_reward',
+              status: DEFAULT_COMMISSION_STATUS,
+              depositId,
+              tierId: effectiveTier.id,
+              ratePct: null,
+              meta: {
+                tierName: effectiveTier.name,
+                rewardAmount,
+                source: tierReward != null && tierReward > 0 ? 'tier' : 'global_setting',
+                tierIsDefaultFallback: !a.user.affiliateTier,
+              } as Prisma.JsonObject,
+            },
+          });
+          result.accrued.push({
+            affiliateId: a.user.id,
+            level: 1,
+            tierName: effectiveTier.name,
+            ratePct: 0,
+            amount: rewardAmount,
+            commissionId: row.id,
+          });
+          console.info('[affiliate] first-deposit reward accrued', {
+            affiliateId: a.user.id,
+            depositId,
+            amount: rewardAmount,
+          });
+        } catch (err) {
+          if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+            console.info('[affiliate] first-deposit reward already accrued', { affiliateId: a.user.id, depositId });
+          } else {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.error('[affiliate] first-deposit reward write failed', msg);
+            result.error = result.error ?? `first_deposit_reward_failed: ${msg.slice(0, 200)}`;
+          }
+        }
+      }
     }
   }
 

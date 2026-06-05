@@ -29,8 +29,12 @@ import { db } from '@/lib/db/client';
 const HOLD_DAYS_SETTING = 'referral_hold_days';
 const CADENCE_SETTING = 'referral_claim_cadence';
 const TURNOVER_SETTING = 'referral_turnover_x';
+const ENABLED_SETTING = 'referral_enabled';
+const HOLD_ENABLED_SETTING = 'referral_hold_enabled';
 
 export interface ReferralSettings {
+  enabled: boolean;
+  holdEnabled: boolean;
   cadence: 'weekly' | 'monthly' | 'manual' | 'auto';
   holdDays: number;
   turnoverX: number;
@@ -44,15 +48,25 @@ export interface BalanceSnapshot {
 
 export async function loadReferralSettings(): Promise<ReferralSettings> {
   const rows = await db.systemSetting.findMany({
-    where: { key: { in: [HOLD_DAYS_SETTING, CADENCE_SETTING, TURNOVER_SETTING] } },
+    where: { key: { in: [HOLD_DAYS_SETTING, CADENCE_SETTING, TURNOVER_SETTING, ENABLED_SETTING, HOLD_ENABLED_SETTING] } },
   });
   const get = (k: string) => rows.find((r) => r.key === k)?.value;
   const cadence = (get(CADENCE_SETTING) ?? 'weekly').toLowerCase();
-  const holdDays = Math.max(0, Number(get(HOLD_DAYS_SETTING) ?? 7) || 0);
+  const holdDaysRaw = Math.max(0, Number(get(HOLD_DAYS_SETTING) ?? 7) || 0);
   const turnoverX = Math.max(0, Number(get(TURNOVER_SETTING) ?? 0) || 0);
+  // Default ON when the row is missing so existing installations keep
+  // the same behaviour they had before the toggle landed.
+  const enabledRaw = (get(ENABLED_SETTING) ?? 'true').trim().toLowerCase();
+  const holdEnabledRaw = (get(HOLD_ENABLED_SETTING) ?? 'true').trim().toLowerCase();
+  const enabled = enabledRaw !== 'false' && enabledRaw !== '0' && enabledRaw !== 'off';
+  const holdEnabled = holdEnabledRaw !== 'false' && holdEnabledRaw !== '0' && holdEnabledRaw !== 'off';
   return {
+    enabled,
+    holdEnabled,
     cadence: cadence === 'monthly' || cadence === 'manual' || cadence === 'auto' ? (cadence as ReferralSettings['cadence']) : 'weekly',
-    holdDays,
+    // When the hold toggle is off, treat holdDays as 0 so the balance
+    // projector marks commissions claimable immediately.
+    holdDays: holdEnabled ? holdDaysRaw : 0,
     turnoverX,
   };
 }

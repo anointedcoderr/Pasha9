@@ -22,6 +22,7 @@ interface Tier {
   level1Pct: number | string;
   level2Pct: number | string;
   level3Pct: number | string;
+  firstDepositRewardBdt: number | string | null;
   minActiveReferrals: number;
   minMonthlyVolume: number | string;
   position: number;
@@ -32,9 +33,10 @@ const BLANK: Tier = {
   id: '',
   name: '',
   description: '',
-  level1Pct: 8,
-  level2Pct: 4,
-  level3Pct: 2,
+  level1Pct: 1.5,
+  level2Pct: 1,
+  level3Pct: 0.5,
+  firstDepositRewardBdt: 200,
   minActiveReferrals: 0,
   minMonthlyVolume: 0,
   position: 0,
@@ -74,6 +76,9 @@ export default function AdminAffiliateTiersPage() {
       level1Pct: Number(editor.level1Pct),
       level2Pct: Number(editor.level2Pct),
       level3Pct: Number(editor.level3Pct),
+      firstDepositRewardBdt: editor.firstDepositRewardBdt === '' || editor.firstDepositRewardBdt == null
+        ? null
+        : Number(editor.firstDepositRewardBdt),
       minActiveReferrals: Number(editor.minActiveReferrals),
       minMonthlyVolume: Number(editor.minMonthlyVolume),
       position: Number(editor.position),
@@ -144,6 +149,12 @@ export default function AdminAffiliateTiersPage() {
                   <span><span className="text-ink-lo">L1</span> <span className="font-bold text-ink-hi">{Number(t.level1Pct)}%</span></span>
                   <span><span className="text-ink-lo">L2</span> <span className="font-bold text-ink-hi">{Number(t.level2Pct)}%</span></span>
                   <span><span className="text-ink-lo">L3</span> <span className="font-bold text-ink-hi">{Number(t.level3Pct)}%</span></span>
+                  <span>
+                    <span className="text-ink-lo">First deposit reward</span>{' '}
+                    <span className="font-bold text-ink-hi">
+                      {t.firstDepositRewardBdt == null ? 'global' : `৳ ${Number(t.firstDepositRewardBdt).toLocaleString()}`}
+                    </span>
+                  </span>
                   <span><span className="text-ink-lo">Min referrals</span> <span className="font-bold text-ink-hi">{t.minActiveReferrals}</span></span>
                   <span><span className="text-ink-lo">Min volume</span> <span className="font-bold text-ink-hi">৳ {Number(t.minMonthlyVolume).toLocaleString()}</span></span>
                 </div>
@@ -188,6 +199,16 @@ export default function AdminAffiliateTiersPage() {
               </FormField>
             </div>
             <div className="grid gap-3 md:grid-cols-3">
+              <FormField label="First deposit reward (BDT)" hint="Fixed one-time bonus credited to the direct upline when the referred user's first deposit is approved. Leave empty to fall back to the global setting.">
+                <Input
+                  type="number"
+                  step="1"
+                  min="0"
+                  value={editor.firstDepositRewardBdt == null ? '' : String(editor.firstDepositRewardBdt)}
+                  onChange={(e) => setEditor({ ...editor, firstDepositRewardBdt: e.target.value === '' ? null : Number(e.target.value) })}
+                  placeholder="Use global default"
+                />
+              </FormField>
               <FormField label="Min active referrals">
                 <Input type="number" step="1" min="0" value={String(editor.minActiveReferrals)} onChange={(e) => setEditor({ ...editor, minActiveReferrals: Number(e.target.value) || 0 })} />
               </FormField>

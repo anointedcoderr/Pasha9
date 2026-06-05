@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 import { db } from '@/lib/db/client';
 import { jsonOk } from '@/lib/auth/errors';
 
-const PUBLIC_KEYS = ['support_telegram', 'support_whatsapp', 'support_email', 'site_name'] as const;
+const PUBLIC_KEYS = ['support_telegram', 'support_whatsapp', 'support_email', 'support_phone', 'site_name'] as const;
 
 export async function GET() {
   const rows = await db.systemSetting.findMany({
@@ -20,5 +20,6 @@ export async function GET() {
     telegram: map.support_telegram ?? null,
     whatsapp: map.support_whatsapp ?? null,
     email: map.support_email ?? null,
+    phone: map.support_phone ?? null,
   });
 }

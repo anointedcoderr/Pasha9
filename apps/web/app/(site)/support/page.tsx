@@ -6,12 +6,13 @@ import { PageHeader } from '@/components/site/PageHeader';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { FormField, Input, Textarea } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
-import { LifeBuoy, Send, MessageCircle, Mail, ChevronDown, AlertCircle } from 'lucide-react';
+import { LifeBuoy, Send, MessageCircle, Mail, ChevronDown, AlertCircle, Phone } from 'lucide-react';
 
 interface ClientContacts {
   telegram: string | null;
   whatsapp: string | null;
   email: string | null;
+  phone: string | null;
 }
 
 const FAQ = [
@@ -27,15 +28,20 @@ export default function SupportPage() {
   const [contacts, setContacts] = useState<ClientContacts | null>(null);
 
   useEffect(() => {
-    fetch('/api/content/contacts')
+    fetch('/api/content/contacts', { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        if (data) setContacts({ telegram: data.telegram, whatsapp: data.whatsapp, email: data.email });
+        if (data) setContacts({
+          telegram: data.telegram ?? null,
+          whatsapp: data.whatsapp ?? null,
+          email: data.email ?? null,
+          phone: data.phone ?? null,
+        });
       })
       .catch(() => {});
   }, []);
 
-  const noContacts = contacts !== null && !contacts.telegram && !contacts.whatsapp && !contacts.email;
+  const noContacts = contacts !== null && !contacts.telegram && !contacts.whatsapp && !contacts.email && !contacts.phone;
 
   return (
     <>
@@ -74,6 +80,14 @@ export default function SupportPage() {
               <h3 className="mt-3 text-base font-semibold text-ink-hi">Email</h3>
               <p className="mt-1 text-xs text-ink-mid">Use email for account or KYC matters.</p>
               <a href={`mailto:${contacts.email}`} className="mt-3 inline-block text-sm text-neon hover:text-ink-hi">{contacts.email}</a>
+            </Card>
+          ) : null}
+          {contacts?.phone ? (
+            <Card padding="md">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-300"><Phone className="h-5 w-5" /></span>
+              <h3 className="mt-3 text-base font-semibold text-ink-hi">Phone</h3>
+              <p className="mt-1 text-xs text-ink-mid">Available during business hours.</p>
+              <a href={`tel:${contacts.phone.replace(/[^+\d]/g, '')}`} className="mt-3 inline-block text-sm text-neon hover:text-ink-hi">{contacts.phone}</a>
             </Card>
           ) : null}
         </div>
