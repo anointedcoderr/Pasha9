@@ -23,6 +23,7 @@ const ruleSchema = z.object({
   pointsRequired: z.number().int().min(0).max(10_000_000),
   rewardKind: z.enum(['coins', 'bonus', 'freebet', 'physical']).default('coins'),
   rewardAmount: z.number().min(0).max(10_000_000),
+  turnoverX: z.number().min(0).max(50).optional().default(0),
   bonusRuleId: z.string().trim().max(60).optional().nullable(),
   isActive: z.boolean().optional().default(true),
 });
@@ -58,6 +59,7 @@ export async function GET() {
         ...r,
         pointsRequired: r.pointsRequired,
         rewardAmount: Number(r.rewardAmount),
+        turnoverX: Number(r.turnoverX ?? 0),
       })),
       recentClaims: recentClaims.map((c) => ({
         id: c.id,
@@ -105,6 +107,7 @@ export async function POST(req: NextRequest) {
         pointsRequired: parsed.data.pointsRequired,
         rewardKind: parsed.data.rewardKind,
         rewardAmount: parsed.data.rewardAmount,
+        turnoverX: parsed.data.turnoverX ?? 0,
         bonusRuleId: parsed.data.bonusRuleId ?? null,
         isActive: parsed.data.isActive ?? true,
       },

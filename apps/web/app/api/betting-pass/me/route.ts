@@ -49,6 +49,7 @@ export async function GET() {
         pointsRequired: r.pointsRequired,
         rewardKind: r.rewardKind,
         rewardAmount: Number(r.rewardAmount),
+        turnoverX: Number(r.turnoverX ?? 0),
         unlocked,
         claimed,
         claimable: unlocked && !claimed,

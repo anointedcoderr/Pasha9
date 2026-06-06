@@ -156,42 +156,151 @@ export async function accrueBettingPassOnBet(userId: string, providerTxId: strin
   });
 }
 
+export interface ClaimWalletSnapshot {
+  balance: number;
+  bonusBalance: number;
+  lockedBalance: number;
+  lottoBalance: number;
+}
+
 export type ClaimResult =
-  | { ok: true; claimId: string; rewardKind: string; rewardAmount: number }
-  | { ok: false; code: 'TIER_LOCKED' | 'ALREADY_CLAIMED' | 'RULE_INACTIVE' | 'RULE_NOT_FOUND' };
+  | {
+      ok: true;
+      claimId: string;
+      rewardKind: string;
+      rewardAmount: number;
+      pointsSpent: number;
+      pointsTotalAfter: number;
+      currentTier: number;
+      walletBalances: ClaimWalletSnapshot;
+      bonusGrantId: string | null;
+      turnoverRequired: number;
+    }
+  | { ok: false; code: 'TIER_LOCKED' | 'ALREADY_CLAIMED' | 'RULE_INACTIVE' | 'RULE_NOT_FOUND' | 'INSUFFICIENT_POINTS' };
 
 export async function claimBettingPassReward(userId: string, ruleId: string): Promise<ClaimResult> {
+  // Resolve config OUTSIDE the tx because loadBettingPassConfig hits
+  // SystemSetting; keeping the tx tight reduces lock duration.
+  const config = await loadBettingPassConfig();
+
   return await db.$transaction(async (tx) => {
     const rule = await tx.bettingPassRule.findUnique({ where: { id: ruleId } });
     if (!rule) return { ok: false, code: 'RULE_NOT_FOUND' };
     if (!rule.isActive) return { ok: false, code: 'RULE_INACTIVE' };
 
-    const progress = await tx.userBettingPassProgress.findUnique({ where: { userId } });
-    const total = Number(progress?.pointsTotal ?? 0);
-    if (total < rule.pointsRequired) return { ok: false, code: 'TIER_LOCKED' };
-
     const dup = await tx.bettingPassClaim.findUnique({ where: { userId_ruleId: { userId, ruleId } } });
     if (dup) return { ok: false, code: 'ALREADY_CLAIMED' };
 
-    const rewardAmount = Number(rule.rewardAmount);
+    const progress = await tx.userBettingPassProgress.findUnique({ where: { userId } });
+    const totalBefore = new Prisma.Decimal(progress?.pointsTotal ?? 0);
+    const required = new Prisma.Decimal(rule.pointsRequired);
+    if (totalBefore.lt(required)) return { ok: false, code: 'INSUFFICIENT_POINTS' };
 
-    if (rule.rewardKind === 'coins' && rewardAmount > 0) {
+    const rewardAmount = new Prisma.Decimal(rule.rewardAmount);
+    const turnoverX = new Prisma.Decimal(rule.turnoverX ?? 0);
+    const turnoverRequired = rewardAmount.mul(turnoverX);
+
+    // ---------- Wallet credit per reward kind ----------
+    let bonusGrantId: string | null = null;
+
+    if (rule.rewardKind === 'coins' && rewardAmount.gt(0)) {
       await tx.wallet.upsert({
         where: { userId },
         update: { bonusBalance: { increment: rewardAmount } },
         create: { userId, balance: 0, bonusBalance: rewardAmount, lockedBalance: 0, currency: 'BDT' },
       });
-    } else if (rule.rewardKind === 'freebet' && rewardAmount > 0) {
+      await tx.transaction.create({
+        data: {
+          userId,
+          type: 'bonus',
+          amount: rewardAmount,
+          status: 'completed',
+          reference: `betting_pass:${ruleId}`,
+          description: `Betting Pass coins reward (tier ${rule.tier})`,
+          meta: { source: 'betting_pass_claim', ruleId, tier: rule.tier, rewardKind: 'coins' } as Prisma.JsonObject,
+        },
+      });
+    } else if (rule.rewardKind === 'freebet' && rewardAmount.gt(0)) {
       await tx.wallet.upsert({
         where: { userId },
         update: { lockedBalance: { increment: rewardAmount } },
         create: { userId, balance: 0, bonusBalance: 0, lockedBalance: rewardAmount, currency: 'BDT' },
       });
+      await tx.transaction.create({
+        data: {
+          userId,
+          type: 'bonus',
+          amount: rewardAmount,
+          status: 'completed',
+          reference: `betting_pass:${ruleId}`,
+          description: `Betting Pass freebet reward (tier ${rule.tier})`,
+          meta: { source: 'betting_pass_claim', ruleId, tier: rule.tier, rewardKind: 'freebet' } as Prisma.JsonObject,
+        },
+      });
+    } else if (rule.rewardKind === 'bonus' && rewardAmount.gt(0)) {
+      // Bonus rewards land in lockedBalance with a traceable UserBonus
+      // row so the existing turnover engine (lib/bonuses/engine.ts
+      // addTurnover) can release them once the player wagers
+      // amount * turnoverX. Mirrors the spin wheel pattern from
+      // f3cf57d so the wallet ledger stays consistent.
+      const bpRule = await tx.bonusRule.upsert({
+        where: { code: 'bp_payout' },
+        update: {},
+        create: {
+          code: 'bp_payout',
+          name: 'Betting Pass Reward',
+          type: 'manual',
+          status: 'active',
+          amount: 0,
+          turnoverX: 0,
+          validityDays: 30,
+          description: 'Bonus issued by the Betting Pass tier claim flow.',
+        },
+        select: { id: true },
+      });
+      await tx.wallet.upsert({
+        where: { userId },
+        update: { lockedBalance: { increment: rewardAmount } },
+        create: { userId, balance: 0, bonusBalance: 0, lockedBalance: rewardAmount, currency: 'BDT' },
+      });
+      const grant = await tx.userBonus.create({
+        data: {
+          userId,
+          bonusRuleId: bpRule.id,
+          amount: rewardAmount,
+          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          status: 'active',
+          turnoverRequired,
+          turnoverProgress: 0,
+          sourceType: 'betting_pass',
+          sourceId: ruleId,
+          note: `Betting Pass tier ${rule.tier}`,
+        },
+      });
+      bonusGrantId = grant.id;
+      await tx.transaction.create({
+        data: {
+          userId,
+          type: 'bonus',
+          amount: rewardAmount,
+          status: 'completed',
+          reference: `betting_pass:${ruleId}`,
+          description: `Betting Pass bonus reward (tier ${rule.tier})`,
+          meta: {
+            source: 'betting_pass_claim',
+            ruleId,
+            tier: rule.tier,
+            rewardKind: 'bonus',
+            turnoverRequired: Number(turnoverRequired),
+            bonusGrantId: grant.id,
+          } as Prisma.JsonObject,
+        },
+      });
     }
-    // For rewardKind='bonus' or 'physical' the operator handles the
-    // payout offline. The claim row + RewardClaim-style audit is
-    // enough for the admin to fulfil it.
+    // rewardKind='physical' writes no wallet movement; the operator
+    // fulfils via the BettingPassClaim row below.
 
+    // ---------- Claim row (unique guard on userId+ruleId) ----------
     const claim = await tx.bettingPassClaim.create({
       data: {
         userId,
@@ -200,9 +309,49 @@ export async function claimBettingPassReward(userId: string, ruleId: string): Pr
         rewardKind: rule.rewardKind,
         rewardAmount: rule.rewardAmount,
         status: 'paid',
+        bonusGrantId,
       },
     });
 
-    return { ok: true, claimId: claim.id, rewardKind: rule.rewardKind, rewardAmount };
+    // ---------- Spend the points via a negative ledger event ----------
+    // BettingPassEvent.points is Decimal; aggregating positives and
+    // negatives in rebuildProgress yields the spendable balance.
+    // idempotencyKey scoped to the claim id so retries are no-ops.
+    await tx.bettingPassEvent.create({
+      data: {
+        userId,
+        source: 'claim',
+        sourceId: claim.id,
+        points: required.neg(),
+        pointsFromDeposit: 0,
+        pointsFromBet: 0,
+        idempotencyKey: `${config.seasonKey}:claim:${claim.id}`,
+      },
+    });
+
+    const { pointsTotal, currentTier } = await rebuildProgress(tx, userId);
+
+    const walletAfter = await tx.wallet.findUnique({
+      where: { userId },
+      select: { balance: true, bonusBalance: true, lockedBalance: true, lottoBalance: true },
+    });
+
+    return {
+      ok: true,
+      claimId: claim.id,
+      rewardKind: rule.rewardKind,
+      rewardAmount: Number(rewardAmount),
+      pointsSpent: rule.pointsRequired,
+      pointsTotalAfter: pointsTotal,
+      currentTier,
+      walletBalances: {
+        balance: Number(walletAfter?.balance ?? 0),
+        bonusBalance: Number(walletAfter?.bonusBalance ?? 0),
+        lockedBalance: Number(walletAfter?.lockedBalance ?? 0),
+        lottoBalance: Number(walletAfter?.lottoBalance ?? 0),
+      },
+      bonusGrantId,
+      turnoverRequired: Number(turnoverRequired),
+    };
   });
 }

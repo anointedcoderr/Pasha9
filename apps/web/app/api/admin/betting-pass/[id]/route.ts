@@ -25,6 +25,7 @@ const patchSchema = z.object({
   pointsRequired: z.number().int().min(0).max(10_000_000).optional(),
   rewardKind: z.enum(['coins', 'bonus', 'freebet', 'physical']).optional(),
   rewardAmount: z.number().min(0).max(10_000_000).optional(),
+  turnoverX: z.number().min(0).max(50).optional(),
   bonusRuleId: z.string().trim().max(60).optional().nullable(),
   isActive: z.boolean().optional(),
 });

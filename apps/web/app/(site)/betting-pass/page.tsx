@@ -98,13 +98,26 @@ export default function BettingPassPage() {
     try {
       const r = await fetch(`/api/betting-pass/claim/${encodeURIComponent(ruleId)}`, { method: 'POST', credentials: 'include' });
       const j = await r.json();
-      if (!r.ok) throw new Error(j?.message ?? j?.code ?? 'Claim failed');
-      setFlash({
-        kind: 'ok',
-        text: lang === 'bn'
-          ? 'রিওয়ার্ড দাবি করা হয়েছে।'
-          : `Reward claimed. +${Number(j.rewardAmount).toLocaleString()} ${j.rewardKind}.`,
-      });
+      if (!r.ok) {
+        // Server is the source of truth. We do NOT flip any local
+        // state to "claimed" before this check returns ok, so a
+        // failed claim leaves the button live for retry / diagnosis.
+        const code = j?.code as string | undefined;
+        let msg = j?.message ?? code ?? 'Claim failed';
+        if (code === 'INSUFFICIENT_POINTS' || code === 'TIER_LOCKED') {
+          msg = lang === 'bn' ? 'যথেষ্ট পয়েন্ট নেই। আরও খেলে পয়েন্ট অর্জন করুন।' : 'You need more points to claim this reward.';
+        } else if (code === 'ALREADY_CLAIMED') {
+          msg = lang === 'bn' ? 'আপনি ইতিমধ্যে এই রিওয়ার্ড দাবি করেছেন।' : 'You have already claimed this reward.';
+        }
+        throw new Error(msg);
+      }
+      const pointsAfter = Number(j?.pointsTotalAfter ?? 0);
+      const spent = Number(j?.pointsSpent ?? 0);
+      const turnover = Number(j?.turnoverRequired ?? 0);
+      const ok = lang === 'bn'
+        ? `রিওয়ার্ড দাবি সম্পন্ন। +${Number(j.rewardAmount).toLocaleString()} ${j.rewardKind}. পয়েন্ট: ${pointsAfter.toLocaleString()} (খরচ ${spent.toLocaleString()})${turnover > 0 ? `. টার্নওভার প্রয়োজন ৳${turnover.toLocaleString()}` : ''}.`
+        : `Reward claimed. +${Number(j.rewardAmount).toLocaleString()} ${j.rewardKind}. Points: ${pointsAfter.toLocaleString()} (spent ${spent.toLocaleString()})${turnover > 0 ? `. Turnover required ৳${turnover.toLocaleString()}` : ''}.`;
+      setFlash({ kind: 'ok', text: ok });
       triggerWalletRefresh();
       await refresh();
     } catch (e) {

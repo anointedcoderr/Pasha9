@@ -80,6 +80,11 @@ export interface HomeSectionsBundle {
 
 const STRIP_LIMIT = 12;
 const FEATURED_LIMIT = 20;
+// Hot Games is operator-curated end-to-end; render every row the
+// operator added (capped by FEATURED_LIMIT in loadFeaturedGames) so
+// the public strip mirrors the Manager exactly. Other category
+// strips (slots/casino/etc) keep STRIP_LIMIT.
+const HOMEPAGE_HOT_LIMIT = FEATURED_LIMIT;
 
 const ICON_KEY_BY_SECTION: Record<string, string> = {
   homepage_hot: 'flame',
@@ -396,7 +401,7 @@ export async function buildHomeSections(): Promise<HomeSectionsBundle> {
         // case here cascades to the route filter which the route now
         // short-circuits via bundle.curatedCount.
         if (curatedCount > 0) {
-          games = featuredGames.slice(0, STRIP_LIMIT).map((g) => ({ ...g, isHot: true }));
+          games = featuredGames.slice(0, HOMEPAGE_HOT_LIMIT).map((g) => ({ ...g, isHot: true }));
         } else {
           const fallback = await db.externalGame.findMany({
             where: { status: 'active', provider: { status: 'active' }, isFeatured: true },
@@ -457,7 +462,7 @@ export async function buildHomeSections(): Promise<HomeSectionsBundle> {
   // never silently drops curated games.
   if (curatedCount > 0) {
     const hotIdx = sections.findIndex((s) => s.key === 'homepage_hot');
-    const hotGames = featuredGames.slice(0, STRIP_LIMIT).map((g) => ({ ...g, isHot: true }));
+    const hotGames = featuredGames.slice(0, HOMEPAGE_HOT_LIMIT).map((g) => ({ ...g, isHot: true }));
     if (hotIdx === -1) {
       sections.unshift(syntheticHotSection(hotGames));
     } else {

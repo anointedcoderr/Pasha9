@@ -39,6 +39,7 @@ interface Rule {
   pointsRequired: number;
   rewardKind: 'coins' | 'bonus' | 'freebet' | 'physical';
   rewardAmount: number;
+  turnoverX: number;
   isActive: boolean;
 }
 
@@ -73,6 +74,7 @@ const BLANK_RULE: Rule = {
   pointsRequired: 1000,
   rewardKind: 'coins',
   rewardAmount: 100,
+  turnoverX: 0,
   isActive: true,
 };
 
@@ -142,6 +144,7 @@ export default function AdminBettingPassPage() {
         pointsRequired: Number(editor.pointsRequired),
         rewardKind: editor.rewardKind,
         rewardAmount: Number(editor.rewardAmount),
+        turnoverX: Number(editor.turnoverX ?? 0),
         isActive: editor.isActive,
       };
       const r = editor.id
@@ -291,13 +294,16 @@ export default function AdminBettingPassPage() {
               <FormField label="Name (BN)"><Input value={editor.nameBn ?? ''} onChange={(e) => setEditor({ ...editor, nameBn: e.target.value })} placeholder="ব্রোঞ্জ" /></FormField>
               <FormField label="Reward kind">
                 <Select value={editor.rewardKind} onChange={(e) => setEditor({ ...editor, rewardKind: e.target.value as Rule['rewardKind'] })}>
-                  <option value="coins">Coins (bonusBalance)</option>
-                  <option value="bonus">Bonus (operator fulfils)</option>
-                  <option value="freebet">Freebet (lockedBalance)</option>
+                  <option value="coins">Coins (bonusBalance, no turnover)</option>
+                  <option value="bonus">Bonus (lockedBalance + UserBonus turnover)</option>
+                  <option value="freebet">Freebet (lockedBalance, no turnover)</option>
                   <option value="physical">Physical (operator fulfils)</option>
                 </Select>
               </FormField>
               <FormField label="Reward amount"><Input type="number" min="0" step="0.01" value={String(editor.rewardAmount)} onChange={(e) => setEditor({ ...editor, rewardAmount: Number(e.target.value) || 0 })} /></FormField>
+              <FormField label="Turnover multiplier" hint="Used only when reward kind is bonus. 3 means amount x 3 wager required to release.">
+                <Input type="number" min="0" step="0.1" value={String(editor.turnoverX)} onChange={(e) => setEditor({ ...editor, turnoverX: Number(e.target.value) || 0 })} />
+              </FormField>
             </div>
             <FormField label="Description (EN, optional)"><Input value={editor.descriptionEn ?? ''} onChange={(e) => setEditor({ ...editor, descriptionEn: e.target.value })} /></FormField>
             <FormField label="Description (BN, optional)"><Input value={editor.descriptionBn ?? ''} onChange={(e) => setEditor({ ...editor, descriptionBn: e.target.value })} /></FormField>

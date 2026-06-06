@@ -1987,6 +1987,13 @@ model BettingPassRule {
   pointsRequired  Int      // lifetime points to unlock
   rewardKind      String   @default("coins")  // coins|bonus|freebet|physical
   rewardAmount    Decimal  @default(0) @db.Decimal(14, 2)
+  // Wager multiplier applied to bonus payouts so the claim engine can
+  // create a tracked UserBonus grant (amount * turnoverX = turnover
+  // required). 0 means no wager gate. Coins/freebet/physical reward
+  // kinds ignore this value. Snapshotted per-claim in
+  // BettingPassClaim.errorCode meta so admin rate changes never
+  // rewrite history.
+  turnoverX       Decimal  @default(0) @db.Decimal(6, 2)
   bonusRuleId     String?  // optional reference if rewardKind=bonus
   isActive        Boolean  @default(true)
   createdAt       DateTime @default(now())
