@@ -37,7 +37,7 @@ interface Rule {
   descriptionBn: string | null;
   iconUrl: string | null;
   pointsRequired: number;
-  rewardKind: 'coins' | 'bonus' | 'freebet' | 'physical';
+  rewardKind: 'coins' | 'bonus' | 'freebet' | 'physical' | 'bdt_balance';
   rewardAmount: number;
   turnoverX: number;
   isActive: boolean;
@@ -297,6 +297,7 @@ export default function AdminBettingPassPage() {
                   <option value="coins">Coins (bonusBalance, no turnover)</option>
                   <option value="bonus">Bonus (lockedBalance + UserBonus turnover)</option>
                   <option value="freebet">Freebet (lockedBalance, no turnover)</option>
+                  <option value="bdt_balance">BDT Balance (main wallet + turnover gate on withdrawal)</option>
                   <option value="physical">Physical (operator fulfils)</option>
                 </Select>
               </FormField>

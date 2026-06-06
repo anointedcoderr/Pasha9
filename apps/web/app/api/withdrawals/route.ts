@@ -90,18 +90,26 @@ export async function POST(req: NextRequest) {
     }
 
     const wallet = await db.wallet.findUnique({ where: { userId: session.sub } });
-    const available = wallet ? Number(wallet.balance) - Number(wallet.lockedBalance) : 0;
+    // Deposit turnover gate AND any Betting Pass BDT Balance grants
+    // that landed in Wallet.balance directly but are still under
+    // their per-grant wager requirement. The bdtBalanceLocked total
+    // is subtracted from the available balance so the player cannot
+    // withdraw the BDT Balance reward until the wager is complete.
+    const turnover = await computeDepositTurnover(session.sub);
+    const available = wallet
+      ? Number(wallet.balance) - Number(wallet.lockedBalance) - turnover.bdtBalanceLocked
+      : 0;
     if (available < parsed.data.amount) {
-      return jsonError(400, 'INSUFFICIENT_FUNDS', 'Withdrawable balance is lower than the requested amount.');
+      return jsonError(
+        400,
+        'INSUFFICIENT_FUNDS',
+        turnover.bdtBalanceLocked > 0
+          ? `Withdrawable balance is lower than the requested amount. ${turnover.bdtBalanceLocked.toFixed(2)} BDT is locked by an unfulfilled Betting Pass reward.`
+          : 'Withdrawable balance is lower than the requested amount.',
+        { bdtBalanceLocked: turnover.bdtBalanceLocked },
+      );
     }
 
-    // Deposit turnover gate. Lifetime aggregate, configurable via the
-    // deposit_turnover_multiplier SystemSetting (default 1.0). Returns
-    // 403 TURNOVER_NOT_MET so the client can display the precise
-    // shortfall - the frontend already disables the button when the
-    // /api/withdrawals/eligibility endpoint says isMet=false, but this
-    // server-side enforcement is the authoritative gate.
-    const turnover = await computeDepositTurnover(session.sub);
     if (!turnover.isMet) {
       return jsonError(
         403,
@@ -113,6 +121,7 @@ export async function POST(req: NextRequest) {
           requiredTurnover: turnover.requiredTurnover,
           completedTurnover: turnover.completedTurnover,
           remainingTurnover: turnover.remainingTurnover,
+          bdtBalanceLocked: turnover.bdtBalanceLocked,
         },
       );
     }

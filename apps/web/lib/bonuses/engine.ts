@@ -92,7 +92,17 @@ async function creditBonus(tx: Tx, userId: string, amount: Prisma.Decimal): Prom
   }
 }
 
-async function releaseBonus(tx: Tx, userId: string, amount: Prisma.Decimal): Promise<void> {
+// `sourceType` tells the release path whether to move money. Most
+// grants live in lockedBalance and need lockedBalance -> balance on
+// release. Betting Pass BDT Balance rewards land in `balance`
+// directly with the UserBonus row used purely as a withdrawal-gate
+// tracker; their release must NOT touch the wallet or lockedBalance
+// would go negative. The flag is opt-in: anything else keeps the
+// historical move.
+async function releaseBonus(tx: Tx, userId: string, amount: Prisma.Decimal, sourceType: string | null = null): Promise<void> {
+  if (sourceType === 'betting_pass_bdt') {
+    return;
+  }
   await tx.wallet.update({
     where: { userId },
     data: {
@@ -166,7 +176,7 @@ export async function grantBonusInTx(tx: Tx, opts: GrantOpts): Promise<{ grantId
   });
 
   if (turnoverRequired.lte(0)) {
-    await releaseBonus(tx, opts.userId, amount);
+    await releaseBonus(tx, opts.userId, amount, opts.sourceType ?? null);
     await tx.userBonus.update({
       where: { id: grant.id },
       data: { status: 'completed', releasedAt: new Date() },
@@ -512,7 +522,7 @@ export async function addTurnover(opts: AddTurnoverOpts): Promise<{
       });
 
       if (released) {
-        await releaseBonus(tx, opts.userId, new Prisma.Decimal(g.amount));
+        await releaseBonus(tx, opts.userId, new Prisma.Decimal(g.amount), g.sourceType ?? null);
       }
 
       applied.push({

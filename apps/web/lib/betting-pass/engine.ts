@@ -296,6 +296,82 @@ export async function claimBettingPassReward(userId: string, ruleId: string): Pr
           } as Prisma.JsonObject,
         },
       });
+    } else if (rule.rewardKind === 'bdt_balance' && rewardAmount.gt(0)) {
+      // BDT Balance reward: credits the main wallet (Wallet.balance)
+      // directly so the player sees the BDT show up immediately.
+      // Withdrawal eligibility is gated by a UserBonus row with
+      // sourceType='betting_pass_bdt' that lib/turnover/deposit-gate
+      // subtracts from the withdrawable balance until the player
+      // wagers amount * turnoverX. The release path in
+      // lib/bonuses/engine.ts skips the wallet move for this
+      // sourceType because the money is already in `balance`.
+      const bpRule = await tx.bonusRule.upsert({
+        where: { code: 'bp_payout' },
+        update: {},
+        create: {
+          code: 'bp_payout',
+          name: 'Betting Pass Reward',
+          type: 'manual',
+          status: 'active',
+          amount: 0,
+          turnoverX: 0,
+          validityDays: 30,
+          description: 'Bonus issued by the Betting Pass tier claim flow.',
+        },
+        select: { id: true },
+      });
+      await tx.wallet.upsert({
+        where: { userId },
+        update: { balance: { increment: rewardAmount } },
+        create: { userId, balance: rewardAmount, bonusBalance: 0, lockedBalance: 0, currency: 'BDT' },
+      });
+      const grant = await tx.userBonus.create({
+        data: {
+          userId,
+          bonusRuleId: bpRule.id,
+          amount: rewardAmount,
+          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          status: 'active',
+          turnoverRequired,
+          turnoverProgress: 0,
+          sourceType: 'betting_pass_bdt',
+          sourceId: ruleId,
+          note: `Betting Pass BDT Balance tier ${rule.tier}`,
+        },
+      });
+      bonusGrantId = grant.id;
+      await tx.transaction.create({
+        data: {
+          userId,
+          type: 'bonus',
+          amount: rewardAmount,
+          status: 'completed',
+          reference: `betting_pass:${ruleId}`,
+          description: `Betting Pass BDT Balance reward (tier ${rule.tier})`,
+          meta: {
+            source: 'betting_pass_claim',
+            ruleId,
+            tier: rule.tier,
+            rewardKind: 'bdt_balance',
+            turnoverRequired: Number(turnoverRequired),
+            bonusGrantId: grant.id,
+            // The reward landed in Wallet.balance directly. Withdrawal
+            // eligibility is gated by the UserBonus row above.
+            creditedTo: 'balance',
+          } as Prisma.JsonObject,
+        },
+      });
+
+      // turnoverX=0 means "no wager required" - flip the grant to
+      // completed immediately so the withdrawal gate stops counting
+      // it. We do NOT touch wallet here because the money is
+      // already in Wallet.balance (see upsert above).
+      if (turnoverRequired.lte(0)) {
+        await tx.userBonus.update({
+          where: { id: grant.id },
+          data: { status: 'completed', releasedAt: new Date() },
+        });
+      }
     }
     // rewardKind='physical' writes no wallet movement; the operator
     // fulfils via the BettingPassClaim row below.

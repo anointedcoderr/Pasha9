@@ -21,7 +21,7 @@ const ruleSchema = z.object({
   descriptionBn: z.string().trim().max(400).optional().nullable(),
   iconUrl: z.string().trim().max(500).optional().nullable(),
   pointsRequired: z.number().int().min(0).max(10_000_000),
-  rewardKind: z.enum(['coins', 'bonus', 'freebet', 'physical']).default('coins'),
+  rewardKind: z.enum(['coins', 'bonus', 'freebet', 'physical', 'bdt_balance']).default('coins'),
   rewardAmount: z.number().min(0).max(10_000_000),
   turnoverX: z.number().min(0).max(50).optional().default(0),
   bonusRuleId: z.string().trim().max(60).optional().nullable(),

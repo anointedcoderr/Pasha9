@@ -26,8 +26,9 @@ interface BettingPassLadderRow {
   descriptionBn: string | null;
   iconUrl: string | null;
   pointsRequired: number;
-  rewardKind: 'coins' | 'bonus' | 'freebet' | 'physical';
+  rewardKind: 'coins' | 'bonus' | 'freebet' | 'physical' | 'bdt_balance';
   rewardAmount: number;
+  turnoverX: number;
   unlocked: boolean;
   claimed: boolean;
   claimable: boolean;
@@ -52,6 +53,17 @@ interface BettingPassData {
 }
 
 type AuthState = { kind: 'checking' } | { kind: 'guest' } | { kind: 'authed' };
+
+function prettyRewardKind(kind: string, lang: 'en' | 'bn'): string {
+  switch (kind) {
+    case 'bdt_balance': return lang === 'bn' ? 'বিডিটি ব্যালেন্স' : 'BDT Balance';
+    case 'coins':       return lang === 'bn' ? 'কয়েন' : 'coins';
+    case 'bonus':       return lang === 'bn' ? 'বোনাস' : 'bonus';
+    case 'freebet':     return lang === 'bn' ? 'ফ্রিবেট' : 'freebet';
+    case 'physical':    return lang === 'bn' ? 'ফিজিক্যাল রিওয়ার্ড' : 'physical reward';
+    default:            return kind;
+  }
+}
 
 export default function BettingPassPage() {
   const t = useT();
@@ -114,9 +126,28 @@ export default function BettingPassPage() {
       const pointsAfter = Number(j?.pointsTotalAfter ?? 0);
       const spent = Number(j?.pointsSpent ?? 0);
       const turnover = Number(j?.turnoverRequired ?? 0);
+      const kindLabel = (() => {
+        switch (j.rewardKind) {
+          case 'bdt_balance': return lang === 'bn' ? 'বিডিটি ব্যালেন্স' : 'BDT Balance';
+          case 'coins':       return lang === 'bn' ? 'কয়েন' : 'coins';
+          case 'bonus':       return lang === 'bn' ? 'বোনাস' : 'bonus';
+          case 'freebet':     return lang === 'bn' ? 'ফ্রিবেট' : 'freebet';
+          case 'physical':    return lang === 'bn' ? 'ফিজিক্যাল রিওয়ার্ড' : 'physical reward';
+          default:            return String(j.rewardKind);
+        }
+      })();
+      const turnoverNote = turnover > 0
+        ? (j.rewardKind === 'bdt_balance'
+            ? (lang === 'bn'
+                ? `. উইথড্রয়ালের আগে ৳${turnover.toLocaleString()} টার্নওভার সম্পূর্ণ করুন।`
+                : `. Complete ${turnover.toLocaleString()} BDT turnover before withdrawal.`)
+            : (lang === 'bn'
+                ? `. টার্নওভার প্রয়োজন ৳${turnover.toLocaleString()}`
+                : `. Turnover required ৳${turnover.toLocaleString()}`))
+        : '';
       const ok = lang === 'bn'
-        ? `রিওয়ার্ড দাবি সম্পন্ন। +${Number(j.rewardAmount).toLocaleString()} ${j.rewardKind}. পয়েন্ট: ${pointsAfter.toLocaleString()} (খরচ ${spent.toLocaleString()})${turnover > 0 ? `. টার্নওভার প্রয়োজন ৳${turnover.toLocaleString()}` : ''}.`
-        : `Reward claimed. +${Number(j.rewardAmount).toLocaleString()} ${j.rewardKind}. Points: ${pointsAfter.toLocaleString()} (spent ${spent.toLocaleString()})${turnover > 0 ? `. Turnover required ৳${turnover.toLocaleString()}` : ''}.`;
+        ? `রিওয়ার্ড দাবি সম্পন্ন। +${Number(j.rewardAmount).toLocaleString()} ${kindLabel}. পয়েন্ট: ${pointsAfter.toLocaleString()} (খরচ ${spent.toLocaleString()})${turnoverNote}.`
+        : `Reward claimed. +${Number(j.rewardAmount).toLocaleString()} ${kindLabel}. Points: ${pointsAfter.toLocaleString()} (spent ${spent.toLocaleString()})${turnoverNote}.`;
       setFlash({ kind: 'ok', text: ok });
       triggerWalletRefresh();
       await refresh();
@@ -262,8 +293,15 @@ export default function BettingPassPage() {
               </p>
               <p className="text-sm font-semibold text-brand-ink">
                 <Gift className="mr-1.5 inline h-3.5 w-3.5 text-brand-yellow-600" />
-                {row.rewardAmount.toLocaleString()} {row.rewardKind}
+                {row.rewardAmount.toLocaleString()} {prettyRewardKind(row.rewardKind, lang)}
               </p>
+              {row.rewardKind === 'bdt_balance' && Number(row.turnoverX ?? 0) > 0 ? (
+                <p className="mt-1 text-[10px] text-brand-inkMute">
+                  {lang === 'bn'
+                    ? `উইথড্রয়ালের আগে ${Number(row.turnoverX)}x টার্নওভার প্রয়োজন।`
+                    : `Requires ${Number(row.turnoverX)}x turnover before withdrawal.`}
+                </p>
+              ) : null}
               {row.descriptionEn || row.descriptionBn ? (
                 <p className="mt-2 text-[11px] text-brand-inkMute">
                   {lang === 'bn' && row.descriptionBn ? row.descriptionBn : row.descriptionEn}

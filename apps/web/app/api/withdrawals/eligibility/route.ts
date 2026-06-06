@@ -26,6 +26,7 @@ export async function GET() {
       completedTurnover: status.completedTurnover,
       remainingTurnover: status.remainingTurnover,
       isMet: status.isMet,
+      bdtBalanceLocked: status.bdtBalanceLocked,
     });
   });
 }

@@ -31,6 +31,31 @@ export interface DepositTurnoverStatus {
   completedTurnover: number;
   remainingTurnover: number;
   isMet: boolean;
+  // Sum of active rewards credited directly to Wallet.balance but
+  // still under a turnover requirement (currently Betting Pass
+  // BDT Balance grants). This is NOT included in the deposit gate's
+  // remaining number; the caller subtracts it from the withdrawable
+  // balance instead, because the money is already in the main wallet
+  // by design (operator surface), just not yet free to withdraw.
+  bdtBalanceLocked: number;
+}
+
+// Active UserBonus grants with this sourceType represent BDT Balance
+// rewards that were credited to Wallet.balance but are still waiting
+// for the player to complete their wager. Withdrawals must subtract
+// this from the available balance until the grant is released.
+const BDT_BALANCE_LOCK_SOURCE_TYPE = 'betting_pass_bdt';
+
+export async function computeBdtBalanceLocked(userId: string): Promise<number> {
+  try {
+    const agg = await db.userBonus.aggregate({
+      where: { userId, status: 'active', sourceType: BDT_BALANCE_LOCK_SOURCE_TYPE },
+      _sum: { amount: true },
+    });
+    return Math.max(0, Number(agg._sum?.amount ?? 0));
+  } catch {
+    return 0;
+  }
 }
 
 export async function loadDepositTurnoverMultiplier(): Promise<number> {
@@ -48,7 +73,7 @@ export async function loadDepositTurnoverMultiplier(): Promise<number> {
 export async function computeDepositTurnover(userId: string): Promise<DepositTurnoverStatus> {
   const multiplier = await loadDepositTurnoverMultiplier();
 
-  const [depositAgg, betAgg] = await Promise.all([
+  const [depositAgg, betAgg, bdtBalanceLocked] = await Promise.all([
     db.deposit.aggregate({
       where: { userId, status: 'approved' },
       _sum: { amount: true },
@@ -57,6 +82,7 @@ export async function computeDepositTurnover(userId: string): Promise<DepositTur
       where: { userId, status: 'accepted' },
       _sum: { betAmount: true },
     }),
+    computeBdtBalanceLocked(userId),
   ]);
 
   const approvedDepositTotal = Number(depositAgg._sum?.amount ?? 0);
@@ -72,5 +98,6 @@ export async function computeDepositTurnover(userId: string): Promise<DepositTur
     completedTurnover,
     remainingTurnover,
     isMet,
+    bdtBalanceLocked,
   };
 }
