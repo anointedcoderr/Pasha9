@@ -11,6 +11,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { pickBestTier } from '@/lib/bonuses/deposit-tiers';
+import { previewDepositPromotion } from '@/lib/promotions/deposit';
 
 export async function GET(req: NextRequest) {
   try {
@@ -20,14 +21,20 @@ export async function GET(req: NextRequest) {
     if (!Number.isFinite(amount) || amount < 0) {
       return NextResponse.json({ ok: true, amount: 0, tier: null, bonusPercentage: 0, bonusAmount: 0, totalCredit: 0 });
     }
-    const preview = await pickBestTier(amount);
+    const promotionId = url.searchParams.get('promotionId');
+    const selected = promotionId ? await previewDepositPromotion(promotionId, amount) : null;
+    const tierPreview = selected ? null : await pickBestTier(amount);
+    const preview = selected ?? tierPreview;
+    if (!preview) throw new Error('No preview result');
     return NextResponse.json({
       ok: true,
       amount,
-      tier: preview.tier,
+      tier: tierPreview?.tier ?? null,
       bonusPercentage: preview.bonusPercentage,
       bonusAmount: preview.bonusAmount,
       totalCredit: preview.totalCredit,
+      promotionId: selected?.rule.id ?? null,
+      promotionName: selected?.rule.name ?? null,
     });
   } catch (err) {
     console.error('[content/deposit-preview] preview failed', err);

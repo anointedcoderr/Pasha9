@@ -25,11 +25,14 @@ import { Gift, Plus, Pencil, Trash2, RefreshCw, AlertCircle, Settings2, BadgePlu
 import { formatBDT } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import { ImageUpload } from '@/components/admin/ImageUpload';
+import { getPromotionConfig, mergePromotionMeta } from '@/lib/promotions/config';
 
 interface RuleRow {
   id: string;
   name: string;
+  nameBn: string | null;
   type: string;
+  promotionType: string | null;
   code: string | null;
   amount: number;
   percentage: number;
@@ -40,9 +43,11 @@ interface RuleRow {
   priority: number;
   status: string;
   description: string | null;
+  descriptionBn: string | null;
   startsAt: string | null;
   endsAt: string | null;
   meta: unknown;
+  configWarning?: string | null;
   // M4 Phase D presentation assets + terms.
   bannerDesktopUrl: string | null;
   bannerMobileUrl: string | null;
@@ -73,13 +78,23 @@ interface GrantRow {
   cancelledAt: string | null;
 }
 
-const BONUS_TYPES = ['first_deposit', 'daily', 'weekly', 'referral', 'vip', 'invite', 'reload', 'manual', 'promo'] as const;
+const PROMOTION_TYPES = [
+  { value: 'first_deposit_bonus', engineType: 'first_deposit', label: 'First Deposit Bonus' },
+  { value: 'daily_bonus', engineType: 'daily', label: 'Daily Bonus' },
+  { value: 'weekly_reward', engineType: 'weekly', label: 'Weekly Reward' },
+  { value: 'referral_bonus', engineType: 'referral', label: 'Referral Bonus' },
+  { value: 'vip_reward', engineType: 'vip', label: 'VIP Reward' },
+  { value: 'invite_friend_offer', engineType: 'invite', label: 'Invite Friend Offer' },
+  { value: 'other', engineType: 'promo', label: 'Other Future Promotions' },
+] as const;
 const GRANT_STATUSES = ['', 'active', 'completed', 'expired', 'cancelled'] as const;
 
 const EMPTY_RULE: Omit<RuleRow, 'id'> & { id: string } = {
   id: 'new',
   name: '',
+  nameBn: '',
   type: 'promo',
+  promotionType: 'other',
   code: '',
   amount: 0,
   percentage: 0,
@@ -90,6 +105,7 @@ const EMPTY_RULE: Omit<RuleRow, 'id'> & { id: string } = {
   priority: 0,
   status: 'active',
   description: '',
+  descriptionBn: '',
   startsAt: null,
   endsAt: null,
   meta: null,
@@ -180,7 +196,9 @@ export default function AdminBonusesPage() {
       const method = isNew ? 'POST' : 'PATCH';
       const payload = {
         name: form.name,
+        nameBn: form.nameBn ?? '',
         type: form.type,
+        promotionType: form.promotionType,
         code: form.code?.trim() ? form.code.trim() : null,
         amount: Number(form.amount),
         percentage: Number(form.percentage),
@@ -191,8 +209,10 @@ export default function AdminBonusesPage() {
         priority: Number(form.priority),
         status: form.status,
         description: form.description ?? '',
+        descriptionBn: form.descriptionBn ?? '',
         startsAt: form.startsAt ?? null,
         endsAt: form.endsAt ?? null,
+        meta: form.meta,
         // M4 Phase D presentation assets.
         bannerDesktopUrl: form.bannerDesktopUrl,
         bannerMobileUrl: form.bannerMobileUrl,
@@ -294,8 +314,8 @@ export default function AdminBonusesPage() {
   return (
     <>
       <PageHeader
-        title="Bonus Engine"
-        subtitle="Configure rules and audit issued grants. Engine fires on deposit approve + manual admin grant."
+        title="Promotions and Bonus Engine"
+        subtitle="Configure promotion categories, claim actions, payouts, eligibility, and audit issued grants."
         icon={<Gift className="h-5 w-5" />}
         action={
           <div className="flex gap-2">
@@ -339,9 +359,10 @@ export default function AdminBonusesPage() {
                 <Card key={r.id} padding="lg">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="text-xs uppercase tracking-wider text-gold-300">{r.type.replace('_', ' ')}{r.code ? ` . ${r.code}` : ''}</p>
+                      <p className="text-xs uppercase tracking-wider text-gold-300">{(r.promotionType ?? r.type).replaceAll('_', ' ')}{r.code ? ` . ${r.code}` : ''}</p>
                       <h3 className="mt-1 text-base font-semibold text-ink-hi">{r.name}</h3>
                       {r.description ? <p className="mt-1 text-sm text-ink-mid">{r.description}</p> : null}
+                      {r.configWarning ? <p className="mt-2 text-xs text-signal-warn">Warning: {r.configWarning}</p> : null}
                     </div>
                     <Chip tone={ruleStatusTone(r.status)}>{r.status}</Chip>
                   </div>
@@ -368,7 +389,10 @@ export default function AdminBonusesPage() {
                     <Button size="sm" variant="neon" leftIcon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditor({
                       ...r,
                       code: r.code ?? '',
+                      nameBn: r.nameBn ?? '',
+                      promotionType: r.promotionType ?? null,
                       description: r.description ?? '',
+                      descriptionBn: r.descriptionBn ?? '',
                       termsEn: r.termsEn ?? '',
                       termsBn: r.termsBn ?? '',
                     })}>Edit</Button>
@@ -514,15 +538,31 @@ function RuleEditor({
   onCancel: () => void;
 }) {
   const set = <K extends keyof typeof value>(k: K, v: typeof value[K]) => onChange({ ...value, [k]: v });
+  const promotion = getPromotionConfig(value.meta);
+  const setPromotion = (patch: Parameters<typeof mergePromotionMeta>[1]) => set('meta', mergePromotionMeta(value.meta, patch));
   return (
     <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); onSave(); }}>
       <div className="grid gap-3 md:grid-cols-2">
         <FormField label="Name" required>
           <Input value={value.name} onChange={(e) => set('name', e.target.value)} placeholder="e.g. Welcome 100% match" />
         </FormField>
-        <FormField label="Type" required hint="first_deposit fires on the user's first approved deposit. reload + promo (meta.trigger=deposit) fire on every deposit.">
-          <Select value={value.type} onChange={(e) => set('type', e.target.value)}>
-            {BONUS_TYPES.map((tp) => <option key={tp} value={tp}>{tp.replace('_', ' ')}</option>)}
+        <FormField label="Name (Bangla)" hint="Shown first for Bangla users.">
+          <Input value={value.nameBn ?? ''} onChange={(e) => set('nameBn', e.target.value)} placeholder="বাংলা প্রমোশন নাম" />
+        </FormField>
+        <FormField label="Promotion type" required hint="Controls the public category and default claim action.">
+          <Select
+            value={value.promotionType ?? ''}
+            onChange={(e) => {
+              const selected = PROMOTION_TYPES.find((item) => item.value === e.target.value);
+              onChange({
+                ...value,
+                promotionType: selected?.value ?? null,
+                type: selected?.engineType ?? value.type,
+              });
+            }}
+          >
+            {!value.promotionType ? <option value="">Legacy category: {value.type.replaceAll('_', ' ')}</option> : null}
+            {PROMOTION_TYPES.map((tp) => <option key={tp.value} value={tp.value}>{tp.label}</option>)}
           </Select>
         </FormField>
         <FormField label="Code (optional)" hint="Stable lookup key. Letters / digits / underscore.">
@@ -560,6 +600,50 @@ function RuleEditor({
       <FormField label="Description (shown on /promotions)">
         <Textarea rows={3} value={value.description ?? ''} onChange={(e) => set('description', e.target.value)} placeholder="Plain text shown to users." />
       </FormField>
+      <FormField label="Description (Bangla)" hint="Bangla-first copy. Leave blank to use the English description.">
+        <Textarea rows={3} value={value.descriptionBn ?? ''} onChange={(e) => set('descriptionBn', e.target.value)} placeholder="বাংলা বিবরণ" />
+      </FormField>
+
+      <div className="space-y-4 rounded-xl border border-brand-divider bg-brand-surface p-3">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">Claim flow and eligibility</p>
+        {value.configWarning ? <p className="text-xs text-signal-warn">Admin warning: {value.configWarning}</p> : null}
+        <div className="grid gap-3 md:grid-cols-2">
+          <FormField label="Claim button action" hint="Auto uses the safe default for the selected promotion type.">
+            <Select value={promotion.claimBehavior} onChange={(e) => setPromotion({ claimBehavior: e.target.value as typeof promotion.claimBehavior })}>
+              <option value="auto">Auto by promotion type</option>
+              <option value="direct">Direct claim</option>
+              <option value="deposit">Redirect to deposit</option>
+              <option value="redirect">Redirect to URL</option>
+              <option value="disabled">Disabled with safe message</option>
+            </Select>
+          </FormField>
+          <FormField label="Target URL" hint="Used by redirect actions. Referral and VIP have safe defaults.">
+            <Input value={promotion.targetUrl ?? ''} onChange={(e) => setPromotion({ targetUrl: e.target.value || null })} placeholder="/referral" />
+          </FormField>
+          <FormField label="Required or recommended deposit (BDT)" hint="Prefills the deposit page. Falls back to Min deposit.">
+            <Input type="number" min={0} value={promotion.requiredDepositAmount} onChange={(e) => setPromotion({ requiredDepositAmount: Number(e.target.value) })} />
+          </FormField>
+          <FormField label="Minimum approved deposit count">
+            <Input type="number" min={0} value={promotion.minApprovedDepositCount} onChange={(e) => setPromotion({ minApprovedDepositCount: Number(e.target.value) })} />
+          </FormField>
+          <FormField label="Minimum approved deposit total (BDT)">
+            <Input type="number" min={0} value={promotion.minApprovedDepositTotal} onChange={(e) => setPromotion({ minApprovedDepositTotal: Number(e.target.value) })} />
+          </FormField>
+          <label className="flex items-center gap-2 self-end pb-2 text-sm text-ink-mid">
+            <Switch checked={promotion.depositRequired} onChange={(v) => setPromotion({ depositRequired: Boolean(v) })} />
+            Daily bonus requires deposit
+          </label>
+        </div>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2">
+        <FormField label="Starts at" hint="Optional public visibility and claim window.">
+          <Input type="datetime-local" value={value.startsAt ? value.startsAt.slice(0, 16) : ''} onChange={(e) => set('startsAt', e.target.value ? new Date(e.target.value).toISOString() : null)} />
+        </FormField>
+        <FormField label="Ends at" hint="Expired promotions stay visible to admin but disappear publicly.">
+          <Input type="datetime-local" value={value.endsAt ? value.endsAt.slice(0, 16) : ''} onChange={(e) => set('endsAt', e.target.value ? new Date(e.target.value).toISOString() : null)} />
+        </FormField>
+      </div>
 
       <div className="space-y-4 rounded-xl border border-brand-divider bg-brand-surface p-3">
         <p className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">Presentation assets</p>

@@ -26,6 +26,8 @@ interface DepositRow {
   method: string;
   transactionId: string;
   proofUrl?: string | null;
+  promotionRuleId?: string | null;
+  promotionCode?: string | null;
   status: 'pending' | 'approved' | 'rejected';
   adminNote?: string | null;
   rejectionReason?: string | null;
@@ -174,6 +176,11 @@ export default function AdminDepositsPage() {
           return <span className="font-semibold text-ink-hi">{formatBDT(total)}</span>;
         } },
       { header: 'Method', accessorKey: 'method', cell: ({ getValue }) => <span className="text-ink-mid">{String(getValue())}</span> },
+      { header: 'Promotion', id: 'promotion', cell: ({ row }) => (
+          row.original.promotionRuleId
+            ? <span className="text-xs text-emerald-300">{row.original.promotionCode || row.original.promotionRuleId}</span>
+            : <span className="text-xs text-ink-lo">-</span>
+        ) },
       { header: 'TX ID', accessorKey: 'transactionId', cell: ({ getValue }) => <code className="font-mono text-xs text-ink-mid">{String(getValue())}</code> },
       { header: 'Proof', id: 'proof', cell: ({ row }) => {
           const url = row.original.proofUrl;

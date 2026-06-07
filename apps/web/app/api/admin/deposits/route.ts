@@ -43,6 +43,8 @@ export async function GET(req: NextRequest) {
           method: r.method,
           transactionId: r.transactionId,
           proofUrl: r.proofUrl,
+          promotionRuleId: r.promotionRuleId,
+          promotionCode: r.promotionCode,
           status: r.status,
           adminNote: r.adminNote,
           rejectionReason: r.rejectionReason,

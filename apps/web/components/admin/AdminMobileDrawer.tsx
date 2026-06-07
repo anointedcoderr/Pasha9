@@ -92,6 +92,7 @@ const GROUPS = [
     labelKey: 'groupBonusAndAffiliate',
     items: [
       { key: 'bonuses', href: ROUTES.admin.bonuses, icon: Gift },
+      { key: 'promotionBanners', href: ROUTES.admin.promotionBanners, icon: ImageIcon },
       { key: 'affiliate', href: ROUTES.admin.affiliate, icon: Briefcase },
       { key: 'affiliateTiers', href: ROUTES.admin.affiliateTiers, icon: Trophy },
     ],

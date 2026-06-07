@@ -31,6 +31,7 @@ import { accrueCommissionsOnDeposit, type AccrualResult as CommissionAccrualResu
 import { accrueBettingPassOnDeposit } from '@/lib/betting-pass/engine';
 import { sendSms } from '@/lib/sms/service';
 import { fireEvent } from '@/lib/tracking/dispatcher';
+import { applySelectedDepositPromotion } from '@/lib/promotions/deposit';
 
 const schema = z.object({
   adminNote: z.string().max(500).optional(),
@@ -117,7 +118,16 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       isFirstDeposit: false,
     };
     try {
-      bonusResult = await applyDepositBonuses(deposit.userId, deposit.id, amount);
+      bonusResult = deposit.promotionRuleId
+        ? await applySelectedDepositPromotion({
+            userId: deposit.userId,
+            depositId: deposit.id,
+            ruleId: deposit.promotionRuleId,
+            depositAmount: amount,
+            actorId: session.sub,
+            actorRole: session.role,
+          })
+        : await applyDepositBonuses(deposit.userId, deposit.id, amount);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error('[deposit-approve] bonus engine threw unexpectedly', err);
@@ -177,6 +187,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         bonusesGranted: bonusResult.granted.length,
         bonusGrantIds: bonusResult.granted.map((g) => g.grantId),
         bonusEngineError: bonusResult.error,
+        promotionRuleId: deposit.promotionRuleId,
+        promotionCode: deposit.promotionCode,
         commissionsAccrued: commissionResult.accrued.length,
         commissionTotal: commissionResult.accrued.reduce((acc, c) => acc + c.amount, 0),
         commissionEngineError: commissionResult.error,
@@ -211,6 +223,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         granted: bonusResult.granted,
         skipped: bonusResult.skipped,
         error: bonusResult.error,
+        promotionRuleId: deposit.promotionRuleId,
+        promotionCode: deposit.promotionCode,
       },
     });
 

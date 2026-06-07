@@ -26,6 +26,8 @@ import { withAuth, recordActivity } from '@/lib/auth/guard';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 import { rateLimit } from '@/lib/auth/rate-limit';
 import { pickBestTier } from '@/lib/bonuses/deposit-tiers';
+import { previewDepositPromotion } from '@/lib/promotions/deposit';
+import { resolveClaimBehavior } from '@/lib/promotions/config';
 
 const schema = z.object({
   amount: z.coerce.number().min(100).max(500_000),
@@ -40,6 +42,8 @@ const schema = z.object({
     .refine((v) => v == null || v === '' || v.startsWith('/uploads/'), {
       message: 'proofUrl must be a path served from /uploads/',
     }),
+  promotionId: z.string().trim().min(1).max(60).optional().nullable(),
+  promoCode: z.string().trim().min(1).max(60).optional().nullable(),
 });
 
 export async function POST(req: NextRequest) {
@@ -53,7 +57,34 @@ export async function POST(req: NextRequest) {
     const parsed = schema.safeParse(body);
     if (!parsed.success) return jsonError(400, 'VALIDATION', undefined, { issues: parsed.error.issues });
 
-    const preview = await pickBestTier(parsed.data.amount).catch(() => ({
+    let promotionRule: Awaited<ReturnType<typeof db.bonusRule.findUnique>> = null;
+    if (parsed.data.promotionId) {
+      promotionRule = await db.bonusRule.findUnique({ where: { id: parsed.data.promotionId } });
+      const now = new Date();
+      if (!promotionRule || promotionRule.status !== 'active') {
+        return jsonError(409, 'PROMOTION_UNAVAILABLE', 'The selected promotion is no longer active.');
+      }
+      if (promotionRule.startsAt && promotionRule.startsAt > now) {
+        return jsonError(409, 'PROMOTION_UNAVAILABLE', 'The selected promotion has not started yet.');
+      }
+      if (promotionRule.endsAt && promotionRule.endsAt < now) {
+        return jsonError(409, 'PROMOTION_UNAVAILABLE', 'The selected promotion has ended.');
+      }
+      if (resolveClaimBehavior(promotionRule) !== 'deposit') {
+        return jsonError(409, 'PROMOTION_ACTION_INVALID', 'The selected promotion is not claimed through deposit.');
+      }
+      if (parsed.data.promoCode && promotionRule.code && parsed.data.promoCode !== promotionRule.code) {
+        return jsonError(409, 'PROMO_CODE_MISMATCH', 'The promotion code does not match the selected promotion.');
+      }
+    }
+
+    const selectedPreview = promotionRule
+      ? await previewDepositPromotion(promotionRule.id, parsed.data.amount)
+      : null;
+    if (promotionRule && !selectedPreview) {
+      return jsonError(409, 'PROMOTION_CONFIG_ERROR', 'The selected promotion is temporarily unavailable.');
+    }
+    const preview = selectedPreview ?? await pickBestTier(parsed.data.amount).catch(() => ({
       tier: null, bonusPercentage: 0, bonusAmount: 0, totalCredit: parsed.data.amount,
     }));
 
@@ -67,6 +98,8 @@ export async function POST(req: NextRequest) {
         status: 'pending',
         bonusPercentage: preview.bonusPercentage > 0 ? new Prisma.Decimal(preview.bonusPercentage) : null,
         bonusAmount: preview.bonusAmount > 0 ? new Prisma.Decimal(preview.bonusAmount) : null,
+        promotionRuleId: promotionRule?.id ?? null,
+        promotionCode: promotionRule?.code ?? parsed.data.promoCode ?? null,
       },
     });
 
@@ -83,6 +116,8 @@ export async function POST(req: NextRequest) {
         promisedBonusPercentage: preview.bonusPercentage,
         promisedBonusAmount: preview.bonusAmount,
         promisedTotalCredit: preview.totalCredit,
+        promotionRuleId: promotionRule?.id ?? null,
+        promotionCode: promotionRule?.code ?? parsed.data.promoCode ?? null,
       },
     });
 
@@ -99,6 +134,8 @@ export async function POST(req: NextRequest) {
           bonusAmount: deposit.bonusAmount == null ? 0 : Number(deposit.bonusAmount),
           totalCredit: Number(deposit.amount) + (deposit.bonusAmount == null ? 0 : Number(deposit.bonusAmount)),
           proofUrl: deposit.proofUrl,
+          promotionRuleId: deposit.promotionRuleId,
+          promotionCode: deposit.promotionCode,
         },
       },
       201,

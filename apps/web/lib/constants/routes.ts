@@ -50,6 +50,7 @@ export const ROUTES = {
     sponsors: '/admin/sponsors',
     publicPaymentMethods: '/admin/public-payment-methods',
     bonuses: '/admin/bonuses',
+    promotionBanners: '/admin/promotions/banners',
     banners: '/admin/banners',
     popups: '/admin/popups',
     categories: '/admin/categories',

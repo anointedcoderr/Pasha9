@@ -366,6 +366,11 @@ model Deposit {
   // promised bonus + total credit at a glance.
   bonusPercentage   Decimal?      @db.Decimal(5, 2)
   bonusAmount       Decimal?      @db.Decimal(14, 2)
+  // Optional promotion context selected from /promotions. Approval
+  // validates the live BonusRule before granting, while these fields
+  // preserve the user's original deposit intent for audit.
+  promotionRuleId   String?
+  promotionCode     String?
   reviewerId    String?
   reviewedAt    DateTime?
   createdAt     DateTime      @default(now())
@@ -376,6 +381,7 @@ model Deposit {
   @@index([status])
   @@index([userId])
   @@index([providerRef])
+  @@index([promotionRuleId])
   // M2J: time-series + cohort reports filter by createdAt range.
   @@index([createdAt])
 }
@@ -438,7 +444,11 @@ model WithdrawalEvent {
 model BonusRule {
   id          String        @id @default(cuid())
   name        String
+  nameBn      String?
   type        BonusType
+  // Public promotion category selected by admin. Null preserves
+  // legacy rows, which are mapped from BonusType at read time.
+  promotionType String?
   amount      Decimal       @default(0) @db.Decimal(14, 2)
   percentage  Decimal       @default(0) @db.Decimal(5, 2)
   minDeposit  Decimal       @default(0) @db.Decimal(14, 2)
@@ -480,6 +490,8 @@ model BonusRule {
 
   userBonuses UserBonus[]
   promotionClaims PromotionClaim[]
+
+  @@index([promotionType, status])
 }
 
 model UserBonus {
@@ -2067,6 +2079,24 @@ model BettingPassClaim {
 // are active, the page falls back to the hardcoded built-in hero so
 // the surface never breaks on a fresh DB.
 model BettingPassBanner {
+  id          String   @id @default(cuid())
+  titleEn     String
+  titleBn     String?
+  subtitleEn  String?
+  subtitleBn  String?
+  imageUrl    String?
+  ctaUrl      String?
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
+}
+
+// Operator-managed banner deck for the public /promotions hero.
+// Empty decks fall back to the built-in CategoryHero.
+model PromotionBanner {
   id          String   @id @default(cuid())
   titleEn     String
   titleBn     String?

@@ -23,7 +23,7 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
     const limit = rateLimit(`promotion-claim:${session.sub}`, 10, 10 * 60_000);
     if (!limit.ok) return jsonError(429, 'RATE_LIMITED');
 
-    const result = await runPromotionClaim({ ruleId: params.id, userId: session.sub });
+    const result = await runPromotionClaim({ ruleId: params.id, userId: session.sub, actorRole: session.role });
 
     if (!result.ok) {
       await recordActivity({
@@ -33,20 +33,23 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
         target: params.id,
         meta: { code: result.code, message: result.message, ...(result.meta ?? {}) },
       });
-      return jsonError(result.httpStatus, result.code, result.message, result.meta);
+      return jsonError(result.httpStatus, result.code, result.message, { action: result.action, ...(result.meta ?? {}) });
     }
 
-    await recordActivity({
-      actorId: session.sub,
-      actorRole: session.role,
-      action: 'PROMOTION_CLAIM_GRANT',
-      target: params.id,
-      detail: result.ruleName,
-      meta: { bonusGrantId: result.bonusGrantId, amount: result.amount, claimId: result.claimId },
-    });
+    if (result.action === 'redirect') {
+      await recordActivity({
+        actorId: session.sub,
+        actorRole: session.role,
+        action: 'PROMOTION_CLAIM_REDIRECT',
+        target: params.id,
+        detail: result.ruleName,
+        meta: { url: result.url },
+      });
+      return jsonOk(result);
+    }
 
     return jsonOk({
-      status: 'granted',
+      action: result.action,
       ruleName: result.ruleName,
       bonusGrantId: result.bonusGrantId,
       amount: result.amount,

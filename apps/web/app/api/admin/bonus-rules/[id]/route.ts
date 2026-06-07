@@ -8,9 +8,20 @@ import type { BonusType, ContentStatus, Prisma } from '@prisma/client';
 import { db } from '@/lib/db/client';
 import { withAuth, ensurePermission, recordActivity } from '@/lib/auth/guard';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
+import { promotionActivationError } from '@/lib/promotions/config';
 
 const ALLOWED_TYPES: BonusType[] = ['first_deposit', 'daily', 'weekly', 'referral', 'vip', 'invite', 'reload', 'manual', 'promo'];
 const ALLOWED_STATUSES: ContentStatus[] = ['active', 'hidden', 'paused'];
+const PROMOTION_TYPES = ['first_deposit_bonus', 'daily_bonus', 'weekly_reward', 'referral_bonus', 'vip_reward', 'invite_friend_offer', 'other'] as const;
+const TYPE_BY_PROMOTION: Record<(typeof PROMOTION_TYPES)[number], BonusType> = {
+  first_deposit_bonus: 'first_deposit',
+  daily_bonus: 'daily',
+  weekly_reward: 'weekly',
+  referral_bonus: 'referral',
+  vip_reward: 'vip',
+  invite_friend_offer: 'invite',
+  other: 'promo',
+};
 
 // M4 Phase D: empty strings clear the column; missing keys leave it unchanged.
 const optionalUrl = z
@@ -23,7 +34,9 @@ const optionalUrl = z
 
 const patchSchema = z.object({
   name: z.string().trim().min(1).max(120).optional(),
+  nameBn: z.string().trim().max(120).nullable().optional(),
   type: z.enum(ALLOWED_TYPES as [BonusType, ...BonusType[]]).optional(),
+  promotionType: z.enum(PROMOTION_TYPES).nullable().optional(),
   code: z.string().trim().min(1).max(60).nullable().optional(),
   amount: z.coerce.number().min(0).max(10_000_000).optional(),
   percentage: z.coerce.number().min(0).max(1000).optional(),
@@ -57,6 +70,21 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const parsed = patchSchema.safeParse(body);
     if (!parsed.success) return jsonError(400, 'VALIDATION', undefined, { issues: parsed.error.issues });
     const data = parsed.data;
+    const engineType = data.promotionType ? TYPE_BY_PROMOTION[data.promotionType] : (data.type ?? existing.type);
+    const next = {
+      id: existing.id,
+      type: engineType,
+      code: data.code !== undefined ? data.code : existing.code,
+      amount: data.amount ?? existing.amount,
+      percentage: data.percentage ?? existing.percentage,
+      minDeposit: data.minDeposit ?? existing.minDeposit,
+      maxBonus: data.maxBonus ?? existing.maxBonus,
+      meta: data.meta !== undefined ? data.meta : existing.meta,
+    };
+    const configWarning = promotionActivationError(next);
+    if ((data.status ?? existing.status) === 'active' && configWarning) {
+      return jsonError(409, 'PROMOTION_CONFIG_REQUIRED', configWarning);
+    }
 
     if (data.code && data.code !== existing.code) {
       const dup = await db.bonusRule.findUnique({ where: { code: data.code } });
@@ -69,7 +97,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       where: { id: params.id },
       data: {
         ...(data.name !== undefined ? { name: data.name } : {}),
-        ...(data.type !== undefined ? { type: data.type } : {}),
+        ...(data.nameBn !== undefined ? { nameBn: data.nameBn } : {}),
+        ...((data.type !== undefined || data.promotionType) ? { type: engineType } : {}),
+        ...(data.promotionType !== undefined ? { promotionType: data.promotionType } : {}),
         ...(data.code !== undefined ? { code: data.code ?? null } : {}),
         ...(data.amount !== undefined ? { amount: data.amount } : {}),
         ...(data.percentage !== undefined ? { percentage: data.percentage } : {}),

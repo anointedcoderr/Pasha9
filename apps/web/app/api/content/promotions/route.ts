@@ -25,7 +25,14 @@ export const fetchCache = 'force-no-store';
 import { db } from '@/lib/db/client';
 import { jsonOk } from '@/lib/auth/errors';
 import { getCurrentSession } from '@/lib/auth/rbac';
-import { weeklyBucket } from '@/lib/promotions/claim';
+import { bucketForPromotionType, weeklyBucket } from '@/lib/promotions/claim';
+import {
+  getPromotionConfig,
+  promotionConfigWarning,
+  promotionDepositAmount,
+  promotionTargetUrl,
+  resolveClaimBehavior,
+} from '@/lib/promotions/config';
 
 function describe(r: {
   amount: unknown;
@@ -34,7 +41,7 @@ function describe(r: {
   minDeposit: unknown;
   turnoverX: unknown;
   validityDays: number;
-}): string {
+}, behavior: string): string {
   const pct = Number(r.percentage);
   const flat = Number(r.amount);
   const cap = Number(r.maxBonus);
@@ -45,11 +52,40 @@ function describe(r: {
   if (pct > 0) parts.push(`${pct}% bonus`);
   if (flat > 0) parts.push(`+ ${flat.toLocaleString()} BDT flat`);
   if (cap > 0) parts.push(`(max ${cap.toLocaleString()})`);
-  let body = parts.length > 0 ? parts.join(' ') : 'No payout configured';
+  let body = parts.length > 0
+    ? parts.join(' ')
+    : behavior === 'redirect'
+      ? 'Continue to the offer page'
+      : behavior === 'disabled'
+        ? 'Claim action is not available yet'
+        : 'Reward configuration pending';
   if (min > 0) body += ` on deposits from ${min.toLocaleString()} BDT`;
   if (tx > 0) body += `. Wagering ${tx}x before release`;
   if (r.validityDays > 0) body += `. Expires in ${r.validityDays} days`;
   return body;
+}
+
+function publicCategory(type: string, configured: string | null): string {
+  if (configured && ['first_deposit_bonus', 'daily_bonus', 'weekly_reward', 'referral_bonus', 'vip_reward', 'invite_friend_offer', 'other'].includes(configured)) {
+    return configured;
+  }
+  switch (type) {
+    case 'first_deposit':
+    case 'reload':
+      return 'first_deposit_bonus';
+    case 'daily':
+      return 'daily_bonus';
+    case 'weekly':
+      return 'weekly_reward';
+    case 'referral':
+      return 'referral_bonus';
+    case 'vip':
+      return 'vip_reward';
+    case 'invite':
+      return 'invite_friend_offer';
+    default:
+      return 'other';
+  }
 }
 
 const dayBucket = () => new Date().toISOString().slice(0, 10);
@@ -64,6 +100,7 @@ export async function GET() {
   });
   const now = new Date();
   const live = rows.filter((r) => {
+    if (r.type === 'manual') return false;
     if (r.startsAt && r.startsAt > now) return false;
     if (r.endsAt && r.endsAt < now) return false;
     return true;
@@ -92,20 +129,23 @@ export async function GET() {
       const ruleClaim = claimsByRule.get(r.id) ?? null;
       const claimedToday = ruleClaim?.dayBucket === todayBucket;
       const claimedThisWeek = ruleClaim?.dayBucket === thisWeekBucket;
+      const claimed = ruleClaim?.dayBucket === bucketForPromotionType(r.type, now);
 
-      // Static disabledReason flags for the public UI. The BonusType
-      // enum currently lacks a 'cashback' member, so the cashback chip
-      // would only fire if the enum gains it in a future migration.
-      let disabledReason: string | null = null;
-      if (r.type === 'first_deposit') disabledReason = 'auto_first_deposit';
-      else if (r.type === 'vip') disabledReason = 'vip_not_configured';
-      else if (r.type === 'referral') disabledReason = 'auto_referral';
-      else if (r.type === 'invite' || r.type === 'manual') disabledReason = 'admin_only';
+      const claimAction = resolveClaimBehavior(r);
+      const configWarning = promotionConfigWarning(r);
+      const config = getPromotionConfig(r.meta);
+      const disabledReason = claimAction === 'disabled'
+        ? 'disabled'
+        : configWarning
+          ? 'config_error'
+          : null;
 
       return {
         id: r.id,
         name: r.name,
+        nameBn: r.nameBn,
         type: r.type,
+        category: publicCategory(r.type, r.promotionType),
         code: r.code,
         percentage: Number(r.percentage),
         amount: Number(r.amount),
@@ -120,7 +160,7 @@ export async function GET() {
         description: r.description,
         descriptionBn: r.descriptionBn ?? null,
         bannerUrl: r.bannerUrl ?? null,
-        effective: describe(r),
+        effective: describe(r, claimAction),
         startsAt: r.startsAt,
         endsAt: r.endsAt,
         // M4 Phase D presentation assets.
@@ -133,8 +173,13 @@ export async function GET() {
         // Per-visitor claim state (null when guest).
         claimedToday: userId ? claimedToday : null,
         claimedThisWeek: userId ? claimedThisWeek : null,
+        claimed: userId ? claimed : null,
         lastClaimAt: userId ? (ruleClaim?.createdAt ?? null) : null,
         disabledReason,
+        claimAction,
+        claimUrl: claimAction === 'redirect' ? promotionTargetUrl(r) : null,
+        requiredDepositAmount: claimAction === 'deposit' ? promotionDepositAmount(r) : 0,
+        depositRequired: claimAction === 'deposit' || config.depositRequired,
       };
     }),
   });

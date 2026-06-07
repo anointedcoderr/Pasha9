@@ -59,6 +59,13 @@ interface PreviewState {
   bonusPercentage: number;
   bonusAmount: number;
   totalCredit: number;
+  promotionName?: string | null;
+}
+
+interface PromotionIntent {
+  promotionId: string;
+  promoCode: string | null;
+  recommendedAmount: number;
 }
 
 type AuthState =
@@ -87,6 +94,7 @@ export default function DepositPage() {
   const [notices, setNotices] = useState<NoticeRow[]>([]);
   const [noticeOpen, setNoticeOpen] = useState(false);
   const [preview, setPreview] = useState<PreviewState>({ bonusPercentage: 0, bonusAmount: 0, totalCredit: 0 });
+  const [promotionIntent, setPromotionIntent] = useState<PromotionIntent | null>(null);
   const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -156,6 +164,26 @@ export default function DepositPage() {
     defaultValues: { amount: 0, method: '', txn: '' },
   });
 
+  // Promotion claims land here with a database-backed promotion id.
+  // Prefill the configured amount, then persist the context when the
+  // user submits so approval can apply the exact selected rule.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('source') !== 'promotion') return;
+    const promotionId = params.get('promotionId')?.trim() ?? '';
+    if (!promotionId) return;
+    const amount = Number(params.get('amount') ?? 0);
+    const recommendedAmount = Number.isFinite(amount) && amount > 0 ? amount : 0;
+    setPromotionIntent({
+      promotionId,
+      promoCode: params.get('promoCode')?.trim() || null,
+      recommendedAmount,
+    });
+    if (recommendedAmount > 0) {
+      setValue('amount', recommendedAmount, { shouldValidate: true });
+    }
+  }, [setValue]);
+
   // Default method = first DB method once it loads.
   useEffect(() => {
     if (methodsLoaded && methods.length > 0 && !watch('method')) {
@@ -172,11 +200,13 @@ export default function DepositPage() {
     const n = Number(watchedAmount) || 0;
     if (previewTimer.current) clearTimeout(previewTimer.current);
     if (n <= 0) {
-      setPreview({ bonusPercentage: 0, bonusAmount: 0, totalCredit: 0 });
+      setPreview({ bonusPercentage: 0, bonusAmount: 0, totalCredit: 0, promotionName: null });
       return;
     }
     previewTimer.current = setTimeout(() => {
-      fetch(`/api/content/deposit-preview?amount=${encodeURIComponent(String(n))}`, { cache: 'no-store' })
+      const params = new URLSearchParams({ amount: String(n) });
+      if (promotionIntent?.promotionId) params.set('promotionId', promotionIntent.promotionId);
+      fetch(`/api/content/deposit-preview?${params.toString()}`, { cache: 'no-store' })
         .then((r) => (r.ok ? r.json() : null))
         .then((j) => {
           if (!j) return;
@@ -184,12 +214,13 @@ export default function DepositPage() {
             bonusPercentage: Number(j.bonusPercentage) || 0,
             bonusAmount: Number(j.bonusAmount) || 0,
             totalCredit: Number(j.totalCredit) || n,
+            promotionName: typeof j.promotionName === 'string' ? j.promotionName : null,
           });
         })
         .catch(() => { /* preview is best-effort */ });
     }, 250);
     return () => { if (previewTimer.current) clearTimeout(previewTimer.current); };
-  }, [watchedAmount]);
+  }, [watchedAmount, promotionIntent?.promotionId]);
 
   const errorEntries = Object.entries(errors).map(([field, e]) => ({
     field,
@@ -256,6 +287,8 @@ export default function DepositPage() {
           method: values.method,
           transactionId: values.txn,
           proofUrl: proofUrl ?? undefined,
+          promotionId: promotionIntent?.promotionId ?? undefined,
+          promoCode: promotionIntent?.promoCode ?? undefined,
         }),
       });
       const data = await res.json().catch(() => ({} as Record<string, unknown>));
@@ -311,7 +344,7 @@ export default function DepositPage() {
     setUploadError(null);
     setServerError(null);
     setServerDetail(null);
-    reset({ amount: 0, method: methods[0]?.name ?? '', txn: '' });
+    reset({ amount: promotionIntent?.recommendedAmount ?? 0, method: methods[0]?.name ?? '', txn: '' });
   };
 
   const canSubmit = auth.kind === 'authed' && !loading && !uploading;
@@ -334,6 +367,19 @@ export default function DepositPage() {
               <LogIn className="mr-1.5 h-4 w-4" /> Log in
             </Link>
           </div>
+        </Card>
+      ) : null}
+
+      {promotionIntent ? (
+        <Card padding="md" className="mb-4 border border-emerald-300/60 bg-emerald-50">
+          <p className="text-sm font-semibold text-emerald-900">
+            {lang === 'bn' ? 'প্রমোশন ডিপোজিট নির্বাচন করা হয়েছে' : 'Promotion deposit selected'}
+          </p>
+          <p className="mt-1 text-xs text-emerald-800">
+            {preview.promotionName
+              ? (lang === 'bn' ? `${preview.promotionName} অনুমোদনের পর প্রয়োগ হবে।` : `${preview.promotionName} will be applied after approval.`)
+              : (lang === 'bn' ? 'যোগ্য হলে অনুমোদনের পর বোনাস প্রয়োগ হবে।' : 'The bonus will be applied after approval when eligible.')}
+          </p>
         </Card>
       ) : null}
 

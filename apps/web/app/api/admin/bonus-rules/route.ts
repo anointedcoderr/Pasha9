@@ -13,9 +13,20 @@ import type { BonusType, ContentStatus, Prisma } from '@prisma/client';
 import { db } from '@/lib/db/client';
 import { withAuth, ensurePermission, recordActivity } from '@/lib/auth/guard';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
+import { promotionActivationError, promotionConfigWarning } from '@/lib/promotions/config';
 
 const ALLOWED_TYPES: BonusType[] = ['first_deposit', 'daily', 'weekly', 'referral', 'vip', 'invite', 'reload', 'manual', 'promo'];
 const ALLOWED_STATUSES: ContentStatus[] = ['active', 'hidden', 'paused'];
+const PROMOTION_TYPES = ['first_deposit_bonus', 'daily_bonus', 'weekly_reward', 'referral_bonus', 'vip_reward', 'invite_friend_offer', 'other'] as const;
+const TYPE_BY_PROMOTION: Record<(typeof PROMOTION_TYPES)[number], BonusType> = {
+  first_deposit_bonus: 'first_deposit',
+  daily_bonus: 'daily',
+  weekly_reward: 'weekly',
+  referral_bonus: 'referral',
+  vip_reward: 'vip',
+  invite_friend_offer: 'invite',
+  other: 'promo',
+};
 
 // M4 Phase D: promotion presentation assets. Banner / terms columns
 // are optional on every existing rule; clearing a field is allowed
@@ -30,7 +41,9 @@ const optionalUrl = z
 
 const createSchema = z.object({
   name: z.string().trim().min(1).max(120),
+  nameBn: z.string().trim().max(120).optional().nullable(),
   type: z.enum(ALLOWED_TYPES as [BonusType, ...BonusType[]]),
+  promotionType: z.enum(PROMOTION_TYPES).optional().nullable(),
   code: z.string().trim().min(1).max(60).optional().nullable(),
   amount: z.coerce.number().min(0).max(10_000_000).default(0),
   percentage: z.coerce.number().min(0).max(1000).default(0),
@@ -58,7 +71,9 @@ function serialize(r: Awaited<ReturnType<typeof db.bonusRule.findMany>>[number])
   return {
     id: r.id,
     name: r.name,
+    nameBn: r.nameBn,
     type: r.type,
+    promotionType: r.promotionType,
     code: r.code,
     amount: Number(r.amount),
     percentage: Number(r.percentage),
@@ -82,6 +97,7 @@ function serialize(r: Awaited<ReturnType<typeof db.bonusRule.findMany>>[number])
     termsBn: r.termsBn,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
+    configWarning: promotionConfigWarning(r),
   };
 }
 
@@ -124,6 +140,20 @@ export async function POST(req: NextRequest) {
     const parsed = createSchema.safeParse(body);
     if (!parsed.success) return jsonError(400, 'VALIDATION', undefined, { issues: parsed.error.issues });
     const data = parsed.data;
+    const engineType = data.promotionType ? TYPE_BY_PROMOTION[data.promotionType] : data.type;
+    const configWarning = promotionActivationError({
+      id: 'new',
+      type: engineType,
+      code: data.code ?? null,
+      amount: data.amount,
+      percentage: data.percentage,
+      minDeposit: data.minDeposit,
+      maxBonus: data.maxBonus,
+      meta: data.meta,
+    });
+    if (data.status === 'active' && configWarning) {
+      return jsonError(409, 'PROMOTION_CONFIG_REQUIRED', configWarning);
+    }
 
     if (data.code) {
       const dup = await db.bonusRule.findUnique({ where: { code: data.code } });
@@ -133,7 +163,9 @@ export async function POST(req: NextRequest) {
     const created = await db.bonusRule.create({
       data: {
         name: data.name,
-        type: data.type,
+        nameBn: data.nameBn ?? null,
+        type: engineType,
+        promotionType: data.promotionType ?? null,
         code: data.code ?? null,
         amount: data.amount,
         percentage: data.percentage,
