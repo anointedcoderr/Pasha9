@@ -84,17 +84,16 @@ export function BettingPassBannerSlider({ banners }: { banners: BannerRow[] }) {
           src={active.imageUrl}
           alt=""
           aria-hidden
-          className="absolute inset-0 h-full w-full object-cover opacity-60"
+          className="absolute inset-0 h-full w-full object-cover"
         />
       ) : null}
-      <div className="absolute inset-0 bg-gradient-to-r from-indigo-900/85 via-indigo-900/60 to-transparent" />
       <div className="relative flex h-full min-h-[180px] flex-col justify-center gap-2 px-5 py-6 md:px-8">
-        <p className="inline-flex w-max items-center gap-1.5 rounded-full bg-brand-yellow-500/20 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-brand-yellow-300">
+        <p className="inline-flex w-max items-center gap-1.5 rounded-full bg-black/30 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-brand-yellow-300 shadow-sm">
           <Sparkles className="h-3 w-3" />
           {bn ? 'পাশা ৯ বেটিং পাস' : 'Pasha 9 Betting Pass'}
         </p>
-        <h2 className="text-xl font-extrabold leading-tight text-white md:text-2xl">{title}</h2>
-        {subtitle ? <p className="max-w-md text-sm text-white/85">{subtitle}</p> : null}
+        <h2 className="text-xl font-extrabold leading-tight text-white [text-shadow:0_2px_8px_rgba(0,0,0,0.85)] md:text-2xl">{title}</h2>
+        {subtitle ? <p className="max-w-md text-sm text-white [text-shadow:0_1px_6px_rgba(0,0,0,0.9)]">{subtitle}</p> : null}
       </div>
 
       {count > 1 ? (
