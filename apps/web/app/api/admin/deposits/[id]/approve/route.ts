@@ -47,7 +47,20 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const deposit = await db.deposit.findUnique({ where: { id: params.id } });
     if (!deposit) return jsonError(404, 'NOT_FOUND');
     if (deposit.status === 'approved') {
-      return jsonOk({ ok: true, alreadyApproved: true, deposit });
+      const commissions = await accrueCommissionsOnDeposit(deposit.userId, deposit.id, new Prisma.Decimal(deposit.amount));
+      await recordActivity({
+        actorId: session.sub,
+        actorRole: session.role,
+        action: 'REFERRAL_ACCRUAL_RETRY',
+        target: deposit.id,
+        meta: {
+          accrued: commissions.accrued,
+          skipped: commissions.skipped,
+          autoPaid: commissions.autoPaid,
+          error: commissions.error,
+        },
+      });
+      return jsonOk({ ok: true, alreadyApproved: true, deposit, commissions });
     }
     if (deposit.status === 'rejected') {
       return jsonError(409, 'ALREADY_REJECTED');
@@ -142,6 +155,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       skipped: [],
       chainDepth: 0,
       error: null,
+      autoPaid: [],
     };
     try {
       commissionResult = await accrueCommissionsOnDeposit(deposit.userId, deposit.id, amount);
@@ -192,6 +206,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         commissionsAccrued: commissionResult.accrued.length,
         commissionTotal: commissionResult.accrued.reduce((acc, c) => acc + c.amount, 0),
         commissionEngineError: commissionResult.error,
+        referralAutoPaid: commissionResult.autoPaid,
         bettingPassPointsAwarded: bettingPassDeposit.pointsAwarded,
         bettingPassTotal: bettingPassDeposit.pointsTotalAfter,
         bettingPassNewTier: bettingPassDeposit.newTier,
@@ -250,6 +265,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         accrued: commissionResult.accrued,
         skipped: commissionResult.skipped,
         error: commissionResult.error,
+        autoPaid: commissionResult.autoPaid,
       },
     });
 
@@ -291,6 +307,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         skipped: commissionResult.skipped,
         chainDepth: commissionResult.chainDepth,
         error: commissionResult.error,
+        autoPaid: commissionResult.autoPaid,
         total: commissionResult.accrued.reduce((acc, c) => acc + c.amount, 0),
         count: commissionResult.accrued.length,
       },

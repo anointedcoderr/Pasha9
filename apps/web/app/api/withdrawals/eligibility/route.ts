@@ -33,6 +33,9 @@ export async function GET() {
       bettingPassRequired: s.bettingPassRequired,
       bettingPassCompleted: s.bettingPassCompleted,
       bettingPassRemaining: s.bettingPassRemaining,
+      referralRequired: s.referralRequired,
+      referralCompleted: s.referralCompleted,
+      referralRemaining: s.referralRemaining,
 
       // Combined totals
       requiredTurnover: s.requiredTurnover,
@@ -40,6 +43,7 @@ export async function GET() {
       remainingTurnover: s.remainingTurnover,
       isMet: s.isMet,
       bdtBalanceLocked: s.bdtBalanceLocked,
+      referralBalanceLocked: s.referralBalanceLocked,
     });
   });
 }

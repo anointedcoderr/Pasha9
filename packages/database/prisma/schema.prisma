@@ -497,7 +497,9 @@ model BonusRule {
 model UserBonus {
   id          String    @id @default(cuid())
   userId      String
-  bonusRuleId String
+  // Referral wallet credits use the turnover ledger without requiring
+  // an unrelated BonusRule row. Existing bonus grants keep this set.
+  bonusRuleId String?
   amount      Decimal   @db.Decimal(14, 2)
   claimedAt   DateTime  @default(now())
   expiresAt   DateTime?
@@ -505,8 +507,8 @@ model UserBonus {
   // = turnover satisfied + funds released, expired = past expiresAt
   // and forfeited, cancelled = admin cancel.
   status           String   @default("active")
-  // Wager requirement = amount * BonusRule.turnoverX. Locked until
-  // progress catches up.
+  // Wager requirement captured at grant time. Locked until progress
+  // catches up.
   turnoverRequired Decimal  @default(0) @db.Decimal(14, 2)
   turnoverProgress Decimal  @default(0) @db.Decimal(14, 2)
   releasedAt       DateTime?
@@ -518,7 +520,7 @@ model UserBonus {
   note             String?
 
   user           User             @relation(fields: [userId], references: [id])
-  bonusRule      BonusRule        @relation(fields: [bonusRuleId], references: [id])
+  bonusRule      BonusRule?       @relation(fields: [bonusRuleId], references: [id])
   turnoverEvents TurnoverEvent[]
 
   @@index([userId])
@@ -959,7 +961,8 @@ model CommissionTier {
   level2Pct          Decimal       @db.Decimal(5, 2)
   level3Pct          Decimal       @db.Decimal(5, 2)
   // One-time fixed reward credited to the direct (level 1) upline
-  // when the referred user's first deposit is approved. Per-tier so
+  // after the referred user's cumulative approved deposits reach the
+  // configured global minimum. Per-tier so
   // VIP tiers can pay a larger signup reward than Bronze. Null = use
   // the global `referral_first_deposit_reward_bdt` SystemSetting,
   // which itself defaults to 0 (disabled). Snapshotted on every
@@ -995,6 +998,9 @@ model AffiliateCommission {
   tierId       String?
   ratePct      Decimal? @db.Decimal(5, 2)
   payoutId     String?
+  // Stable business key for exact retry protection. Existing rows stay
+  // null; new deposit shares and fixed rewards always populate it.
+  idempotencyKey String? @unique
 
   payout       CommissionPayout? @relation(fields: [payoutId], references: [id], onDelete: SetNull)
 
@@ -1872,6 +1878,7 @@ model ReferralClaim {
   amount      Decimal  @db.Decimal(14, 2)
   status      String   @default("pending")
   walletTxId  String?
+  payoutId    String?  @unique
   errorCode   String?
   createdAt   DateTime @default(now())
   paidAt      DateTime?

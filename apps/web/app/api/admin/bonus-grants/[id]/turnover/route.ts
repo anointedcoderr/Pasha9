@@ -65,8 +65,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const updated = await db.$transaction(async (tx) => {
       const fresh = await tx.userBonus.findUnique({ where: { id: grant.id } });
       if (!fresh || fresh.status !== 'active') throw new Error('GRANT_RACE');
-      const progressAfter = new Prisma.Decimal(fresh.turnoverProgress).add(applyAmount);
       const required = new Prisma.Decimal(fresh.turnoverRequired);
+      const attemptedProgress = new Prisma.Decimal(fresh.turnoverProgress).add(applyAmount);
+      const progressAfter = attemptedProgress.gt(required) ? required : attemptedProgress;
       const release = progressAfter.gte(required);
 
       await tx.userBonus.update({
@@ -87,13 +88,16 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         },
       });
       if (release) {
-        await tx.wallet.update({
-          where: { userId: fresh.userId },
-          data: {
-            lockedBalance: { decrement: new Prisma.Decimal(fresh.amount) },
-            balance: { increment: new Prisma.Decimal(fresh.amount) },
-          },
-        });
+        const directBalanceLock = ['betting_pass_bdt', 'referral_first_deposit', 'referral_commission'].includes(fresh.sourceType ?? '');
+        if (!directBalanceLock) {
+          await tx.wallet.update({
+            where: { userId: fresh.userId },
+            data: {
+              lockedBalance: { decrement: new Prisma.Decimal(fresh.amount) },
+              balance: { increment: new Prisma.Decimal(fresh.amount) },
+            },
+          });
+        }
       }
       return { release, progressAfter: Number(progressAfter), required: Number(required) };
     });

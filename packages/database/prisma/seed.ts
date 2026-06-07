@@ -761,6 +761,7 @@ async function seedM4SystemSettings() {
     { key: 'referral_claim_cadence',    value: 'weekly',  type: 'string'  },
     { key: 'referral_hold_days',        value: '7',       type: 'number'  },
     { key: 'referral_turnover_x',       value: '0',       type: 'number'  },
+    { key: 'referral_first_deposit_min_bdt', value: '300', type: 'number' },
     { key: 'promotion_claim_engine',    value: 'enabled', type: 'string'  },
     // M4 Phase F lotto knobs. claim_mode 'auto' preserves the current
     // behaviour (settlement credits Wallet.lottoBalance instantly);

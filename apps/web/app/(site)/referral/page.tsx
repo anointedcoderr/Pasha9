@@ -35,7 +35,13 @@ interface MeResponse {
     totalEarned: number;
     lastClaimedAt: string | null;
   };
-  settings: { cadence: 'weekly' | 'monthly' | 'manual' | 'auto'; holdDays: number; turnoverX: number };
+  settings: {
+    cadence: 'weekly' | 'monthly' | 'manual' | 'auto';
+    holdDays: number;
+    turnoverX: number;
+    firstDepositMinBdt: number;
+    firstDepositRewardBdt: number;
+  };
   claim: { cadenceBlocked: boolean; nextClaimAt: string | null };
   recentCommissions: Array<{ id: string; level: number; amount: number; status: string; ratePct: number | null; createdAt: string }>;
   recentClaims: Array<{ id: string; amount: number; status: string; errorCode: string | null; createdAt: string; paidAt: string | null }>;
@@ -47,7 +53,7 @@ const EMPTY: MeResponse = {
   level1Invited: [],
   tier: null,
   balance: { pendingAmount: 0, claimableAmount: 0, claimedAmount: 0, totalEarned: 0, lastClaimedAt: null },
-  settings: { cadence: 'weekly', holdDays: 7, turnoverX: 0 },
+  settings: { cadence: 'weekly', holdDays: 7, turnoverX: 0, firstDepositMinBdt: 0, firstDepositRewardBdt: 0 },
   claim: { cadenceBlocked: false, nextClaimAt: null },
   recentCommissions: [],
   recentClaims: [],
@@ -211,9 +217,13 @@ export default function ReferralPage() {
       if (status === 'paid') {
         setToast({
           kind: 'ok',
-          message: lang === 'bn'
-            ? `${formatBDT(Number(j?.amount ?? 0))} মেইন ব্যালেন্সে যোগ হয়েছে।`
-            : `${formatBDT(Number(j?.amount ?? 0))} moved to your main balance.`,
+          message: data.settings.turnoverX > 0
+            ? (lang === 'bn'
+                ? `${formatBDT(Number(j?.amount ?? 0))} মেইন ব্যালেন্সে যোগ হয়েছে। উইথড্রয়ালের আগে টার্নওভার সম্পূর্ণ করুন।`
+                : `${formatBDT(Number(j?.amount ?? 0))} moved to your main balance with an active withdrawal turnover lock.`)
+            : (lang === 'bn'
+                ? `${formatBDT(Number(j?.amount ?? 0))} মেইন ব্যালেন্সে যোগ হয়েছে।`
+                : `${formatBDT(Number(j?.amount ?? 0))} moved to your main balance.`),
         });
         triggerWalletRefresh();
       } else {
@@ -261,6 +271,11 @@ export default function ReferralPage() {
     if (data.settings.cadence === 'manual') {
       return lang === 'bn' ? 'ম্যানুয়াল কেডেন্স: অ্যাডমিন রিভিউয়ের পর মেইন ব্যালেন্সে যাবে।' : 'Manual cadence: funds release after admin review.';
     }
+    if (data.settings.turnoverX > 0) {
+      return lang === 'bn'
+        ? `রিওয়ার্ড মেইন ব্যালেন্সে যোগ হবে এবং ${data.settings.turnoverX}x টার্নওভার শেষ না হওয়া পর্যন্ত উইথড্রয়াল লক থাকবে।`
+        : `The reward moves to main balance and remains locked from withdrawal until ${data.settings.turnoverX}x turnover is complete.`;
+    }
     return null;
   })();
 
@@ -281,11 +296,12 @@ export default function ReferralPage() {
             <CopyField label={t('referral.link')} value={data.user.inviteLink || '-'} onCopy={() => copy(data.user.inviteLink, 'link')} copied={copied === 'link'} />
           </div>
 
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
             <Stat label={t('referral.totalInvited')} value={String(data.downline.level1Total + data.downline.level2Total + data.downline.level3Total)} />
             <Stat label={t('referral.totalEarned')} value={formatBDT(data.balance.totalEarned)} accent />
             <Stat label={t('referral.pending')} value={formatBDT(data.balance.pendingAmount)} />
             <Stat label={lang === 'bn' ? 'দাবিযোগ্য' : 'Claimable'} value={formatBDT(data.balance.claimableAmount)} accent />
+            <Stat label={lang === 'bn' ? 'পরিশোধিত' : 'Claimed'} value={formatBDT(data.balance.claimedAmount)} />
           </div>
 
           <Card padding="md" className="border-l-4 border-emerald-400/60">

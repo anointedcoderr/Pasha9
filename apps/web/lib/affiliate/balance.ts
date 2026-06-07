@@ -20,8 +20,7 @@
 //
 // SystemSetting 'referral_hold_days' (default 7) controls how long a
 // commission sits in pending before it matures. 'referral_turnover_x'
-// (default 0 = no gate) is read by the claim endpoint to decide
-// whether the user has met the wagering bar.
+// (default 0) controls the withdrawal lock created when a claim pays.
 
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db/client';
@@ -31,6 +30,10 @@ const CADENCE_SETTING = 'referral_claim_cadence';
 const TURNOVER_SETTING = 'referral_turnover_x';
 const ENABLED_SETTING = 'referral_enabled';
 const HOLD_ENABLED_SETTING = 'referral_hold_enabled';
+const FIRST_DEPOSIT_MIN_SETTING = 'referral_first_deposit_min_bdt';
+const FIRST_DEPOSIT_REWARD_SETTING = 'referral_first_deposit_reward_bdt';
+
+type ReferralReadClient = Pick<Prisma.TransactionClient, 'systemSetting' | 'affiliateCommission' | 'referralBalance'>;
 
 export interface ReferralSettings {
   enabled: boolean;
@@ -38,6 +41,8 @@ export interface ReferralSettings {
   cadence: 'weekly' | 'monthly' | 'manual' | 'auto';
   holdDays: number;
   turnoverX: number;
+  firstDepositMinBdt: number;
+  firstDepositRewardBdt: number;
 }
 
 export interface BalanceSnapshot {
@@ -46,14 +51,16 @@ export interface BalanceSnapshot {
   claimedAmount: number;
 }
 
-export async function loadReferralSettings(): Promise<ReferralSettings> {
-  const rows = await db.systemSetting.findMany({
-    where: { key: { in: [HOLD_DAYS_SETTING, CADENCE_SETTING, TURNOVER_SETTING, ENABLED_SETTING, HOLD_ENABLED_SETTING] } },
+export async function loadReferralSettings(client: ReferralReadClient = db): Promise<ReferralSettings> {
+  const rows = await client.systemSetting.findMany({
+    where: { key: { in: [HOLD_DAYS_SETTING, CADENCE_SETTING, TURNOVER_SETTING, ENABLED_SETTING, HOLD_ENABLED_SETTING, FIRST_DEPOSIT_MIN_SETTING, FIRST_DEPOSIT_REWARD_SETTING] } },
   });
   const get = (k: string) => rows.find((r) => r.key === k)?.value;
   const cadence = (get(CADENCE_SETTING) ?? 'weekly').toLowerCase();
   const holdDaysRaw = Math.max(0, Number(get(HOLD_DAYS_SETTING) ?? 7) || 0);
   const turnoverX = Math.max(0, Number(get(TURNOVER_SETTING) ?? 0) || 0);
+  const firstDepositMinBdt = Math.max(0, Number(get(FIRST_DEPOSIT_MIN_SETTING) ?? 0) || 0);
+  const firstDepositRewardBdt = Math.max(0, Number(get(FIRST_DEPOSIT_REWARD_SETTING) ?? 0) || 0);
   // Default ON when the row is missing so existing installations keep
   // the same behaviour they had before the toggle landed.
   const enabledRaw = (get(ENABLED_SETTING) ?? 'true').trim().toLowerCase();
@@ -68,29 +75,36 @@ export async function loadReferralSettings(): Promise<ReferralSettings> {
     // projector marks commissions claimable immediately.
     holdDays: holdEnabled ? holdDaysRaw : 0,
     turnoverX,
+    firstDepositMinBdt,
+    firstDepositRewardBdt,
   };
 }
 
 /** Compute the balance snapshot for a single user from
  *  AffiliateCommission rows. Pure read; safe to call inside a
  *  transaction or standalone. */
-export async function computeBalanceFor(userId: string, holdDays: number, now: Date = new Date()): Promise<BalanceSnapshot> {
+export async function computeBalanceFor(
+  userId: string,
+  holdDays: number,
+  now: Date = new Date(),
+  client: ReferralReadClient = db,
+): Promise<BalanceSnapshot> {
   const cutoff = new Date(now.getTime() - holdDays * 24 * 60 * 60 * 1000);
 
   const [pendingStatus, approvedWithinHold, approvedMatured, paid] = await Promise.all([
-    db.affiliateCommission.aggregate({
+    client.affiliateCommission.aggregate({
       where: { affiliateId: userId, status: 'pending' },
       _sum: { amount: true },
     }),
-    db.affiliateCommission.aggregate({
+    client.affiliateCommission.aggregate({
       where: { affiliateId: userId, status: 'approved', payoutId: null, createdAt: { gt: cutoff } },
       _sum: { amount: true },
     }),
-    db.affiliateCommission.aggregate({
+    client.affiliateCommission.aggregate({
       where: { affiliateId: userId, status: 'approved', payoutId: null, createdAt: { lte: cutoff } },
       _sum: { amount: true },
     }),
-    db.affiliateCommission.aggregate({
+    client.affiliateCommission.aggregate({
       where: { affiliateId: userId, status: 'paid' },
       _sum: { amount: true },
     }),

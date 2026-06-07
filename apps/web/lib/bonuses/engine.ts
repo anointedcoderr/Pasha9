@@ -99,8 +99,14 @@ async function creditBonus(tx: Tx, userId: string, amount: Prisma.Decimal): Prom
 // tracker; their release must NOT touch the wallet or lockedBalance
 // would go negative. The flag is opt-in: anything else keeps the
 // historical move.
+const DIRECT_BALANCE_LOCK_SOURCES = new Set([
+  'betting_pass_bdt',
+  'referral_first_deposit',
+  'referral_commission',
+]);
+
 async function releaseBonus(tx: Tx, userId: string, amount: Prisma.Decimal, sourceType: string | null = null): Promise<void> {
-  if (sourceType === 'betting_pass_bdt') {
+  if (sourceType && DIRECT_BALANCE_LOCK_SOURCES.has(sourceType)) {
     return;
   }
   await tx.wallet.update({
@@ -112,7 +118,14 @@ async function releaseBonus(tx: Tx, userId: string, amount: Prisma.Decimal, sour
   });
 }
 
-async function clawbackBonus(tx: Tx, userId: string, amount: Prisma.Decimal): Promise<void> {
+async function clawbackBonus(tx: Tx, userId: string, amount: Prisma.Decimal, sourceType: string | null = null): Promise<void> {
+  if (sourceType && DIRECT_BALANCE_LOCK_SOURCES.has(sourceType)) {
+    await tx.wallet.update({
+      where: { userId },
+      data: { balance: { decrement: amount } },
+    });
+    return;
+  }
   await tx.wallet.update({
     where: { userId },
     data: {
@@ -572,6 +585,9 @@ export async function cancelGrant(grantId: string, actorNote?: string): Promise<
     const g = await tx.userBonus.findUnique({ where: { id: grantId } });
     if (!g) throw new Error('GRANT_NOT_FOUND');
     if (g.status !== 'active') throw new Error('GRANT_NOT_ACTIVE');
+    if (g.sourceType === 'referral_first_deposit' || g.sourceType === 'referral_commission') {
+      throw new Error('REFERRAL_LOCK_MANAGED_BY_REFERRAL_LEDGER');
+    }
 
     await tx.userBonus.update({
       where: { id: grantId },
@@ -581,7 +597,7 @@ export async function cancelGrant(grantId: string, actorNote?: string): Promise<
         note: actorNote ?? g.note ?? null,
       },
     });
-    await clawbackBonus(tx, g.userId, new Prisma.Decimal(g.amount));
+    await clawbackBonus(tx, g.userId, new Prisma.Decimal(g.amount), g.sourceType ?? null);
     await tx.transaction.create({
       data: {
         userId: g.userId,
@@ -602,7 +618,7 @@ export async function sweepExpiredGrants(): Promise<{ expired: number }> {
   const now = new Date();
   const candidates = await db.userBonus.findMany({
     where: { status: 'active', expiresAt: { lt: now, not: null } },
-    select: { id: true, userId: true, amount: true },
+    select: { id: true, userId: true, amount: true, sourceType: true },
   });
   let expired = 0;
   for (const g of candidates) {
@@ -614,7 +630,7 @@ export async function sweepExpiredGrants(): Promise<{ expired: number }> {
           where: { id: g.id },
           data: { status: 'expired' },
         });
-        await clawbackBonus(tx, g.userId, new Prisma.Decimal(g.amount));
+        await clawbackBonus(tx, g.userId, new Prisma.Decimal(g.amount), g.sourceType ?? null);
         await tx.transaction.create({
           data: {
             userId: g.userId,

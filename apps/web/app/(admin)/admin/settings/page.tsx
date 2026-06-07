@@ -29,6 +29,7 @@ const REFERRAL_KEYS = [
   'referral_hold_days',
   'referral_turnover_x',
   'referral_claim_cadence',
+  'referral_first_deposit_min_bdt',
   'referral_first_deposit_reward_bdt',
 ] as const;
 const SITE_KEYS = ['site_name'] as const;
@@ -42,6 +43,7 @@ function defaultFor(key: SettingKey): string {
   if (key === 'referral_hold_days') return '7';
   if (key === 'referral_turnover_x') return '1';
   if (key === 'referral_claim_cadence') return 'weekly';
+  if (key === 'referral_first_deposit_min_bdt') return '300';
   if (key === 'referral_first_deposit_reward_bdt') return '200';
   if (key === 'site_name') return 'Pasha 9';
   return '';
@@ -165,8 +167,11 @@ export default function AdminSettingsPage() {
               <FormField label="Hold period (days)" hint="Days a pending commission waits before becoming claimable.">
                 <Input type="number" min={0} max={365} value={values.referral_hold_days ?? ''} onChange={(e) => update('referral_hold_days', e.target.value)} placeholder="7" />
               </FormField>
-              <FormField label="Turnover multiplier" hint="Multiplier on accumulated deposits before referral commission can be withdrawn. 0 disables the gate.">
+              <FormField label="Turnover multiplier" hint="Multiplier applied to paid referral rewards. 0 disables the withdrawal lock.">
                 <Input type="number" step="0.1" min={0} max={50} value={values.referral_turnover_x ?? ''} onChange={(e) => update('referral_turnover_x', e.target.value)} placeholder="1" />
+              </FormField>
+              <FormField label="Fixed reward minimum approved deposits (BDT)" hint="Cumulative approved deposits required before the direct referrer receives the one-time fixed reward. Percentage commissions are never blocked by this minimum.">
+                <Input type="number" min={0} max={10000000} value={values.referral_first_deposit_min_bdt ?? ''} onChange={(e) => update('referral_first_deposit_min_bdt', e.target.value)} placeholder="300" />
               </FormField>
               <FormField label="Claim cadence">
                 <Select value={values.referral_claim_cadence ?? 'weekly'} onChange={(e) => update('referral_claim_cadence', e.target.value)}>
@@ -176,7 +181,7 @@ export default function AdminSettingsPage() {
                   <option value="manual">Manual (admin approves each claim)</option>
                 </Select>
               </FormField>
-              <FormField label="First deposit fixed reward (BDT)" hint="Global default for the one-time bonus credited to the direct upline when a referred user's first deposit is approved. Per-tier overrides are set in /admin/affiliate/tiers.">
+              <FormField label="First deposit fixed reward (BDT)" hint="Global default for the one-time reward credited to the direct upline after cumulative approved deposits reach the configured minimum. Per-tier overrides are set in /admin/affiliate/tiers.">
                 <Input type="number" min={0} max={1000000} value={values.referral_first_deposit_reward_bdt ?? ''} onChange={(e) => update('referral_first_deposit_reward_bdt', e.target.value)} placeholder="200" />
               </FormField>
             </div>

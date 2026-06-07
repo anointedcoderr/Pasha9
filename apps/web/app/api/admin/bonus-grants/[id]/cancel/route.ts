@@ -24,7 +24,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       await cancelGrant(params.id, parsed.data.note);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'CANCEL_FAILED';
-      const known = ['GRANT_NOT_FOUND', 'GRANT_NOT_ACTIVE'];
+      const known = ['GRANT_NOT_FOUND', 'GRANT_NOT_ACTIVE', 'REFERRAL_LOCK_MANAGED_BY_REFERRAL_LEDGER'];
       if (known.includes(msg)) return jsonError(400, msg);
       console.error('grant cancel failed', err);
       return jsonError(500, 'SERVER_ERROR');

@@ -1,6 +1,6 @@
 // Built by Anointed Coder.
 //
-// Turnover gate for the withdrawal flow. Combines two real gates:
+// Turnover gate for the withdrawal flow. Combines three real gates:
 //
 //   1. Deposit gate (existing). lifetime-aggregate:
 //        depositRequired  = SUM(Deposit.amount where status='approved') * multiplier
@@ -15,6 +15,10 @@
 //        releaseBonus, which is a no-op for this sourceType because
 //        the money landed in Wallet.balance at claim time, not
 //        lockedBalance).
+//
+//   3. Referral reward gate (per-grant). Paid fixed rewards and
+//        percentage commissions land in Wallet.balance and create
+//        active UserBonus rows until their configured turnover is met.
 //
 // Combined totals reported to the UI and used by the POST gate:
 //   requiredTurnover  = depositRequired + bettingPassRequired
@@ -36,6 +40,7 @@ const DEFAULT_MULTIPLIER = 1.0;
 // rewards that landed in Wallet.balance and are still under a wager
 // requirement. They also drive the withdrawable-balance subtraction.
 const BDT_BALANCE_LOCK_SOURCE_TYPE = 'betting_pass_bdt';
+const REFERRAL_LOCK_SOURCE_TYPES = ['referral_first_deposit', 'referral_commission'];
 
 export interface DepositTurnoverStatus {
   multiplier: number;
@@ -50,6 +55,10 @@ export interface DepositTurnoverStatus {
   bettingPassCompleted: number;
   bettingPassRemaining: number;
 
+  referralRequired: number;
+  referralCompleted: number;
+  referralRemaining: number;
+
   // ----- Combined totals (what the gate enforces) -----
   requiredTurnover: number;
   completedTurnover: number;
@@ -62,12 +71,25 @@ export interface DepositTurnoverStatus {
   // available-balance check fails fast even if the deposit gate is
   // disabled (multiplier=0).
   bdtBalanceLocked: number;
+  referralBalanceLocked: number;
 }
 
 export async function computeBdtBalanceLocked(userId: string): Promise<number> {
   try {
     const agg = await db.userBonus.aggregate({
       where: { userId, status: 'active', sourceType: BDT_BALANCE_LOCK_SOURCE_TYPE },
+      _sum: { amount: true },
+    });
+    return Math.max(0, Number(agg._sum?.amount ?? 0));
+  } catch {
+    return 0;
+  }
+}
+
+export async function computeReferralBalanceLocked(userId: string): Promise<number> {
+  try {
+    const agg = await db.userBonus.aggregate({
+      where: { userId, status: 'active', sourceType: { in: REFERRAL_LOCK_SOURCE_TYPES } },
       _sum: { amount: true },
     });
     return Math.max(0, Number(agg._sum?.amount ?? 0));
@@ -91,7 +113,7 @@ export async function loadDepositTurnoverMultiplier(): Promise<number> {
 export async function computeDepositTurnover(userId: string): Promise<DepositTurnoverStatus> {
   const multiplier = await loadDepositTurnoverMultiplier();
 
-  const [depositAgg, betAgg, bpAgg, bdtBalanceLocked] = await Promise.all([
+  const [depositAgg, betAgg, bpAgg, referralAgg, bdtBalanceLocked, referralBalanceLocked] = await Promise.all([
     db.deposit.aggregate({
       where: { userId, status: 'approved' },
       _sum: { amount: true },
@@ -104,7 +126,12 @@ export async function computeDepositTurnover(userId: string): Promise<DepositTur
       where: { userId, status: 'active', sourceType: BDT_BALANCE_LOCK_SOURCE_TYPE },
       _sum: { turnoverRequired: true, turnoverProgress: true },
     }),
+    db.userBonus.aggregate({
+      where: { userId, status: 'active', sourceType: { in: REFERRAL_LOCK_SOURCE_TYPES } },
+      _sum: { turnoverRequired: true, turnoverProgress: true },
+    }),
     computeBdtBalanceLocked(userId),
+    computeReferralBalanceLocked(userId),
   ]);
 
   const approvedDepositTotal = Number(depositAgg._sum?.amount ?? 0);
@@ -116,14 +143,18 @@ export async function computeDepositTurnover(userId: string): Promise<DepositTur
   const bettingPassCompleted = Math.max(0, Math.min(bettingPassRequired, Number(bpAgg._sum?.turnoverProgress ?? 0)));
   const bettingPassRemaining = Math.max(0, bettingPassRequired - bettingPassCompleted);
 
-  const requiredTurnover = depositRequired + bettingPassRequired;
-  const completedTurnover = depositCompleted + bettingPassCompleted;
+  const referralRequired = Math.max(0, Number(referralAgg._sum?.turnoverRequired ?? 0));
+  const referralCompleted = Math.max(0, Math.min(referralRequired, Number(referralAgg._sum?.turnoverProgress ?? 0)));
+  const referralRemaining = Math.max(0, referralRequired - referralCompleted);
+
+  const requiredTurnover = depositRequired + bettingPassRequired + referralRequired;
+  const completedTurnover = depositCompleted + bettingPassCompleted + referralCompleted;
   const remainingTurnover = Math.max(0, requiredTurnover - completedTurnover);
   // Gate is met only when BOTH gates are individually met. We could
   // also check remainingTurnover <= 0 but the per-source check is
   // more honest when the deposit gate completed > deposit required
   // (the player over-wagered for deposits but still owes BP wager).
-  const isMet = depositRemaining <= 0 && bettingPassRemaining <= 0;
+  const isMet = depositRemaining <= 0 && bettingPassRemaining <= 0 && referralRemaining <= 0;
 
   return {
     multiplier,
@@ -134,10 +165,14 @@ export async function computeDepositTurnover(userId: string): Promise<DepositTur
     bettingPassRequired,
     bettingPassCompleted,
     bettingPassRemaining,
+    referralRequired,
+    referralCompleted,
+    referralRemaining,
     requiredTurnover,
     completedTurnover,
     remainingTurnover,
     isMet,
     bdtBalanceLocked,
+    referralBalanceLocked,
   };
 }

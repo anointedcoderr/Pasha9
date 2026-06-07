@@ -15,25 +15,30 @@ export const dynamic = 'force-dynamic';
 import { db } from '@/lib/db/client';
 import { withAuth, ensurePermission } from '@/lib/auth/guard';
 import { jsonOk } from '@/lib/auth/errors';
+import { loadReferralSettings } from '@/lib/affiliate/balance';
 
 export async function GET() {
   return withAuth(async () => {
     await ensurePermission('affiliate.read');
 
-    // Aggregates over the whole platform.
-    const [totalInvited, sumPending, sumApproved, sumPaid, sumClaimable] = await Promise.all([
+    const settings = await loadReferralSettings();
+    const cutoff = new Date(Date.now() - settings.holdDays * 86_400_000);
+    // Aggregates over the canonical commission ledger so the overview
+    // does not depend on a previously-run balance projection sweep.
+    const [totalInvited, sumEarned, sumPaid, sumClaimable] = await Promise.all([
       db.user.count({ where: { referredById: { not: null } } }),
-      db.affiliateCommission.aggregate({ where: { status: 'pending' }, _sum: { amount: true } }),
-      db.affiliateCommission.aggregate({ where: { status: 'approved' }, _sum: { amount: true } }),
+      db.affiliateCommission.aggregate({ where: { status: { not: 'cancelled' } }, _sum: { amount: true } }),
       db.affiliateCommission.aggregate({ where: { status: 'paid' }, _sum: { amount: true } }),
-      db.referralBalance.aggregate({ _sum: { claimableAmount: true } }),
+      db.affiliateCommission.aggregate({
+        where: { status: 'approved', payoutId: null, createdAt: { lte: cutoff } },
+        _sum: { amount: true },
+      }),
     ]);
 
-    const pending = Number(sumPending._sum.amount ?? 0);
-    const approved = Number(sumApproved._sum.amount ?? 0);
+    const totalEarned = Number(sumEarned._sum.amount ?? 0);
     const paid = Number(sumPaid._sum.amount ?? 0);
-    const claimable = Number(sumClaimable._sum.claimableAmount ?? 0);
-    const totalEarned = pending + approved + paid;
+    const claimable = Number(sumClaimable._sum.amount ?? 0);
+    const pending = Math.max(0, totalEarned - paid - claimable);
 
     // Top 6 referrers ranked by earned (approved + paid) commission.
     const topGroups = await db.affiliateCommission.groupBy({

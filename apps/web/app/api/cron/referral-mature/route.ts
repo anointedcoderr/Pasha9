@@ -16,6 +16,7 @@ import { NextRequest } from 'next/server';
 import { withAuth, ensurePermission, recordActivity } from '@/lib/auth/guard';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 import { loadReferralSettings, refreshAllBalances } from '@/lib/affiliate/balance';
+import { autoSettleMaturedReferralUsers } from '@/lib/affiliate/settlement';
 
 function bearerMatchesCronSecret(req: NextRequest): boolean {
   const header = req.headers.get('authorization') ?? '';
@@ -27,9 +28,10 @@ function bearerMatchesCronSecret(req: NextRequest): boolean {
 
 async function run() {
   const settings = await loadReferralSettings();
-  const result = await refreshAllBalances(settings.holdDays);
-  console.info('[cron] referral-mature', { ...result, holdDays: settings.holdDays });
-  return { holdDays: settings.holdDays, ...result };
+  const balances = await refreshAllBalances(settings.holdDays);
+  const auto = await autoSettleMaturedReferralUsers(settings);
+  console.info('[cron] referral-mature', { ...balances, ...auto, holdDays: settings.holdDays, cadence: settings.cadence });
+  return { holdDays: settings.holdDays, cadence: settings.cadence, ...balances, ...auto };
 }
 
 export async function POST(req: NextRequest) {

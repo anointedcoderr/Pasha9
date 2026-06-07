@@ -63,7 +63,7 @@ export async function GET() {
       select: {
         username: true,
         referralCode: true,
-        affiliateTier: { select: { name: true, level1Pct: true, level2Pct: true, level3Pct: true } },
+        affiliateTier: { select: { name: true, level1Pct: true, level2Pct: true, level3Pct: true, status: true } },
       },
     });
 
@@ -72,12 +72,12 @@ export async function GET() {
     // dashboard always shows the percentages the user would earn under
     // the platform default. Operators no longer have to assign a tier
     // to every normal user just so the dashboard reads correctly.
-    let displayTier = user.affiliateTier;
+    let displayTier = user.affiliateTier?.status === 'active' ? user.affiliateTier : null;
     if (!displayTier) {
       const defaultTier = await db.commissionTier.findFirst({
         where: { status: 'active' },
         orderBy: { position: 'asc' },
-        select: { name: true, level1Pct: true, level2Pct: true, level3Pct: true },
+        select: { name: true, level1Pct: true, level2Pct: true, level3Pct: true, status: true },
       });
       if (defaultTier) displayTier = defaultTier;
     }
@@ -145,7 +145,7 @@ export async function GET() {
             level1Pct: Number(displayTier.level1Pct),
             level2Pct: Number(displayTier.level2Pct),
             level3Pct: Number(displayTier.level3Pct),
-            isDefault: !user.affiliateTier,
+            isDefault: user.affiliateTier?.status !== 'active',
           }
         : null,
       balance: {

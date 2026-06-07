@@ -82,6 +82,7 @@ export async function GET(req: NextRequest) {
         status: c.status,
         errorCode: c.errorCode,
         walletTxId: c.walletTxId,
+        payoutId: c.payoutId,
         createdAt: c.createdAt,
         paidAt: c.paidAt,
       })),

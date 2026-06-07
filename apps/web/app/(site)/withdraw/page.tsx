@@ -58,7 +58,11 @@ interface TurnoverState {
   bettingPassRequired: number;
   bettingPassCompleted: number;
   bettingPassRemaining: number;
+  referralRequired: number;
+  referralCompleted: number;
+  referralRemaining: number;
   bdtBalanceLocked: number;
+  referralBalanceLocked: number;
 }
 
 const DEFAULT_LIMITS: GlobalLimits = { min: 500, max: 200000, policy: '' };
@@ -75,7 +79,11 @@ const DEFAULT_TURNOVER: TurnoverState = {
   bettingPassRequired: 0,
   bettingPassCompleted: 0,
   bettingPassRemaining: 0,
+  referralRequired: 0,
+  referralCompleted: 0,
+  referralRemaining: 0,
   bdtBalanceLocked: 0,
+  referralBalanceLocked: 0,
 };
 
 export default function WithdrawPage() {
@@ -177,7 +185,11 @@ export default function WithdrawPage() {
             bettingPassRequired: Number(data.bettingPassRequired ?? 0),
             bettingPassCompleted: Number(data.bettingPassCompleted ?? 0),
             bettingPassRemaining: Number(data.bettingPassRemaining ?? 0),
+            referralRequired: Number(data.referralRequired ?? 0),
+            referralCompleted: Number(data.referralCompleted ?? 0),
+            referralRemaining: Number(data.referralRemaining ?? 0),
             bdtBalanceLocked: Number(data.bdtBalanceLocked ?? 0),
+            referralBalanceLocked: Number(data.referralBalanceLocked ?? 0),
           });
         })
         .catch(() => { /* keep defaults */ });
@@ -289,7 +301,11 @@ export default function WithdrawPage() {
                 bettingPassRequired: Number(data.bettingPassRequired ?? 0),
                 bettingPassCompleted: Number(data.bettingPassCompleted ?? 0),
                 bettingPassRemaining: Number(data.bettingPassRemaining ?? 0),
+                referralRequired: Number(data.referralRequired ?? 0),
+                referralCompleted: Number(data.referralCompleted ?? 0),
+                referralRemaining: Number(data.referralRemaining ?? 0),
                 bdtBalanceLocked: Number(data.bdtBalanceLocked ?? 0),
+                referralBalanceLocked: Number(data.referralBalanceLocked ?? 0),
               });
             })
             .catch(() => { /* keep current */ });
@@ -418,6 +434,19 @@ export default function WithdrawPage() {
                     {lang === 'bn'
                       ? `প্রয়োজন ৳ ${turnover.depositRequired.toLocaleString(undefined, { maximumFractionDigits: 2 })} . সম্পূর্ণ ৳ ${turnover.depositCompleted.toLocaleString(undefined, { maximumFractionDigits: 2 })} . বাকি ৳ ${turnover.depositRemaining.toLocaleString(undefined, { maximumFractionDigits: 2 })}.`
                       : `Required ৳ ${turnover.depositRequired.toLocaleString(undefined, { maximumFractionDigits: 2 })} . Completed ৳ ${turnover.depositCompleted.toLocaleString(undefined, { maximumFractionDigits: 2 })} . Remaining ৳ ${turnover.depositRemaining.toLocaleString(undefined, { maximumFractionDigits: 2 })}.`}
+                  </p>
+                </div>
+              ) : null}
+
+              {turnover.referralRequired > 0 ? (
+                <div className="mt-2 rounded-md border border-rose-200/60 bg-white/50 p-2">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-rose-700">
+                    {lang === 'bn' ? 'রেফারেল রিওয়ার্ড টার্নওভার' : 'Referral reward turnover'}
+                  </p>
+                  <p className="mt-1 text-[11px] text-rose-900">
+                    {lang === 'bn'
+                      ? `প্রয়োজন ৳ ${turnover.referralRequired.toLocaleString(undefined, { maximumFractionDigits: 2 })} . সম্পূর্ণ ৳ ${turnover.referralCompleted.toLocaleString(undefined, { maximumFractionDigits: 2 })} . বাকি ৳ ${turnover.referralRemaining.toLocaleString(undefined, { maximumFractionDigits: 2 })}.`
+                      : `Required ৳ ${turnover.referralRequired.toLocaleString(undefined, { maximumFractionDigits: 2 })} . Completed ৳ ${turnover.referralCompleted.toLocaleString(undefined, { maximumFractionDigits: 2 })} . Remaining ৳ ${turnover.referralRemaining.toLocaleString(undefined, { maximumFractionDigits: 2 })}.`}
                   </p>
                 </div>
               ) : null}

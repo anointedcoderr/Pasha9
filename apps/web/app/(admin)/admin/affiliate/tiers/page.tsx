@@ -199,7 +199,7 @@ export default function AdminAffiliateTiersPage() {
               </FormField>
             </div>
             <div className="grid gap-3 md:grid-cols-3">
-              <FormField label="First deposit reward (BDT)" hint="Fixed one-time bonus credited to the direct upline when the referred user's first deposit is approved. Leave empty to fall back to the global setting.">
+              <FormField label="First deposit reward (BDT)" hint="Fixed one-time reward credited to the direct upline after the referred user's cumulative approved deposits reach the global minimum. Leave empty to use the global reward amount.">
                 <Input
                   type="number"
                   step="1"
@@ -219,7 +219,7 @@ export default function AdminAffiliateTiersPage() {
                 <Input type="number" min="0" value={String(editor.position)} onChange={(e) => setEditor({ ...editor, position: Number(e.target.value) || 0 })} />
               </FormField>
             </div>
-            <CardHeader title="Note" subtitle="Saving writes an ActivityLog entry. Commission auto-calc using these rates launches in Milestone 2." />
+            <CardHeader title="Note" subtitle="Saving writes an ActivityLog entry. New approved deposits snapshot these rates at accrual time." />
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="ghost" type="button" onClick={() => setEditor(null)}>Cancel</Button>
               <Button type="submit" loading={busy}>Save</Button>

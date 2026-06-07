@@ -3,9 +3,9 @@
 // M2E Affiliate Commission Engine.
 //
 // On every approved deposit, walk up the referral chain (up to 3
-// levels), and for each ancestor that is flagged isAffiliate, write
-// an AffiliateCommission row at the ancestor's tier rate for that
-// level. Commissions land in status="approved" so the affiliate can
+// levels), and write an AffiliateCommission row at each ancestor's
+// assigned tier rate or the active default tier rate for that level.
+// Commissions land in status="approved" so the referrer can
 // see them immediately and request payout. If we ever want admin
 // pre-approval for fraud review, change the default to "pending"
 // in one place (DEFAULT_COMMISSION_STATUS below).
@@ -31,7 +31,8 @@
 
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db/client';
-import { loadReferralSettings } from './balance';
+import { computeBalanceFor, loadReferralSettings } from './balance';
+import { settleMaturedReferralCommissions } from './settlement';
 
 const DEFAULT_COMMISSION_STATUS = 'approved';
 const MAX_LEVELS = 3;
@@ -55,6 +56,7 @@ interface ChainAncestor {
       level2Pct: Prisma.Decimal;
       level3Pct: Prisma.Decimal;
       firstDepositRewardBdt: Prisma.Decimal | null;
+      status: string;
     } | null;
   };
 }
@@ -65,12 +67,16 @@ interface ChainNode {
   referredBy: ChainAncestor['user'] | null;
 }
 
-async function loadChain(userId: string, maxLevels: number): Promise<ChainAncestor[]> {
+async function loadChain(
+  userId: string,
+  maxLevels: number,
+  client: Pick<Prisma.TransactionClient, 'user'> = db,
+): Promise<ChainAncestor[]> {
   const chain: ChainAncestor[] = [];
   let currentId: string | null = userId;
   for (let level = 1; level <= maxLevels; level += 1) {
     if (!currentId) break;
-    const u: ChainNode | null = await db.user.findUnique({
+    const u: ChainNode | null = await client.user.findUnique({
       where: { id: currentId },
       select: {
         id: true,
@@ -81,7 +87,7 @@ async function loadChain(userId: string, maxLevels: number): Promise<ChainAncest
             isAffiliate: true,
             affiliateTierId: true,
             affiliateTier: {
-              select: { id: true, name: true, level1Pct: true, level2Pct: true, level3Pct: true, firstDepositRewardBdt: true },
+              select: { id: true, name: true, level1Pct: true, level2Pct: true, level3Pct: true, firstDepositRewardBdt: true, status: true },
             },
           },
         },
@@ -125,6 +131,7 @@ export interface AccrualResult {
   skipped: CommissionSkipRow[];
   chainDepth: number;
   error: string | null;
+  autoPaid: Array<{ affiliateId: string; claimId: string; amount: number }>;
 }
 
 export async function accrueCommissionsOnDeposit(
@@ -132,207 +139,222 @@ export async function accrueCommissionsOnDeposit(
   depositId: string,
   depositAmount: Prisma.Decimal,
 ): Promise<AccrualResult> {
-  const result: AccrualResult = { accrued: [], skipped: [], chainDepth: 0, error: null };
+  const result: AccrualResult = { accrued: [], skipped: [], chainDepth: 0, error: null, autoPaid: [] };
 
-  // Operator kill-switch. Returns a clean "engine_disabled" no-op so
-  // the deposit approve flow can still record an audit entry.
   try {
     const settings = await loadReferralSettings();
     if (!settings.enabled) {
-      result.error = null;
       result.skipped.push({ affiliateId: '', level: 0, reason: 'engine_disabled' });
       return result;
     }
-  } catch { /* fall through with default-on behaviour */ }
 
-  let chain: ChainAncestor[];
-  try {
-    chain = await loadChain(sourceUserId, MAX_LEVELS);
-  } catch (err) {
-    const msg = err instanceof Error ? `${err.message}\n${err.stack ?? ''}` : String(err);
-    console.error('[affiliate] chain lookup failed', msg);
-    result.error = `chain_lookup_failed: ${msg.slice(0, 300)}`;
-    return result;
-  }
-  result.chainDepth = chain.length;
+    const transactionResult = await db.$transaction(async (tx) => {
+      const skipped: CommissionSkipRow[] = [];
+      const planned: Prisma.AffiliateCommissionCreateManyInput[] = [];
+      const approvedDeposit = await tx.deposit.findUnique({
+        where: { id: depositId },
+        select: { userId: true, amount: true, status: true },
+      });
+      if (!approvedDeposit || approvedDeposit.userId !== sourceUserId || approvedDeposit.status !== 'approved') {
+        throw new Error('DEPOSIT_NOT_APPROVED');
+      }
+      const finalAmount = new Prisma.Decimal(approvedDeposit.amount);
+      if (!finalAmount.eq(depositAmount)) {
+        skipped.push({ affiliateId: '', level: 0, reason: 'approved_amount_snapshot_updated' });
+      }
 
-  if (chain.length === 0) {
-    console.info('[affiliate] no upline for user', { sourceUserId });
-    return result;
-  }
+      const chain = await loadChain(sourceUserId, MAX_LEVELS, tx);
+      if (chain.length === 0) {
+        return { accrued: [] as CommissionAccrualRow[], skipped, chainDepth: 0, affected: [] as string[] };
+      }
 
-  // Default tier used when an affiliate upline has no tier explicitly
-  // assigned. Operators set this implicitly by ordering CommissionTier
-  // rows in /admin/affiliate/tiers - the active row at the lowest
-  // `position` is the default. Loaded once per accrual so the loop
-  // does not hit the DB per ancestor.
-  const defaultTier = await db.commissionTier.findFirst({
-    where: { status: 'active' },
-    orderBy: { position: 'asc' },
-    select: { id: true, name: true, level1Pct: true, level2Pct: true, level3Pct: true, firstDepositRewardBdt: true },
-  });
+      const defaultTier = await tx.commissionTier.findFirst({
+        where: { status: 'active' },
+        orderBy: { position: 'asc' },
+        select: { id: true, name: true, level1Pct: true, level2Pct: true, level3Pct: true, firstDepositRewardBdt: true, status: true },
+      });
+      const cumulative = await tx.deposit.aggregate({
+        where: { userId: sourceUserId, status: 'approved' },
+        _sum: { amount: true },
+      });
+      const cumulativeApproved = new Prisma.Decimal(cumulative._sum.amount ?? 0);
+      const existingDepositRows = await tx.affiliateCommission.findMany({
+        where: { depositId },
+        select: { affiliateId: true, level: true, basis: true },
+      });
+      const existingDepositKeys = new Set(
+        existingDepositRows.map((row) => `${row.affiliateId}:${row.level}:${row.basis}`),
+      );
+      const directAffiliateId = chain.find((ancestor) => ancestor.level === 1)?.user.id ?? null;
+      const existingFixedReward = directAffiliateId
+        ? await tx.affiliateCommission.findFirst({
+            where: {
+              affiliateId: directAffiliateId,
+              sourceUserId,
+              level: 1,
+              basis: 'first_deposit_reward',
+            },
+            select: { id: true },
+          })
+        : null;
 
-  // Detect whether THIS deposit is the source user's first approved
-  // deposit. If yes, the level-1 upline also gets a one-time fixed
-  // reward (separate row, basis='first_deposit_reward'). The unique
-  // constraint (affiliateId, depositId, level, basis) makes this
-  // idempotent across retries. We check by counting earlier approved
-  // deposits excluding the current one (handles the race where the
-  // hook fires from inside the approve route AFTER the deposit row
-  // flipped to status='approved').
-  let isFirstApprovedDeposit = false;
-  try {
-    const earlierApproved = await db.deposit.count({
-      where: { userId: sourceUserId, status: 'approved', NOT: { id: depositId } },
-    });
-    isFirstApprovedDeposit = earlierApproved === 0;
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error('[affiliate] first-deposit detection failed', msg);
-  }
+      for (const ancestor of chain) {
+        const assignedTier = ancestor.user.affiliateTier?.status === 'active' ? ancestor.user.affiliateTier : null;
+        const effectiveTier = assignedTier ?? defaultTier;
+        if (!effectiveTier) {
+          skipped.push({ affiliateId: ancestor.user.id, level: ancestor.level, reason: 'no_active_tier' });
+          continue;
+        }
 
-  // Resolve the global fallback first-deposit reward (operator may
-  // leave tier.firstDepositRewardBdt null and fall back to the
-  // SystemSetting). Loaded once per accrual.
-  let globalFirstDepositReward = 0;
-  try {
-    const row = await db.systemSetting.findUnique({
-      where: { key: 'referral_first_deposit_reward_bdt' },
-      select: { value: true },
-    });
-    const v = Number(row?.value ?? 0);
-    if (Number.isFinite(v) && v > 0) globalFirstDepositReward = v;
-  } catch { /* keep 0 */ }
+        const rate = tierRateForLevel(effectiveTier, ancestor.level);
+        if (rate && rate.gt(0)) {
+          const amount = finalAmount.mul(rate).div(100);
+          if (amount.gt(0)) {
+            const legacyKey = `${ancestor.user.id}:${ancestor.level}:deposit_share`;
+            if (existingDepositKeys.has(legacyKey)) {
+              skipped.push({ affiliateId: ancestor.user.id, level: ancestor.level, reason: 'duplicate_already_accrued' });
+            } else {
+              planned.push({
+                affiliateId: ancestor.user.id,
+                sourceUserId,
+                level: ancestor.level,
+                amount,
+                basis: 'deposit_share',
+                status: DEFAULT_COMMISSION_STATUS,
+                depositId,
+                tierId: effectiveTier.id,
+                ratePct: rate,
+                idempotencyKey: `deposit_share:${depositId}:${ancestor.user.id}:${ancestor.level}`,
+                meta: {
+                  tierName: effectiveTier.name,
+                  tierIsDefaultFallback: !assignedTier,
+                  depositAmount: Number(finalAmount),
+                } as Prisma.JsonObject,
+              });
+            }
+          }
+        } else {
+          skipped.push({ affiliateId: ancestor.user.id, level: ancestor.level, reason: `rate_zero_at_level_${ancestor.level}` });
+        }
 
-  for (const a of chain) {
-    if (!a.user.isAffiliate) {
-      result.skipped.push({ affiliateId: a.user.id, level: a.level, reason: 'not_affiliate' });
-      console.info('[affiliate] skip', { affiliateId: a.user.id, level: a.level, reason: 'not_affiliate' });
-      continue;
-    }
-    const effectiveTier = a.user.affiliateTier ?? defaultTier;
-    if (!effectiveTier) {
-      result.skipped.push({ affiliateId: a.user.id, level: a.level, reason: 'no_tier_assigned_and_no_default' });
-      console.info('[affiliate] skip', { affiliateId: a.user.id, level: a.level, reason: 'no_tier_and_no_default' });
-      continue;
-    }
-    const rate = tierRateForLevel(effectiveTier, a.level);
-    if (!rate || rate.lte(0)) {
-      result.skipped.push({ affiliateId: a.user.id, level: a.level, reason: `rate_zero_at_level_${a.level}` });
-      continue;
-    }
+        if (ancestor.level !== 1) continue;
+        const tierReward = effectiveTier.firstDepositRewardBdt == null ? null : Number(effectiveTier.firstDepositRewardBdt);
+        const rewardAmount = tierReward != null ? tierReward : settings.firstDepositRewardBdt;
+        if (rewardAmount <= 0) continue;
+        if (cumulativeApproved.lt(settings.firstDepositMinBdt)) {
+          skipped.push({
+            affiliateId: ancestor.user.id,
+            level: 1,
+            reason: `first_deposit_min_${settings.firstDepositMinBdt}_not_met`,
+          });
+          continue;
+        }
+        if (existingFixedReward) {
+          skipped.push({ affiliateId: ancestor.user.id, level: 1, reason: 'first_deposit_reward_already_accrued' });
+          continue;
+        }
 
-    const amount = depositAmount.mul(rate).div(100);
-    if (amount.lte(0)) {
-      result.skipped.push({ affiliateId: a.user.id, level: a.level, reason: 'computed_amount_zero' });
-      continue;
-    }
-
-    try {
-      const row = await db.affiliateCommission.create({
-        data: {
-          affiliateId: a.user.id,
+        planned.push({
+          affiliateId: ancestor.user.id,
           sourceUserId,
-          level: a.level,
-          amount,
-          basis: 'deposit_share',
+          level: 1,
+          amount: new Prisma.Decimal(rewardAmount),
+          basis: 'first_deposit_reward',
           status: DEFAULT_COMMISSION_STATUS,
           depositId,
           tierId: effectiveTier.id,
-          ratePct: rate,
+          ratePct: null,
+          idempotencyKey: `first_deposit_reward:${ancestor.user.id}:${sourceUserId}`,
           meta: {
             tierName: effectiveTier.name,
-            tierIsDefaultFallback: !a.user.affiliateTier,
-            depositAmount: Number(depositAmount),
+            rewardAmount,
+            minimumApprovedDeposit: settings.firstDepositMinBdt,
+            cumulativeApprovedDeposit: Number(cumulativeApproved),
+            source: tierReward != null ? 'tier' : 'global_setting',
+            tierIsDefaultFallback: !assignedTier,
           } as Prisma.JsonObject,
-        },
-      });
-      result.accrued.push({
-        affiliateId: a.user.id,
-        level: a.level,
-        tierName: effectiveTier.name,
-        ratePct: Number(rate),
-        amount: Number(amount),
-        commissionId: row.id,
-      });
-      console.info('[affiliate] accrued', {
-        affiliateId: a.user.id,
-        level: a.level,
-        tier: effectiveTier.name,
-        rate: Number(rate),
-        amount: Number(amount),
-        defaultFallback: !a.user.affiliateTier,
-      });
-    } catch (err) {
-      // Swallow the unique-constraint violation that protects against
-      // double-firing the approval hook. Anything else is a real error.
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-        result.skipped.push({ affiliateId: a.user.id, level: a.level, reason: 'duplicate_already_accrued' });
-        console.info('[affiliate] duplicate skipped', { affiliateId: a.user.id, level: a.level, depositId });
-        continue;
+        });
       }
-      const msg = err instanceof Error ? `${err.message}\n${err.stack ?? ''}` : String(err);
-      console.error('[affiliate] commission write failed', { affiliateId: a.user.id, level: a.level }, msg);
-      result.skipped.push({ affiliateId: a.user.id, level: a.level, reason: `write_failed: ${msg.slice(0, 200)}` });
-      result.error = result.error ?? `write_failed: ${msg.slice(0, 200)}`;
-    }
 
-    // First-deposit fixed reward. Direct upline only (level 1) AND
-    // this must be the first approved deposit. Per-tier amount with
-    // a global SystemSetting fallback. Snapshotted on the row so
-    // future admin rate changes never rewrite historical payouts.
-    if (a.level === 1 && isFirstApprovedDeposit) {
-      const tierReward = effectiveTier.firstDepositRewardBdt != null
-        ? Number(effectiveTier.firstDepositRewardBdt)
-        : null;
-      const rewardAmount = tierReward != null && tierReward > 0
-        ? tierReward
-        : globalFirstDepositReward;
-      if (rewardAmount > 0) {
+      const plannedKeys = planned.map((row) => row.idempotencyKey).filter((key): key is string => Boolean(key));
+      const existingKeys = plannedKeys.length > 0
+        ? new Set((await tx.affiliateCommission.findMany({
+            where: { idempotencyKey: { in: plannedKeys } },
+            select: { idempotencyKey: true },
+          })).map((row) => row.idempotencyKey).filter((key): key is string => Boolean(key)))
+        : new Set<string>();
+      if (planned.length > 0) {
+        await tx.affiliateCommission.createMany({ data: planned, skipDuplicates: true });
+      }
+      const insertedRows = plannedKeys.length > 0
+        ? await tx.affiliateCommission.findMany({
+            where: { idempotencyKey: { in: plannedKeys.filter((key) => !existingKeys.has(key)) } },
+            select: { id: true, affiliateId: true, level: true, amount: true, ratePct: true, idempotencyKey: true, meta: true },
+          })
+        : [];
+      const accrued = insertedRows.map((row) => {
+        const meta = (row.meta ?? null) as { tierName?: unknown } | null;
+        return {
+          affiliateId: row.affiliateId,
+          level: row.level,
+          tierName: typeof meta?.tierName === 'string' ? meta.tierName : null,
+          ratePct: Number(row.ratePct ?? 0),
+          amount: Number(row.amount),
+          commissionId: row.id,
+        };
+      });
+      for (const key of existingKeys) {
+        const row = planned.find((candidate) => candidate.idempotencyKey === key);
+        if (row) skipped.push({ affiliateId: row.affiliateId, level: row.level, reason: 'duplicate_already_accrued' });
+      }
+
+      const affected = Array.from(new Set(chain.map((a) => a.user.id)));
+      for (const affiliateId of affected) {
+        const snap = await computeBalanceFor(affiliateId, settings.holdDays, new Date(), tx);
+        await tx.referralBalance.upsert({
+          where: { userId: affiliateId },
+          update: {
+            pendingAmount: new Prisma.Decimal(snap.pendingAmount),
+            claimableAmount: new Prisma.Decimal(snap.claimableAmount),
+            claimedAmount: new Prisma.Decimal(snap.claimedAmount),
+          },
+          create: {
+            userId: affiliateId,
+            pendingAmount: new Prisma.Decimal(snap.pendingAmount),
+            claimableAmount: new Prisma.Decimal(snap.claimableAmount),
+            claimedAmount: new Prisma.Decimal(snap.claimedAmount),
+          },
+        });
+      }
+      return { accrued, skipped, chainDepth: chain.length, affected };
+    });
+
+    result.accrued = transactionResult.accrued;
+    result.skipped = transactionResult.skipped;
+    result.chainDepth = transactionResult.chainDepth;
+    if (settings.cadence === 'auto') {
+      for (const affiliateId of transactionResult.affected) {
         try {
-          const row = await db.affiliateCommission.create({
-            data: {
-              affiliateId: a.user.id,
-              sourceUserId,
-              level: 1,
-              amount: new Prisma.Decimal(rewardAmount),
-              basis: 'first_deposit_reward',
-              status: DEFAULT_COMMISSION_STATUS,
-              depositId,
-              tierId: effectiveTier.id,
-              ratePct: null,
-              meta: {
-                tierName: effectiveTier.name,
-                rewardAmount,
-                source: tierReward != null && tierReward > 0 ? 'tier' : 'global_setting',
-                tierIsDefaultFallback: !a.user.affiliateTier,
-              } as Prisma.JsonObject,
-            },
+          const paid = await settleMaturedReferralCommissions({
+            userId: affiliateId,
+            mode: 'auto',
+            actorId: affiliateId,
+            actorRole: 'system',
+            settings,
           });
-          result.accrued.push({
-            affiliateId: a.user.id,
-            level: 1,
-            tierName: effectiveTier.name,
-            ratePct: 0,
-            amount: rewardAmount,
-            commissionId: row.id,
-          });
-          console.info('[affiliate] first-deposit reward accrued', {
-            affiliateId: a.user.id,
-            depositId,
-            amount: rewardAmount,
-          });
-        } catch (err) {
-          if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-            console.info('[affiliate] first-deposit reward already accrued', { affiliateId: a.user.id, depositId });
-          } else {
-            const msg = err instanceof Error ? err.message : String(err);
-            console.error('[affiliate] first-deposit reward write failed', msg);
-            result.error = result.error ?? `first_deposit_reward_failed: ${msg.slice(0, 200)}`;
+          if (paid.code === 'paid') {
+            result.autoPaid.push({ affiliateId, claimId: paid.claimId, amount: paid.amount });
           }
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          result.error = result.error ?? `auto_settlement_failed: ${message.slice(0, 200)}`;
         }
       }
     }
+  } catch (err) {
+    const msg = err instanceof Error ? `${err.message}\n${err.stack ?? ''}` : String(err);
+    console.error('[affiliate] accrual failed', msg);
+    result.error = `accrual_failed: ${msg.slice(0, 300)}`;
   }
 
   return result;
@@ -363,20 +385,25 @@ export async function diagnoseAffiliate(
     return { sourceUserExists: false, chainDepth: 0, evaluated: [] };
   }
   const chain = await loadChain(sourceUserId, MAX_LEVELS);
+  const defaultTier = await db.commissionTier.findFirst({
+    where: { status: 'active' },
+    orderBy: { position: 'asc' },
+    select: { id: true, name: true, level1Pct: true, level2Pct: true, level3Pct: true, firstDepositRewardBdt: true, status: true },
+  });
   const evaluated = chain.map((a) => {
-    const rate = tierRateForLevel(a.user.affiliateTier, a.level);
+    const tier = a.user.affiliateTier?.status === 'active' ? a.user.affiliateTier : defaultTier;
+    const rate = tierRateForLevel(tier, a.level);
     const payout = rate ? amount.mul(rate).div(100) : new Prisma.Decimal(0);
     let reason: string | null = null;
     let eligible = true;
-    if (!a.user.isAffiliate) { reason = 'not_affiliate'; eligible = false; }
-    else if (!a.user.affiliateTier) { reason = 'no_tier_assigned'; eligible = false; }
+    if (!tier) { reason = 'no_active_tier'; eligible = false; }
     else if (!rate || rate.lte(0)) { reason = `rate_zero_at_level_${a.level}`; eligible = false; }
     else if (payout.lte(0)) { reason = 'computed_amount_zero'; eligible = false; }
     return {
       affiliateId: a.user.id,
       level: a.level,
       isAffiliate: a.user.isAffiliate,
-      tierName: a.user.affiliateTier?.name ?? null,
+      tierName: tier?.name ?? null,
       ratePct: rate ? Number(rate) : null,
       payoutAmount: Number(payout),
       eligible,

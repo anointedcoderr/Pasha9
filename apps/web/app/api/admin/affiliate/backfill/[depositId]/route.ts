@@ -6,10 +6,11 @@
 // no_tier_assigned at the time, admin must trigger this endpoint
 // after fixing the tier.
 //
-// Guards:
+// Guard:
 //   - deposit must exist and be status=approved
-//   - no AffiliateCommission rows for this deposit can already exist
-//     (would double-pay the upline if we ran twice)
+//
+// The engine's business idempotency keys make this safe to rerun. That
+// also lets operators repair a partially-accrued deposit.
 //
 // Returns the same shape as the deposit-approve commission block so
 // the admin UI can reuse its handler.
@@ -33,13 +34,6 @@ export async function POST(_req: NextRequest, { params }: { params: { depositId:
     });
     if (!deposit) return jsonError(404, 'DEPOSIT_NOT_FOUND');
     if (deposit.status !== 'approved') return jsonError(400, 'DEPOSIT_NOT_APPROVED', `Deposit status is ${deposit.status}.`);
-
-    const existing = await db.affiliateCommission.count({
-      where: { depositId: deposit.id },
-    });
-    if (existing > 0) {
-      return jsonError(409, 'ALREADY_ACCRUED', `${existing} commission row(s) already exist for this deposit. Refusing to double-pay.`);
-    }
 
     const result = await accrueCommissionsOnDeposit(deposit.userId, deposit.id, new Prisma.Decimal(deposit.amount));
 

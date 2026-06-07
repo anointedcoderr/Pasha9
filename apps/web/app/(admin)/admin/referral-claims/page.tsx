@@ -18,7 +18,13 @@ import { Chip } from '@/components/ui/Chip';
 import { Users, Save, RefreshCw, Search } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 
-interface Settings { cadence: 'weekly' | 'monthly' | 'manual' | 'auto'; holdDays: number; turnoverX: number }
+interface Settings {
+  cadence: 'weekly' | 'monthly' | 'manual' | 'auto';
+  holdDays: number;
+  turnoverX: number;
+  firstDepositMinBdt: number;
+  firstDepositRewardBdt: number;
+}
 interface BalanceRow {
   userId: string;
   username: string;
@@ -55,7 +61,13 @@ function fmtDate(s: string | null): string {
 }
 
 export default function AdminReferralClaimsPage() {
-  const [settings, setSettings] = useState<Settings>({ cadence: 'weekly', holdDays: 7, turnoverX: 0 });
+  const [settings, setSettings] = useState<Settings>({
+    cadence: 'weekly',
+    holdDays: 7,
+    turnoverX: 0,
+    firstDepositMinBdt: 0,
+    firstDepositRewardBdt: 0,
+  });
   const [balances, setBalances] = useState<BalanceRow[]>([]);
   const [claims, setClaims] = useState<ClaimRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -97,6 +109,8 @@ export default function AdminReferralClaimsPage() {
           cadence: settings.cadence,
           holdDays: settings.holdDays,
           turnoverX: settings.turnoverX,
+          firstDepositMinBdt: settings.firstDepositMinBdt,
+          firstDepositRewardBdt: settings.firstDepositRewardBdt,
         }),
       });
       const j = await r.json();
@@ -117,7 +131,7 @@ export default function AdminReferralClaimsPage() {
       const r = await fetch('/api/cron/referral-mature', { method: 'POST' });
       const j = await r.json();
       if (!r.ok) throw new Error(j?.message ?? j?.code ?? 'Cron failed');
-      setInfo(`Maturity sweep done. Users touched: ${j.usersTouched ?? 0}. Newly matured: ${formatBDT(Number(j.newlyMatured ?? 0))}.`);
+      setInfo(`Maturity sweep done. Users touched: ${j.usersTouched ?? 0}. Newly matured: ${formatBDT(Number(j.newlyMatured ?? 0))}. Auto paid: ${formatBDT(Number(j.amountPaid ?? 0))}.`);
       await load();
       setTimeout(() => setInfo(null), 5000);
     } catch (e) {
@@ -159,7 +173,7 @@ export default function AdminReferralClaimsPage() {
 
       <Card padding="md">
         <p className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">Settings</p>
-        <div className="mt-3 grid gap-3 md:grid-cols-4">
+        <div className="mt-3 grid gap-3 md:grid-cols-3">
           <label className="block">
             <span className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">Cadence</span>
             <select value={settings.cadence} onChange={(e) => setSettings({ ...settings, cadence: e.target.value as Settings['cadence'] })} className={inputCls}>
@@ -168,6 +182,14 @@ export default function AdminReferralClaimsPage() {
               <option value="manual">Manual review</option>
               <option value="auto">Auto (no cadence gate)</option>
             </select>
+          </label>
+          <label className="block">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">Fixed reward minimum deposit</span>
+            <input type="number" min={0} max={10000000} value={settings.firstDepositMinBdt} onChange={(e) => setSettings({ ...settings, firstDepositMinBdt: Number(e.target.value) })} className={inputCls} />
+          </label>
+          <label className="block">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">Global fixed reward</span>
+            <input type="number" min={0} max={1000000} value={settings.firstDepositRewardBdt} onChange={(e) => setSettings({ ...settings, firstDepositRewardBdt: Number(e.target.value) })} className={inputCls} />
           </label>
           <label className="block">
             <span className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">Hold days</span>
@@ -181,7 +203,7 @@ export default function AdminReferralClaimsPage() {
             <Button variant="gold" leftIcon={<Save className="h-4 w-4" />} loading={savingSettings} onClick={saveSettings} className="w-full">Save</Button>
           </div>
         </div>
-        <p className="mt-2 text-[11px] text-brand-inkMute">Turnover = 0 disables the wagering gate. While &gt; 0, claims return REFERRAL_TURNOVER_NOT_READY until the wagering feed is configured.</p>
+        <p className="mt-2 text-[11px] text-brand-inkMute">The fixed reward minimum applies only to the one-time direct referral reward. Percentage commissions apply to every approved deposit. Turnover above 0 creates a withdrawal lock that progresses with valid wagers.</p>
       </Card>
 
       <Card padding="md">

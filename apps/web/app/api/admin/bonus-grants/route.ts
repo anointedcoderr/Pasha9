@@ -56,12 +56,19 @@ export async function GET(req: NextRequest) {
         userId: r.userId,
         username: r.user.username,
         phone: r.user.phone,
-        rule: {
-          id: r.bonusRule.id,
-          name: r.bonusRule.name,
-          type: r.bonusRule.type,
-          turnoverX: Number(r.bonusRule.turnoverX),
-        },
+        rule: r.bonusRule
+          ? {
+              id: r.bonusRule.id,
+              name: r.bonusRule.name,
+              type: r.bonusRule.type,
+              turnoverX: Number(r.bonusRule.turnoverX),
+            }
+          : {
+              id: '',
+              name: 'Referral reward',
+              type: 'referral',
+              turnoverX: Number(r.turnoverRequired) > 0 ? Number(r.turnoverRequired) / Number(r.amount) : 0,
+            },
         amount: Number(r.amount),
         turnoverRequired: Number(r.turnoverRequired),
         turnoverProgress: Number(r.turnoverProgress),

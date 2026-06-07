@@ -20,7 +20,9 @@ import { loadReferralSettings } from '@/lib/affiliate/balance';
 const schema = z.object({
   cadence: z.enum(['weekly', 'monthly', 'manual', 'auto']).optional(),
   holdDays: z.coerce.number().int().min(0).max(180).optional(),
-  turnoverX: z.coerce.number().int().min(0).max(50).optional(),
+  turnoverX: z.coerce.number().min(0).max(50).optional(),
+  firstDepositMinBdt: z.coerce.number().min(0).max(10_000_000).optional(),
+  firstDepositRewardBdt: z.coerce.number().min(0).max(1_000_000).optional(),
 });
 
 export async function GET() {
@@ -61,6 +63,20 @@ export async function PATCH(req: NextRequest) {
         where: { key: 'referral_turnover_x' },
         update: { value: String(parsed.data.turnoverX), type: 'number' },
         create: { key: 'referral_turnover_x', value: String(parsed.data.turnoverX), type: 'number' },
+      }));
+    }
+    if (parsed.data.firstDepositMinBdt !== undefined) {
+      writes.push(db.systemSetting.upsert({
+        where: { key: 'referral_first_deposit_min_bdt' },
+        update: { value: String(parsed.data.firstDepositMinBdt), type: 'number' },
+        create: { key: 'referral_first_deposit_min_bdt', value: String(parsed.data.firstDepositMinBdt), type: 'number' },
+      }));
+    }
+    if (parsed.data.firstDepositRewardBdt !== undefined) {
+      writes.push(db.systemSetting.upsert({
+        where: { key: 'referral_first_deposit_reward_bdt' },
+        update: { value: String(parsed.data.firstDepositRewardBdt), type: 'number' },
+        create: { key: 'referral_first_deposit_reward_bdt', value: String(parsed.data.firstDepositRewardBdt), type: 'number' },
       }));
     }
     await Promise.all(writes);

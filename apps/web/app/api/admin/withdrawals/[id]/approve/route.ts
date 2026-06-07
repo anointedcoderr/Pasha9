@@ -20,6 +20,7 @@ import { withAuth, ensurePermission, recordActivity } from '@/lib/auth/guard';
 import { jsonOk, jsonError } from '@/lib/auth/errors';
 import { sendSms } from '@/lib/sms/service';
 import { fireEvent } from '@/lib/tracking/dispatcher';
+import { computeDepositTurnover } from '@/lib/turnover/deposit-gate';
 
 const schema = z.object({ adminNote: z.string().max(500).optional() });
 
@@ -43,8 +44,17 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     const wallet = await db.wallet.findUnique({ where: { userId: withdrawal.userId } });
     if (!wallet) return jsonError(409, 'WALLET_MISSING', 'User has no wallet.');
-    if (Number(wallet.balance) < Number(amount)) {
-      return jsonError(409, 'INSUFFICIENT_FUNDS', 'User balance is lower than the withdrawal amount.');
+    const turnover = await computeDepositTurnover(withdrawal.userId);
+    const available = Number(wallet.balance) - Number(wallet.lockedBalance) - turnover.bdtBalanceLocked - turnover.referralBalanceLocked;
+    if (available < Number(amount)) {
+      return jsonError(409, 'INSUFFICIENT_FUNDS', 'User withdrawable balance is lower than the withdrawal amount.');
+    }
+    if (!turnover.isMet) {
+      return jsonError(409, 'TURNOVER_NOT_MET', 'User turnover requirements are not complete.', {
+        depositRemaining: turnover.depositRemaining,
+        bettingPassRemaining: turnover.bettingPassRemaining,
+        referralRemaining: turnover.referralRemaining,
+      });
     }
 
     const updated = await db.$transaction(async (tx) => {

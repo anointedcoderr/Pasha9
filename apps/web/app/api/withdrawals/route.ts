@@ -97,16 +97,16 @@ export async function POST(req: NextRequest) {
     // withdraw the BDT Balance reward until the wager is complete.
     const turnover = await computeDepositTurnover(session.sub);
     const available = wallet
-      ? Number(wallet.balance) - Number(wallet.lockedBalance) - turnover.bdtBalanceLocked
+      ? Number(wallet.balance) - Number(wallet.lockedBalance) - turnover.bdtBalanceLocked - turnover.referralBalanceLocked
       : 0;
     if (available < parsed.data.amount) {
       return jsonError(
         400,
         'INSUFFICIENT_FUNDS',
-        turnover.bdtBalanceLocked > 0
-          ? `Withdrawable balance is lower than the requested amount. ${turnover.bdtBalanceLocked.toFixed(2)} BDT is locked by an unfulfilled Betting Pass reward.`
+        turnover.bdtBalanceLocked > 0 || turnover.referralBalanceLocked > 0
+          ? `Withdrawable balance is lower than the requested amount. ${(turnover.bdtBalanceLocked + turnover.referralBalanceLocked).toFixed(2)} BDT is locked by active reward turnover.`
           : 'Withdrawable balance is lower than the requested amount.',
-        { bdtBalanceLocked: turnover.bdtBalanceLocked },
+        { bdtBalanceLocked: turnover.bdtBalanceLocked, referralBalanceLocked: turnover.referralBalanceLocked },
       );
     }
 
@@ -120,6 +120,9 @@ export async function POST(req: NextRequest) {
       }
       if (turnover.depositRemaining > 0) {
         parts.push(`Complete ${turnover.depositRemaining.toFixed(2)} BDT more deposit turnover`);
+      }
+      if (turnover.referralRemaining > 0) {
+        parts.push(`Complete ${turnover.referralRemaining.toFixed(2)} BDT more wagering for your referral reward`);
       }
       const msg = parts.length > 0
         ? `${parts.join(' and ')} before submitting a withdrawal.`
@@ -137,10 +140,14 @@ export async function POST(req: NextRequest) {
           bettingPassRequired: turnover.bettingPassRequired,
           bettingPassCompleted: turnover.bettingPassCompleted,
           bettingPassRemaining: turnover.bettingPassRemaining,
+          referralRequired: turnover.referralRequired,
+          referralCompleted: turnover.referralCompleted,
+          referralRemaining: turnover.referralRemaining,
           requiredTurnover: turnover.requiredTurnover,
           completedTurnover: turnover.completedTurnover,
           remainingTurnover: turnover.remainingTurnover,
           bdtBalanceLocked: turnover.bdtBalanceLocked,
+          referralBalanceLocked: turnover.referralBalanceLocked,
         },
       );
     }

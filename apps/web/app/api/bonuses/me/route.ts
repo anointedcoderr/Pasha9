@@ -68,14 +68,23 @@ export async function GET() {
         releasedAt: g.releasedAt,
         cancelledAt: g.cancelledAt,
         note: g.note,
-        rule: {
-          id: g.bonusRule.id,
-          name: g.bonusRule.name,
-          type: g.bonusRule.type,
-          description: g.bonusRule.description,
-          turnoverX: Number(g.bonusRule.turnoverX),
-          validityDays: g.bonusRule.validityDays,
-        },
+        rule: g.bonusRule
+          ? {
+              id: g.bonusRule.id,
+              name: g.bonusRule.name,
+              type: g.bonusRule.type,
+              description: g.bonusRule.description,
+              turnoverX: Number(g.bonusRule.turnoverX),
+              validityDays: g.bonusRule.validityDays,
+            }
+          : {
+              id: '',
+              name: 'Referral reward',
+              type: 'referral',
+              description: 'Referral reward turnover lock',
+              turnoverX: Number(g.turnoverRequired) > 0 ? Number(g.turnoverRequired) / Number(g.amount) : 0,
+              validityDays: 0,
+            },
       })),
     });
   });
