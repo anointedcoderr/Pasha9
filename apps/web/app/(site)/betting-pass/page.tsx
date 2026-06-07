@@ -12,6 +12,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { CategoryHero } from '@/components/site/CategoryHero';
 import { BackBar } from '@/components/site/BackBar';
+import { BettingPassBannerSlider, type BannerRow as SliderBannerRow } from '@/components/site/BettingPassBannerSlider';
 import { useT, useLang } from '@/lib/i18n/context';
 import { triggerWalletRefresh } from '@/components/site/WalletStrip';
 import { Crown, Lock, Star, Zap, Gift, CheckCircle2, AlertTriangle, LogIn } from 'lucide-react';
@@ -73,6 +74,16 @@ export default function BettingPassPage() {
   const [loading, setLoading] = useState(true);
   const [claimingId, setClaimingId] = useState<string | null>(null);
   const [flash, setFlash] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  const [sliderBanners, setSliderBanners] = useState<SliderBannerRow[]>([]);
+
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/content/betting-pass/banners', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : { banners: [] }))
+      .then((j) => { if (alive) setSliderBanners(Array.isArray(j?.banners) ? j.banners : []); })
+      .catch(() => { if (alive) setSliderBanners([]); });
+    return () => { alive = false; };
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -165,17 +176,21 @@ export default function BettingPassPage() {
   return (
     <div className="space-y-6">
       <BackBar title={t('bp.title')} />
-      <CategoryHero
-        kicker={t('bp.title')}
-        title={t('bp.title')}
-        description={t('bp.subtitle')}
-        accent="blue"
-        category="bettingPass"
-        chips={[
-          { label: 'Hot', tone: 'rose' },
-          { label: 'Tier Rewards', tone: 'gold' },
-        ]}
-      />
+      {sliderBanners.length > 0 ? (
+        <BettingPassBannerSlider banners={sliderBanners} />
+      ) : (
+        <CategoryHero
+          kicker={t('bp.title')}
+          title={t('bp.title')}
+          description={t('bp.subtitle')}
+          accent="blue"
+          category="bettingPass"
+          chips={[
+            { label: 'Hot', tone: 'rose' },
+            { label: 'Tier Rewards', tone: 'gold' },
+          ]}
+        />
+      )}
 
       {flash ? (
         <div className={cn(

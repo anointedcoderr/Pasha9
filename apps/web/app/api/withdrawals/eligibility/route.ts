@@ -2,11 +2,14 @@
 //
 // GET /api/withdrawals/eligibility
 //
-// Returns the signed-in user's deposit turnover status. The /withdraw
-// page polls this to render the "remaining turnover" warning and to
-// disable the submit button until the requirement is met. The POST
-// /api/withdrawals endpoint enforces the same check server-side so a
+// Returns the signed-in user's combined turnover status. The /withdraw
+// page polls this to render the "remaining turnover" warning, and the
+// POST /api/withdrawals route enforces the same check server-side so a
 // disabled-button bypass still 403s.
+//
+// Response includes both the combined totals and the per-source
+// breakdown so the UI can render two rows when a Betting Pass BDT
+// Balance turnover is active.
 
 export const dynamic = 'force-dynamic';
 
@@ -18,15 +21,25 @@ import { computeDepositTurnover } from '@/lib/turnover/deposit-gate';
 export async function GET() {
   return withAuth(async () => {
     const session = await requireActiveUser();
-    const status = await computeDepositTurnover(session.sub);
+    const s = await computeDepositTurnover(session.sub);
     return jsonOk({
-      multiplier: status.multiplier,
-      approvedDepositTotal: status.approvedDepositTotal,
-      requiredTurnover: status.requiredTurnover,
-      completedTurnover: status.completedTurnover,
-      remainingTurnover: status.remainingTurnover,
-      isMet: status.isMet,
-      bdtBalanceLocked: status.bdtBalanceLocked,
+      multiplier: s.multiplier,
+      approvedDepositTotal: s.approvedDepositTotal,
+
+      // Per-source breakdown
+      depositRequired: s.depositRequired,
+      depositCompleted: s.depositCompleted,
+      depositRemaining: s.depositRemaining,
+      bettingPassRequired: s.bettingPassRequired,
+      bettingPassCompleted: s.bettingPassCompleted,
+      bettingPassRemaining: s.bettingPassRemaining,
+
+      // Combined totals
+      requiredTurnover: s.requiredTurnover,
+      completedTurnover: s.completedTurnover,
+      remainingTurnover: s.remainingTurnover,
+      isMet: s.isMet,
+      bdtBalanceLocked: s.bdtBalanceLocked,
     });
   });
 }

@@ -1,50 +1,68 @@
 // Built by Anointed Coder.
 //
-// Deposit turnover gate for the withdrawal flow.
+// Turnover gate for the withdrawal flow. Combines two real gates:
 //
-// Rule (intentionally simple, lifetime-aggregate; no schema change):
-//   required  = SUM(Deposit.amount where status='approved') * multiplier
-//   completed = SUM(ProviderTransaction.betAmount where status='accepted')
-//   remaining = max(0, required - completed)
+//   1. Deposit gate (existing). lifetime-aggregate:
+//        depositRequired  = SUM(Deposit.amount where status='approved') * multiplier
+//        depositCompleted = SUM(ProviderTransaction.betAmount where status='accepted')
 //
-// The multiplier comes from SystemSetting key `deposit_turnover_multiplier`,
-// default 1.0 (every BDT deposited must be wagered once before withdrawal).
-// Admin sets it to 0 to disable the gate entirely, or higher to require
-// more wagering. Per-row historical snapshotting is NOT done here so a
-// multiplier change applies forward AND backward to the lifetime
-// aggregate. If you need per-deposit lock-in, the next iteration would
-// add Deposit.turnoverRequired/Completed columns.
+//   2. Betting Pass BDT Balance gate (per-grant). Each claim of a
+//        rewardKind='bdt_balance' tier creates an active UserBonus row
+//        with sourceType='betting_pass_bdt' and turnoverRequired =
+//        rewardAmount * tier.turnoverX. The bonus engine's
+//        addTurnover() loop ticks down UserBonus.turnoverProgress as
+//        the player wagers, and flips status to 'completed' (via
+//        releaseBonus, which is a no-op for this sourceType because
+//        the money landed in Wallet.balance at claim time, not
+//        lockedBalance).
 //
-// Cancelled / refunded / rolled-back bets are excluded by the
-// status='accepted' filter on ProviderTransaction (same filter used by
-// the bonus turnover engine, kept consistent on purpose).
+// Combined totals reported to the UI and used by the POST gate:
+//   requiredTurnover  = depositRequired + bettingPassRequired
+//   completedTurnover = depositCompleted + bettingPassCompleted
+//   remainingTurnover = max(0, requiredTurnover - completedTurnover)
+//
+// The same accepted bet ticks down BOTH gates (deposit completed +
+// the FIFO-distributed UserBonus.turnoverProgress). That is intentional
+// per client spec: a 100 BDT @ 20x BP reward must add 2000 BDT to the
+// total required turnover, and a 1000 BDT wager closes 1000 BDT of
+// the required total (against the BP grant FIFO).
 
 import { db } from '@/lib/db/client';
 
 const SETTING_KEY = 'deposit_turnover_multiplier';
 const DEFAULT_MULTIPLIER = 1.0;
 
+// Active UserBonus grants with this sourceType represent BDT Balance
+// rewards that landed in Wallet.balance and are still under a wager
+// requirement. They also drive the withdrawable-balance subtraction.
+const BDT_BALANCE_LOCK_SOURCE_TYPE = 'betting_pass_bdt';
+
 export interface DepositTurnoverStatus {
   multiplier: number;
   approvedDepositTotal: number;
+
+  // ----- Per-source breakdown (UI uses these to render two rows) -----
+  depositRequired: number;
+  depositCompleted: number;
+  depositRemaining: number;
+
+  bettingPassRequired: number;
+  bettingPassCompleted: number;
+  bettingPassRemaining: number;
+
+  // ----- Combined totals (what the gate enforces) -----
   requiredTurnover: number;
   completedTurnover: number;
   remainingTurnover: number;
   isMet: boolean;
+
   // Sum of active rewards credited directly to Wallet.balance but
-  // still under a turnover requirement (currently Betting Pass
-  // BDT Balance grants). This is NOT included in the deposit gate's
-  // remaining number; the caller subtracts it from the withdrawable
-  // balance instead, because the money is already in the main wallet
-  // by design (operator surface), just not yet free to withdraw.
+  // still under a turnover requirement. Subtracted from the
+  // withdrawable balance independently of the gate above so that the
+  // available-balance check fails fast even if the deposit gate is
+  // disabled (multiplier=0).
   bdtBalanceLocked: number;
 }
-
-// Active UserBonus grants with this sourceType represent BDT Balance
-// rewards that were credited to Wallet.balance but are still waiting
-// for the player to complete their wager. Withdrawals must subtract
-// this from the available balance until the grant is released.
-const BDT_BALANCE_LOCK_SOURCE_TYPE = 'betting_pass_bdt';
 
 export async function computeBdtBalanceLocked(userId: string): Promise<number> {
   try {
@@ -73,7 +91,7 @@ export async function loadDepositTurnoverMultiplier(): Promise<number> {
 export async function computeDepositTurnover(userId: string): Promise<DepositTurnoverStatus> {
   const multiplier = await loadDepositTurnoverMultiplier();
 
-  const [depositAgg, betAgg, bdtBalanceLocked] = await Promise.all([
+  const [depositAgg, betAgg, bpAgg, bdtBalanceLocked] = await Promise.all([
     db.deposit.aggregate({
       where: { userId, status: 'approved' },
       _sum: { amount: true },
@@ -82,18 +100,40 @@ export async function computeDepositTurnover(userId: string): Promise<DepositTur
       where: { userId, status: 'accepted' },
       _sum: { betAmount: true },
     }),
+    db.userBonus.aggregate({
+      where: { userId, status: 'active', sourceType: BDT_BALANCE_LOCK_SOURCE_TYPE },
+      _sum: { turnoverRequired: true, turnoverProgress: true },
+    }),
     computeBdtBalanceLocked(userId),
   ]);
 
   const approvedDepositTotal = Number(depositAgg._sum?.amount ?? 0);
-  const completedTurnover = Math.abs(Number(betAgg._sum?.betAmount ?? 0));
-  const requiredTurnover = approvedDepositTotal * multiplier;
+  const depositCompleted = Math.abs(Number(betAgg._sum?.betAmount ?? 0));
+  const depositRequired = approvedDepositTotal * multiplier;
+  const depositRemaining = Math.max(0, depositRequired - depositCompleted);
+
+  const bettingPassRequired = Math.max(0, Number(bpAgg._sum?.turnoverRequired ?? 0));
+  const bettingPassCompleted = Math.max(0, Math.min(bettingPassRequired, Number(bpAgg._sum?.turnoverProgress ?? 0)));
+  const bettingPassRemaining = Math.max(0, bettingPassRequired - bettingPassCompleted);
+
+  const requiredTurnover = depositRequired + bettingPassRequired;
+  const completedTurnover = depositCompleted + bettingPassCompleted;
   const remainingTurnover = Math.max(0, requiredTurnover - completedTurnover);
-  const isMet = remainingTurnover <= 0;
+  // Gate is met only when BOTH gates are individually met. We could
+  // also check remainingTurnover <= 0 but the per-source check is
+  // more honest when the deposit gate completed > deposit required
+  // (the player over-wagered for deposits but still owes BP wager).
+  const isMet = depositRemaining <= 0 && bettingPassRemaining <= 0;
 
   return {
     multiplier,
     approvedDepositTotal,
+    depositRequired,
+    depositCompleted,
+    depositRemaining,
+    bettingPassRequired,
+    bettingPassCompleted,
+    bettingPassRemaining,
     requiredTurnover,
     completedTurnover,
     remainingTurnover,

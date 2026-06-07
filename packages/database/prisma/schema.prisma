@@ -2061,3 +2061,23 @@ model BettingPassClaim {
   @@unique([userId, ruleId])
   @@index([userId, createdAt])
 }
+
+// Operator-managed banner deck for the public /betting-pass hero.
+// Rendered as a swipeable / auto-rotating carousel. When zero rows
+// are active, the page falls back to the hardcoded built-in hero so
+// the surface never breaks on a fresh DB.
+model BettingPassBanner {
+  id          String   @id @default(cuid())
+  titleEn     String
+  titleBn     String?
+  subtitleEn  String?
+  subtitleBn  String?
+  imageUrl    String?
+  ctaUrl      String?
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
+}

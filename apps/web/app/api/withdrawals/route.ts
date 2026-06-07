@@ -111,13 +111,32 @@ export async function POST(req: NextRequest) {
     }
 
     if (!turnover.isMet) {
+      // Build a message that names the active blocker. A user with
+      // both gates failing sees the higher-priority Betting Pass
+      // reward block named first so they understand the new charge.
+      const parts: string[] = [];
+      if (turnover.bettingPassRemaining > 0) {
+        parts.push(`Complete ${turnover.bettingPassRemaining.toFixed(2)} BDT more wagering for your Betting Pass reward`);
+      }
+      if (turnover.depositRemaining > 0) {
+        parts.push(`Complete ${turnover.depositRemaining.toFixed(2)} BDT more deposit turnover`);
+      }
+      const msg = parts.length > 0
+        ? `${parts.join(' and ')} before submitting a withdrawal.`
+        : `Complete ${turnover.remainingTurnover.toFixed(2)} BDT more turnover before submitting a withdrawal.`;
       return jsonError(
         403,
         'TURNOVER_NOT_MET',
-        `Complete ${turnover.remainingTurnover.toFixed(2)} BDT more turnover before submitting a withdrawal.`,
+        msg,
         {
           multiplier: turnover.multiplier,
           approvedDepositTotal: turnover.approvedDepositTotal,
+          depositRequired: turnover.depositRequired,
+          depositCompleted: turnover.depositCompleted,
+          depositRemaining: turnover.depositRemaining,
+          bettingPassRequired: turnover.bettingPassRequired,
+          bettingPassCompleted: turnover.bettingPassCompleted,
+          bettingPassRemaining: turnover.bettingPassRemaining,
           requiredTurnover: turnover.requiredTurnover,
           completedTurnover: turnover.completedTurnover,
           remainingTurnover: turnover.remainingTurnover,

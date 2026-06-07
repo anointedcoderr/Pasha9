@@ -52,6 +52,13 @@ interface TurnoverState {
   requiredTurnover: number;
   completedTurnover: number;
   remainingTurnover: number;
+  depositRequired: number;
+  depositCompleted: number;
+  depositRemaining: number;
+  bettingPassRequired: number;
+  bettingPassCompleted: number;
+  bettingPassRemaining: number;
+  bdtBalanceLocked: number;
 }
 
 const DEFAULT_LIMITS: GlobalLimits = { min: 500, max: 200000, policy: '' };
@@ -62,6 +69,13 @@ const DEFAULT_TURNOVER: TurnoverState = {
   requiredTurnover: 0,
   completedTurnover: 0,
   remainingTurnover: 0,
+  depositRequired: 0,
+  depositCompleted: 0,
+  depositRemaining: 0,
+  bettingPassRequired: 0,
+  bettingPassCompleted: 0,
+  bettingPassRemaining: 0,
+  bdtBalanceLocked: 0,
 };
 
 export default function WithdrawPage() {
@@ -157,6 +171,13 @@ export default function WithdrawPage() {
             requiredTurnover: Number(data.requiredTurnover ?? 0),
             completedTurnover: Number(data.completedTurnover ?? 0),
             remainingTurnover: Number(data.remainingTurnover ?? 0),
+            depositRequired: Number(data.depositRequired ?? 0),
+            depositCompleted: Number(data.depositCompleted ?? 0),
+            depositRemaining: Number(data.depositRemaining ?? 0),
+            bettingPassRequired: Number(data.bettingPassRequired ?? 0),
+            bettingPassCompleted: Number(data.bettingPassCompleted ?? 0),
+            bettingPassRemaining: Number(data.bettingPassRemaining ?? 0),
+            bdtBalanceLocked: Number(data.bdtBalanceLocked ?? 0),
           });
         })
         .catch(() => { /* keep defaults */ });
@@ -262,6 +283,13 @@ export default function WithdrawPage() {
                 requiredTurnover: Number(data.requiredTurnover ?? 0),
                 completedTurnover: Number(data.completedTurnover ?? 0),
                 remainingTurnover: Number(data.remainingTurnover ?? 0),
+                depositRequired: Number(data.depositRequired ?? 0),
+                depositCompleted: Number(data.depositCompleted ?? 0),
+                depositRemaining: Number(data.depositRemaining ?? 0),
+                bettingPassRequired: Number(data.bettingPassRequired ?? 0),
+                bettingPassCompleted: Number(data.bettingPassCompleted ?? 0),
+                bettingPassRemaining: Number(data.bettingPassRemaining ?? 0),
+                bdtBalanceLocked: Number(data.bdtBalanceLocked ?? 0),
               });
             })
             .catch(() => { /* keep current */ });
@@ -367,6 +395,32 @@ export default function WithdrawPage() {
                   ৳ {turnover.remainingTurnover.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                 </div>
               </div>
+
+              {turnover.bettingPassRequired > 0 ? (
+                <div className="mt-3 rounded-md border border-rose-300/60 bg-white/70 p-2">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-rose-700">
+                    {lang === 'bn' ? 'বেটিং পাস রিওয়ার্ড টার্নওভার' : 'Betting Pass reward turnover'}
+                  </p>
+                  <p className="mt-1 text-[11px] text-rose-900">
+                    {lang === 'bn'
+                      ? `প্রয়োজন ৳ ${turnover.bettingPassRequired.toLocaleString(undefined, { maximumFractionDigits: 2 })} . সম্পূর্ণ ৳ ${turnover.bettingPassCompleted.toLocaleString(undefined, { maximumFractionDigits: 2 })} . বাকি ৳ ${turnover.bettingPassRemaining.toLocaleString(undefined, { maximumFractionDigits: 2 })}.`
+                      : `Required ৳ ${turnover.bettingPassRequired.toLocaleString(undefined, { maximumFractionDigits: 2 })} . Completed ৳ ${turnover.bettingPassCompleted.toLocaleString(undefined, { maximumFractionDigits: 2 })} . Remaining ৳ ${turnover.bettingPassRemaining.toLocaleString(undefined, { maximumFractionDigits: 2 })}.`}
+                  </p>
+                </div>
+              ) : null}
+
+              {turnover.depositRequired > 0 ? (
+                <div className="mt-2 rounded-md border border-rose-200/60 bg-white/50 p-2">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-rose-700">
+                    {lang === 'bn' ? 'ডিপোজিট টার্নওভার' : 'Deposit turnover'}
+                  </p>
+                  <p className="mt-1 text-[11px] text-rose-900">
+                    {lang === 'bn'
+                      ? `প্রয়োজন ৳ ${turnover.depositRequired.toLocaleString(undefined, { maximumFractionDigits: 2 })} . সম্পূর্ণ ৳ ${turnover.depositCompleted.toLocaleString(undefined, { maximumFractionDigits: 2 })} . বাকি ৳ ${turnover.depositRemaining.toLocaleString(undefined, { maximumFractionDigits: 2 })}.`
+                      : `Required ৳ ${turnover.depositRequired.toLocaleString(undefined, { maximumFractionDigits: 2 })} . Completed ৳ ${turnover.depositCompleted.toLocaleString(undefined, { maximumFractionDigits: 2 })} . Remaining ৳ ${turnover.depositRemaining.toLocaleString(undefined, { maximumFractionDigits: 2 })}.`}
+                  </p>
+                </div>
+              ) : null}
             </div>
           </div>
         </Card>
