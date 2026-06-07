@@ -59,8 +59,8 @@ export async function loadReferralSettings(client: ReferralReadClient = db): Pro
   const cadence = (get(CADENCE_SETTING) ?? 'weekly').toLowerCase();
   const holdDaysRaw = Math.max(0, Number(get(HOLD_DAYS_SETTING) ?? 7) || 0);
   const turnoverX = Math.max(0, Number(get(TURNOVER_SETTING) ?? 0) || 0);
-  const firstDepositMinBdt = Math.max(0, Number(get(FIRST_DEPOSIT_MIN_SETTING) ?? 0) || 0);
-  const firstDepositRewardBdt = Math.max(0, Number(get(FIRST_DEPOSIT_REWARD_SETTING) ?? 0) || 0);
+  const firstDepositMinBdt = Math.max(0, Number(get(FIRST_DEPOSIT_MIN_SETTING) ?? 300) || 0);
+  const firstDepositRewardBdt = Math.max(0, Number(get(FIRST_DEPOSIT_REWARD_SETTING) ?? 200) || 0);
   // Default ON when the row is missing so existing installations keep
   // the same behaviour they had before the toggle landed.
   const enabledRaw = (get(ENABLED_SETTING) ?? 'true').trim().toLowerCase();
