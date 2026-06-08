@@ -186,8 +186,30 @@ export default function AdminInAppNotificationsPage() {
             constraintHint="PNG / JPG / WEBP, square or 16/9, max 2 MB"
             onChange={(url) => setCompose({ ...compose, imageUrl: url ?? '' })}
           />
-          <FormField label="Custom sound URL (optional)" hint="Short audio file (mp3 / wav). Falls back to the browser default chime when empty.">
-            <Input value={compose.soundUrl} onChange={(e) => setCompose({ ...compose, soundUrl: e.target.value })} placeholder="/uploads/sounds/ping.mp3" />
+          <FormField label="Custom sound URL (optional)" hint="Short audio file (mp3 / wav). Plays for the in-app notification card when the visitor's tab is open. Background device sound is controlled by the OS/browser and cannot be overridden by web push payloads on most platforms.">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <Input
+                value={compose.soundUrl}
+                onChange={(e) => setCompose({ ...compose, soundUrl: e.target.value })}
+                placeholder="/uploads/sounds/ping.mp3"
+              />
+              <button
+                type="button"
+                disabled={!compose.soundUrl}
+                onClick={() => {
+                  try {
+                    const audio = new Audio(compose.soundUrl);
+                    audio.volume = 0.8;
+                    audio.play().catch((err) => setError(`Sound play failed: ${err?.message ?? err}`));
+                  } catch (err) {
+                    setError(`Could not load sound: ${err instanceof Error ? err.message : err}`);
+                  }
+                }}
+                className="inline-flex h-9 shrink-0 items-center justify-center rounded-md border border-brand-divider bg-brand-paper px-3 text-xs font-semibold text-brand-ink hover:border-brand-yellow-500 disabled:opacity-50"
+              >
+                Test sound
+              </button>
+            </div>
           </FormField>
           <div className="flex justify-end">
             <Button type="submit" loading={busy} leftIcon={<Send className="h-4 w-4" />}>

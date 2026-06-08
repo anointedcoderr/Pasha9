@@ -11,6 +11,7 @@ import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db/client';
 import { withAuth, ensurePermission, recordActivity } from '@/lib/auth/guard';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
+import { dispatchPushToUsers } from '@/lib/push/dispatch';
 
 const AUDIENCE = ['all', 'active', 'depositors', 'selected'] as const;
 
@@ -126,6 +127,22 @@ export async function POST(req: NextRequest) {
       return created;
     });
 
+    // Best-effort web push dispatch. In-app notifications above are
+    // the source of truth; push is an additional channel that may
+    // require VAPID configuration and per-user device subscriptions.
+    // Failures never block the in-app delivery.
+    const pushResult = await dispatchPushToUsers(userIds, {
+      title: data.titleEn,
+      body: data.bodyEn ?? null,
+      imageUrl: data.imageUrl ?? null,
+      linkUrl: data.linkUrl ?? null,
+      notificationId: notification.id,
+      soundUrl: data.soundUrl ?? null,
+    }).catch((err) => {
+      console.error('[notifications] push dispatch failed', err);
+      return { attempted: 0, sent: 0, failed: 0, status: 'failed' as const, details: 'dispatch_threw' };
+    });
+
     await recordActivity({
       actorId: session.sub,
       actorRole: session.role,
@@ -135,6 +152,10 @@ export async function POST(req: NextRequest) {
       meta: {
         audience: data.audience,
         recipientCount: userIds.length,
+        pushStatus: pushResult.status,
+        pushAttempted: pushResult.attempted,
+        pushSent: pushResult.sent,
+        pushFailed: pushResult.failed,
       } as Prisma.JsonObject,
     });
 
@@ -142,6 +163,7 @@ export async function POST(req: NextRequest) {
       ok: true,
       notificationId: notification.id,
       recipientCount: userIds.length,
+      push: pushResult,
     });
   });
 }

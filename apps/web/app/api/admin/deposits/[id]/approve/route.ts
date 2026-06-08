@@ -32,6 +32,7 @@ import { accrueBettingPassOnDeposit } from '@/lib/betting-pass/engine';
 import { sendSms } from '@/lib/sms/service';
 import { fireEvent } from '@/lib/tracking/dispatcher';
 import { applySelectedDepositPromotion } from '@/lib/promotions/deposit';
+import { pickBestTier } from '@/lib/bonuses/deposit-tiers';
 
 const schema = z.object({
   adminNote: z.string().max(500).optional(),
@@ -130,12 +131,38 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       error: null,
       isFirstDeposit: false,
     };
+    // Recover the promotion rule for pre-existing deposits that were
+    // submitted before /api/deposits started snapping the synced
+    // tier BonusRule onto the row. If the deposit promised a bonus
+    // (bonusAmount > 0) but lost the rule reference, re-resolve from
+    // the best matching tier so the player is credited correctly.
+    let effectivePromotionRuleId: string | null = deposit.promotionRuleId;
+    if (!effectivePromotionRuleId && Number(deposit.bonusAmount ?? 0) > 0) {
+      try {
+        const tierPreview = await pickBestTier(Number(amount));
+        if (tierPreview?.tier && tierPreview.bonusAmount > 0) {
+          const tierRule = await db.bonusRule.findUnique({
+            where: { code: `deposit_tier_${tierPreview.tier.id}` },
+          });
+          if (tierRule && tierRule.status === 'active') {
+            effectivePromotionRuleId = tierRule.id;
+            await db.deposit.update({
+              where: { id: deposit.id },
+              data: { promotionRuleId: tierRule.id, promotionCode: tierRule.code },
+            });
+          }
+        }
+      } catch (err) {
+        console.error('[deposit-approve] tier rule recovery failed', err);
+      }
+    }
+
     try {
-      bonusResult = deposit.promotionRuleId
+      bonusResult = effectivePromotionRuleId
         ? await applySelectedDepositPromotion({
             userId: deposit.userId,
             depositId: deposit.id,
-            ruleId: deposit.promotionRuleId,
+            ruleId: effectivePromotionRuleId,
             depositAmount: amount,
             actorId: session.sub,
             actorRole: session.role,

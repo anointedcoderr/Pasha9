@@ -84,9 +84,29 @@ export async function POST(req: NextRequest) {
     if (promotionRule && !selectedPreview) {
       return jsonError(409, 'PROMOTION_CONFIG_ERROR', 'The selected promotion is temporarily unavailable.');
     }
-    const preview = selectedPreview ?? await pickBestTier(parsed.data.amount).catch(() => ({
+    const tierPreview = selectedPreview ? null : await pickBestTier(parsed.data.amount).catch(() => null);
+    const preview = selectedPreview ?? tierPreview ?? {
       tier: null, bonusPercentage: 0, bonusAmount: 0, totalCredit: parsed.data.amount,
-    }));
+    };
+
+    // Tier-backed bonuses are synced into BonusRule with
+    // code='deposit_tier_<tierId>' by syncTierToBonusRule. When the
+    // visitor hits /deposit without an explicit promotionId but a
+    // matching tier returns a positive bonus, snap the corresponding
+    // BonusRule onto the deposit row so the admin approve route can
+    // re-use the same applySelectedDepositPromotion code path the
+    // explicit promotion flow uses. Before this snap the approve
+    // route fell through to applyDepositBonuses() which iterates the
+    // first_deposit / reload / promo rules but did not find the
+    // tier-synced rule by name, leaving the player un-credited.
+    let resolvedPromotionRule = promotionRule;
+    if (!resolvedPromotionRule && tierPreview?.tier && tierPreview.bonusAmount > 0) {
+      const tierCode = `deposit_tier_${tierPreview.tier.id}`;
+      const tierRule = await db.bonusRule.findUnique({ where: { code: tierCode } });
+      if (tierRule && tierRule.status === 'active') {
+        resolvedPromotionRule = tierRule;
+      }
+    }
 
     const deposit = await db.deposit.create({
       data: {
@@ -98,8 +118,8 @@ export async function POST(req: NextRequest) {
         status: 'pending',
         bonusPercentage: preview.bonusPercentage > 0 ? new Prisma.Decimal(preview.bonusPercentage) : null,
         bonusAmount: preview.bonusAmount > 0 ? new Prisma.Decimal(preview.bonusAmount) : null,
-        promotionRuleId: promotionRule?.id ?? null,
-        promotionCode: promotionRule?.code ?? parsed.data.promoCode ?? null,
+        promotionRuleId: resolvedPromotionRule?.id ?? null,
+        promotionCode: resolvedPromotionRule?.code ?? parsed.data.promoCode ?? null,
       },
     });
 
@@ -116,8 +136,8 @@ export async function POST(req: NextRequest) {
         promisedBonusPercentage: preview.bonusPercentage,
         promisedBonusAmount: preview.bonusAmount,
         promisedTotalCredit: preview.totalCredit,
-        promotionRuleId: promotionRule?.id ?? null,
-        promotionCode: promotionRule?.code ?? parsed.data.promoCode ?? null,
+        promotionRuleId: resolvedPromotionRule?.id ?? null,
+        promotionCode: resolvedPromotionRule?.code ?? parsed.data.promoCode ?? null,
       },
     });
 

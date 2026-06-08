@@ -11,6 +11,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { ArrowDownToLine, ArrowUpToLine, ReceiptText, RefreshCw, Sparkles, UserPlus, LogIn } from 'lucide-react';
 import { useT, useLang } from '@/lib/i18n/context';
 import { ROUTES } from '@/lib/constants/routes';
@@ -28,6 +29,7 @@ const REFRESH_EVENT = 'pasha9:wallet-refresh';
 export function WalletStrip() {
   const t = useT();
   const { lang } = useLang();
+  const router = useRouter();
   const [me, setMe] = useState<Me | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -167,9 +169,11 @@ export function WalletStrip() {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-2 md:flex md:gap-2">
+        <div className="relative z-10 grid grid-cols-3 gap-2 md:flex md:gap-2">
           <Link
             href={ROUTES.deposit}
+            prefetch={false}
+            onClick={(e) => { e.preventDefault(); router.push(ROUTES.deposit); }}
             className="btn-yellow inline-flex h-11 items-center justify-center rounded-xl px-3 text-[13px] shadow-[0_8px_16px_-6px_rgba(245,180,0,0.65)]"
           >
             <ArrowDownToLine className="mr-1.5 h-4 w-4" />
@@ -177,6 +181,8 @@ export function WalletStrip() {
           </Link>
           <Link
             href={ROUTES.withdraw}
+            prefetch={false}
+            onClick={(e) => { e.preventDefault(); router.push(ROUTES.withdraw); }}
             className="inline-flex h-11 items-center justify-center rounded-xl border border-white/20 bg-white/[0.07] px-3 text-[13px] font-semibold text-white backdrop-blur transition hover:border-white/40 hover:bg-white/[0.13]"
           >
             <ArrowUpToLine className="mr-1.5 h-4 w-4 text-brand-yellow-400" />
@@ -184,6 +190,8 @@ export function WalletStrip() {
           </Link>
           <Link
             href={ROUTES.transactions}
+            prefetch={false}
+            onClick={(e) => { e.preventDefault(); router.push(ROUTES.transactions); }}
             className="inline-flex h-11 items-center justify-center rounded-xl border border-white/20 bg-white/[0.07] px-3 text-[13px] font-semibold text-white backdrop-blur transition hover:border-white/40 hover:bg-white/[0.13]"
           >
             <ReceiptText className="mr-1.5 h-4 w-4 text-brand-yellow-400" />

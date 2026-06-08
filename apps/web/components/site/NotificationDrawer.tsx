@@ -8,10 +8,11 @@
 
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
-import { Bell, X, Megaphone, CheckCircle2 } from 'lucide-react';
+import { Bell, X, Megaphone, CheckCircle2, BellRing, BellOff } from 'lucide-react';
 import { useLang } from '@/lib/i18n/context';
+import { checkPushSupport, disableDevicePush, enableDevicePush, getNotificationPermission } from '@/lib/push/client';
 
 interface FeedItem {
   recipientId: string;
@@ -22,6 +23,7 @@ interface FeedItem {
   bodyBn: string | null;
   linkUrl: string | null;
   imageUrl: string | null;
+  soundUrl: string | null;
   priority: string;
   readAt: string | null;
   createdAt: string;
@@ -47,6 +49,34 @@ export function NotificationDrawer({ open, onOpenChange, isLoggedIn }: Props) {
   const [items, setItems] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pushSupport, setPushSupport] = useState<'unknown' | ReturnType<typeof checkPushSupport>>('unknown');
+  const [permission, setPermission] = useState<NotificationPermission | 'unknown'>('unknown');
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushFlash, setPushFlash] = useState<string | null>(null);
+  const lastNotificationId = useRef<string | null>(null);
+
+  useEffect(() => {
+    setPushSupport(checkPushSupport());
+    setPermission(getNotificationPermission());
+  }, []);
+
+  // Play the configured sound (if any) for the newest in-app notification
+  // received while the drawer is open. Browsers gate Audio.play() on a
+  // prior user gesture; the very first time the drawer opens after a
+  // page load may stay silent, which is the documented platform
+  // behaviour rather than a fault.
+  useEffect(() => {
+    if (!items.length) return;
+    const top = items[0];
+    if (!top || !top.soundUrl) return;
+    if (lastNotificationId.current === top.id) return;
+    lastNotificationId.current = top.id;
+    try {
+      const audio = new Audio(top.soundUrl);
+      audio.volume = 0.8;
+      audio.play().catch(() => { /* autoplay blocked is expected on cold pages */ });
+    } catch { /* swallow */ }
+  }, [items]);
 
   const fetchFeed = useCallback(async () => {
     if (!isLoggedIn) {
@@ -134,6 +164,61 @@ export function NotificationDrawer({ open, onOpenChange, isLoggedIn }: Props) {
               </Dialog.Close>
             </div>
           </div>
+          {isLoggedIn && pushSupport === 'supported' ? (
+            <div className="flex items-center justify-between gap-2 border-b border-brand-divider bg-brand-paper px-4 py-2">
+              <div className="min-w-0">
+                <p className="text-[12px] font-semibold text-brand-ink">
+                  {lang === 'bn' ? 'ডিভাইস নোটিফিকেশন' : 'Device notifications'}
+                </p>
+                <p className="truncate text-[10px] text-brand-inkMute">
+                  {permission === 'granted'
+                    ? (lang === 'bn' ? 'সক্রিয়। ব্রাউজার ব্যাকগ্রাউন্ডে থাকলেও পাবেন।' : 'On. You will receive these even when the tab is in the background.')
+                    : permission === 'denied'
+                      ? (lang === 'bn' ? 'ব্রাউজার থেকে অনুমতি দিন।' : 'Browser blocked notifications. Allow in browser settings.')
+                      : (lang === 'bn' ? 'সক্রিয় করতে ট্যাপ করুন।' : 'Tap to enable browser/device notifications.')}
+                </p>
+                {pushFlash ? <p className="mt-0.5 truncate text-[10px] text-brand-yellow-700">{pushFlash}</p> : null}
+              </div>
+              <button
+                type="button"
+                disabled={pushBusy}
+                onClick={async () => {
+                  setPushBusy(true);
+                  setPushFlash(null);
+                  try {
+                    if (permission === 'granted') {
+                      await disableDevicePush();
+                      setPermission('default');
+                      setPushFlash(lang === 'bn' ? 'বন্ধ করা হয়েছে।' : 'Disabled.');
+                    } else {
+                      const result = await enableDevicePush();
+                      if (result.ok) {
+                        setPermission('granted');
+                        setPushFlash(lang === 'bn' ? 'সক্রিয় হয়েছে।' : 'Enabled.');
+                      } else {
+                        setPushFlash(result.message);
+                      }
+                    }
+                  } finally {
+                    setPushBusy(false);
+                  }
+                }}
+                className={`inline-flex h-8 items-center gap-1 rounded-lg border px-3 text-[11px] font-bold uppercase tracking-wider transition ${permission === 'granted' ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-brand-yellow-500 bg-brand-yellow-50 text-brand-yellow-700'}`}
+              >
+                {permission === 'granted' ? (
+                  <>
+                    <BellOff className="h-3 w-3" />
+                    {lang === 'bn' ? 'বন্ধ' : 'Disable'}
+                  </>
+                ) : (
+                  <>
+                    <BellRing className="h-3 w-3" />
+                    {lang === 'bn' ? 'সক্রিয় করুন' : 'Enable'}
+                  </>
+                )}
+              </button>
+            </div>
+          ) : null}
           <div className="max-h-[60vh] overflow-y-auto">
             {!isLoggedIn ? (
               <EmptyHero

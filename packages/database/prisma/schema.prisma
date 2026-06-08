@@ -234,6 +234,7 @@ model User {
   promoCodeRedemptions PromoCodeRedemption[]
   notificationsCreated Notification[] @relation("NotificationsCreated")
   notificationsReceived NotificationRecipient[]
+  pushSubscriptions    PushSubscription[]
   campaignsCreated    Campaign[] @relation("CampaignsCreated")
   campaignRecipients  CampaignRecipient[]
   cashbackPayouts     CashbackPayout[]
@@ -2254,6 +2255,32 @@ model Notification {
 
   @@index([createdAt])
   @@index([status, createdAt])
+}
+
+// Browser push subscription registered via the service worker after
+// the player taps "Enable device notifications". One row per
+// (user, endpoint) pair so a single user can receive push on multiple
+// devices. Inactive rows are kept in the table for diagnostic
+// purposes; the dispatcher only sends to isActive=true rows and flips
+// the flag off when the provider returns 404/410 (expired/unsubscribed).
+model PushSubscription {
+  id              String   @id @default(cuid())
+  userId          String
+  endpoint        String   @unique
+  p256dh          String
+  auth            String
+  userAgent       String?
+  deviceLabel     String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  lastSeenAt      DateTime @default(now())
+  failedAt        DateTime?
+  failureReason   String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isActive])
 }
 
 model NotificationRecipient {
