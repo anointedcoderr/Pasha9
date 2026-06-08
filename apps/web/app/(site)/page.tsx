@@ -91,7 +91,7 @@ export default function HomePage() {
   const blockSections = blocks.map(blockToSection);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5 md:space-y-6">
       <HeroSlider />
 
       <WalletStrip />

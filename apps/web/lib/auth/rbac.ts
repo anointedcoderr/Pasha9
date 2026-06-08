@@ -2,7 +2,7 @@
 // Role-based access control helpers. Used inside route handlers and server components.
 
 import { db } from '@/lib/db/client';
-import { getSessionClaims } from './session';
+import { getOrRefreshSessionClaims, getSessionClaims } from './session';
 import type { AccessClaims } from './jwt';
 
 const STAFF_ROLES = new Set(['super_admin', 'admin', 'staff']);
@@ -19,7 +19,14 @@ export async function getCurrentSession(): Promise<AccessClaims | null> {
 }
 
 export async function requireUser(): Promise<AccessClaims> {
-  const s = await getSessionClaims();
+  // Transparent refresh: when the short access cookie has expired but
+  // the long-lived refresh cookie still resolves to a valid DB
+  // session, mint a fresh access cookie before returning. Without
+  // this every protected endpoint flips to 401 the instant the 24h
+  // access TTL elapses, which the public homepage WalletStrip then
+  // interprets as "user logged out" and renders the guest auth card.
+  // This was the production logout-on-Withdraw report.
+  const s = await getOrRefreshSessionClaims();
   if (!s) throw new AuthError('UNAUTHENTICATED');
   return s;
 }

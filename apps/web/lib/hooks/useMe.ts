@@ -46,12 +46,20 @@ export function useMe(): UseMeResult {
 
   const load = useCallback(() => {
     fetch('/api/auth/me', { cache: 'no-store', credentials: 'include' })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        setMe((data?.user as MeUser | undefined) ?? null);
+      .then(async (r) => {
+        if (r.ok) {
+          const data = await r.json().catch(() => null);
+          setMe((data?.user as MeUser | undefined) ?? null);
+        } else if (r.status === 401) {
+          // Only 401 from the auth endpoint itself is treated as a
+          // definitive logout. 5xx / 408 / network blips preserve the
+          // last known me so a transient hiccup never flips the UI
+          // into the guest state.
+          setMe(null);
+        }
       })
       .catch(() => {
-        setMe(null);
+        /* preserve last known me on network errors */
       })
       .finally(() => setLoading(false));
   }, []);

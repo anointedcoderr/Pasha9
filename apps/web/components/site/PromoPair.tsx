@@ -116,20 +116,21 @@ function PromoCard({
         // eslint-disable-next-line @next/next/no-img-element
         <img src={imageUrl} alt="" aria-hidden className="absolute inset-0 h-full w-full object-cover opacity-55" />
       ) : (
-        <div aria-hidden className="absolute inset-0 opacity-90">{art}</div>
+        <div aria-hidden className="pointer-events-none absolute inset-0 opacity-90">{art}</div>
       )}
-      <div className="relative grid grid-cols-[1fr_auto] items-center gap-3 px-5 py-6 md:px-7 md:py-8">
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-wider text-brand-yellow-400">{kicker}</p>
-          <h3 className="mt-1.5 text-xl font-extrabold leading-tight md:text-2xl">{title}</h3>
-          <p className="mt-2 max-w-sm text-sm text-white/80">{body}</p>
-          <Link
-            href={href}
-            className="btn-yellow mt-4 inline-flex h-10 items-center gap-2 rounded-lg px-4 text-sm font-bold text-brand-ink"
-          >
-            {cta} <ArrowRight className="h-4 w-4" />
-          </Link>
-        </div>
+      {/* Right-side fade so the SVG art / image never visually
+          collides with the headline at narrow widths. */}
+      <span aria-hidden className="pointer-events-none absolute inset-y-0 right-0 w-2/5 bg-gradient-to-l from-black/45 to-transparent md:w-1/2" />
+      <div className="relative flex min-h-[160px] flex-col justify-center gap-2 px-4 py-5 md:px-7 md:py-8">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-brand-yellow-400 [text-shadow:0_1px_4px_rgba(0,0,0,0.85)] md:text-[11px]">{kicker}</p>
+        <h3 className="max-w-[18ch] text-lg font-extrabold leading-snug [text-shadow:0_1px_8px_rgba(0,0,0,0.85)] md:text-2xl">{title}</h3>
+        <p className="max-w-[28ch] text-xs leading-relaxed text-white/85 [text-shadow:0_1px_4px_rgba(0,0,0,0.75)] md:max-w-sm md:text-sm">{body}</p>
+        <Link
+          href={href}
+          className="btn-yellow mt-2 inline-flex h-10 w-max items-center gap-2 rounded-lg px-4 text-sm font-bold text-brand-ink"
+        >
+          {cta} <ArrowRight className="h-4 w-4" />
+        </Link>
       </div>
     </article>
   );

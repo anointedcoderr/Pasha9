@@ -43,15 +43,23 @@ export function WalletStrip() {
   const load = useCallback(async () => {
     setRefreshing(true);
     try {
-      const res = await fetch('/api/auth/me', { cache: 'no-store' });
+      // credentials: 'include' is explicit so the auth cookies travel
+      // on every probe even when the wallet card is mounted inside an
+      // iframe or service-worker proxied context. The 401-only logout
+      // rule below ensures a network blip or 5xx never flips a real
+      // session into the guest card.
+      const res = await fetch('/api/auth/me', { cache: 'no-store', credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
         setMe((data?.user as Me) ?? null);
-      } else {
+      } else if (res.status === 401) {
+        // Definitive unauthenticated response from the auth endpoint.
+        // Any other non-OK status (5xx, network noise) is transient
+        // and must not clear the wallet card to the guest state.
         setMe(null);
       }
     } catch {
-      /* ignore */
+      /* preserve last known me on transient network errors */
     } finally {
       setRefreshing(false);
       setLoaded(true);

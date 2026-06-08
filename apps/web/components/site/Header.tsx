@@ -92,22 +92,30 @@ export function Header() {
   }, []);
 
   const loadMe = () => {
-    fetch('/api/auth/me', { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (data?.user) setMe(data.user as Me);
-        else setMe(null);
+    fetch('/api/auth/me', { cache: 'no-store', credentials: 'include' })
+      .then(async (r) => {
+        if (r.ok) {
+          const data = await r.json().catch(() => null);
+          if (data?.user) setMe(data.user as Me);
+          else setMe(null);
+        } else if (r.status === 401) {
+          setMe(null);
+        }
+        // Anything else (5xx, network blip) preserves the last known me.
       })
       .catch(() => {});
   };
 
   useEffect(() => {
     let alive = true;
-    fetch('/api/auth/me', { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
+    fetch('/api/auth/me', { cache: 'no-store', credentials: 'include' })
+      .then(async (r) => {
         if (!alive) return;
-        if (data?.user) setMe(data.user as Me);
+        if (r.ok) {
+          const data = await r.json().catch(() => null);
+          if (data?.user) setMe(data.user as Me);
+        }
+        // 401 leaves me=null (initial); 5xx/network preserves it too.
         setAuthLoaded(true);
       })
       .catch(() => { if (alive) setAuthLoaded(true); });
