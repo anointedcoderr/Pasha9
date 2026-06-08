@@ -29,6 +29,8 @@ interface SectionRow {
   position: number;
   isVisible: boolean;
   layout: string | null;
+  meta?: { iconImageUrl?: string | null } | null;
+  iconImageUrl?: string | null;
 }
 
 interface FeaturedRow {
@@ -526,6 +528,10 @@ function SectionEditorRow({ row, saving, onPatch }: { row: SectionRow; saving: b
   const [subtitleEn, setSubtitleEn] = useState(row.subtitleEn ?? '');
   const [subtitleBn, setSubtitleBn] = useState(row.subtitleBn ?? '');
   const [position, setPosition] = useState(String(row.position));
+  const initialIcon = (row.meta?.iconImageUrl ?? row.iconImageUrl ?? '') || '';
+  const [iconImageUrl, setIconImageUrl] = useState<string>(initialIcon);
+  const [iconUploading, setIconUploading] = useState(false);
+  const [iconError, setIconError] = useState<string | null>(null);
 
   useEffect(() => {
     setTitleEn(row.titleEn);
@@ -533,14 +539,34 @@ function SectionEditorRow({ row, saving, onPatch }: { row: SectionRow; saving: b
     setSubtitleEn(row.subtitleEn ?? '');
     setSubtitleBn(row.subtitleBn ?? '');
     setPosition(String(row.position));
-  }, [row.id, row.titleEn, row.titleBn, row.subtitleEn, row.subtitleBn, row.position]);
+    setIconImageUrl((row.meta?.iconImageUrl ?? row.iconImageUrl ?? '') || '');
+  }, [row.id, row.titleEn, row.titleBn, row.subtitleEn, row.subtitleBn, row.position, row.meta?.iconImageUrl, row.iconImageUrl]);
+
+  const uploadIcon = async (file: File) => {
+    setIconError(null);
+    setIconUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('category', 'categories');
+      const res = await fetch('/api/admin/uploads', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message ?? data?.code ?? 'Upload failed');
+      setIconImageUrl(data.url as string);
+    } catch (err) {
+      setIconError(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setIconUploading(false);
+    }
+  };
 
   const dirty = (
     titleEn !== row.titleEn ||
     (titleBn || null) !== (row.titleBn ?? null) ||
     (subtitleEn || null) !== (row.subtitleEn ?? null) ||
     (subtitleBn || null) !== (row.subtitleBn ?? null) ||
-    Number(position) !== row.position
+    Number(position) !== row.position ||
+    iconImageUrl !== initialIcon
   );
 
   return (
@@ -585,6 +611,47 @@ function SectionEditorRow({ row, saving, onPatch }: { row: SectionRow; saving: b
           <input type="number" value={position} onChange={(e) => setPosition(e.target.value)} className={inputCls} />
         </label>
       </div>
+      <div className="mt-3">
+        <span className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">Section icon (optional)</span>
+        <div className="mt-1 flex flex-col gap-2 sm:flex-row sm:items-stretch">
+          <div className="flex h-[72px] w-full items-center justify-center overflow-hidden rounded-lg border border-brand-divider bg-brand-paper sm:w-[88px]">
+            {iconImageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={iconImageUrl} alt="" className="h-14 w-14 object-contain" />
+            ) : (
+              <p className="text-[10px] text-brand-inkMute">No icon</p>
+            )}
+          </div>
+          <div className="flex flex-1 flex-col gap-2">
+            <input value={iconImageUrl} onChange={(e) => setIconImageUrl(e.target.value)} placeholder="/uploads/categories/..." className={inputCls} />
+            <div className="flex flex-wrap gap-2">
+              <label className="inline-flex h-9 cursor-pointer items-center rounded-md border border-brand-divider bg-brand-paper px-3 text-xs font-semibold text-brand-ink hover:border-brand-yellow-500">
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) uploadIcon(f);
+                  }}
+                />
+                {iconUploading ? 'Uploading...' : iconImageUrl ? 'Replace' : 'Upload'}
+              </label>
+              {iconImageUrl ? (
+                <button
+                  type="button"
+                  onClick={() => setIconImageUrl('')}
+                  className="inline-flex h-9 items-center rounded-md border border-brand-divider bg-brand-paper px-3 text-xs font-semibold text-rose-600 hover:border-rose-400"
+                >
+                  Remove
+                </button>
+              ) : null}
+            </div>
+            {iconError ? <p className="text-xs text-rose-600">{iconError}</p> : null}
+            <p className="text-[10px] text-brand-inkMute">PNG, JPG, WEBP or SVG. Falls back to the built-in icon when empty.</p>
+          </div>
+        </div>
+      </div>
       <div className="mt-3 flex justify-end">
         <Button
           variant="gold"
@@ -597,6 +664,7 @@ function SectionEditorRow({ row, saving, onPatch }: { row: SectionRow; saving: b
             subtitleEn: subtitleEn.trim() ? subtitleEn : null,
             subtitleBn: subtitleBn.trim() ? subtitleBn : null,
             position: Number(position) || 0,
+            iconImageUrl: iconImageUrl.trim() ? iconImageUrl.trim() : null,
           })}
         >
           Save

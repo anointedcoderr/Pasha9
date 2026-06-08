@@ -234,6 +234,9 @@ model User {
   promoCodeRedemptions PromoCodeRedemption[]
   notificationsCreated Notification[] @relation("NotificationsCreated")
   notificationsReceived NotificationRecipient[]
+  campaignsCreated    Campaign[] @relation("CampaignsCreated")
+  campaignRecipients  CampaignRecipient[]
+  cashbackPayouts     CashbackPayout[]
   rewardClaims        RewardClaim[]
   dailyCheckIns       DailyCheckInLog[]
   spinResults         SpinResult[]
@@ -494,6 +497,7 @@ model BonusRule {
   userBonuses UserBonus[]
   promotionClaims PromotionClaim[]
   promoCodes  PromoCode[]
+  cashbackCampaigns CashbackCampaign[]
 
   @@index([promotionType, status])
 }
@@ -2123,6 +2127,33 @@ model PromotionBanner {
   @@index([isActive, sortOrder])
 }
 
+// Operator-curated homepage video. Source is either a YouTube URL
+// (parsed to videoId so the public carousel can render the standard
+// thumbnail + embed) or a directly uploaded mp4/webm served from
+// /uploads/videos. The carousel renders 1+ active rows ordered by
+// sortOrder; an empty deck falls back to whatever the homepage video
+// section rendered before this model existed. All fields are
+// additive; nothing else in the schema references this table.
+model HomepageVideo {
+  id             String   @id @default(cuid())
+  titleEn        String
+  titleBn        String?
+  subtitleEn     String?
+  subtitleBn     String?
+  sourceType     String   @default("youtube")
+  youtubeUrl     String?
+  youtubeVideoId String?
+  videoUrl       String?
+  thumbnailUrl   String?
+  ctaUrl         String?
+  sortOrder      Int      @default(0)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
+}
+
 // Single-use or multi-use promo code that grants a configured payout
 // (bonus grant, main balance credit, locked freebet) on redemption.
 // The redeem service runs in a Prisma transaction, writes a wallet
@@ -2239,6 +2270,104 @@ model NotificationRecipient {
   @@unique([notificationId, userId])
   @@index([userId, readAt])
   @@index([userId, createdAt])
+}
+
+// Bulk SMS or Email campaign. Created by an admin from
+// /admin/campaigns. The dispatch is provider-gated: when SMS or SMTP
+// provider keys are absent the row stays in 'provider_setup_required'
+// status. No CampaignRecipient is ever marked sent unless the
+// provider returns ok. The admin can still build out the message body,
+// audience and recipient list; pressing Send only writes the
+// scheduled-time and provider attempt, never a fake success.
+model Campaign {
+  id             String   @id @default(cuid())
+  channel        String
+  title          String
+  subject        String?
+  body           String   @db.Text
+  audience       String   @default("all")
+  status         String   @default("draft")
+  providerStatus String?
+  recipientCount Int      @default(0)
+  sentCount      Int      @default(0)
+  failedCount    Int      @default(0)
+  createdById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  sentAt         DateTime?
+
+  createdBy User?               @relation("CampaignsCreated", fields: [createdById], references: [id])
+  recipients CampaignRecipient[]
+
+  @@index([channel, status])
+  @@index([createdAt])
+}
+
+model CampaignRecipient {
+  id                String   @id @default(cuid())
+  campaignId        String
+  userId            String?
+  phone             String?
+  email             String?
+  status            String   @default("queued")
+  providerMessageId String?
+  error             String?
+  sentAt            DateTime?
+  createdAt         DateTime @default(now())
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user     User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([campaignId, status])
+  @@index([userId, createdAt])
+}
+
+// Operator-defined cashback program. Each campaign captures the
+// formula (net_loss or wager_amount), the percentage, the cap and the
+// turnover lock applied to credited cashback. CashbackPayout records
+// every credit so the same campaign + user + period combination cannot
+// be double-paid; idempotencyKey is unique by construction.
+model CashbackCampaign {
+  id           String   @id @default(cuid())
+  nameEn       String
+  nameBn       String?
+  source       String   @default("net_loss")
+  percentage   Decimal  @default(0) @db.Decimal(5, 2)
+  maxCashback  Decimal  @default(0) @db.Decimal(14, 2)
+  turnoverX    Decimal  @default(0) @db.Decimal(6, 2)
+  cadence      String   @default("weekly")
+  startsAt     DateTime?
+  endsAt       DateTime?
+  isActive     Boolean  @default(true)
+  bonusRuleId  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  bonusRule BonusRule?       @relation(fields: [bonusRuleId], references: [id])
+  payouts   CashbackPayout[]
+
+  @@index([isActive, endsAt])
+}
+
+model CashbackPayout {
+  id             String   @id @default(cuid())
+  campaignId     String
+  userId         String
+  periodKey      String
+  baseAmount     Decimal  @db.Decimal(14, 2)
+  cashbackAmount Decimal  @db.Decimal(14, 2)
+  walletTxId     String?
+  bonusGrantId   String?
+  status         String   @default("granted")
+  idempotencyKey String   @unique
+  createdAt      DateTime @default(now())
+
+  campaign CashbackCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, userId, periodKey])
+  @@index([userId, createdAt])
+  @@index([campaignId, createdAt])
 }
 
 // Operator-managed social-media link directory rendered in the public

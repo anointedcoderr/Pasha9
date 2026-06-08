@@ -22,6 +22,7 @@ import {
   Bell,
   MessageSquare,
   TrendingUp,
+  PlaySquare,
 } from 'lucide-react';
 
 const LIVE = [
@@ -30,7 +31,10 @@ const LIVE = [
   { href: '/admin/promo-text', icon: Type, title: 'Promo Marquee Text', body: 'Rolling promo strip below the hero. Multi-line, bn / en aware.' },
   { href: '/admin/bonuses', icon: Gift, title: 'Bonus Rules', body: 'Define percent / fixed bonus rules with min deposit, max bonus and turnover requirement.' },
   { href: '/admin/promo-codes', icon: Tag, title: 'Promo Codes', body: 'Single-use or multi-use codes that grant a configured payout. Audit redemptions in-page.' },
+  { href: '/admin/campaigns', icon: Megaphone, title: 'SMS and Email Campaigns', body: 'Draft, audience-target and dispatch SMS or email blasts. SMS uses the configured provider; email needs SMTP env vars.' },
+  { href: '/admin/cashback', icon: TrendingUp, title: 'Cashback Campaigns', body: 'Percentage cashback on net loss or wager, computed from the real Transaction ledger. Manual run, transactional credit, idempotent.' },
   { href: '/admin/in-app-notifications', icon: Bell, title: 'In-app Notifications', body: 'Broadcast a notification to all, active or selected users. Renders inside the player bell drawer.' },
+  { href: '/admin/homepage-videos', icon: PlaySquare, title: 'Homepage Videos', body: 'Brand ambassador and promo video carousel. YouTube URL or direct upload, bilingual title, lazy-loaded.' },
   { href: '/admin/affiliate', icon: Briefcase, title: 'Affiliate Program', body: 'Approve applications, manage commission tiers, review the affiliate roster.' },
   { href: '/admin/referrals', icon: Network, title: 'Referral System', body: 'Three-level referral chain reporting (data live; commission accrual M2).' },
 ];
@@ -40,13 +44,13 @@ const LIVE = [
 //   - Push / SMS / Email: provider keys (VAPID / SMS / SMTP) must be
 //     supplied before any send path can complete. The runtime queues a
 //     campaign as draft until keys are configured.
-// Web push (VAPID) and outbound SMS / Email blasts still need
-// provider credentials before they can dispatch. Cashback engine is
-// scheduled in a follow-up iteration.
+// Web push (VAPID) is the remaining provider-gated capability. SMS
+// and email campaigns ship today; SMS dispatches via the existing
+// /admin/notifications provider, email needs SMTP env vars before any
+// real send completes (the campaign engine keeps it queued otherwise).
 const PENDING = [
-  { icon: Bell, title: 'Web push (VAPID)', body: 'In-app notifications now ship via /admin/in-app-notifications. Browser push requires VAPID keys and a service worker, configured separately.', tone: 'warn' as const, chip: 'Provider setup required' },
-  { icon: MessageSquare, title: 'SMS / Email blasts', body: 'Campaign builder and send queue ship in a follow-up iteration; SMS gateway and SMTP credentials are required before any send completes.', tone: 'warn' as const, chip: 'Provider setup required' },
-  { icon: TrendingUp, title: 'Cashback campaigns', body: 'Cashback engine credits a percent of net loss to bonus balance against the existing Transaction ledger. Scheduled in a follow-up iteration.', tone: 'neutral' as const, chip: 'Scheduled' },
+  { icon: Bell, title: 'Browser push (VAPID)', body: 'In-app notifications ship via /admin/in-app-notifications. Browser push requires VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY and VAPID_SUBJECT plus a service worker and adapter.', tone: 'warn' as const, chip: 'Provider setup required' },
+  { icon: MessageSquare, title: 'Email SMTP adapter', body: 'Email campaign builder ships at /admin/campaigns. Drafts persist and the queue stays as provider_setup_required until EMAIL_SMTP_HOST, EMAIL_SMTP_PORT, EMAIL_SMTP_USER, EMAIL_SMTP_PASSWORD and EMAIL_FROM_ADDRESS are populated and an adapter is added.', tone: 'warn' as const, chip: 'Provider setup required' },
 ];
 
 export default function AdminMarketingPage() {

@@ -57,6 +57,10 @@ export interface HomeSection {
   isVisible: boolean;
   layout: string | null;
   iconKey: string;
+  // Operator-uploaded custom icon image. Stored in PublicSection.meta
+  // so the field is additive (no schema change). When set, the public
+  // strip renders this image instead of the lucide icon for iconKey.
+  iconImageUrl: string | null;
   href: string;
   games: HomeSectionGame[];
 }
@@ -320,9 +324,21 @@ function syntheticHotSection(games: HomeSectionGame[]): HomeSection {
     isVisible: true,
     layout: 'strip',
     iconKey: ICON_KEY_BY_SECTION.homepage_hot,
+    iconImageUrl: null,
     href: HREF_BY_SECTION.homepage_hot,
     games,
   };
+}
+
+// Pull the admin-uploaded iconImageUrl out of PublicSection.meta. The
+// meta column is free-form Json; the value is stored as a plain
+// /uploads/categories/<file> URL or any absolute https URL.
+function extractIconImageUrl(meta: unknown): string | null {
+  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return null;
+  const v = (meta as Record<string, unknown>).iconImageUrl;
+  if (typeof v !== 'string') return null;
+  const trimmed = v.trim();
+  return trimmed ? trimmed : null;
 }
 
 async function loadExternalByCategoryMatch(needles: string[]): Promise<HomeSectionGame[]> {
@@ -452,6 +468,7 @@ export async function buildHomeSections(): Promise<HomeSectionsBundle> {
       isVisible: s.isVisible,
       layout: s.layout,
       iconKey: ICON_KEY_BY_SECTION[s.key] ?? 'sparkles',
+      iconImageUrl: extractIconImageUrl(s.meta),
       href: HREF_BY_SECTION[s.key] ?? '/games',
       games,
     });

@@ -22,6 +22,10 @@ const schema = z.object({
   subtitleBn: z.string().trim().max(400).nullable().optional(),
   isVisible: z.boolean().optional(),
   position: z.number().int().min(0).max(9999).optional(),
+  // Operator-uploaded section icon. Stored inside the existing meta
+  // JSON column so the change is additive (no schema migration). An
+  // empty string clears the override; null is treated the same.
+  iconImageUrl: z.string().trim().max(600).nullable().optional(),
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
@@ -38,9 +42,24 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (!current) return jsonError(404, 'NOT_FOUND');
     if (current.group !== 'homepage') return jsonError(403, 'WRONG_GROUP', 'This endpoint only edits homepage sections.');
 
+    const { iconImageUrl, ...rest } = parsed.data;
+    const nextMeta = (() => {
+      if (iconImageUrl === undefined) return undefined;
+      const base = (current.meta && typeof current.meta === 'object' && !Array.isArray(current.meta))
+        ? { ...(current.meta as Record<string, unknown>) }
+        : {};
+      const trimmed = iconImageUrl?.trim() ?? '';
+      if (trimmed) base.iconImageUrl = trimmed;
+      else delete base.iconImageUrl;
+      return base;
+    })();
+
     const updated = await db.publicSection.update({
       where: { id: params.id },
-      data: parsed.data,
+      data: {
+        ...rest,
+        ...(nextMeta !== undefined ? { meta: nextMeta as object } : {}),
+      },
     });
 
     await recordActivity({

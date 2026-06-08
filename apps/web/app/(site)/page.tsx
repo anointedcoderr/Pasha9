@@ -20,6 +20,7 @@ import { JackpotStrip } from '@/components/site/JackpotStrip';
 import { WalletStrip } from '@/components/site/WalletStrip';
 import { CategorySlider } from '@/components/site/CategorySlider';
 import { AmbassadorVideoSection } from '@/components/site/AmbassadorVideoSection';
+import { HomepageVideoCarousel, type VideoRow } from '@/components/site/HomepageVideoCarousel';
 import { PromoPair } from '@/components/site/PromoPair';
 import { AppDownloadSection } from '@/components/site/AppDownloadSection';
 import { HomeDbGameSection } from '@/components/site/HomeDbGameSection';
@@ -50,6 +51,7 @@ function blockToSection(b: HomeBlock): HomeSection {
     isVisible: true,
     layout: b.layout,
     iconKey,
+    iconImageUrl: null,
     href: b.href,
     games: b.games,
   };
@@ -58,6 +60,7 @@ function blockToSection(b: HomeBlock): HomeSection {
 export default function HomePage() {
   const [sections, setSections] = useState<HomeSection[] | null>(null);
   const [blocks, setBlocks] = useState<HomeBlock[]>([]);
+  const [videos, setVideos] = useState<VideoRow[]>([]);
 
   useEffect(() => {
     let alive = true;
@@ -69,6 +72,15 @@ export default function HomePage() {
         setBlocks(Array.isArray(j?.blocks) ? (j.blocks as HomeBlock[]) : []);
       })
       .catch(() => { if (alive) { setSections([]); setBlocks([]); } });
+
+    fetch('/api/content/homepage-videos', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!alive) return;
+        setVideos(Array.isArray(j?.videos) ? (j.videos as VideoRow[]) : []);
+      })
+      .catch(() => { if (alive) setVideos([]); });
+
     return () => { alive = false; };
   }, []);
 
@@ -107,7 +119,13 @@ export default function HomePage() {
         <HomeDbGameSection key={s.id} section={s} />
       ))}
 
-      {ambassadorSection?.isVisible !== false ? <AmbassadorVideoSection /> : null}
+      {ambassadorSection?.isVisible !== false ? (
+        videos.length > 0 ? (
+          <HomepageVideoCarousel videos={videos} />
+        ) : (
+          <AmbassadorVideoSection />
+        )
+      ) : null}
 
       {stripSections.slice(3).map((s) => (
         <HomeDbGameSection key={s.id} section={s} />
