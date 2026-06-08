@@ -2,15 +2,21 @@
 'use client';
 
 import { useEffect, useState, type ReactNode } from 'react';
+import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { ShieldAlert } from 'lucide-react';
 import { AdminSidebar } from '@/components/admin/AdminSidebar';
 import { AdminMobileDrawer } from '@/components/admin/AdminMobileDrawer';
 import { AdminTopbar } from '@/components/admin/AdminTopbar';
 import { TooltipProvider } from '@/components/ui/Tooltip';
+import { useAdminPermissions } from '@/lib/auth/use-admin-permissions';
+import { canAccessAdminPath } from '@/lib/auth/admin-permission-map';
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const { loaded, role, permissions } = useAdminPermissions();
+  const accessible = !loaded ? true : canAccessAdminPath(pathname ?? '/admin', role, permissions);
 
   // Apply the admin light theme on every admin route (including the login
   // standalone page). The CSS body.theme-admin block in globals.css recolors
@@ -52,10 +58,30 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <AdminTopbar onMenu={() => setDrawerOpen(true)} />
           <main className="flex-1 overflow-y-auto overscroll-contain px-4 py-6 md:px-8">
-            {children}
+            {accessible ? children : <AdminForbidden />}
           </main>
         </div>
       </div>
     </TooltipProvider>
+  );
+}
+
+function AdminForbidden() {
+  return (
+    <div className="mx-auto flex max-w-md flex-col items-center justify-center rounded-2xl border border-amber-200 bg-amber-50 p-8 text-center">
+      <span className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+        <ShieldAlert className="h-6 w-6" />
+      </span>
+      <h2 className="mt-4 text-base font-extrabold text-brand-ink">Access denied</h2>
+      <p className="mt-2 text-sm text-brand-inkSoft">
+        Your staff role does not include permission to view this module. Ask a Super Admin to grant access from the Staff page if you need it.
+      </p>
+      <Link
+        href="/admin"
+        className="btn-yellow mt-5 inline-flex h-10 items-center rounded-lg px-4 text-xs font-bold"
+      >
+        Back to dashboard
+      </Link>
+    </div>
   );
 }

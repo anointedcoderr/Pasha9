@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 
 import { db } from '@/lib/db/client';
 import { getOrRefreshSessionClaims } from '@/lib/auth/session';
+import { loadEffectivePermissions } from '@/lib/auth/rbac';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 
 export async function GET() {
@@ -39,5 +40,18 @@ export async function GET() {
 
   if (!user) return jsonError(401, 'UNAUTHENTICATED');
 
-  return jsonOk({ user });
+  // Surface effective permissions for staff users so the admin shell
+  // can filter the sidebar + drawer + page access. Players never get
+  // an admin role so the load is cheap and skipped for them. Super
+  // admins receive an empty array because they bypass every gate.
+  let permissions: string[] = [];
+  if (user.role?.key === 'admin' || user.role?.key === 'staff') {
+    try {
+      permissions = await loadEffectivePermissions(user.id);
+    } catch (err) {
+      console.error('[auth/me] loadEffectivePermissions failed', err);
+    }
+  }
+
+  return jsonOk({ user, permissions });
 }

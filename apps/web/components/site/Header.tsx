@@ -152,7 +152,7 @@ export function Header() {
       <header className="sticky top-0 z-30 border-b border-brand-divider bg-brand-paper shadow-[0_1px_0_rgba(15,17,21,0.04)]">
         {/* Top hairline gold glow */}
         <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-brand-yellow-500/35 to-transparent" />
-        <div className="relative mx-auto flex h-[68px] max-w-page items-center gap-3 px-3 md:px-6">
+        <div className="relative mx-auto flex h-[68px] max-w-page items-center gap-2 px-2 sm:gap-3 sm:px-3 md:px-6">
           <button
             type="button"
             aria-label="Open menu"
@@ -164,7 +164,7 @@ export function Header() {
 
           <Logo tone="dark" size="md" />
 
-          <div className="ml-auto flex min-h-[40px] min-w-[200px] items-center justify-end gap-2">
+          <div className="ml-auto flex min-h-[40px] items-center justify-end gap-1.5 sm:min-w-[200px] sm:gap-2">
             {!authLoaded ? (
               // Skeleton placeholder. Matches the visual footprint of
               // either auth state (guest or authed) so the right

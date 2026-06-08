@@ -51,6 +51,8 @@ import { ROUTES } from '@/lib/constants/routes';
 import { useT } from '@/lib/i18n/context';
 import { BRAND } from '@/lib/constants/brand';
 import { cn } from '@/lib/utils/cn';
+import { useAdminPermissions } from '@/lib/auth/use-admin-permissions';
+import { canAccessAdminMenuItem } from '@/lib/auth/admin-permission-map';
 
 const GROUPS = [
   {
@@ -169,6 +171,20 @@ const GROUPS = [
 export function AdminSidebar() {
   const pathname = usePathname();
   const t = useT();
+  const { loaded, role, permissions } = useAdminPermissions();
+
+  // Until the /api/auth/me probe completes, render NOTHING for staff
+  // users so they cannot see a flash of restricted modules. Super
+  // admins and admins see the full menu immediately (the gate below
+  // returns true for them). The cached fetch resolves in a few ms on
+  // a warm session so this is an imperceptible hiding for a brief
+  // initial paint.
+  const visibleGroups = GROUPS
+    .map((g) => ({
+      ...g,
+      items: g.items.filter(({ key }) => (!loaded ? role === 'super_admin' || role === 'admin' : canAccessAdminMenuItem(key, role, permissions))),
+    }))
+    .filter((g) => g.items.length > 0);
 
   return (
     <aside className="hidden h-[100dvh] w-[260px] shrink-0 flex-col border-r border-brand-divider bg-brand-paper lg:flex">
@@ -178,7 +194,7 @@ export function AdminSidebar() {
       </div>
 
       <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4 font-admin text-sm">
-        {GROUPS.map((g) => (
+        {visibleGroups.map((g) => (
           <div key={g.labelKey} className="mb-5">
             <p className="px-3 pb-2 text-[10px] uppercase tracking-[0.18em] text-brand-inkMute">{t(`admin.${g.labelKey}`)}</p>
             <div className="space-y-1">

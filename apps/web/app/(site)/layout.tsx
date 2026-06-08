@@ -27,7 +27,7 @@ export default function SiteLayout({ children }: { children: ReactNode }) {
   // legacy 100vh / min-h-screen jumps with the URL bar).
   return (
     <TooltipProvider>
-      <div className="flex min-h-dvh flex-col pb-[calc(116px+env(safe-area-inset-bottom))] lg:pb-0">
+      <div className="flex min-h-dvh w-full flex-col overflow-x-hidden pb-[calc(116px+env(safe-area-inset-bottom))] lg:pb-0">
         <Header />
         <main className="mx-auto w-full max-w-page grow px-3 py-4 md:px-6">
           {children}

@@ -59,6 +59,8 @@ import { Logo } from '@/components/site/Logo';
 import { ROUTES } from '@/lib/constants/routes';
 import { useT } from '@/lib/i18n/context';
 import { cn } from '@/lib/utils/cn';
+import { useAdminPermissions } from '@/lib/auth/use-admin-permissions';
+import { canAccessAdminMenuItem } from '@/lib/auth/admin-permission-map';
 
 const GROUPS = [
   {
@@ -177,6 +179,14 @@ const GROUPS = [
 export function AdminMobileDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const pathname = usePathname();
   const t = useT();
+  const { loaded, role, permissions } = useAdminPermissions();
+
+  const visibleGroups = GROUPS
+    .map((g) => ({
+      ...g,
+      items: g.items.filter(({ key }) => (!loaded ? role === 'super_admin' || role === 'admin' : canAccessAdminMenuItem(key, role, permissions))),
+    }))
+    .filter((g) => g.items.length > 0);
 
   // Lock body scroll while open.
   useEffect(() => {
@@ -223,7 +233,7 @@ export function AdminMobileDrawer({ open, onClose }: { open: boolean; onClose: (
         </div>
 
         <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4 font-admin text-sm">
-          {GROUPS.map((g) => (
+          {visibleGroups.map((g) => (
             <div key={g.labelKey} className="mb-5">
               <p className="px-3 pb-2 text-[10px] uppercase tracking-[0.18em] text-brand-inkMute">
                 {t(`admin.${g.labelKey}`)}
