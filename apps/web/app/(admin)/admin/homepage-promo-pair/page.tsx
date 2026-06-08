@@ -20,6 +20,8 @@ interface SlotConfig {
   ctaBn: string;
   href: string;
   imageUrl: string;
+  imageOnly: boolean;
+  overlayEnabled: boolean;
 }
 
 const EMPTY: SlotConfig = {
@@ -33,11 +35,19 @@ const EMPTY: SlotConfig = {
   ctaBn: '',
   href: '',
   imageUrl: '',
+  imageOnly: false,
+  overlayEnabled: true,
 };
 
 type Slot = 'refer' | 'pass';
 
+function truthy(v?: string): boolean {
+  const t = (v ?? '').trim().toLowerCase();
+  return t === '1' || t === 'true' || t === 'on';
+}
+
 function readSlot(map: Record<string, string>, slot: Slot): SlotConfig {
+  const overlayRaw = map[`promo_pair_${slot}_overlay_enabled`]?.trim();
   return {
     kickerEn: map[`promo_pair_${slot}_kicker_en`] ?? '',
     kickerBn: map[`promo_pair_${slot}_kicker_bn`] ?? '',
@@ -49,6 +59,8 @@ function readSlot(map: Record<string, string>, slot: Slot): SlotConfig {
     ctaBn: map[`promo_pair_${slot}_cta_bn`] ?? '',
     href: map[`promo_pair_${slot}_href`] ?? '',
     imageUrl: map[`promo_pair_${slot}_image_url`] ?? '',
+    imageOnly: truthy(map[`promo_pair_${slot}_image_only`]),
+    overlayEnabled: overlayRaw == null || overlayRaw === '' ? true : truthy(overlayRaw),
   };
 }
 
@@ -137,10 +149,33 @@ function SlotEditor({
   onChange: (next: SlotConfig) => void;
   defaultHref: string;
 }) {
-  const set = (k: keyof SlotConfig, v: string) => onChange({ ...value, [k]: v });
+  const set = <K extends keyof SlotConfig>(k: K, v: SlotConfig[K]) => onChange({ ...value, [k]: v });
   return (
     <Card padding="lg" className="space-y-4">
       <h3 className="text-base font-semibold text-ink-hi">{title}</h3>
+      <div className="flex flex-wrap gap-4 rounded-lg border border-brand-divider bg-brand-paper p-3">
+        <label className="flex cursor-pointer items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={value.imageOnly}
+            onChange={(e) => set('imageOnly', e.target.checked)}
+            className="h-4 w-4"
+          />
+          <span>Image-only mode</span>
+        </label>
+        <label className="flex cursor-pointer items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={value.overlayEnabled}
+            onChange={(e) => set('overlayEnabled', e.target.checked)}
+            className="h-4 w-4"
+          />
+          <span>Dark overlay on top of the image</span>
+        </label>
+        <p className="basis-full text-[11px] text-ink-mid">
+          When Image-only mode is on, the text/CTA layer is hidden and the uploaded image renders edge-to-edge. Disable the overlay if you want the image visible at full opacity even when text is present.
+        </p>
+      </div>
       <div className="grid gap-3 md:grid-cols-2">
         <FormField label="Kicker (English)"><Input value={value.kickerEn} onChange={(e) => set('kickerEn', e.target.value)} /></FormField>
         <FormField label="Kicker (Bangla)"><Input value={value.kickerBn} onChange={(e) => set('kickerBn', e.target.value)} /></FormField>

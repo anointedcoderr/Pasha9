@@ -50,6 +50,7 @@ export interface HomeSectionGame {
   showHotBadge?: boolean;
   showPlayButton?: boolean;
   imageOnlyMode?: boolean;
+  imageFitMode?: 'cover' | 'contain';
 }
 
 export interface HomeSection {
@@ -294,6 +295,7 @@ async function loadFeaturedGames(nativePublicArg?: boolean): Promise<LoadFeature
         showHotBadge: r.showHotBadge,
         showPlayButton: r.showPlayButton,
         imageOnlyMode: r.imageOnlyMode,
+        imageFitMode: (r.imageFitMode === 'contain' ? 'contain' : 'cover'),
       });
     } else if (r.source === 'native' && r.nativeGameCode) {
       const g = nativeByCode.get(r.nativeGameCode);
@@ -316,6 +318,7 @@ async function loadFeaturedGames(nativePublicArg?: boolean): Promise<LoadFeature
         showHotBadge: r.showHotBadge,
         showPlayButton: r.showPlayButton,
         imageOnlyMode: r.imageOnlyMode,
+        imageFitMode: (r.imageFitMode === 'contain' ? 'contain' : 'cover'),
       });
     }
   }

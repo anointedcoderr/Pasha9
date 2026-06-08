@@ -24,6 +24,8 @@ const KEYS = [
   'promo_pair_refer_cta_bn',
   'promo_pair_refer_href',
   'promo_pair_refer_image_url',
+  'promo_pair_refer_image_only',
+  'promo_pair_refer_overlay_enabled',
   'promo_pair_pass_kicker_en',
   'promo_pair_pass_kicker_bn',
   'promo_pair_pass_title_en',
@@ -34,7 +36,16 @@ const KEYS = [
   'promo_pair_pass_cta_bn',
   'promo_pair_pass_href',
   'promo_pair_pass_image_url',
+  'promo_pair_pass_image_only',
+  'promo_pair_pass_overlay_enabled',
 ] as const;
+
+function bool(v: string | undefined, fallback: boolean): boolean {
+  if (v == null) return fallback;
+  const t = v.trim().toLowerCase();
+  if (t === '') return fallback;
+  return t === '1' || t === 'true' || t === 'on';
+}
 
 function get(map: Record<string, string>, key: string): string | null {
   const v = map[key];
@@ -60,6 +71,8 @@ export async function GET() {
       ctaBn: get(map, 'promo_pair_refer_cta_bn'),
       href: get(map, 'promo_pair_refer_href'),
       imageUrl: get(map, 'promo_pair_refer_image_url'),
+      imageOnly: bool(map.promo_pair_refer_image_only, false),
+      overlayEnabled: bool(map.promo_pair_refer_overlay_enabled, true),
     },
     pass: {
       kicker: get(map, 'promo_pair_pass_kicker_en'),
@@ -72,6 +85,8 @@ export async function GET() {
       ctaBn: get(map, 'promo_pair_pass_cta_bn'),
       href: get(map, 'promo_pair_pass_href'),
       imageUrl: get(map, 'promo_pair_pass_image_url'),
+      imageOnly: bool(map.promo_pair_pass_image_only, false),
+      overlayEnabled: bool(map.promo_pair_pass_overlay_enabled, true),
     },
   });
 }

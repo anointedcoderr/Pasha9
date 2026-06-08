@@ -67,6 +67,7 @@ interface EnrichedRow {
   showHotBadge: boolean;
   showPlayButton: boolean;
   imageOnlyMode: boolean;
+  imageFitMode: string;
   live: boolean;
 }
 
@@ -129,6 +130,7 @@ async function loadEnrichedFeaturedList(): Promise<EnrichedRow[]> {
       showHotBadge: r.showHotBadge,
       showPlayButton: r.showPlayButton,
       imageOnlyMode: r.imageOnlyMode,
+      imageFitMode: r.imageFitMode,
       live,
     };
   });

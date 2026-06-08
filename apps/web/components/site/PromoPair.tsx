@@ -13,31 +13,24 @@ import { useEffect, useState } from 'react';
 import { ArrowRight } from 'lucide-react';
 import { useT, useLang } from '@/lib/i18n/context';
 
+interface SlotConfig {
+  kicker: string | null;
+  kickerBn: string | null;
+  title: string | null;
+  titleBn: string | null;
+  body: string | null;
+  bodyBn: string | null;
+  cta: string | null;
+  ctaBn: string | null;
+  href: string | null;
+  imageUrl: string | null;
+  imageOnly?: boolean;
+  overlayEnabled?: boolean;
+}
+
 interface PromoPairConfig {
-  refer: {
-    kicker: string | null;
-    kickerBn: string | null;
-    title: string | null;
-    titleBn: string | null;
-    body: string | null;
-    bodyBn: string | null;
-    cta: string | null;
-    ctaBn: string | null;
-    href: string | null;
-    imageUrl: string | null;
-  };
-  pass: {
-    kicker: string | null;
-    kickerBn: string | null;
-    title: string | null;
-    titleBn: string | null;
-    body: string | null;
-    bodyBn: string | null;
-    cta: string | null;
-    ctaBn: string | null;
-    href: string | null;
-    imageUrl: string | null;
-  };
+  refer: SlotConfig;
+  pass: SlotConfig;
 }
 
 const pickLang = (en: string | null, bn: string | null, fallback: string, lang: 'en' | 'bn'): string => {
@@ -74,6 +67,8 @@ export function PromoPair() {
         cta={pickLang(refer?.cta ?? null, refer?.ctaBn ?? null, t('home.pair.referCta'), lang)}
         href={refer?.href || '/affiliate'}
         imageUrl={refer?.imageUrl ?? null}
+        imageOnly={refer?.imageOnly === true}
+        overlayEnabled={refer?.overlayEnabled !== false}
         art={<ReferArt />}
         gradient="from-brand-ink to-brand-navInkSoft"
       />
@@ -84,6 +79,8 @@ export function PromoPair() {
         cta={pickLang(pass?.cta ?? null, pass?.ctaBn ?? null, t('home.pair.passCta'), lang)}
         href={pass?.href || '/betting-pass'}
         imageUrl={pass?.imageUrl ?? null}
+        imageOnly={pass?.imageOnly === true}
+        overlayEnabled={pass?.overlayEnabled !== false}
         art={<PassArt />}
         gradient="from-brand-blue-700 to-brand-blue-500"
       />
@@ -98,6 +95,8 @@ function PromoCard({
   cta,
   href,
   imageUrl,
+  imageOnly,
+  overlayEnabled,
   art,
   gradient,
 }: {
@@ -107,31 +106,67 @@ function PromoCard({
   cta: string;
   href: string;
   imageUrl: string | null;
+  imageOnly: boolean;
+  overlayEnabled: boolean;
   art: React.ReactNode;
   gradient: string;
 }) {
+  // Effective rendering mode. Image-only is the cleanest case: the
+  // operator's banner is shown edge-to-edge with no scrim and no
+  // text column. When the operator turns overlayEnabled off but still
+  // provides text, we drop the dark right-side fade but keep the text
+  // so the user can still see the headline; text shadows preserve
+  // legibility on busy backgrounds.
+  const showText = !imageOnly && Boolean(imageUrl ? true : true);
+  const showOverlay = overlayEnabled && !imageOnly && Boolean(imageUrl);
+
+  if (imageOnly && imageUrl) {
+    return (
+      <article className={`relative overflow-hidden rounded-2xl ${gradient ? `bg-gradient-to-br ${gradient}` : ''}`}>
+        <Link href={href} className="block">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={imageUrl}
+            alt=""
+            className="block h-auto w-full"
+          />
+        </Link>
+      </article>
+    );
+  }
+
   return (
     <article className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${gradient} text-white`}>
       {imageUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={imageUrl} alt="" aria-hidden className="absolute inset-0 h-full w-full object-cover opacity-55" />
+        <img
+          src={imageUrl}
+          alt=""
+          aria-hidden
+          className={`absolute inset-0 h-full w-full object-cover ${showOverlay ? 'opacity-55' : 'opacity-100'}`}
+        />
       ) : (
         <div aria-hidden className="pointer-events-none absolute inset-0 opacity-90">{art}</div>
       )}
-      {/* Right-side fade so the SVG art / image never visually
-          collides with the headline at narrow widths. */}
-      <span aria-hidden className="pointer-events-none absolute inset-y-0 right-0 w-2/5 bg-gradient-to-l from-black/45 to-transparent md:w-1/2" />
-      <div className="relative flex min-h-[160px] flex-col justify-center gap-2 px-4 py-5 md:px-7 md:py-8">
-        <p className="text-[10px] font-bold uppercase tracking-wider text-brand-yellow-400 [text-shadow:0_1px_4px_rgba(0,0,0,0.85)] md:text-[11px]">{kicker}</p>
-        <h3 className="max-w-[18ch] text-lg font-extrabold leading-snug [text-shadow:0_1px_8px_rgba(0,0,0,0.85)] md:text-2xl">{title}</h3>
-        <p className="max-w-[28ch] text-xs leading-relaxed text-white/85 [text-shadow:0_1px_4px_rgba(0,0,0,0.75)] md:max-w-sm md:text-sm">{body}</p>
-        <Link
-          href={href}
-          className="btn-yellow mt-2 inline-flex h-10 w-max items-center gap-2 rounded-lg px-4 text-sm font-bold text-brand-ink"
-        >
-          {cta} <ArrowRight className="h-4 w-4" />
-        </Link>
-      </div>
+      {showOverlay ? (
+        // Right-side fade so the headline never visually collides
+        // with the image artwork. Skipped when the operator turned
+        // the overlay off.
+        <span aria-hidden className="pointer-events-none absolute inset-y-0 right-0 w-2/5 bg-gradient-to-l from-black/45 to-transparent md:w-1/2" />
+      ) : null}
+      {showText ? (
+        <div className="relative flex min-h-[160px] flex-col justify-center gap-2 px-4 py-5 md:px-7 md:py-8">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-brand-yellow-400 [text-shadow:0_1px_4px_rgba(0,0,0,0.85)] md:text-[11px]">{kicker}</p>
+          <h3 className="max-w-[18ch] text-lg font-extrabold leading-snug [text-shadow:0_1px_8px_rgba(0,0,0,0.85)] md:text-2xl">{title}</h3>
+          <p className="max-w-[28ch] text-xs leading-relaxed text-white/85 [text-shadow:0_1px_4px_rgba(0,0,0,0.75)] md:max-w-sm md:text-sm">{body}</p>
+          <Link
+            href={href}
+            className="btn-yellow mt-2 inline-flex h-10 w-max items-center gap-2 rounded-lg px-4 text-sm font-bold text-brand-ink"
+          >
+            {cta} <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+      ) : null}
     </article>
   );
 }

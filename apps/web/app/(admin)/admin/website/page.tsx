@@ -234,7 +234,7 @@ export default function AdminWebsitePage() {
                 label="Favicon"
                 value={faviconUrl}
                 onChange={setFaviconUrl}
-                hint="32 x 32 PNG or SVG. Applied to the browser tab and the dynamic icon link."
+                hint="512 x 512 PNG recommended for PWA / Home Screen, 32 x 32 PNG or SVG for the browser tab. Browsers and search engines cache favicons aggressively. Hard refresh or PWA reinstall may be required to see the new icon, and Google/Bing search-result favicons can take several days to update."
               />
 
               <div className="flex justify-end gap-2 pt-2">

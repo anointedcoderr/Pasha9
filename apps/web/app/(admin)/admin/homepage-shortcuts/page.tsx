@@ -105,10 +105,10 @@ export default function AdminHomepageShortcutsPage() {
               </div>
               <AdminMediaUpload
                 label="Custom icon"
-                hint="PNG, SVG or WEBP. Square works best. Falls back to the bundled lucide icon when empty."
+                hint="Transparent PNG, SVG or WEBP. Square (~256x256) works best. Rendered edge to edge with no frame, border or background, so transparent PNGs blend straight into the page. Falls back to the bundled lucide icon when empty."
                 value={icons[item.key] || null}
                 category="categories"
-                constraintHint="SVG / PNG / WEBP, square, max 1 MB"
+                constraintHint="SVG / PNG / WEBP, square, transparent background recommended, max 1 MB"
                 onChange={(url) => setIcons((prev) => ({ ...prev, [item.key]: url ?? '' }))}
               />
               <FormField label="Direct URL (optional)">

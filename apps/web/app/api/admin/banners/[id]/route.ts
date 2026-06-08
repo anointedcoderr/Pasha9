@@ -8,8 +8,10 @@ import { db } from '@/lib/db/client';
 import { withAuth, ensurePermission, recordActivity } from '@/lib/auth/guard';
 import { jsonOk, jsonError } from '@/lib/auth/errors';
 
+// Title intentionally allows empty string; banners may be pure
+// image / video only. See the create schema for the reasoning.
 const updateSchema = z.object({
-  title: z.string().min(1).max(120).optional(),
+  title: z.string().trim().max(120).optional(),
   titleEn: z.string().max(120).optional().nullable(),
   subtitle: z.string().max(240).optional().nullable(),
   subtitleEn: z.string().max(240).optional().nullable(),

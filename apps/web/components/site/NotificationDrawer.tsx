@@ -55,7 +55,10 @@ export function NotificationDrawer({ open, onOpenChange, isLoggedIn }: Props) {
   const [pushFlash, setPushFlash] = useState<string | null>(null);
   const [testBusy, setTestBusy] = useState(false);
   const [vapidConfigured, setVapidConfigured] = useState<boolean | null>(null);
+  const [vapidMissing, setVapidMissing] = useState<string[]>([]);
+  const [vapidPublicKeyPresent, setVapidPublicKeyPresent] = useState<boolean | null>(null);
   const [swRegistered, setSwRegistered] = useState<boolean | null>(null);
+  const [subscribed, setSubscribed] = useState<boolean | null>(null);
   const [diagOpen, setDiagOpen] = useState(false);
   const lastNotificationId = useRef<string | null>(null);
 
@@ -72,12 +75,33 @@ export function NotificationDrawer({ open, onOpenChange, isLoggedIn }: Props) {
     if (!open) return;
     fetch('/api/content/push-config', { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
-      .then((j) => setVapidConfigured(Boolean(j?.configured)))
-      .catch(() => setVapidConfigured(false));
+      .then((j) => {
+        setVapidConfigured(Boolean(j?.configured));
+        setVapidPublicKeyPresent(Boolean(j?.publicKey));
+        setVapidMissing(Array.isArray(j?.missing) ? (j.missing as string[]) : []);
+      })
+      .catch(() => {
+        setVapidConfigured(false);
+        setVapidPublicKeyPresent(false);
+        setVapidMissing([]);
+      });
     if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistration('/').then((reg) => setSwRegistered(Boolean(reg))).catch(() => setSwRegistered(false));
+      navigator.serviceWorker.getRegistration('/').then(async (reg) => {
+        setSwRegistered(Boolean(reg));
+        if (reg) {
+          try {
+            const sub = await reg.pushManager.getSubscription();
+            setSubscribed(Boolean(sub));
+          } catch {
+            setSubscribed(false);
+          }
+        } else {
+          setSubscribed(false);
+        }
+      }).catch(() => { setSwRegistered(false); setSubscribed(false); });
     } else {
       setSwRegistered(false);
+      setSubscribed(false);
     }
   }, [open]);
 
@@ -309,8 +333,18 @@ export function NotificationDrawer({ open, onOpenChange, isLoggedIn }: Props) {
                   <li>Browser supports push: {pushSupport === 'supported' ? 'yes' : 'no'}</li>
                   <li>Service worker registered: {swRegistered == null ? '...' : swRegistered ? 'yes' : 'no'}</li>
                   <li>Notification permission: {permission === 'unknown' ? '...' : permission}</li>
+                  <li>Device subscribed: {subscribed == null ? '...' : subscribed ? 'yes' : 'no'}</li>
+                  <li>VAPID public key available: {vapidPublicKeyPresent == null ? '...' : vapidPublicKeyPresent ? 'yes' : 'no'}</li>
                   <li>VAPID configured (server): {vapidConfigured == null ? '...' : vapidConfigured ? 'yes' : 'no'}</li>
+                  {vapidMissing.length > 0 ? (
+                    <li className="text-amber-700">Missing env: {vapidMissing.join(', ')}</li>
+                  ) : null}
                   {isIos ? <li>iOS PWA required: {isStandalone ? 'installed' : 'add to home screen'}</li> : null}
+                  {vapidConfigured === false ? (
+                    <li className="mt-1 text-[10px] text-brand-inkMute">
+                      Set VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY and VAPID_SUBJECT in the server .env, then restart with pm2 restart pasha9-web --update-env.
+                    </li>
+                  ) : null}
                 </ul>
               ) : null}
             </div>

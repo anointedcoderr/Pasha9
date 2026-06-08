@@ -191,10 +191,10 @@ export default function AdminBannersPage() {
         {editor ? (
           <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); void save(); }}>
             <div className="grid gap-3 md:grid-cols-2">
-              <FormField label="Title (Bangla)" required>
+              <FormField label="Title (Bangla)" hint="Optional. Leave empty for image-only banners (no text overlay on the public slider).">
                 <Input value={editor.title} onChange={(e) => setEditor({ ...editor, title: e.target.value })} />
               </FormField>
-              <FormField label="Title (English)">
+              <FormField label="Title (English)" hint="Optional.">
                 <Input value={editor.titleEn ?? ''} onChange={(e) => setEditor({ ...editor, titleEn: e.target.value })} />
               </FormField>
             </div>

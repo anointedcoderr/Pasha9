@@ -52,6 +52,7 @@ interface FeaturedRow {
   showHotBadge: boolean;
   showPlayButton: boolean;
   imageOnlyMode: boolean;
+  imageFitMode: 'cover' | 'contain';
   live: boolean;
   createdAt: string;
 }
@@ -535,6 +536,21 @@ export default function AdminHomepageSectionsPage() {
                       <span>{label}</span>
                     </label>
                   ))}
+                  <label className="col-span-2 flex items-center gap-2 sm:col-span-3">
+                    <span className="font-semibold uppercase tracking-wider text-brand-inkMute">Fit mode</span>
+                    <select
+                      value={f.imageFitMode ?? 'cover'}
+                      disabled={savingFeaturedId === f.id}
+                      onChange={(e) => onFeaturedPatch(f.id, { imageFitMode: e.target.value as 'cover' | 'contain' })}
+                      className="rounded border border-brand-divider bg-brand-paper px-1 py-0.5 text-[11px]"
+                    >
+                      <option value="cover">Cover (crops to fill)</option>
+                      <option value="contain">Contain (full image)</option>
+                    </select>
+                  </label>
+                  <p className="col-span-2 text-[10px] text-brand-inkMute sm:col-span-3">
+                    Recommended image: 600 x 800 px (3:4) for best fit. For best result, upload images in the recommended ratio.
+                  </p>
                 </div>
               </details>
               <Button

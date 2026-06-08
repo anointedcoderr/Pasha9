@@ -187,17 +187,40 @@ export function HomeDbGameSection({ section }: Props) {
           const showName = g.showGameName !== false && !imageOnly;
           const showHotBadge = g.showHotBadge !== false && !imageOnly;
           const showPlay = g.showPlayButton !== false && !imageOnly;
+          // In contain mode, render a blurred copy of the same image
+          // behind the foreground so the tile never reveals a white
+          // box. Cover mode keeps the current full-bleed behaviour.
+          const useContain = g.imageFitMode === 'contain' && useImage;
 
           const inner = (
             <div className="relative aspect-[4/3] overflow-hidden">
               {useImage ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={g.imageUrl ?? ''}
-                  alt={g.displayName}
-                  onError={() => markImageFailed(tileKey)}
-                  className="absolute inset-0 h-full w-full object-cover"
-                />
+                useContain ? (
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={g.imageUrl ?? ''}
+                      alt=""
+                      aria-hidden
+                      className="absolute inset-0 h-full w-full scale-110 object-cover blur-md brightness-50"
+                    />
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={g.imageUrl ?? ''}
+                      alt={g.displayName}
+                      onError={() => markImageFailed(tileKey)}
+                      className="absolute inset-0 h-full w-full object-contain"
+                    />
+                  </>
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={g.imageUrl ?? ''}
+                    alt={g.displayName}
+                    onError={() => markImageFailed(tileKey)}
+                    className="absolute inset-0 h-full w-full object-cover"
+                  />
+                )
               ) : (
                 <CategoryHeroArt code={artFor(g.category)} className="absolute inset-0 h-full w-full opacity-65" />
               )}

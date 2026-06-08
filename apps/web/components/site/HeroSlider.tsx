@@ -26,7 +26,7 @@ type CtaKind = 'register' | 'login' | 'play' | 'deposit' | 'bonus' | 'wallet' | 
 interface Slide {
   title: string;
   subtitle: string;
-  primary: { label: string; href: string; kind: CtaKind };
+  primary?: { label: string; href: string; kind: CtaKind };
   secondary?: { label: string; href: string; kind: CtaKind };
   art: 'royal' | 'live' | 'referral';
   mediaType?: MediaType;
@@ -34,6 +34,14 @@ interface Slide {
   videoUrl?: string | null;
   posterUrl?: string | null;
   accent?: Accent;
+  // True when the admin uploaded a media-only banner: no title, no
+  // subtitle, no CTA label. The whole slide becomes a single clickable
+  // image with no dim overlay and no text column so the artwork shows
+  // exactly as the operator designed it.
+  textless?: boolean;
+  // Optional link applied to textless slides so the entire image
+  // becomes the click target.
+  link?: string | null;
 }
 
 interface LiveBanner {
@@ -134,7 +142,7 @@ function iconForKind(kind: CtaKind) {
 
 function rewriteForAuthed(slide: Slide, t: (k: string) => string): Slide {
   const next: Slide = { ...slide };
-  if (looksGuestOnly(slide.primary.href, slide.primary.label)) {
+  if (slide.primary && looksGuestOnly(slide.primary.href, slide.primary.label)) {
     next.primary = { label: t('home.heroCtaPlay'), href: '/games', kind: 'play' };
   }
   if (slide.secondary && looksGuestOnly(slide.secondary.href, slide.secondary.label)) {
@@ -192,17 +200,28 @@ export function HeroSlider() {
       // know.
       return isAuthed ? authedFallbackSlides(t) : guestFallbackSlides(t);
     }
-    const liveSlides = live.map<Slide>((b) => ({
-      title: (lang === 'en' && b.titleEn) ? b.titleEn : b.title,
-      subtitle: ((lang === 'en' && b.subtitleEn) ? b.subtitleEn : b.subtitle) ?? '',
-      primary: { label: b.ctaLabel ?? t('home.heroCtaRegister'), href: b.link ?? '/', kind: 'open' },
-      art: artForAccent(b.accent),
-      mediaType: (b.mediaType ?? 'image') as MediaType,
-      imageUrl: b.imageUrl,
-      videoUrl: b.videoUrl,
-      posterUrl: b.posterUrl,
-      accent: b.accent,
-    }));
+    const liveSlides = live.map<Slide>((b) => {
+      const title = ((lang === 'en' && b.titleEn) ? b.titleEn : b.title) ?? '';
+      const subtitle = ((lang === 'en' && b.subtitleEn) ? b.subtitleEn : b.subtitle) ?? '';
+      const ctaLabel = (b.ctaLabel ?? '').trim();
+      const hasAnyText = title.trim().length > 0 || subtitle.trim().length > 0 || ctaLabel.length > 0;
+      return {
+        title,
+        subtitle,
+        // When the operator did not provide a CTA label we skip the
+        // button entirely; the image stays clickable through the
+        // textless link wrapper below.
+        primary: ctaLabel ? { label: ctaLabel, href: b.link ?? '/', kind: 'open' } : undefined,
+        art: artForAccent(b.accent),
+        mediaType: (b.mediaType ?? 'image') as MediaType,
+        imageUrl: b.imageUrl,
+        videoUrl: b.videoUrl,
+        posterUrl: b.posterUrl,
+        accent: b.accent,
+        textless: !hasAnyText,
+        link: b.link ?? null,
+      };
+    });
     // For logged-in users, replace any obviously guest-only CTAs on
     // admin-set live banners with sensible logged-in equivalents.
     return isAuthed ? liveSlides.map((s) => rewriteForAuthed(s, t)) : liveSlides;
@@ -258,6 +277,13 @@ export function HeroSlider() {
   const slide = slides[i] ?? slides[0];
   const hasVideo = slide.mediaType === 'video' && !!slide.videoUrl;
   const hasImage = slide.mediaType === 'image' && !!slide.imageUrl;
+  const isTextless = slide.textless === true;
+  // When the slide is image-only / video-only and has no text, drop
+  // the dark gradient overlays so the operator's artwork shows
+  // exactly as designed. Text slides keep the overlay so the
+  // headline stays legible on busy backgrounds.
+  const dimMedia = (hasVideo || hasImage) && !isTextless;
+  const textlessHref = isTextless ? (slide.link?.trim() || null) : null;
 
   return (
     <section
@@ -305,12 +331,23 @@ export function HeroSlider() {
                 decoding="async"
               />
             ) : null}
-            {/* dim overlay so text on image / video stays readable */}
-            {(hasVideo || hasImage) ? (
+            {/* dim overlay so text on image / video stays readable.
+                Skipped on textless slides so the image renders edge
+                to edge at full opacity. */}
+            {dimMedia ? (
               <>
                 <span aria-hidden className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/55 to-black/15" />
                 <span aria-hidden className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
               </>
+            ) : null}
+            {/* On textless slides, if a link is set, the entire
+                media surface becomes the click target. */}
+            {textlessHref ? (
+              <Link
+                href={textlessHref}
+                aria-label="Open banner link"
+                className="absolute inset-0 z-[1] block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-yellow-500/60"
+              />
             ) : null}
           </motion.div>
         </AnimatePresence>
@@ -324,50 +361,65 @@ export function HeroSlider() {
         ) : null}
       </div>
 
-      <div className="relative grid min-h-[260px] grid-cols-1 items-center gap-6 px-5 py-8 md:min-h-[360px] md:grid-cols-2 md:px-10 md:py-12">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={i}
-            initial={{ opacity: 0, x: -28 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 12 }}
-            transition={{ duration: 0.4, ease: 'easeOut' }}
-            className="max-w-xl"
-          >
-            <div className="inline-flex items-center gap-2 rounded-full border border-brand-yellow-500/30 bg-brand-yellow-500/15 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-brand-yellow-300 shadow-[0_4px_12px_-6px_rgba(245,180,0,0.55)]">
-              <Sparkles className="h-3 w-3" /> {t('home.tickerLabel')}
-            </div>
-            <h1
-              className="mt-3 text-[26px] font-black leading-[1.05] tracking-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.55)] md:text-[44px]"
-              style={{
-                backgroundImage: 'linear-gradient(180deg,#FFFFFF 0%,#FFE9A8 78%,#F5B400 100%)',
-                WebkitBackgroundClip: 'text',
-                backgroundClip: 'text',
-                color: 'transparent',
-              }}
+      {isTextless ? (
+        // Image / video only banner: no text column, the media fills
+        // the full slide height. We still reserve the same minimum
+        // height so the slider does not jump between slides.
+        <div className="relative grid min-h-[260px] grid-cols-1 md:min-h-[360px]" />
+      ) : (
+        <div className="relative grid min-h-[260px] grid-cols-1 items-center gap-6 px-5 py-8 md:min-h-[360px] md:grid-cols-2 md:px-10 md:py-12">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, x: -28 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 12 }}
+              transition={{ duration: 0.4, ease: 'easeOut' }}
+              className="max-w-xl"
             >
-              {slide.title}
-            </h1>
-            <p className="mt-3 max-w-md text-[13px] leading-snug text-white/85 drop-shadow md:text-[15px]">{slide.subtitle}</p>
-            <div className="mt-5 flex flex-wrap items-center gap-3">
-              <Link href={slide.primary.href}>
-                <Button size="lg" variant="yellow" leftIcon={iconForKind(slide.primary.kind)}>{slide.primary.label}</Button>
-              </Link>
-              {slide.secondary ? (
-                <Link href={slide.secondary.href}>
-                  <Button size="lg" variant="blue" leftIcon={iconForKind(slide.secondary.kind)}>{slide.secondary.label}</Button>
-                </Link>
+              <div className="inline-flex items-center gap-2 rounded-full border border-brand-yellow-500/30 bg-brand-yellow-500/15 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-brand-yellow-300 shadow-[0_4px_12px_-6px_rgba(245,180,0,0.55)]">
+                <Sparkles className="h-3 w-3" /> {t('home.tickerLabel')}
+              </div>
+              {slide.title?.trim() ? (
+                <h1
+                  className="mt-3 text-[26px] font-black leading-[1.05] tracking-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.55)] md:text-[44px]"
+                  style={{
+                    backgroundImage: 'linear-gradient(180deg,#FFFFFF 0%,#FFE9A8 78%,#F5B400 100%)',
+                    WebkitBackgroundClip: 'text',
+                    backgroundClip: 'text',
+                    color: 'transparent',
+                  }}
+                >
+                  {slide.title}
+                </h1>
               ) : null}
-            </div>
-          </motion.div>
-        </AnimatePresence>
+              {slide.subtitle?.trim() ? (
+                <p className="mt-3 max-w-md text-[13px] leading-snug text-white/85 drop-shadow md:text-[15px]">{slide.subtitle}</p>
+              ) : null}
+              {(slide.primary || slide.secondary) ? (
+                <div className="mt-5 flex flex-wrap items-center gap-3">
+                  {slide.primary ? (
+                    <Link href={slide.primary.href}>
+                      <Button size="lg" variant="yellow" leftIcon={iconForKind(slide.primary.kind)}>{slide.primary.label}</Button>
+                    </Link>
+                  ) : null}
+                  {slide.secondary ? (
+                    <Link href={slide.secondary.href}>
+                      <Button size="lg" variant="blue" leftIcon={iconForKind(slide.secondary.kind)}>{slide.secondary.label}</Button>
+                    </Link>
+                  ) : null}
+                </div>
+              ) : null}
+            </motion.div>
+          </AnimatePresence>
 
-        {!hasVideo && !hasImage ? (
-          <div className="relative hidden h-full min-h-[260px] md:block">
-            <HeroArt variant={slide.art} />
-          </div>
-        ) : null}
-      </div>
+          {!hasVideo && !hasImage ? (
+            <div className="relative hidden h-full min-h-[260px] md:block">
+              <HeroArt variant={slide.art} />
+            </div>
+          ) : null}
+        </div>
+      )}
 
       {/* Mute / unmute, only visible on video slides */}
       {hasVideo ? (

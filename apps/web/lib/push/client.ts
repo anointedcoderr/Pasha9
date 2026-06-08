@@ -63,7 +63,13 @@ export async function enableDevicePush(): Promise<EnableResult> {
   }
   const config = await configRes.json().catch(() => null);
   if (!config?.configured || !config?.publicKey) {
-    return { ok: false, code: 'no_public_key', message: 'Browser push is not configured by the operator.' };
+    const missing = Array.isArray(config?.missing) ? (config!.missing as string[]) : [];
+    const suffix = missing.length > 0 ? ` Missing: ${missing.join(', ')}.` : '';
+    return {
+      ok: false,
+      code: 'no_public_key',
+      message: `Browser push is not configured by the operator.${suffix}`,
+    };
   }
 
   let registration: ServiceWorkerRegistration;

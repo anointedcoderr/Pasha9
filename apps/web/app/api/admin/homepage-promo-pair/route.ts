@@ -29,6 +29,8 @@ const slotSchema = z.object({
   ctaBn: optionalText,
   href: optionalUrl,
   imageUrl: optionalUrl,
+  imageOnly: z.boolean().optional(),
+  overlayEnabled: z.boolean().optional(),
 });
 
 const putSchema = z.object({ refer: slotSchema, pass: slotSchema });
@@ -44,6 +46,8 @@ const KEYS = [
   'promo_pair_refer_cta_bn',
   'promo_pair_refer_href',
   'promo_pair_refer_image_url',
+  'promo_pair_refer_image_only',
+  'promo_pair_refer_overlay_enabled',
   'promo_pair_pass_kicker_en',
   'promo_pair_pass_kicker_bn',
   'promo_pair_pass_title_en',
@@ -54,6 +58,8 @@ const KEYS = [
   'promo_pair_pass_cta_bn',
   'promo_pair_pass_href',
   'promo_pair_pass_image_url',
+  'promo_pair_pass_image_only',
+  'promo_pair_pass_overlay_enabled',
 ] as const;
 
 export async function GET() {
@@ -85,6 +91,8 @@ export async function PUT(req: NextRequest) {
       { key: 'promo_pair_refer_cta_bn', value: data.refer.ctaBn ?? '' },
       { key: 'promo_pair_refer_href', value: data.refer.href ?? '' },
       { key: 'promo_pair_refer_image_url', value: data.refer.imageUrl ?? '' },
+      { key: 'promo_pair_refer_image_only', value: data.refer.imageOnly ? '1' : '0' },
+      { key: 'promo_pair_refer_overlay_enabled', value: data.refer.overlayEnabled === false ? '0' : '1' },
       { key: 'promo_pair_pass_kicker_en', value: data.pass.kickerEn ?? '' },
       { key: 'promo_pair_pass_kicker_bn', value: data.pass.kickerBn ?? '' },
       { key: 'promo_pair_pass_title_en', value: data.pass.titleEn ?? '' },
@@ -95,6 +103,8 @@ export async function PUT(req: NextRequest) {
       { key: 'promo_pair_pass_cta_bn', value: data.pass.ctaBn ?? '' },
       { key: 'promo_pair_pass_href', value: data.pass.href ?? '' },
       { key: 'promo_pair_pass_image_url', value: data.pass.imageUrl ?? '' },
+      { key: 'promo_pair_pass_image_only', value: data.pass.imageOnly ? '1' : '0' },
+      { key: 'promo_pair_pass_overlay_enabled', value: data.pass.overlayEnabled === false ? '0' : '1' },
     ];
 
     await db.$transaction(

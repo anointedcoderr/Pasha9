@@ -26,6 +26,7 @@ const patchSchema = z.object({
   showHotBadge: z.boolean().optional(),
   showPlayButton: z.boolean().optional(),
   imageOnlyMode: z.boolean().optional(),
+  imageFitMode: z.enum(['cover', 'contain']).optional(),
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {

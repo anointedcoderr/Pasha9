@@ -1770,6 +1770,10 @@ model HomepageFeaturedGame {
   showHotBadge      Boolean  @default(true)
   showPlayButton    Boolean  @default(true)
   imageOnlyMode     Boolean  @default(false)
+  // How the public card fits the uploaded image. 'cover' fills the
+  // tile (may crop). 'contain' shows the full image with a blurred
+  // copy of the image as the background so the tile never goes white.
+  imageFitMode      String   @default("cover")
   addedBy         String
   createdAt       DateTime @default(now())
 

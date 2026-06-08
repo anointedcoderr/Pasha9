@@ -8,8 +8,14 @@ import { db } from '@/lib/db/client';
 import { withAuth, ensurePermission, recordActivity } from '@/lib/auth/guard';
 import { jsonOk } from '@/lib/auth/errors';
 
+// title is intentionally NOT required. Banners can be uploaded as
+// pure background images / videos with no text overlay at all (the
+// design system call from the client: "Banner & Slider should be
+// optional banner only without title or text"). The HeroSlider
+// renders the text column conditionally so an empty title is a
+// legitimate, fully supported case.
 const createSchema = z.object({
-  title: z.string().min(1).max(120),
+  title: z.string().trim().max(120).optional().nullable().transform((v) => (v == null ? '' : v)),
   titleEn: z.string().max(120).optional().nullable(),
   subtitle: z.string().max(240).optional().nullable(),
   subtitleEn: z.string().max(240).optional().nullable(),
