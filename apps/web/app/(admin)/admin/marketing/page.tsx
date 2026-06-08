@@ -29,6 +29,8 @@ const LIVE = [
   { href: '/admin/popups', icon: Megaphone, title: 'Announcement Popups', body: 'First-visit popup carousel; cookie-gated so it does not annoy returning visitors.' },
   { href: '/admin/promo-text', icon: Type, title: 'Promo Marquee Text', body: 'Rolling promo strip below the hero. Multi-line, bn / en aware.' },
   { href: '/admin/bonuses', icon: Gift, title: 'Bonus Rules', body: 'Define percent / fixed bonus rules with min deposit, max bonus and turnover requirement.' },
+  { href: '/admin/promo-codes', icon: Tag, title: 'Promo Codes', body: 'Single-use or multi-use codes that grant a configured payout. Audit redemptions in-page.' },
+  { href: '/admin/in-app-notifications', icon: Bell, title: 'In-app Notifications', body: 'Broadcast a notification to all, active or selected users. Renders inside the player bell drawer.' },
   { href: '/admin/affiliate', icon: Briefcase, title: 'Affiliate Program', body: 'Approve applications, manage commission tiers, review the affiliate roster.' },
   { href: '/admin/referrals', icon: Network, title: 'Referral System', body: 'Three-level referral chain reporting (data live; commission accrual M2).' },
 ];
@@ -38,11 +40,13 @@ const LIVE = [
 //   - Push / SMS / Email: provider keys (VAPID / SMS / SMTP) must be
 //     supplied before any send path can complete. The runtime queues a
 //     campaign as draft until keys are configured.
+// Web push (VAPID) and outbound SMS / Email blasts still need
+// provider credentials before they can dispatch. Cashback engine is
+// scheduled in a follow-up iteration.
 const PENDING = [
-  { icon: Tag, title: 'Promo codes', body: 'Single-use and multi-use codes that grant bonus rules on redemption. Scheduled in the next iteration.', tone: 'neutral' as const, chip: 'Scheduled' },
-  { icon: Bell, title: 'Push notifications', body: 'In-app history + send queue land in the next iteration; live push requires VAPID keys before any campaign can dispatch.', tone: 'warn' as const, chip: 'Provider setup required' },
-  { icon: MessageSquare, title: 'SMS / Email blasts', body: 'Campaign builder + queue land in the next iteration; SMS / SMTP provider keys are required before any send completes.', tone: 'warn' as const, chip: 'Provider setup required' },
-  { icon: TrendingUp, title: 'Cashback campaigns', body: 'Cashback engine credits a percent of net loss to bonus balance against the existing Transaction ledger. Scheduled in the next iteration.', tone: 'neutral' as const, chip: 'Scheduled' },
+  { icon: Bell, title: 'Web push (VAPID)', body: 'In-app notifications now ship via /admin/in-app-notifications. Browser push requires VAPID keys and a service worker, configured separately.', tone: 'warn' as const, chip: 'Provider setup required' },
+  { icon: MessageSquare, title: 'SMS / Email blasts', body: 'Campaign builder and send queue ship in a follow-up iteration; SMS gateway and SMTP credentials are required before any send completes.', tone: 'warn' as const, chip: 'Provider setup required' },
+  { icon: TrendingUp, title: 'Cashback campaigns', body: 'Cashback engine credits a percent of net loss to bonus balance against the existing Transaction ledger. Scheduled in a follow-up iteration.', tone: 'neutral' as const, chip: 'Scheduled' },
 ];
 
 export default function AdminMarketingPage() {

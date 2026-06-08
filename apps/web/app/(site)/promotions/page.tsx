@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { CategoryHero } from '@/components/site/CategoryHero';
 import { BackBar } from '@/components/site/BackBar';
 import { PromotionBannerSlider, type PromotionBannerRow } from '@/components/site/PromotionBannerSlider';
+import { PromoCodeRedeem } from '@/components/site/PromoCodeRedeem';
 import { useT, useLang } from '@/lib/i18n/context';
 import { Gift, Sparkles, Crown, Repeat, Users, Send, Ticket, Star, BadgePlus, AlertCircle, CheckCircle2, Lock } from 'lucide-react';
 import { formatBDT } from '@/lib/utils/format';
@@ -180,6 +181,8 @@ export default function PromotionsPage() {
           chips={[{ label: 'Bonus', tone: 'gold' }, { label: 'Wallet Connected', tone: 'sky' }]}
         />
       )}
+
+      <PromoCodeRedeem authed={authed} authChecked={authChecked} />
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap gap-2">

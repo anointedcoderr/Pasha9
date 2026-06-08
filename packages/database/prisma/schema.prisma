@@ -231,6 +231,9 @@ model User {
   referralBalance     ReferralBalance?
   referralClaims      ReferralClaim[]
   promotionClaims     PromotionClaim[]
+  promoCodeRedemptions PromoCodeRedemption[]
+  notificationsCreated Notification[] @relation("NotificationsCreated")
+  notificationsReceived NotificationRecipient[]
   rewardClaims        RewardClaim[]
   dailyCheckIns       DailyCheckInLog[]
   spinResults         SpinResult[]
@@ -490,6 +493,7 @@ model BonusRule {
 
   userBonuses UserBonus[]
   promotionClaims PromotionClaim[]
+  promoCodes  PromoCode[]
 
   @@index([promotionType, status])
 }
@@ -2117,6 +2121,124 @@ model PromotionBanner {
   updatedAt   DateTime @updatedAt
 
   @@index([isActive, sortOrder])
+}
+
+// Single-use or multi-use promo code that grants a configured payout
+// (bonus grant, main balance credit, locked freebet) on redemption.
+// The redeem service runs in a Prisma transaction, writes a wallet
+// Transaction + ActivityLog and reuses the existing bonus engine when
+// the reward is a turnover-locked grant. PromoCodeRedemption blocks
+// duplicate per-user redemptions via @@unique([promoCodeId, userId]).
+model PromoCode {
+  id              String   @id @default(cuid())
+  code            String   @unique
+  titleEn         String
+  titleBn         String?
+  descriptionEn   String?  @db.Text
+  descriptionBn   String?  @db.Text
+  // Reward shape. 'bonus_grant' routes through the existing bonus
+  // engine (turnoverX gate, locked balance). 'main_balance' credits
+  // Wallet.balance directly. 'bonus_balance' credits Wallet.bonusBalance.
+  // 'locked_balance' credits Wallet.lockedBalance (freebet).
+  rewardType      String   @default("bonus_grant")
+  rewardAmount    Decimal  @default(0) @db.Decimal(14, 2)
+  // Turnover multiplier applied to the credited amount. Only honoured
+  // when rewardType is 'bonus_grant' or 'locked_balance'.
+  turnoverX       Decimal  @default(0) @db.Decimal(6, 2)
+  // Stops accepting redemptions once total redemptions reaches this
+  // value. 0 disables the cap.
+  maxRedemptions  Int      @default(0)
+  // Maximum redemptions per individual user. 1 is the standard
+  // single-use behaviour. Higher values support multi-use codes.
+  perUserLimit    Int      @default(1)
+  // Minimum approved deposit total (in BDT) required before the user
+  // can redeem. 0 disables the gate.
+  minDepositTotal Decimal  @default(0) @db.Decimal(14, 2)
+  startsAt        DateTime?
+  endsAt          DateTime?
+  isActive        Boolean  @default(true)
+  // Optional fk to a BonusRule for rewardType='bonus_grant' so the
+  // grant inherits the rule's validityDays + turnoverX + max bonus
+  // cap. When null the engine builds a synthetic transient rule from
+  // rewardAmount + turnoverX so the grant still respects the standard
+  // UserBonus / locked balance contract.
+  bonusRuleId     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  bonusRule BonusRule? @relation(fields: [bonusRuleId], references: [id])
+  redemptions PromoCodeRedemption[]
+
+  @@index([isActive, endsAt])
+}
+
+model PromoCodeRedemption {
+  id             String   @id @default(cuid())
+  promoCodeId    String
+  userId         String
+  amount         Decimal  @db.Decimal(14, 2)
+  rewardType     String
+  bonusGrantId   String?
+  walletTxId     String?
+  // Stable idempotency key. The redeem service derives this from
+  // (promoCodeId, userId, sequence) so retries collide here instead
+  // of double-crediting the wallet.
+  idempotencyKey String   @unique
+  status         String   @default("granted")
+  createdAt      DateTime @default(now())
+
+  promoCode PromoCode @relation(fields: [promoCodeId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([promoCodeId, userId, idempotencyKey])
+  @@index([userId, createdAt])
+  @@index([promoCodeId, createdAt])
+}
+
+// Operator-broadcast in-app notification. NotificationRecipient
+// fan-out is created at send time, one row per targeted user, so the
+// per-user unread query stays O(1) and the user can mark each
+// notification read independently. Optional soundUrl points at a
+// short audio asset uploaded via the existing /api/admin/uploads
+// pipeline so the operator can override the default chime per
+// campaign. The model intentionally captures BOTH bilingual fields
+// so a single notification renders correctly for every player.
+model Notification {
+  id          String   @id @default(cuid())
+  titleEn     String
+  titleBn     String?
+  bodyEn      String?  @db.Text
+  bodyBn      String?  @db.Text
+  linkUrl     String?
+  imageUrl    String?
+  soundUrl    String?
+  priority    String   @default("normal")
+  status      String   @default("sent")
+  audience    String   @default("all")
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  createdBy  User?                   @relation("NotificationsCreated", fields: [createdById], references: [id])
+  recipients NotificationRecipient[]
+
+  @@index([createdAt])
+  @@index([status, createdAt])
+}
+
+model NotificationRecipient {
+  id             String   @id @default(cuid())
+  notificationId String
+  userId         String
+  readAt         DateTime?
+  deliveredAt    DateTime?
+  createdAt      DateTime @default(now())
+
+  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([notificationId, userId])
+  @@index([userId, readAt])
+  @@index([userId, createdAt])
 }
 
 // Operator-managed social-media link directory rendered in the public

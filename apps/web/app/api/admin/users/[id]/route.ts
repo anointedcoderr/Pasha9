@@ -44,6 +44,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
         username: user.username,
         phone: user.phone,
         email: user.email,
+        avatarUrl: user.avatarUrl,
         role: user.role,
         status: user.status,
         blockedReason: user.blockedReason,

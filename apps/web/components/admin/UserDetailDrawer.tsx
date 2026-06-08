@@ -34,6 +34,7 @@ export interface AdminUserDetail {
   username: string;
   phone: string;
   email?: string | null;
+  avatarUrl?: string | null;
   role: { key: string; label: string };
   status: 'active' | 'blocked' | 'pending';
   blockedReason?: string | null;
@@ -96,6 +97,29 @@ export function UserDetailDrawer({ open, onOpenChange, detail, loading, error, o
         <p className="text-sm text-ink-mid">No user selected.</p>
       ) : (
         <div className="space-y-5">
+          {/* Identity header with player-uploaded avatar */}
+          <div className="flex items-center gap-3 rounded-xl border border-neon/10 bg-base-deep/40 p-3">
+            <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-full border border-neon/20 bg-grad-gold text-base-deep">
+              {detail.avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={detail.avatarUrl}
+                  alt={detail.username}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <span className="flex h-full w-full items-center justify-center text-base font-bold">
+                  {initialsOf(detail.username)}
+                </span>
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-bold text-ink-hi">{detail.username}</p>
+              <p className="truncate text-xs text-ink-mid">{detail.phone}</p>
+              {detail.email ? <p className="truncate text-[11px] text-ink-lo">{detail.email}</p> : null}
+            </div>
+          </div>
+
           {/* Account status + lock/unlock */}
           <div className="rounded-xl border border-neon/10 bg-base-deep/40 p-3">
             <div className="flex items-center justify-between gap-2">
@@ -256,6 +280,16 @@ export function UserDetailDrawer({ open, onOpenChange, detail, loading, error, o
       )}
     </Drawer>
   );
+}
+
+function initialsOf(name: string): string {
+  return name
+    .split(/[\s_.-]+/)
+    .filter(Boolean)
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
 }
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {

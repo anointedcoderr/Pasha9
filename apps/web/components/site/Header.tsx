@@ -57,6 +57,7 @@ export function Header() {
   const [tab, setTab] = useState<'login' | 'signup'>('login');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [me, setMe] = useState<Me | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
   // Auth probe completion flag. Until the /api/auth/me round-trip
   // returns the header renders a fixed-width placeholder so the
   // guest/authed button swap does not cause a visible width jump
@@ -103,6 +104,36 @@ export function Header() {
     window.addEventListener('pasha9:wallet-refresh', handler);
     return () => window.removeEventListener('pasha9:wallet-refresh', handler);
   }, []);
+
+  // Notification unread badge. Poll every 60s while signed in; the
+  // notification drawer fires pasha9:notification-refresh whenever it
+  // marks items read so the dot disappears immediately on a local
+  // tap without waiting for the next poll.
+  useEffect(() => {
+    if (!me) {
+      setUnreadCount(0);
+      return;
+    }
+    let alive = true;
+    const tick = () => {
+      fetch('/api/me/notifications', { cache: 'no-store', credentials: 'include' })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => {
+          if (!alive) return;
+          setUnreadCount(Number(j?.unreadCount ?? 0));
+        })
+        .catch(() => { /* ignore */ });
+    };
+    tick();
+    const id = window.setInterval(tick, 60_000);
+    const handler = () => tick();
+    window.addEventListener('pasha9:notification-refresh', handler);
+    return () => {
+      alive = false;
+      window.clearInterval(id);
+      window.removeEventListener('pasha9:notification-refresh', handler);
+    };
+  }, [me]);
 
   const logout = async () => {
     try { await fetch('/api/auth/logout', { method: 'POST' }); } catch { /* ignore */ }
@@ -155,7 +186,11 @@ export function Header() {
                   className="relative inline-flex h-10 w-10 items-center justify-center rounded-xl border border-brand-divider bg-brand-paper text-brand-ink transition hover:border-brand-yellow-500 hover:bg-brand-surface"
                 >
                   <Bell className="h-4 w-4" />
-                  <span className="absolute right-2 top-2 h-2 w-2 rounded-full border-2 border-brand-paper bg-brand-hot shadow-[0_0_6px_rgba(255,78,58,0.85)]" />
+                  {unreadCount > 0 ? (
+                    <span className="absolute -right-1 -top-1 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full border-2 border-brand-paper bg-brand-hot px-1 text-[9px] font-bold leading-none text-white shadow-[0_0_6px_rgba(255,78,58,0.85)]">
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </span>
+                  ) : null}
                 </button>
                 <Link href={ROUTES.wallet} className="pill-light tabular-nums shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_2px_8px_-4px_rgba(245,180,0,0.35)]">
                   <WalletIcon className="h-4 w-4 text-brand-yellow-600" />

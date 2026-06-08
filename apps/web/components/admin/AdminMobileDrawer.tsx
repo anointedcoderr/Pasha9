@@ -49,6 +49,7 @@ import {
   Plug,
   Gamepad2,
   Share2,
+  Tag,
   Wallet as WalletIcon,
   MessageCircle,
 } from 'lucide-react';
@@ -140,6 +141,8 @@ const GROUPS = [
     items: [
       { key: 'reports', href: ROUTES.admin.reports, icon: BarChart3 },
       { key: 'marketing', href: ROUTES.admin.marketing, icon: Sparkles },
+      { key: 'promoCodes', href: '/admin/promo-codes', icon: Tag },
+      { key: 'inAppNotifications', href: '/admin/in-app-notifications', icon: Bell },
       { key: 'notifications', href: ROUTES.admin.notifications, icon: Bell },
       { key: 'tracking', href: ROUTES.admin.tracking, icon: BarChart3 },
       { key: 'whatsapp', href: ROUTES.admin.whatsapp, icon: MessageCircle },
