@@ -16,6 +16,11 @@ const patchSchema = z.object({
   isHot: z.boolean().optional(),
   isJackpot: z.boolean().optional(),
   position: z.number().int().min(0).max(9999).optional(),
+  // Operator-uploaded thumbnail override. Empty string or null clears
+  // the override and restores the provider catalogue thumbnail on the
+  // public homepage. Non-empty values must match the existing upload
+  // URL convention.
+  customImageUrl: z.string().trim().max(500).nullable().optional(),
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
@@ -31,9 +36,16 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const existing = await db.homepageFeaturedGame.findUnique({ where: { id: params.id } });
     if (!existing) return jsonError(404, 'NOT_FOUND');
 
+    const { customImageUrl, ...rest } = parsed.data;
+    const data: Record<string, unknown> = { ...rest };
+    if (customImageUrl !== undefined) {
+      const trimmed = customImageUrl?.trim() ?? '';
+      data.customImageUrl = trimmed ? trimmed : null;
+    }
+
     const updated = await db.homepageFeaturedGame.update({
       where: { id: params.id },
-      data: parsed.data,
+      data,
     });
 
     await recordActivity({

@@ -277,7 +277,12 @@ async function loadFeaturedGames(nativePublicArg?: boolean): Promise<LoadFeature
         });
         continue;
       }
-      games.push({ ...externalToGame(g), isHot: r.isHot, isJackpot: r.isJackpot });
+      games.push({
+        ...externalToGame(g),
+        isHot: r.isHot,
+        isJackpot: r.isJackpot,
+        imageUrl: r.customImageUrl?.trim() || g.imageUrl || null,
+      });
     } else if (r.source === 'native' && r.nativeGameCode) {
       const g = nativeByCode.get(r.nativeGameCode);
       if (!g) {
@@ -289,7 +294,12 @@ async function loadFeaturedGames(nativePublicArg?: boolean): Promise<LoadFeature
         });
         continue;
       }
-      games.push({ ...nativeToGame(g), isHot: r.isHot, isJackpot: r.isJackpot });
+      games.push({
+        ...nativeToGame(g),
+        isHot: r.isHot,
+        isJackpot: r.isJackpot,
+        imageUrl: r.customImageUrl?.trim() || null,
+      });
     }
   }
 

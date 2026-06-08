@@ -1755,6 +1755,12 @@ model HomepageFeaturedGame {
   position        Int      @default(0)
   isHot           Boolean  @default(false)
   isJackpot       Boolean  @default(false)
+  // Operator-uploaded thumbnail that overrides the provider/native
+  // game's default imageUrl. Stored as a /uploads/<category>/... URL.
+  // When null the public assembler falls back to the underlying
+  // ExternalGame.imageUrl (provider catalogue) so cleared overrides
+  // restore the provider thumbnail without admin re-input.
+  customImageUrl  String?
   addedBy         String
   createdAt       DateTime @default(now())
 

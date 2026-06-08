@@ -11,8 +11,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { ArrowDownToLine, ArrowUpToLine, ReceiptText, RefreshCw, Sparkles, UserPlus, LogIn } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
+import { ArrowDownToLine, ArrowUpToLine, ReceiptText, RefreshCw, Sparkles, UserPlus, LogIn, type LucideIcon } from 'lucide-react';
 import { useT, useLang } from '@/lib/i18n/context';
 import { ROUTES } from '@/lib/constants/routes';
 import { formatBDT } from '@/lib/utils/format';
@@ -30,9 +30,15 @@ export function WalletStrip() {
   const t = useT();
   const { lang } = useLang();
   const router = useRouter();
+  const pathname = usePathname();
   const [me, setMe] = useState<Me | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  // pendingActive lifts the active highlight to the tapped segment
+  // immediately, before Next.js' router transitions the URL. usePathname
+  // updates a few frames later; combining both keeps the indicator in
+  // sync without a flash of empty selection.
+  const [pendingActive, setPendingActive] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setRefreshing(true);
@@ -93,22 +99,40 @@ export function WalletStrip() {
               </p>
             </div>
           </div>
-          <div className="flex shrink-0 gap-2">
-            <Link
-              href="/?signup=1"
-              className="btn-yellow inline-flex h-11 items-center justify-center rounded-xl px-5 text-sm"
-            >
-              <UserPlus className="mr-1.5 h-4 w-4" />
-              {t('navx.register')}
-            </Link>
-            <Link
-              href="/?login=1"
-              className="inline-flex h-11 items-center justify-center rounded-xl border border-white/20 bg-white/10 px-5 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/15"
-            >
-              <LogIn className="mr-1.5 h-4 w-4" />
-              {t('navx.login')}
-            </Link>
-          </div>
+          <SegmentedActions
+            className="shrink-0"
+            items={[
+              {
+                key: 'register',
+                label: t('navx.register'),
+                icon: UserPlus,
+                href: '/?signup=1',
+                onTap: () => {
+                  setPendingActive('register');
+                  // Dispatch a same-page event so Header opens the
+                  // auth modal even when the URL is already at /.
+                  if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('pasha9:open-signup'));
+                  }
+                  router.push('/?signup=1');
+                },
+              },
+              {
+                key: 'login',
+                label: t('navx.login'),
+                icon: LogIn,
+                href: '/?login=1',
+                onTap: () => {
+                  setPendingActive('login');
+                  if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('pasha9:open-login'));
+                  }
+                  router.push('/?login=1');
+                },
+              },
+            ]}
+            activeKey={pendingActive ?? 'register'}
+          />
         </div>
       </section>
     );
@@ -169,35 +193,35 @@ export function WalletStrip() {
           </div>
         </div>
 
-        <div className="relative z-10 grid grid-cols-3 gap-2 md:flex md:gap-2">
-          <Link
-            href={ROUTES.deposit}
-            prefetch={false}
-            onClick={(e) => { e.preventDefault(); router.push(ROUTES.deposit); }}
-            className="btn-yellow inline-flex h-11 items-center justify-center rounded-xl px-3 text-[13px] shadow-[0_8px_16px_-6px_rgba(245,180,0,0.65)]"
-          >
-            <ArrowDownToLine className="mr-1.5 h-4 w-4" />
-            {t('wallet.deposit')}
-          </Link>
-          <Link
-            href={ROUTES.withdraw}
-            prefetch={false}
-            onClick={(e) => { e.preventDefault(); router.push(ROUTES.withdraw); }}
-            className="inline-flex h-11 items-center justify-center rounded-xl border border-white/20 bg-white/[0.07] px-3 text-[13px] font-semibold text-white backdrop-blur transition hover:border-white/40 hover:bg-white/[0.13]"
-          >
-            <ArrowUpToLine className="mr-1.5 h-4 w-4 text-brand-yellow-400" />
-            {t('wallet.withdraw')}
-          </Link>
-          <Link
-            href={ROUTES.transactions}
-            prefetch={false}
-            onClick={(e) => { e.preventDefault(); router.push(ROUTES.transactions); }}
-            className="inline-flex h-11 items-center justify-center rounded-xl border border-white/20 bg-white/[0.07] px-3 text-[13px] font-semibold text-white backdrop-blur transition hover:border-white/40 hover:bg-white/[0.13]"
-          >
-            <ReceiptText className="mr-1.5 h-4 w-4 text-brand-yellow-400" />
-            {lang === 'bn' ? 'ইতিহাস' : 'History'}
-          </Link>
-        </div>
+        <SegmentedActions
+          items={[
+            {
+              key: 'deposit',
+              label: t('wallet.deposit'),
+              icon: ArrowDownToLine,
+              href: ROUTES.deposit,
+              onTap: () => { setPendingActive('deposit'); router.push(ROUTES.deposit); },
+            },
+            {
+              key: 'withdraw',
+              label: t('wallet.withdraw'),
+              icon: ArrowUpToLine,
+              href: ROUTES.withdraw,
+              onTap: () => { setPendingActive('withdraw'); router.push(ROUTES.withdraw); },
+            },
+            {
+              key: 'history',
+              label: lang === 'bn' ? 'ইতিহাস' : 'History',
+              icon: ReceiptText,
+              href: ROUTES.transactions,
+              onTap: () => { setPendingActive('history'); router.push(ROUTES.transactions); },
+            },
+          ]}
+          activeKey={
+            pendingActive
+              ?? (pathname === ROUTES.withdraw ? 'withdraw' : pathname === ROUTES.transactions ? 'history' : pathname === ROUTES.deposit ? 'deposit' : 'deposit')
+          }
+        />
       </div>
     </section>
   );
@@ -207,4 +231,64 @@ export function triggerWalletRefresh() {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent(REFRESH_EVENT));
   }
+}
+
+interface SegmentedItem {
+  key: string;
+  label: string;
+  icon: LucideIcon;
+  href: string;
+  onTap: () => void;
+}
+
+/**
+ * Pill-tab style action group shared between the guest auth strip and
+ * the logged-in wallet strip. The currently-active key gets a bright
+ * yellow background; the others stay translucent. Tapping a tab calls
+ * the supplied onTap (which lifts pendingActive and pushes the route)
+ * and falls back to Link href for non-JS environments and crawlers.
+ */
+function SegmentedActions({
+  items,
+  activeKey,
+  className,
+}: {
+  items: SegmentedItem[];
+  activeKey: string;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        'relative z-10 inline-flex w-full items-stretch rounded-xl border border-white/10 bg-white/[0.05] p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur md:w-auto',
+        className,
+      )}
+    >
+      {items.map((item) => {
+        const Icon = item.icon;
+        const active = item.key === activeKey;
+        return (
+          <Link
+            key={item.key}
+            href={item.href}
+            prefetch={false}
+            onClick={(e) => {
+              e.preventDefault();
+              item.onTap();
+            }}
+            className={cn(
+              'inline-flex h-10 flex-1 items-center justify-center gap-1.5 rounded-lg px-3 text-[12px] font-semibold transition-all duration-200 sm:text-[13px] md:flex-none md:px-4',
+              active
+                ? 'bg-gradient-to-b from-brand-yellow-300 via-brand-yellow-500 to-[#F5B400] text-brand-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.55),0_8px_18px_-8px_rgba(245,180,0,0.75)] [text-shadow:0_1px_0_rgba(255,255,255,0.35)]'
+                : 'text-white/85 hover:bg-white/10 hover:text-white active:scale-[0.97]',
+            )}
+            aria-current={active ? 'page' : undefined}
+          >
+            <Icon className={cn('h-4 w-4', active ? 'text-brand-ink' : 'text-brand-yellow-400')} />
+            <span className="truncate">{item.label}</span>
+          </Link>
+        );
+      })}
+    </div>
+  );
 }

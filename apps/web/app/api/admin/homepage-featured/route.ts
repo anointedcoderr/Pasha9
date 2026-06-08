@@ -3,7 +3,8 @@
 // GET  /api/admin/homepage-featured   list current featured curation
 // POST /api/admin/homepage-featured   add a game to the curation
 //
-// The curation is capped at 20 rows. POST returns 409 DUPLICATE when
+// The curation is capped at 60 rows (matches the public assembler's
+// FEATURED_LIMIT in lib/homepage/sections.ts). POST returns 409 DUPLICATE when
 // the operator tries to add a game that is already on the list (the
 // dedupe check runs BEFORE the limit check so a full-list re-add gets
 // the accurate 409 code, not the misleading FEATURED_LIMIT). On
@@ -21,7 +22,7 @@ import { getCurrentSession } from '@/lib/auth/rbac';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 import { db } from '@/lib/db/client';
 
-const FEATURED_LIMIT = 20;
+const FEATURED_LIMIT = 60;
 
 const postSchema = z
   .object({
@@ -49,7 +50,16 @@ interface EnrichedRow {
   displayName: string;
   providerName: string;
   category: string | null;
+  // Effective rendering image: operator override when set, falling
+  // back to the underlying provider/native catalogue thumbnail. This
+  // is what the public homepage renders.
   imageUrl: string | null;
+  // The operator-uploaded override on its own, so the admin UI can
+  // show a Reset button only when a real override exists.
+  customImageUrl: string | null;
+  // Underlying provider thumbnail, surfaced so the admin curation
+  // page can preview the fallback alongside the override.
+  providerImageUrl: string | null;
   live: boolean;
 }
 
@@ -89,6 +99,8 @@ async function loadEnrichedFeaturedList(): Promise<EnrichedRow[]> {
     const displayName = ext?.displayName ?? nat?.displayName ?? '(removed)';
     const providerName = ext?.provider?.name ?? 'Pasha Originals';
     const live = ext ? ext.status === 'active' && ext.provider?.status === 'active' : nat ? nat.isActive : false;
+    const providerImageUrl = ext?.imageUrl ?? null;
+    const customImageUrl = r.customImageUrl ?? null;
     return {
       id: r.id,
       source: r.source as 'external' | 'native',
@@ -102,7 +114,9 @@ async function loadEnrichedFeaturedList(): Promise<EnrichedRow[]> {
       displayName,
       providerName,
       category: ext?.category ?? null,
-      imageUrl: ext?.imageUrl ?? null,
+      imageUrl: customImageUrl ?? providerImageUrl,
+      customImageUrl,
+      providerImageUrl,
       live,
     };
   });

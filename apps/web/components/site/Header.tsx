@@ -74,6 +74,23 @@ export function Header() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params?.get('login'), params?.get('signup')]);
 
+  // Same-page event channel for components (WalletStrip guest card,
+  // etc) that need to open the modal without relying on a search-param
+  // round-trip. Search-param navigation on the same path is reliable
+  // for fresh page loads but Next.js' soft-routing skips the modal
+  // when the URL is already at '/' with a different fragment.
+  useEffect(() => {
+    const openLogin = () => { setTab('login'); auth.onOpen(); };
+    const openSignup = () => { setTab('signup'); auth.onOpen(); };
+    window.addEventListener('pasha9:open-login', openLogin);
+    window.addEventListener('pasha9:open-signup', openSignup);
+    return () => {
+      window.removeEventListener('pasha9:open-login', openLogin);
+      window.removeEventListener('pasha9:open-signup', openSignup);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const loadMe = () => {
     fetch('/api/auth/me', { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))

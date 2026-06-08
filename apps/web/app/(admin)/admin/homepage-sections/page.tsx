@@ -45,6 +45,8 @@ interface FeaturedRow {
   providerName: string;
   category: string | null;
   imageUrl: string | null;
+  customImageUrl: string | null;
+  providerImageUrl: string | null;
   live: boolean;
   createdAt: string;
 }
@@ -67,7 +69,7 @@ interface SearchNative {
   displayName: string;
 }
 
-const FEATURED_LIMIT = 20;
+const FEATURED_LIMIT = 60;
 const inputCls = 'w-full rounded-lg border border-brand-divider bg-brand-paper px-3 py-2 text-sm text-brand-ink placeholder:text-brand-inkMute focus:outline-none focus:ring-2 focus:ring-brand-blue-500';
 
 interface DebugSnapshot {
@@ -99,9 +101,57 @@ export default function AdminHomepageSectionsPage() {
   const [error, setError] = useState<string | null>(null);
   const [savingSectionId, setSavingSectionId] = useState<string | null>(null);
   const [savingFeaturedId, setSavingFeaturedId] = useState<string | null>(null);
+  const [uploadingFeaturedId, setUploadingFeaturedId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [debug, setDebug] = useState<DebugSnapshot | null>(null);
+
+  const onFeaturedImageUpload = async (id: string, file: File) => {
+    setUploadingFeaturedId(id);
+    setError(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('category', 'games');
+      const upRes = await fetch('/api/admin/uploads', { method: 'POST', body: fd });
+      const upData = await upRes.json().catch(() => null);
+      if (!upRes.ok) throw new Error(upData?.message ?? upData?.code ?? 'Upload failed');
+      const url = upData.url as string;
+      const patchRes = await fetch(`/api/admin/homepage-featured/${id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ customImageUrl: url }),
+      });
+      const patchData = await patchRes.json().catch(() => null);
+      if (!patchRes.ok) throw new Error(patchData?.message ?? patchData?.code ?? 'Save failed');
+      setFeatured((rows) => rows.map((r) => (r.id === id ? { ...r, customImageUrl: url, imageUrl: url } : r)));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Image save failed');
+    } finally {
+      setUploadingFeaturedId(null);
+    }
+  };
+
+  const onFeaturedImageReset = async (id: string) => {
+    setUploadingFeaturedId(id);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/homepage-featured/${id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ customImageUrl: null }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.message ?? data?.code ?? 'Save failed');
+      setFeatured((rows) =>
+        rows.map((r) => (r.id === id ? { ...r, customImageUrl: null, imageUrl: r.providerImageUrl ?? null } : r)),
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Reset failed');
+    } finally {
+      setUploadingFeaturedId(null);
+    }
+  };
   const [debugBusy, setDebugBusy] = useState(false);
   const [sync, setSync] = useState<SyncSnapshot | null>(null);
 
@@ -372,11 +422,47 @@ export default function AdminHomepageSectionsPage() {
           {featured.map((f, i) => (
             <div key={f.id} className={cn('flex flex-wrap items-center gap-3 rounded-lg border border-brand-divider bg-brand-surface px-3 py-2', !f.live && 'opacity-60')}>
               <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-brand-yellow-500/15 text-[11px] font-bold text-brand-yellow-700">{i + 1}</span>
+              <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-md border border-brand-divider bg-brand-paper">
+                {f.imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={f.imageUrl} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-[9px] uppercase tracking-wider text-brand-inkMute">No image</div>
+                )}
+                {f.customImageUrl ? (
+                  <span className="absolute right-0 top-0 inline-flex items-center rounded-bl-md bg-brand-yellow-500 px-1 text-[8px] font-bold text-brand-ink">CUSTOM</span>
+                ) : null}
+              </div>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold text-brand-ink">{f.displayName}</p>
                 <p className="truncate text-[11px] text-brand-inkMute">
                   {f.providerName}{f.category ? ` . ${f.category}` : ''}{f.source === 'native' ? ' . native' : ''}
                 </p>
+                <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                  <label className={cn('inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border border-brand-divider bg-brand-paper px-2 text-[10px] font-semibold text-brand-ink hover:border-brand-yellow-500', uploadingFeaturedId === f.id && 'pointer-events-none opacity-60')}>
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        e.target.value = '';
+                        if (file) onFeaturedImageUpload(f.id, file);
+                      }}
+                    />
+                    {uploadingFeaturedId === f.id ? 'Uploading...' : f.customImageUrl ? 'Change image' : 'Upload image'}
+                  </label>
+                  {f.customImageUrl ? (
+                    <button
+                      type="button"
+                      onClick={() => onFeaturedImageReset(f.id)}
+                      disabled={uploadingFeaturedId === f.id}
+                      className="inline-flex h-7 items-center rounded-md border border-brand-divider bg-brand-paper px-2 text-[10px] font-semibold text-rose-600 hover:border-rose-400 disabled:opacity-60"
+                    >
+                      Reset
+                    </button>
+                  ) : null}
+                </div>
               </div>
               {!f.live ? <Chip tone="warn">Inactive</Chip> : null}
               <button
