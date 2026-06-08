@@ -162,7 +162,7 @@ export function HomeDbGameSection({ section }: Props) {
       {launchError ? <p className="rounded-lg border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{launchError}</p> : null}
       <DepositRequiredModal open={depositOpen} onOpenChange={setDepositOpen} balance={depositInfo.balance} requiredAmount={depositInfo.required} />
 
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-5 md:gap-3">
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5 md:gap-3">
         {section.games.map((g) => {
           const tileKey = g.key;
           const isExternal = g.source === 'external';

@@ -33,11 +33,16 @@ const LIVE = [
   { href: '/admin/referrals', icon: Network, title: 'Referral System', body: 'Three-level referral chain reporting (data live; commission accrual M2).' },
 ];
 
-const M2 = [
-  { icon: Tag, title: 'Promo codes', body: 'Single-use and multi-use promo codes that grant bonus rules on redemption. New schema + admin CRUD.' },
-  { icon: Bell, title: 'Push notifications', body: 'Web push with VAPID; segments by activity. Requires VAPID keys + service worker registration.' },
-  { icon: MessageSquare, title: 'SMS / Email blasts', body: 'Bulk send via provider adapter (BulkSMS / SendGrid / similar). Provider keys required.' },
-  { icon: TrendingUp, title: 'Cashback campaigns', body: 'Periodic cashback engine that credits a percentage of net loss to bonus balance. Wired against the same Transaction ledger.' },
+// Module status:
+//   - Promo codes / cashback: scheduled in the next implementation pass.
+//   - Push / SMS / Email: provider keys (VAPID / SMS / SMTP) must be
+//     supplied before any send path can complete. The runtime queues a
+//     campaign as draft until keys are configured.
+const PENDING = [
+  { icon: Tag, title: 'Promo codes', body: 'Single-use and multi-use codes that grant bonus rules on redemption. Scheduled in the next iteration.', tone: 'neutral' as const, chip: 'Scheduled' },
+  { icon: Bell, title: 'Push notifications', body: 'In-app history + send queue land in the next iteration; live push requires VAPID keys before any campaign can dispatch.', tone: 'warn' as const, chip: 'Provider setup required' },
+  { icon: MessageSquare, title: 'SMS / Email blasts', body: 'Campaign builder + queue land in the next iteration; SMS / SMTP provider keys are required before any send completes.', tone: 'warn' as const, chip: 'Provider setup required' },
+  { icon: TrendingUp, title: 'Cashback campaigns', body: 'Cashback engine credits a percent of net loss to bonus balance against the existing Transaction ledger. Scheduled in the next iteration.', tone: 'neutral' as const, chip: 'Scheduled' },
 ];
 
 export default function AdminMarketingPage() {
@@ -52,9 +57,11 @@ export default function AdminMarketingPage() {
       <Card padding="md" className="mb-4">
         <p className="text-xs text-ink-mid">
           Live channels are wired to the public site today. Items marked
-          <span className="mx-1 inline-flex items-center"><Chip tone="warn">Ready for M2</Chip></span>
-          either need a provider key (push, SMS, email) or a small schema addition (promo codes, cashback
-          engine) and ship in Milestone 2.
+          <span className="mx-1 inline-flex items-center"><Chip tone="warn">Provider setup required</Chip></span>
+          will dispatch only after the relevant provider keys are configured (VAPID for push, SMS gateway for SMS, SMTP for email).
+          Items marked
+          <span className="mx-1 inline-flex items-center"><Chip tone="neutral">Scheduled</Chip></span>
+          land in the next implementation iteration.
         </p>
       </Card>
 
@@ -79,10 +86,10 @@ export default function AdminMarketingPage() {
       </div>
 
       <div className="mt-6">
-        <CardHeader title="Ready for M2" />
+        <CardHeader title="Pending modules" />
       </div>
       <div className="mt-3 grid gap-3 md:grid-cols-2">
-        {M2.map((r) => {
+        {PENDING.map((r) => {
           const Icon = r.icon;
           return (
             <Card key={r.title} padding="lg" className="border-dashed">
@@ -93,7 +100,7 @@ export default function AdminMarketingPage() {
                 <div className="flex-1">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm font-extrabold text-ink-hi">{r.title}</p>
-                    <Chip tone="warn">Ready for M2</Chip>
+                    <Chip tone={r.tone}>{r.chip}</Chip>
                   </div>
                   <p className="mt-1 text-xs text-ink-mid">{r.body}</p>
                 </div>

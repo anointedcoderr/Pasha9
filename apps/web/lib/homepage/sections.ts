@@ -79,11 +79,13 @@ export interface HomeSectionsBundle {
 }
 
 const STRIP_LIMIT = 12;
-const FEATURED_LIMIT = 20;
+const FEATURED_LIMIT = 60;
 // Hot Games is operator-curated end-to-end; render every row the
 // operator added (capped by FEATURED_LIMIT in loadFeaturedGames) so
-// the public strip mirrors the Manager exactly. Other category
-// strips (slots/casino/etc) keep STRIP_LIMIT.
+// the public strip mirrors the Manager exactly. The cap is set to 60
+// so the operator can curate at least 50 rows as requested while
+// leaving a small safety buffer above the requested headline figure.
+// Other category strips (slots/casino/etc) keep STRIP_LIMIT.
 const HOMEPAGE_HOT_LIMIT = FEATURED_LIMIT;
 
 const ICON_KEY_BY_SECTION: Record<string, string> = {

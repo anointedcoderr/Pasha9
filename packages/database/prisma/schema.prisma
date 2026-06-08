@@ -2118,3 +2118,22 @@ model PromotionBanner {
 
   @@index([isActive, sortOrder])
 }
+
+// Operator-managed social-media link directory rendered in the public
+// Footer. Empty / inactive rows are hidden. Falls back to the legacy
+// SystemSetting telegram/whatsapp/email contact values when this table
+// is empty so a fresh database keeps the existing footer.
+model SocialLink {
+  id        String   @id @default(cuid())
+  platform  String
+  label     String
+  labelBn   String?
+  url       String
+  iconUrl   String?
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
+}

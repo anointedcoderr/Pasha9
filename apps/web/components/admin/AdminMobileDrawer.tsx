@@ -48,6 +48,7 @@ import {
   Bell,
   Plug,
   Gamepad2,
+  Share2,
   Wallet as WalletIcon,
   MessageCircle,
 } from 'lucide-react';
@@ -107,10 +108,12 @@ const GROUPS = [
       { key: 'homepage', href: ROUTES.admin.homepage, icon: Home },
       { key: 'homepageSections', href: ROUTES.admin.homepageSections, icon: Layers },
       { key: 'homepageBlocks', href: ROUTES.admin.homepageBlocks, icon: Layers },
+      { key: 'homepagePromoPair', href: '/admin/homepage-promo-pair', icon: Sparkles },
       { key: 'ambassador', href: '/admin/ambassador', icon: Star },
       { key: 'brandAmbassadors', href: ROUTES.admin.brandAmbassadors, icon: Star },
       { key: 'sponsors', href: ROUTES.admin.sponsors, icon: Trophy },
       { key: 'publicPaymentMethods', href: ROUTES.admin.publicPaymentMethods, icon: CreditCard },
+      { key: 'socialLinks', href: '/admin/social-links', icon: Share2 },
     ],
   },
   {

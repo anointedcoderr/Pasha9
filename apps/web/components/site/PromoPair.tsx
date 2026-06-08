@@ -1,32 +1,89 @@
 // Built by Anointed Coder.
 // Two large promotional cards stacked or side by side: Refer & Earn,
-// Exclusive Betting Pass. Link to /affiliate and /betting-pass.
+// Exclusive Betting Pass. Defaults link to /affiliate and /betting-pass
+// but every text + link + image is admin-overridable via the
+// /api/content/homepage-promo-pair endpoint which reads SystemSetting
+// rows. Empty admin values fall back to the bundled i18n strings + art
+// so a fresh database still renders something meaningful.
 
 'use client';
 
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { ArrowRight } from 'lucide-react';
-import { useT } from '@/lib/i18n/context';
+import { useT, useLang } from '@/lib/i18n/context';
+
+interface PromoPairConfig {
+  refer: {
+    kicker: string | null;
+    kickerBn: string | null;
+    title: string | null;
+    titleBn: string | null;
+    body: string | null;
+    bodyBn: string | null;
+    cta: string | null;
+    ctaBn: string | null;
+    href: string | null;
+    imageUrl: string | null;
+  };
+  pass: {
+    kicker: string | null;
+    kickerBn: string | null;
+    title: string | null;
+    titleBn: string | null;
+    body: string | null;
+    bodyBn: string | null;
+    cta: string | null;
+    ctaBn: string | null;
+    href: string | null;
+    imageUrl: string | null;
+  };
+}
+
+const pickLang = (en: string | null, bn: string | null, fallback: string, lang: 'en' | 'bn'): string => {
+  if (lang === 'bn') return (bn && bn.trim()) || (en && en.trim()) || fallback;
+  return (en && en.trim()) || fallback;
+};
 
 export function PromoPair() {
   const t = useT();
+  const { lang } = useLang();
+  const [config, setConfig] = useState<PromoPairConfig | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/content/homepage-promo-pair', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!alive) return;
+        if (j?.refer && j?.pass) setConfig(j as PromoPairConfig);
+      })
+      .catch(() => { /* defaults render */ });
+    return () => { alive = false; };
+  }, []);
+
+  const refer = config?.refer;
+  const pass = config?.pass;
+
   return (
     <section className="grid gap-3 md:grid-cols-2">
       <PromoCard
-        kicker={t('home.pair.referKicker')}
-        title={t('home.pair.referTitle')}
-        body={t('home.pair.referBody')}
-        cta={t('home.pair.referCta')}
-        href="/affiliate"
+        kicker={pickLang(refer?.kicker ?? null, refer?.kickerBn ?? null, t('home.pair.referKicker'), lang)}
+        title={pickLang(refer?.title ?? null, refer?.titleBn ?? null, t('home.pair.referTitle'), lang)}
+        body={pickLang(refer?.body ?? null, refer?.bodyBn ?? null, t('home.pair.referBody'), lang)}
+        cta={pickLang(refer?.cta ?? null, refer?.ctaBn ?? null, t('home.pair.referCta'), lang)}
+        href={refer?.href || '/affiliate'}
+        imageUrl={refer?.imageUrl ?? null}
         art={<ReferArt />}
         gradient="from-brand-ink to-brand-navInkSoft"
       />
       <PromoCard
-        kicker={t('home.pair.passKicker')}
-        title={t('home.pair.passTitle')}
-        body={t('home.pair.passBody')}
-        cta={t('home.pair.passCta')}
-        href="/betting-pass"
+        kicker={pickLang(pass?.kicker ?? null, pass?.kickerBn ?? null, t('home.pair.passKicker'), lang)}
+        title={pickLang(pass?.title ?? null, pass?.titleBn ?? null, t('home.pair.passTitle'), lang)}
+        body={pickLang(pass?.body ?? null, pass?.bodyBn ?? null, t('home.pair.passBody'), lang)}
+        cta={pickLang(pass?.cta ?? null, pass?.ctaBn ?? null, t('home.pair.passCta'), lang)}
+        href={pass?.href || '/betting-pass'}
+        imageUrl={pass?.imageUrl ?? null}
         art={<PassArt />}
         gradient="from-brand-blue-700 to-brand-blue-500"
       />
@@ -40,6 +97,7 @@ function PromoCard({
   body,
   cta,
   href,
+  imageUrl,
   art,
   gradient,
 }: {
@@ -48,12 +106,18 @@ function PromoCard({
   body: string;
   cta: string;
   href: string;
+  imageUrl: string | null;
   art: React.ReactNode;
   gradient: string;
 }) {
   return (
     <article className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${gradient} text-white`}>
-      <div aria-hidden className="absolute inset-0 opacity-90">{art}</div>
+      {imageUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={imageUrl} alt="" aria-hidden className="absolute inset-0 h-full w-full object-cover opacity-55" />
+      ) : (
+        <div aria-hidden className="absolute inset-0 opacity-90">{art}</div>
+      )}
       <div className="relative grid grid-cols-[1fr_auto] items-center gap-3 px-5 py-6 md:px-7 md:py-8">
         <div>
           <p className="text-[11px] font-bold uppercase tracking-wider text-brand-yellow-400">{kicker}</p>

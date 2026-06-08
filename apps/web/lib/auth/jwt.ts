@@ -6,12 +6,14 @@
 
 import { SignJWT, jwtVerify, type JWTPayload } from 'jose';
 
-// Access token now lasts 8h so a normal session does not log the user
-// out mid-flow. Refresh extends to 30 days so the transparent refresh
-// in /api/auth/me + /api/auth/refresh can keep the user signed in
-// across long gaps. Both still overridable via env vars.
-const ACCESS_TTL = process.env.JWT_ACCESS_TTL ?? '8h';
-const REFRESH_TTL = process.env.JWT_REFRESH_TTL ?? '30d';
+// Access token lasts 24h and refresh extends to 90 days so a normal
+// session survives browser restarts and multi-day gaps without a
+// re-login. Logout still clears both cookies, an admin block still
+// revokes the refresh session, and the transparent refresh path in
+// /api/auth/me + /api/auth/refresh keeps minting fresh access tokens
+// from the long-lived refresh cookie. Both still overridable via env.
+const ACCESS_TTL = process.env.JWT_ACCESS_TTL ?? '24h';
+const REFRESH_TTL = process.env.JWT_REFRESH_TTL ?? '90d';
 
 function secretBytes(envKey: string): Uint8Array {
   const value = process.env[envKey];

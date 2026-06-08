@@ -21,6 +21,7 @@ export async function GET() {
       username: true,
       phone: true,
       email: true,
+      avatarUrl: true,
       referralCode: true,
       referredById: true,
       status: true,

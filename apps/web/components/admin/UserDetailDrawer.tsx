@@ -249,8 +249,8 @@ export function UserDetailDrawer({ open, onOpenChange, detail, loading, error, o
           </div>
           <p className="text-[11px] text-ink-lo">
             Adjust Balance writes via the existing admin balance adjustment surface. Password reset
-            wiring is Ready for M2; the button is reserved on the drawer so the workflow stays in
-            place.
+            wiring is scheduled in the next iteration; the button is reserved on the drawer so the
+            workflow stays in place.
           </p>
         </div>
       )}

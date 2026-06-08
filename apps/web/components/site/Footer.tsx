@@ -10,7 +10,32 @@ import { useEffect, useState } from 'react';
 import { BRAND } from '@/lib/constants/brand';
 import { ROUTES } from '@/lib/constants/routes';
 import { useT, useLang } from '@/lib/i18n/context';
-import { Send, MessageCircle, Mail, Shield, Facebook, Youtube, Instagram, Twitter } from 'lucide-react';
+import { Send, MessageCircle, Mail, Shield, Facebook, Youtube, Instagram, Twitter, Globe, MessageSquare, Music2, Linkedin, Camera, type LucideIcon } from 'lucide-react';
+
+interface SocialLinkRow {
+  id: string;
+  platform: string;
+  label: string;
+  labelBn: string | null;
+  url: string;
+  iconUrl: string | null;
+}
+
+const PLATFORM_ICON: Record<string, LucideIcon> = {
+  telegram: Send,
+  whatsapp: MessageCircle,
+  facebook: Facebook,
+  youtube: Youtube,
+  instagram: Instagram,
+  twitter: Twitter,
+  tiktok: Music2,
+  linkedin: Linkedin,
+  discord: MessageSquare,
+  snapchat: Camera,
+  pinterest: Camera,
+  email: Mail,
+  custom: Globe,
+};
 
 interface ClientContacts {
   siteName: string;
@@ -77,6 +102,7 @@ export function Footer() {
   const { lang } = useLang();
   const [contacts, setContacts] = useState<ClientContacts | null>(null);
   const [display, setDisplay] = useState<AboutDisplay | null>(null);
+  const [socialLinks, setSocialLinks] = useState<SocialLinkRow[]>([]);
 
   useEffect(() => {
     let alive = true;
@@ -107,6 +133,14 @@ export function Footer() {
         });
       })
       .catch(() => { /* footer degrades silently */ });
+
+    fetch('/api/content/social-links')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!alive) return;
+        setSocialLinks(Array.isArray(j?.links) ? (j.links as SocialLinkRow[]) : []);
+      })
+      .catch(() => { /* falls back to legacy contacts row */ });
 
     return () => { alive = false; };
   }, []);
@@ -240,25 +274,47 @@ export function Footer() {
           <div>
             <p className="text-sm font-semibold uppercase tracking-wider text-white">{t('footer.follow')}</p>
             <div className="mt-4 flex flex-wrap items-center gap-3">
-              {contacts?.telegram ? (
-                <SocialPill href={contacts.telegram} label="Telegram" icon={<Send className="h-4 w-4" />} />
-              ) : null}
-              {contacts?.whatsapp ? (
-                <SocialPill href={contacts.whatsapp} label="WhatsApp" icon={<MessageCircle className="h-4 w-4" />} />
-              ) : null}
-              {contacts?.email ? (
-                <SocialPill href={`mailto:${contacts.email}`} label={contacts.email} icon={<Mail className="h-4 w-4" />} external={false} />
-              ) : null}
-              <SocialPill href="#facebook" label="Facebook" icon={<Facebook className="h-4 w-4" />} />
-              <SocialPill href="#youtube" label="YouTube" icon={<Youtube className="h-4 w-4" />} />
-              <SocialPill href="#instagram" label="Instagram" icon={<Instagram className="h-4 w-4" />} />
-              <SocialPill href="#x" label="X" icon={<Twitter className="h-4 w-4" />} />
+              {socialLinks.length > 0 ? (
+                socialLinks.map((link) => {
+                  const Icon = PLATFORM_ICON[link.platform] ?? Globe;
+                  const label = lang === 'bn' && link.labelBn ? link.labelBn : link.label;
+                  const external = !link.url.startsWith('mailto:');
+                  return (
+                    <SocialPill
+                      key={link.id}
+                      href={link.url}
+                      label={label}
+                      external={external}
+                      icon={
+                        link.iconUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={link.iconUrl} alt="" className="h-4 w-4 object-contain" />
+                        ) : (
+                          <Icon className="h-4 w-4" />
+                        )
+                      }
+                    />
+                  );
+                })
+              ) : (
+                <>
+                  {contacts?.telegram ? (
+                    <SocialPill href={contacts.telegram} label="Telegram" icon={<Send className="h-4 w-4" />} />
+                  ) : null}
+                  {contacts?.whatsapp ? (
+                    <SocialPill href={contacts.whatsapp} label="WhatsApp" icon={<MessageCircle className="h-4 w-4" />} />
+                  ) : null}
+                  {contacts?.email ? (
+                    <SocialPill href={`mailto:${contacts.email}`} label={contacts.email} icon={<Mail className="h-4 w-4" />} external={false} />
+                  ) : null}
+                </>
+              )}
             </div>
-            {!contacts?.telegram && !contacts?.whatsapp && !contacts?.email ? (
+            {socialLinks.length === 0 && !contacts?.telegram && !contacts?.whatsapp && !contacts?.email ? (
               <p className="mt-3 text-[11px] text-white/45">
                 {lang === 'bn'
-                  ? 'অ্যাডমিন থেকে পাবলিক সাপোর্ট চ্যানেল কনফিগার করুন।'
-                  : 'Configure public support channels from admin Settings.'}
+                  ? 'অ্যাডমিন থেকে সোশ্যাল লিঙ্ক যোগ করুন।'
+                  : 'Add social links from the admin Social Links page.'}
               </p>
             ) : null}
           </div>

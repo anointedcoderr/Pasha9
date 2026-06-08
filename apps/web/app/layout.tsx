@@ -3,36 +3,56 @@ import { fontAdmin, fontBn, fontEn } from '@/styles/fonts';
 import { Providers } from './providers';
 import { resolveLang } from '@/lib/i18n/server';
 import { TrackingScripts } from '@/components/site/TrackingScripts';
+import { db } from '@/lib/db/client';
 import './globals.css';
 
-export const metadata: Metadata = {
-  metadataBase: new URL('https://pasha9.com'),
-  title: {
-    default: 'Pasha 9 | Royal Bangla Casino',
-    template: '%s | Pasha 9',
-  },
-  description: 'Pasha 9 brings a premium Bangla casino and betting experience. Play smarter, win bigger.',
-  applicationName: 'Pasha 9',
-  authors: [{ name: 'Anointed Coder', url: 'https://t.me/anointedcoder' }],
-  creator: 'Anointed Coder',
-  publisher: 'Anointed Coder',
-  icons: {
-    icon: '/favicon.svg',
-    apple: '/favicon.svg',
-  },
-  manifest: '/manifest.webmanifest',
-  // Block browser translation engines (Google Translate, Edge,
-  // Safari). Pasha 9 ships its own EN/BN dictionaries; the React
-  // tree expects to own every text node. When Google Translate
-  // replaces text nodes it makes React's reconciler unable to find
-  // them later, producing 'Cannot read properties of null (reading
-  // removeChild)' on the next unmount. Belt + suspenders on the
-  // admin shell below pins this for translated browsers that
-  // ignore the meta hint.
-  other: {
-    google: 'notranslate',
-  },
-};
+// Pulls the operator-uploaded favicon and site name out of
+// SystemSetting at request time so /admin/website edits take effect
+// without a redeploy. metadata is rendered server-side so there is no
+// DOM-swap of <link rel=icon> on the client; the prior DynamicFavicon
+// component was removed because that runtime swap was the production
+// source of a React reconciliation crash. Pure server output side-
+// steps that class of bug. Falls back to the in-repo /favicon.svg
+// when no row is set so a fresh database still renders an icon.
+export async function generateMetadata(): Promise<Metadata> {
+  const rows = await db.systemSetting
+    .findMany({ where: { key: { in: ['site_name', 'favicon_url'] } } })
+    .catch(() => [] as Array<{ key: string; value: string | null }>);
+  const map: Record<string, string> = {};
+  for (const r of rows) if (r.value && r.value.trim()) map[r.key] = r.value.trim();
+  const siteName = map.site_name ?? 'Pasha 9';
+  const favicon = map.favicon_url ?? '/favicon.svg';
+
+  return {
+    metadataBase: new URL('https://pasha9.com'),
+    title: {
+      default: `${siteName} | Royal Bangla Casino`,
+      template: `%s | ${siteName}`,
+    },
+    description: `${siteName} brings a premium Bangla casino and betting experience. Play smarter, win bigger.`,
+    applicationName: siteName,
+    authors: [{ name: 'Anointed Coder', url: 'https://t.me/anointedcoder' }],
+    creator: 'Anointed Coder',
+    publisher: 'Anointed Coder',
+    icons: {
+      icon: favicon,
+      apple: favicon,
+      shortcut: favicon,
+    },
+    manifest: '/manifest.webmanifest',
+    // Block browser translation engines (Google Translate, Edge,
+    // Safari). Pasha 9 ships its own EN/BN dictionaries; the React
+    // tree expects to own every text node. When Google Translate
+    // replaces text nodes it makes React's reconciler unable to find
+    // them later, producing 'Cannot read properties of null (reading
+    // removeChild)' on the next unmount. Belt + suspenders on the
+    // admin shell below pins this for translated browsers that
+    // ignore the meta hint.
+    other: {
+      google: 'notranslate',
+    },
+  };
+}
 
 export const viewport: Viewport = {
   width: 'device-width',

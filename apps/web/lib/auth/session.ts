@@ -10,10 +10,13 @@ import { loadEffectivePermissions } from './rbac';
 export const ACCESS_COOKIE = 'pasha9_session';
 export const REFRESH_COOKIE = 'pasha9_refresh';
 
-// Cookie lifetimes mirror the JWT TTLs in lib/auth/jwt.ts. Bumped from
-// 15 min / 7 days so a normal session does not log out mid-flow.
-const ACCESS_MAX_AGE_SECONDS = 8 * 60 * 60; // 8 hours
-const REFRESH_MAX_AGE_SECONDS = 30 * 24 * 60 * 60; // 30 days
+// Cookie lifetimes mirror the JWT TTLs in lib/auth/jwt.ts. Access
+// holds for a full day so daytime activity never logs the user out
+// mid-flow, refresh holds for 90 days so closing the browser does
+// not lose the session. Logout still clears both and an admin block
+// still revokes the refresh row.
+const ACCESS_MAX_AGE_SECONDS = 24 * 60 * 60; // 24 hours
+const REFRESH_MAX_AGE_SECONDS = 90 * 24 * 60 * 60; // 90 days
 
 function sha256(value: string): string {
   return createHash('sha256').update(value).digest('hex');
