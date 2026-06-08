@@ -25,6 +25,7 @@ import { PromoPair } from '@/components/site/PromoPair';
 import { AppDownloadSection } from '@/components/site/AppDownloadSection';
 import { HomeDbGameSection } from '@/components/site/HomeDbGameSection';
 import { SportsbookSection } from '@/components/site/SportsbookSection';
+import { SportsFixturesCarousel } from '@/components/site/SportsFixturesCarousel';
 import type { HomeSection } from '@/lib/homepage/sections';
 import type { HomeBlock } from '@/lib/homepage/blocks';
 
@@ -117,9 +118,14 @@ export default function HomePage() {
           lib/homepage/sections.ts. A strip auto-hides when it has no
           matching games; we never fall back to mock placeholders. */}
       {stripSections.slice(0, 3).map((s) => (
-        s.key === 'homepage_sportsbook'
-          ? <SportsbookSection key={s.id} section={s} />
-          : <HomeDbGameSection key={s.id} section={s} />
+        s.key === 'homepage_sportsbook' ? (
+          <div key={s.id} className="space-y-5">
+            <SportsFixturesCarousel />
+            <SportsbookSection section={s} />
+          </div>
+        ) : (
+          <HomeDbGameSection key={s.id} section={s} />
+        )
       ))}
 
       {ambassadorSection?.isVisible !== false ? (
@@ -131,9 +137,14 @@ export default function HomePage() {
       ) : null}
 
       {stripSections.slice(3).map((s) => (
-        s.key === 'homepage_sportsbook'
-          ? <SportsbookSection key={s.id} section={s} />
-          : <HomeDbGameSection key={s.id} section={s} />
+        s.key === 'homepage_sportsbook' ? (
+          <div key={s.id} className="space-y-5">
+            <SportsFixturesCarousel />
+            <SportsbookSection section={s} />
+          </div>
+        ) : (
+          <HomeDbGameSection key={s.id} section={s} />
+        )
       ))}
 
       {blockSections.map((s) => (

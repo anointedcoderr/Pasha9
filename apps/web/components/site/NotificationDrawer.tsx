@@ -53,12 +53,64 @@ export function NotificationDrawer({ open, onOpenChange, isLoggedIn }: Props) {
   const [permission, setPermission] = useState<NotificationPermission | 'unknown'>('unknown');
   const [pushBusy, setPushBusy] = useState(false);
   const [pushFlash, setPushFlash] = useState<string | null>(null);
+  const [testBusy, setTestBusy] = useState(false);
+  const [vapidConfigured, setVapidConfigured] = useState<boolean | null>(null);
+  const [swRegistered, setSwRegistered] = useState<boolean | null>(null);
+  const [diagOpen, setDiagOpen] = useState(false);
   const lastNotificationId = useRef<string | null>(null);
 
   useEffect(() => {
     setPushSupport(checkPushSupport());
     setPermission(getNotificationPermission());
   }, []);
+
+  // VAPID status probe + service worker registration probe. Both run
+  // when the drawer opens so the diagnostics panel reflects live
+  // state. Failure paths set the value to false rather than throw so
+  // the drawer never crashes when the server is offline.
+  useEffect(() => {
+    if (!open) return;
+    fetch('/api/content/push-config', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => setVapidConfigured(Boolean(j?.configured)))
+      .catch(() => setVapidConfigured(false));
+    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistration('/').then((reg) => setSwRegistered(Boolean(reg))).catch(() => setSwRegistered(false));
+    } else {
+      setSwRegistered(false);
+    }
+  }, [open]);
+
+  const isIos = typeof navigator !== 'undefined' && /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const isStandalone = typeof window !== 'undefined' && (
+    window.matchMedia?.('(display-mode: standalone)').matches
+    || (window.navigator as Navigator & { standalone?: boolean }).standalone === true
+  );
+
+  const sendTestPush = async () => {
+    setTestBusy(true);
+    setPushFlash(null);
+    try {
+      const res = await fetch('/api/me/push-subscriptions/test', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setPushFlash(data?.message ?? 'Test send failed');
+        return;
+      }
+      if (data?.ok) {
+        setPushFlash(lang === 'bn' ? `টেস্ট পাঠানো হয়েছে: ${data.sent}/${data.attempted}` : `Test sent: ${data.sent}/${data.attempted}`);
+      } else {
+        setPushFlash(data?.message ?? (lang === 'bn' ? 'টেস্ট পাঠানো যায়নি।' : 'Test could not be sent.'));
+      }
+    } catch (err) {
+      setPushFlash(err instanceof Error ? err.message : 'Failed');
+    } finally {
+      setTestBusy(false);
+    }
+  };
 
   // Play the configured sound (if any) for the newest in-app notification
   // received while the drawer is open. Browsers gate Audio.play() on a
@@ -164,21 +216,33 @@ export function NotificationDrawer({ open, onOpenChange, isLoggedIn }: Props) {
               </Dialog.Close>
             </div>
           </div>
-          {isLoggedIn && pushSupport === 'supported' ? (
-            <div className="flex items-center justify-between gap-2 border-b border-brand-divider bg-brand-paper px-4 py-2">
-              <div className="min-w-0">
-                <p className="text-[12px] font-semibold text-brand-ink">
-                  {lang === 'bn' ? 'ডিভাইস নোটিফিকেশন' : 'Device notifications'}
-                </p>
-                <p className="truncate text-[10px] text-brand-inkMute">
-                  {permission === 'granted'
-                    ? (lang === 'bn' ? 'সক্রিয়। ব্রাউজার ব্যাকগ্রাউন্ডে থাকলেও পাবেন।' : 'On. You will receive these even when the tab is in the background.')
-                    : permission === 'denied'
-                      ? (lang === 'bn' ? 'ব্রাউজার থেকে অনুমতি দিন।' : 'Browser blocked notifications. Allow in browser settings.')
-                      : (lang === 'bn' ? 'সক্রিয় করতে ট্যাপ করুন।' : 'Tap to enable browser/device notifications.')}
-                </p>
-                {pushFlash ? <p className="mt-0.5 truncate text-[10px] text-brand-yellow-700">{pushFlash}</p> : null}
-              </div>
+          {isLoggedIn ? (
+            <div className="border-b border-brand-divider bg-brand-paper px-4 py-2">
+              {pushSupport !== 'supported' ? (
+                <div className="text-[11px] text-brand-inkMute">
+                  {pushSupport === 'no_window' ? null : isIos && !isStandalone
+                    ? (lang === 'bn'
+                        ? 'iPhone-এ ডিভাইস পুশ পেতে সাইটটি Add to Home Screen করে চালান। Safari ট্যাবে পুশ চলবে না।'
+                        : 'Add this site to your iPhone Home Screen and open it from there to receive device push. Safari tabs do not support push on iOS.')
+                    : (lang === 'bn'
+                        ? 'আপনার ব্রাউজার ডিভাইস পুশ সাপোর্ট করে না।'
+                        : 'Your browser does not support browser push.')}
+                </div>
+              ) : (
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-[12px] font-semibold text-brand-ink">
+                      {lang === 'bn' ? 'ডিভাইস নোটিফিকেশন' : 'Device notifications'}
+                    </p>
+                    <p className="truncate text-[10px] text-brand-inkMute">
+                      {permission === 'granted'
+                        ? (lang === 'bn' ? 'সক্রিয়। ব্রাউজার ব্যাকগ্রাউন্ডে থাকলেও পাবেন।' : 'On. You will receive these even when the tab is in the background.')
+                        : permission === 'denied'
+                          ? (lang === 'bn' ? 'ব্রাউজার থেকে অনুমতি দিন।' : 'Browser blocked notifications. Allow in browser settings.')
+                          : (lang === 'bn' ? 'সক্রিয় করতে ট্যাপ করুন।' : 'Tap to enable browser/device notifications.')}
+                    </p>
+                    {pushFlash ? <p className="mt-0.5 truncate text-[10px] text-brand-yellow-700">{pushFlash}</p> : null}
+                  </div>
               <button
                 type="button"
                 disabled={pushBusy}
@@ -217,6 +281,38 @@ export function NotificationDrawer({ open, onOpenChange, isLoggedIn }: Props) {
                   </>
                 )}
               </button>
+                </div>
+              )}
+              {pushSupport === 'supported' ? (
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  {permission === 'granted' ? (
+                    <button
+                      type="button"
+                      onClick={sendTestPush}
+                      disabled={testBusy}
+                      className="inline-flex h-7 items-center rounded-md border border-brand-divider bg-brand-paper px-2 text-[10px] font-semibold text-brand-ink hover:border-brand-yellow-500 disabled:opacity-60"
+                    >
+                      {testBusy ? (lang === 'bn' ? 'পাঠাচ্ছি...' : 'Sending...') : (lang === 'bn' ? 'টেস্ট পুশ পাঠান' : 'Send test push')}
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => setDiagOpen((v) => !v)}
+                    className="text-[10px] font-semibold text-brand-yellow-700 hover:underline"
+                  >
+                    {diagOpen ? (lang === 'bn' ? 'লুকান' : 'Hide details') : (lang === 'bn' ? 'বিস্তারিত' : 'Diagnostics')}
+                  </button>
+                </div>
+              ) : null}
+              {diagOpen ? (
+                <ul className="mt-2 space-y-0.5 rounded-md border border-brand-divider bg-brand-surface p-2 text-[10px] text-brand-inkMute">
+                  <li>Browser supports push: {pushSupport === 'supported' ? 'yes' : 'no'}</li>
+                  <li>Service worker registered: {swRegistered == null ? '...' : swRegistered ? 'yes' : 'no'}</li>
+                  <li>Notification permission: {permission === 'unknown' ? '...' : permission}</li>
+                  <li>VAPID configured (server): {vapidConfigured == null ? '...' : vapidConfigured ? 'yes' : 'no'}</li>
+                  {isIos ? <li>iOS PWA required: {isStandalone ? 'installed' : 'add to home screen'}</li> : null}
+                </ul>
+              ) : null}
             </div>
           ) : null}
           <div className="max-h-[60vh] overflow-y-auto">

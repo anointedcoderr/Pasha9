@@ -16,12 +16,22 @@ import './globals.css';
 // when no row is set so a fresh database still renders an icon.
 export async function generateMetadata(): Promise<Metadata> {
   const rows = await db.systemSetting
-    .findMany({ where: { key: { in: ['site_name', 'favicon_url'] } } })
+    .findMany({ where: { key: { in: ['site_name', 'favicon_url', 'favicon_version'] } } })
     .catch(() => [] as Array<{ key: string; value: string | null }>);
   const map: Record<string, string> = {};
   for (const r of rows) if (r.value && r.value.trim()) map[r.key] = r.value.trim();
   const siteName = map.site_name ?? 'Pasha 9';
-  const favicon = map.favicon_url ?? '/favicon.svg';
+  const faviconBase = map.favicon_url ?? '/favicon.svg';
+  // Append a cache-busting query string so the browser refetches the
+  // icon every time the operator saves a new file in /admin/website.
+  // The version is the SystemSetting `favicon_version` value (the
+  // admin save route writes a fresh value on every save). Falls back
+  // to '1' when not set so the URL still looks normal on a fresh DB.
+  const version = map.favicon_version || '1';
+  const separator = faviconBase.includes('?') ? '&' : '?';
+  const favicon = faviconBase.startsWith('/uploads/') || /^https?:\/\//i.test(faviconBase)
+    ? `${faviconBase}${separator}v=${encodeURIComponent(version)}`
+    : faviconBase;
 
   return {
     metadataBase: new URL('https://pasha9.com'),

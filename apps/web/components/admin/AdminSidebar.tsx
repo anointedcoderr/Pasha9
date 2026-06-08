@@ -106,6 +106,8 @@ const GROUPS = [
       { key: 'homepageSections', href: ROUTES.admin.homepageSections, icon: Layers },
       { key: 'homepageBlocks', href: ROUTES.admin.homepageBlocks, icon: Layers },
       { key: 'homepagePromoPair', href: '/admin/homepage-promo-pair', icon: Sparkles },
+      { key: 'homepageShortcuts', href: '/admin/homepage-shortcuts', icon: Layers },
+      { key: 'sportsEvents', href: '/admin/sports-events', icon: Trophy },
       { key: 'ambassador', href: '/admin/ambassador', icon: Star },
       { key: 'brandAmbassadors', href: ROUTES.admin.brandAmbassadors, icon: Star },
       { key: 'sponsors', href: ROUTES.admin.sponsors, icon: Trophy },

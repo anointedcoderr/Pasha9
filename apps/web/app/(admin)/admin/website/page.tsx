@@ -122,6 +122,11 @@ export default function AdminWebsitePage() {
     setSaving(true);
     setError(null);
     try {
+      // Bump the favicon version on every save so the
+      // generateMetadata helper appends a fresh ?v=<...> query and
+      // the browser re-fetches the icon instead of serving the
+      // cached tab favicon. Timestamp is enough; a precise hash is
+      // overkill for a 32x32 PNG.
       const res = await fetch('/api/admin/settings', {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
@@ -130,6 +135,7 @@ export default function AdminWebsitePage() {
             { key: 'site_name', value: siteName.trim() },
             { key: 'logo_url', value: logoUrl.trim() },
             { key: 'favicon_url', value: faviconUrl.trim() },
+            { key: 'favicon_version', value: String(Date.now()) },
           ],
         }),
       });

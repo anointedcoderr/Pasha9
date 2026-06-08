@@ -2141,6 +2141,42 @@ model PromotionBanner {
 // sortOrder; an empty deck falls back to whatever the homepage video
 // section rendered before this model existed. All fields are
 // additive; nothing else in the schema references this table.
+// Operator-managed sports fixture rendered in the homepage Sportsbook
+// carousel as a Babu-style event card (status pill + league line + date
+// + two teams). Until a real provider feed adapter is wired the admin
+// adds rows manually. When a feed adapter ships, the importer should
+// upsert into this table by (providerName, providerEventId) so the
+// admin UI continues to render the same cards without code changes.
+// All fields are additive; nothing else in the schema references this
+// table.
+model SportsEvent {
+  id              String   @id @default(cuid())
+  sportType       String   @default("cricket")
+  status          String   @default("upcoming")
+  leagueNameEn    String
+  leagueNameBn    String?
+  startsAt        DateTime
+  endsAt          DateTime?
+  teamAName       String
+  teamAShortName  String?
+  teamALogoUrl    String?
+  teamBName       String
+  teamBShortName  String?
+  teamBLogoUrl    String?
+  providerName    String?
+  providerEventId String?
+  deepLinkUrl     String?
+  sortOrder       Int      @default(0)
+  isActive        Boolean  @default(true)
+  source          String   @default("manual")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([isActive, startsAt])
+  @@index([status, startsAt])
+  @@index([providerName, providerEventId])
+}
+
 model HomepageVideo {
   id             String   @id @default(cuid())
   titleEn        String
