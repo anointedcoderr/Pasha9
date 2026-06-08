@@ -47,6 +47,11 @@ interface FeaturedRow {
   imageUrl: string | null;
   customImageUrl: string | null;
   providerImageUrl: string | null;
+  showProviderLabel: boolean;
+  showGameName: boolean;
+  showHotBadge: boolean;
+  showPlayButton: boolean;
+  imageOnlyMode: boolean;
   live: boolean;
   createdAt: string;
 }
@@ -507,6 +512,31 @@ export default function AdminHomepageSectionsPage() {
                   <ArrowDown className="h-3.5 w-3.5" />
                 </button>
               </div>
+              <details className="ml-auto basis-full text-[10px] md:basis-auto">
+                <summary className="cursor-pointer rounded-md border border-brand-divider px-2 py-1 font-bold uppercase tracking-wider text-brand-inkSoft hover:text-brand-ink">
+                  Overlays
+                </summary>
+                <div className="mt-2 grid w-full grid-cols-2 gap-2 rounded-md border border-brand-divider bg-brand-paper p-2 text-[11px] sm:grid-cols-3 md:absolute md:right-0 md:z-10 md:w-[360px]">
+                  {([
+                    ['imageOnlyMode', 'Image only'],
+                    ['showProviderLabel', 'Provider label'],
+                    ['showGameName', 'Game name'],
+                    ['showHotBadge', 'HOT badge'],
+                    ['showPlayButton', 'Play button'],
+                  ] as Array<[keyof FeaturedRow, string]>).map(([key, label]) => (
+                    <label key={String(key)} className="flex cursor-pointer items-center gap-1.5">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(f[key])}
+                        disabled={savingFeaturedId === f.id}
+                        onChange={(e) => onFeaturedPatch(f.id, { [key]: e.target.checked } as Partial<FeaturedRow>)}
+                        className="h-3.5 w-3.5"
+                      />
+                      <span>{label}</span>
+                    </label>
+                  ))}
+                </div>
+              </details>
               <Button
                 variant="ghost"
                 leftIcon={<Trash2 className="h-3.5 w-3.5" />}

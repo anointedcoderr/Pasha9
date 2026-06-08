@@ -8,8 +8,9 @@ import { db } from '@/lib/db/client';
 import { withAuth, ensurePermission, recordActivity } from '@/lib/auth/guard';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 
+// Image-only banners are allowed; titleEn accepts empty strings.
 const patchSchema = z.object({
-  titleEn: z.string().trim().min(1).max(120).optional(),
+  titleEn: z.string().trim().max(120).optional(),
   titleBn: z.string().trim().max(120).optional().nullable(),
   subtitleEn: z.string().trim().max(280).optional().nullable(),
   subtitleBn: z.string().trim().max(280).optional().nullable(),

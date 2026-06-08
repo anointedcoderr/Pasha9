@@ -55,18 +55,37 @@ export function PromotionBannerSlider({ banners }: { banners: PromotionBannerRow
     >
       {active.imageUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={active.imageUrl} alt="" aria-hidden className="absolute inset-0 h-full w-full object-cover opacity-65" />
+        <img
+          src={active.imageUrl}
+          alt=""
+          aria-hidden
+          className={cn(
+            'absolute inset-0 h-full w-full object-cover',
+            // Full opacity when the banner is image-only so the
+            // operator's promotional design is uncompromised. Dim and
+            // scrim when text exists so the copy stays legible.
+            (title?.trim() || subtitle?.trim()) ? 'opacity-65' : 'opacity-100',
+          )}
+        />
       ) : null}
-      <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/45 to-transparent" />
-      <div className="relative flex min-h-[190px] max-w-xl flex-col justify-center gap-2 px-5 py-6 md:px-8">
-        <p className="inline-flex w-max items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.22em] text-brand-yellow-300">
-          <Sparkles className="h-3 w-3" />
-          {bn ? 'প্রমোশন এবং রিওয়ার্ড' : 'Promotions and Rewards'}
-        </p>
-        <h2 className="text-2xl font-extrabold leading-tight text-white">{title}</h2>
-        {subtitle ? <p className="text-sm text-white/85">{subtitle}</p> : null}
-      </div>
-      <Gift className="absolute right-8 top-1/2 h-16 w-16 -translate-y-1/2 text-brand-yellow-300/80" />
+      {(title?.trim() || subtitle?.trim()) ? (
+        <>
+          <div aria-hidden className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/45 to-transparent" />
+          <div className="relative flex min-h-[190px] max-w-xl flex-col justify-center gap-2 px-5 py-6 md:px-8">
+            <p className="inline-flex w-max items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.22em] text-brand-yellow-300">
+              <Sparkles className="h-3 w-3" />
+              {bn ? 'প্রমোশন এবং রিওয়ার্ড' : 'Promotions and Rewards'}
+            </p>
+            {title?.trim() ? <h2 className="text-2xl font-extrabold leading-tight text-white">{title}</h2> : null}
+            {subtitle?.trim() ? <p className="text-sm text-white/85">{subtitle}</p> : null}
+          </div>
+          <Gift className="absolute right-8 top-1/2 h-16 w-16 -translate-y-1/2 text-brand-yellow-300/80" />
+        </>
+      ) : (
+        // Image-only mode: reserve a respectable aspect ratio so the
+        // banner is large enough on mobile without scrim or text.
+        <div className="relative aspect-[16/7] w-full md:aspect-[16/6]" />
+      )}
 
       {count > 1 ? (
         <>

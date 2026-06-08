@@ -173,7 +173,7 @@ export default function AdminPromotionBannersPage() {
         {editor ? (
           <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); void save(); }}>
             <div className="grid gap-3 md:grid-cols-2">
-              <FormField label="Title (English)" required><Input value={editor.titleEn} onChange={(event) => setEditor({ ...editor, titleEn: event.target.value })} /></FormField>
+              <FormField label="Title (English)" hint="Optional. Leave blank for image-only banners."><Input value={editor.titleEn} onChange={(event) => setEditor({ ...editor, titleEn: event.target.value })} /></FormField>
               <FormField label="Title (Bangla)"><Input value={editor.titleBn ?? ''} onChange={(event) => setEditor({ ...editor, titleBn: event.target.value })} /></FormField>
               <FormField label="Subtitle (English)"><Textarea rows={2} value={editor.subtitleEn ?? ''} onChange={(event) => setEditor({ ...editor, subtitleEn: event.target.value })} /></FormField>
               <FormField label="Subtitle (Bangla)"><Textarea rows={2} value={editor.subtitleBn ?? ''} onChange={(event) => setEditor({ ...editor, subtitleBn: event.target.value })} /></FormField>

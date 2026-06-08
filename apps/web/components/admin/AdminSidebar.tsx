@@ -101,6 +101,7 @@ const GROUPS = [
       { key: 'website', href: ROUTES.admin.website, icon: Globe },
       { key: 'banners', href: ROUTES.admin.banners, icon: ImageIcon },
       { key: 'popups', href: ROUTES.admin.popups, icon: Megaphone },
+      { key: 'welcomePopup', href: '/admin/welcome-popup', icon: Megaphone },
       { key: 'promoText', href: ROUTES.admin.promoText, icon: Type },
       { key: 'homepage', href: ROUTES.admin.homepage, icon: Home },
       { key: 'homepageSections', href: ROUTES.admin.homepageSections, icon: Layers },

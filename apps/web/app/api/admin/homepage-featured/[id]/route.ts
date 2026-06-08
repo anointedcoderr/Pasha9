@@ -21,6 +21,11 @@ const patchSchema = z.object({
   // public homepage. Non-empty values must match the existing upload
   // URL convention.
   customImageUrl: z.string().trim().max(500).nullable().optional(),
+  showProviderLabel: z.boolean().optional(),
+  showGameName: z.boolean().optional(),
+  showHotBadge: z.boolean().optional(),
+  showPlayButton: z.boolean().optional(),
+  imageOnlyMode: z.boolean().optional(),
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {

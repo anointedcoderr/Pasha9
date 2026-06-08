@@ -60,6 +60,13 @@ interface EnrichedRow {
   // Underlying provider thumbnail, surfaced so the admin curation
   // page can preview the fallback alongside the override.
   providerImageUrl: string | null;
+  // Per-card overlay visibility surfaced to the admin so each row's
+  // checkboxes hydrate correctly.
+  showProviderLabel: boolean;
+  showGameName: boolean;
+  showHotBadge: boolean;
+  showPlayButton: boolean;
+  imageOnlyMode: boolean;
   live: boolean;
 }
 
@@ -117,6 +124,11 @@ async function loadEnrichedFeaturedList(): Promise<EnrichedRow[]> {
       imageUrl: customImageUrl ?? providerImageUrl,
       customImageUrl,
       providerImageUrl,
+      showProviderLabel: r.showProviderLabel,
+      showGameName: r.showGameName,
+      showHotBadge: r.showHotBadge,
+      showPlayButton: r.showPlayButton,
+      imageOnlyMode: r.imageOnlyMode,
       live,
     };
   });

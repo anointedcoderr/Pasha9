@@ -43,6 +43,13 @@ export interface HomeSectionGame {
   isJackpot: boolean;
   minBet: number | null;
   href: string | null;
+  // Per-card overlay visibility flags, set on curated Hot Games rows
+  // and defaulted to "show everything" for organic strip sections.
+  showProviderLabel?: boolean;
+  showGameName?: boolean;
+  showHotBadge?: boolean;
+  showPlayButton?: boolean;
+  imageOnlyMode?: boolean;
 }
 
 export interface HomeSection {
@@ -282,6 +289,11 @@ async function loadFeaturedGames(nativePublicArg?: boolean): Promise<LoadFeature
         isHot: r.isHot,
         isJackpot: r.isJackpot,
         imageUrl: r.customImageUrl?.trim() || g.imageUrl || null,
+        showProviderLabel: r.showProviderLabel,
+        showGameName: r.showGameName,
+        showHotBadge: r.showHotBadge,
+        showPlayButton: r.showPlayButton,
+        imageOnlyMode: r.imageOnlyMode,
       });
     } else if (r.source === 'native' && r.nativeGameCode) {
       const g = nativeByCode.get(r.nativeGameCode);
@@ -299,6 +311,11 @@ async function loadFeaturedGames(nativePublicArg?: boolean): Promise<LoadFeature
         isHot: r.isHot,
         isJackpot: r.isJackpot,
         imageUrl: r.customImageUrl?.trim() || null,
+        showProviderLabel: r.showProviderLabel,
+        showGameName: r.showGameName,
+        showHotBadge: r.showHotBadge,
+        showPlayButton: r.showPlayButton,
+        imageOnlyMode: r.imageOnlyMode,
       });
     }
   }

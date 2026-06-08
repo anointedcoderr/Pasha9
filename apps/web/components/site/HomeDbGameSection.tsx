@@ -179,6 +179,14 @@ export function HomeDbGameSection({ section }: Props) {
           const busyKey = isExternal && g.providerKey && g.gameUid ? `${g.providerKey}:${g.gameUid}` : null;
           const busy = busyKey != null && launching === busyKey;
           const useImage = g.imageUrl && !failedImages.has(tileKey);
+          // Per-card overlay visibility. Defaults to "show everything"
+          // so non-curated strip sections keep their legacy look. The
+          // homepage Hot Games admin can flip these per row.
+          const imageOnly = g.imageOnlyMode === true && useImage;
+          const showProvider = g.showProviderLabel !== false && !imageOnly;
+          const showName = g.showGameName !== false && !imageOnly;
+          const showHotBadge = g.showHotBadge !== false && !imageOnly;
+          const showPlay = g.showPlayButton !== false && !imageOnly;
 
           const inner = (
             <div className="relative aspect-[4/3] overflow-hidden">
@@ -193,21 +201,23 @@ export function HomeDbGameSection({ section }: Props) {
               ) : (
                 <CategoryHeroArt code={artFor(g.category)} className="absolute inset-0 h-full w-full opacity-65" />
               )}
-              <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-brand-ink/95 via-brand-ink/40 to-transparent" />
-              {g.isHot ? (
+              {imageOnly ? null : (
+                <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-brand-ink/95 via-brand-ink/40 to-transparent" />
+              )}
+              {showHotBadge && g.isHot ? (
                 <span className="absolute right-2 top-2 inline-flex h-5 items-center rounded-full border border-rose-300/60 bg-rose-500/25 px-1.5 text-[9px] font-extrabold uppercase tracking-wider text-rose-50 backdrop-blur">HOT</span>
               ) : null}
-              {g.isJackpot ? (
+              {showHotBadge && g.isJackpot ? (
                 <span className="absolute right-2 top-9 inline-flex h-5 items-center rounded-full border border-amber-300/60 bg-amber-300/25 px-1.5 text-[9px] font-extrabold uppercase tracking-wider text-amber-50 backdrop-blur">JACKPOT</span>
               ) : null}
               {/* Brand name leads on the card. The aggregator (iGamingAPIs
                   Aggregator) is implied and only shown when no brand is
                   set, so cards never read as "iGamingAPIs Aggreg... / JILI" */}
-              {g.brandName ? (
+              {showProvider && g.brandName ? (
                 <span className="absolute left-2 top-2 inline-flex h-5 max-w-[80%] items-center truncate rounded-full border border-yellow-300/60 bg-yellow-300/25 px-1.5 text-[9px] font-extrabold uppercase tracking-wider text-yellow-50 backdrop-blur">
                   {g.brandName}
                 </span>
-              ) : g.providerName ? (
+              ) : showProvider && g.providerName ? (
                 <span className="absolute left-2 top-2 inline-flex h-5 max-w-[60%] items-center truncate rounded-full border border-amber-300/60 bg-amber-200/15 px-1.5 text-[9px] font-bold uppercase tracking-wider text-amber-100 backdrop-blur">
                   {g.providerName}
                 </span>
@@ -215,13 +225,15 @@ export function HomeDbGameSection({ section }: Props) {
             </div>
           );
 
-          const captionInner = (
+          const captionInner = imageOnly || (!showName && !showPlay) ? null : (
             <div className="relative -mt-7 px-3 pb-3 pt-0 text-left">
-              <h3 className="truncate text-sm font-extrabold leading-tight text-white">{g.displayName}</h3>
-              <p className="mt-1 inline-flex h-7 items-center gap-1 rounded-full bg-gradient-to-b from-amber-300 to-amber-500 px-2.5 text-[10px] font-extrabold uppercase tracking-wider text-[#3A1F00] shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]">
-                <Play className="h-3 w-3" />
-                {busy ? (lang === 'bn' ? 'লোড...' : 'Loading...') : (lang === 'bn' ? 'খেলুন' : 'Play')}
-              </p>
+              {showName ? <h3 className="truncate text-sm font-extrabold leading-tight text-white">{g.displayName}</h3> : null}
+              {showPlay ? (
+                <p className="mt-1 inline-flex h-7 items-center gap-1 rounded-full bg-gradient-to-b from-amber-300 to-amber-500 px-2.5 text-[10px] font-extrabold uppercase tracking-wider text-[#3A1F00] shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]">
+                  <Play className="h-3 w-3" />
+                  {busy ? (lang === 'bn' ? 'লোড...' : 'Loading...') : (lang === 'bn' ? 'খেলুন' : 'Play')}
+                </p>
+              ) : null}
             </div>
           );
 

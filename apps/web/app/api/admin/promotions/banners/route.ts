@@ -8,8 +8,13 @@ import { db } from '@/lib/db/client';
 import { withAuth, ensurePermission, recordActivity } from '@/lib/auth/guard';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 
+// Image-only banners are allowed: every text field accepts empty
+// strings so the operator can save a banner with just an uploaded
+// image. The public PromotionBannerSlider renders the title /
+// subtitle blocks conditionally based on whether the value is a
+// non-empty string after trim.
 const createSchema = z.object({
-  titleEn: z.string().trim().min(1).max(120),
+  titleEn: z.string().trim().max(120).optional().default(''),
   titleBn: z.string().trim().max(120).optional().nullable(),
   subtitleEn: z.string().trim().max(280).optional().nullable(),
   subtitleBn: z.string().trim().max(280).optional().nullable(),

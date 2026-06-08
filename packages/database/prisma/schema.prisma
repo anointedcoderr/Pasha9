@@ -1761,6 +1761,15 @@ model HomepageFeaturedGame {
   // ExternalGame.imageUrl (provider catalogue) so cleared overrides
   // restore the provider thumbnail without admin re-input.
   customImageUrl  String?
+  // Per-row overlay visibility. Defaults preserve the legacy card
+  // layout (provider label, game name, HOT badge, Play button all
+  // visible). imageOnlyMode lets the operator hide every overlay so
+  // a pre-designed promotional thumbnail renders edge-to-edge.
+  showProviderLabel Boolean  @default(true)
+  showGameName      Boolean  @default(true)
+  showHotBadge      Boolean  @default(true)
+  showPlayButton    Boolean  @default(true)
+  imageOnlyMode     Boolean  @default(false)
   addedBy         String
   createdAt       DateTime @default(now())
 

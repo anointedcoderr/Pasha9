@@ -98,30 +98,33 @@ export function CategorySlider() {
                 className="pointer-events-none absolute -inset-y-2 -left-1/2 w-1/2 -skew-x-12 bg-gradient-to-r from-transparent via-white/40 to-transparent opacity-0 transition-all duration-700 group-hover:left-full group-hover:opacity-100"
               />
 
-              {/* Icon tile with inset highlight + outer ring. When the
-                  operator uploaded a custom image we render it on top
-                  of the gradient using object-contain so portrait or
-                  landscape PNGs/SVGs read cleanly. */}
-              <span
-                className={cn(
-                  'relative mx-auto mb-1.5 flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl text-white',
-                  'shadow-[inset_0_1px_0_rgba(255,255,255,0.45),inset_0_-2px_4px_rgba(0,0,0,0.18),0_6px_14px_-6px_rgba(15,17,21,0.35)]',
-                  'ring-1 ring-black/10',
-                  `bg-gradient-to-br ${TONE[item.tone]}`,
-                )}
-              >
-                {overrides[item.key] ? (
-                  // eslint-disable-next-line @next/next/no-img-element
+              {/* Icon tile. With a custom upload we drop the gradient
+                  background entirely and let the image fill the tile,
+                  matching Babu-style category cards. The lucide
+                  fallback keeps the original gradient + inset
+                  highlight. */}
+              {overrides[item.key] ? (
+                <span className="relative mx-auto mb-1.5 flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl md:h-16 md:w-16">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={overrides[item.key]}
                     alt=""
                     aria-hidden
-                    className="absolute inset-0 h-full w-full object-contain p-1.5"
+                    className="absolute inset-0 h-full w-full object-cover"
                   />
-                ) : (
+                </span>
+              ) : (
+                <span
+                  className={cn(
+                    'relative mx-auto mb-1.5 flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl text-white',
+                    'shadow-[inset_0_1px_0_rgba(255,255,255,0.45),inset_0_-2px_4px_rgba(0,0,0,0.18),0_6px_14px_-6px_rgba(15,17,21,0.35)]',
+                    'ring-1 ring-black/10',
+                    `bg-gradient-to-br ${TONE[item.tone]}`,
+                  )}
+                >
                   <Icon className="h-5 w-5 drop-shadow-[0_1px_2px_rgba(0,0,0,0.35)]" />
-                )}
-              </span>
+                </span>
+              )}
               <span className="relative text-center text-[11px] font-bold leading-tight text-brand-ink md:text-[12px]">
                 {lang === 'bn' ? item.labelBn : item.labelEn}
               </span>

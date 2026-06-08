@@ -87,14 +87,20 @@ export function BettingPassBannerSlider({ banners }: { banners: BannerRow[] }) {
           className="absolute inset-0 h-full w-full object-cover"
         />
       ) : null}
-      <div className="relative flex h-full min-h-[180px] flex-col justify-center gap-2 px-5 py-6 md:px-8">
-        <p className="inline-flex w-max items-center gap-1.5 rounded-full bg-black/30 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-brand-yellow-300 shadow-sm">
-          <Sparkles className="h-3 w-3" />
-          {bn ? 'পাশা ৯ বেটিং পাস' : 'Pasha 9 Betting Pass'}
-        </p>
-        <h2 className="text-xl font-extrabold leading-tight text-white [text-shadow:0_2px_8px_rgba(0,0,0,0.85)] md:text-2xl">{title}</h2>
-        {subtitle ? <p className="max-w-md text-sm text-white [text-shadow:0_1px_6px_rgba(0,0,0,0.9)]">{subtitle}</p> : null}
-      </div>
+      {(title?.trim() || subtitle?.trim()) ? (
+        <div className="relative flex h-full min-h-[180px] flex-col justify-center gap-2 px-5 py-6 md:px-8">
+          <p className="inline-flex w-max items-center gap-1.5 rounded-full bg-black/30 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-brand-yellow-300 shadow-sm">
+            <Sparkles className="h-3 w-3" />
+            {bn ? 'পাশা ৯ বেটিং পাস' : 'Pasha 9 Betting Pass'}
+          </p>
+          {title?.trim() ? <h2 className="text-xl font-extrabold leading-tight text-white [text-shadow:0_2px_8px_rgba(0,0,0,0.85)] md:text-2xl">{title}</h2> : null}
+          {subtitle?.trim() ? <p className="max-w-md text-sm text-white [text-shadow:0_1px_6px_rgba(0,0,0,0.9)]">{subtitle}</p> : null}
+        </div>
+      ) : (
+        // Image-only mode: reserve a respectable height so the banner
+        // renders cleanly without the text column.
+        <div className="relative aspect-[16/7] w-full md:aspect-[16/6]" />
+      )}
 
       {count > 1 ? (
         <>

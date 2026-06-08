@@ -220,7 +220,7 @@ export default function AdminBettingPassBannersPage() {
             }}
           >
             <div className="grid gap-3 md:grid-cols-2">
-              <FormField label="Title (English)" required>
+              <FormField label="Title (English)" hint="Optional. Leave blank for image-only banners.">
                 <Input value={editor.titleEn} onChange={(e) => setEditor({ ...editor, titleEn: e.target.value })} />
               </FormField>
               <FormField label="Title (Bangla)">
