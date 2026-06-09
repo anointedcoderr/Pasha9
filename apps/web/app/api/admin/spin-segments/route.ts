@@ -12,7 +12,15 @@ import { db } from '@/lib/db/client';
 import { withAuth, ensurePermission, recordActivity } from '@/lib/auth/guard';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 
-const PAYOUT_TYPES = ['coins', 'bonus', 'freebet', 'freespin', 'nothing'] as const;
+// PayoutType keywords accepted by the spin engine. 'cash' credits the
+// real BDT wallet balance with a per-segment turnover lock tracked via
+// UserBonus(sourceType='spin_result_cash'). 'free_bet' does the same
+// with a fixed 1x turnover. 'bonus' is the legacy lockedBalance path.
+// 'coins' tops up bonusBalance (non-monetary). 'freebet' (legacy
+// declared-but-inert) is kept as a no-op alias; 'freespin' is also
+// declared-but-inert. 'nothing' / 'loss' record a SpinResult with no
+// wallet movement.
+const PAYOUT_TYPES = ['coins', 'bonus', 'cash', 'free_bet', 'freebet', 'freespin', 'nothing', 'loss'] as const;
 
 const createSchema = z.object({
   label: z.string().trim().min(1).max(60),

@@ -36,10 +36,30 @@ import { db } from '@/lib/db/client';
 const SETTING_KEY = 'deposit_turnover_multiplier';
 const DEFAULT_MULTIPLIER = 1.0;
 
-// Active UserBonus grants with this sourceType represent BDT Balance
-// rewards that landed in Wallet.balance and are still under a wager
-// requirement. They also drive the withdrawable-balance subtraction.
-const BDT_BALANCE_LOCK_SOURCE_TYPE = 'betting_pass_bdt';
+// Active UserBonus grants with these sourceTypes represent BDT
+// Balance rewards that landed in Wallet.balance and are still under
+// a wager requirement. They also drive the withdrawable-balance
+// subtraction.
+//
+// The list grew from a single string to an array when the deposit-
+// bonus family ('deposit', 'promotion_deposit', 'promotion_claim',
+// 'manual') moved into balance-direct accounting per client product
+// direction. Every active grant under one of these source types
+// blocks the granted amount from being withdrawn until the bonus
+// turnover is met. The existing UserBonus.turnoverRequired and
+// turnoverProgress columns drive the gate.
+const BDT_BALANCE_LOCK_SOURCE_TYPES: string[] = [
+  'betting_pass_bdt',
+  'deposit',
+  'promotion_deposit',
+  'promotion_claim',
+  'manual',
+  // Spin wheel cash + free-bet payouts land in balance with a
+  // per-segment turnover lock; the withdrawal gate must see them
+  // so the player cannot withdraw the win before turning it over.
+  'spin_result_cash',
+  'spin_result_freebet',
+];
 const REFERRAL_LOCK_SOURCE_TYPES = ['referral_first_deposit', 'referral_commission'];
 
 export interface DepositTurnoverStatus {
@@ -77,7 +97,7 @@ export interface DepositTurnoverStatus {
 export async function computeBdtBalanceLocked(userId: string): Promise<number> {
   try {
     const agg = await db.userBonus.aggregate({
-      where: { userId, status: 'active', sourceType: BDT_BALANCE_LOCK_SOURCE_TYPE },
+      where: { userId, status: 'active', sourceType: { in: BDT_BALANCE_LOCK_SOURCE_TYPES } },
       _sum: { amount: true },
     });
     return Math.max(0, Number(agg._sum?.amount ?? 0));
@@ -123,7 +143,7 @@ export async function computeDepositTurnover(userId: string): Promise<DepositTur
       _sum: { betAmount: true },
     }),
     db.userBonus.aggregate({
-      where: { userId, status: 'active', sourceType: BDT_BALANCE_LOCK_SOURCE_TYPE },
+      where: { userId, status: 'active', sourceType: { in: BDT_BALANCE_LOCK_SOURCE_TYPES } },
       _sum: { turnoverRequired: true, turnoverProgress: true },
     }),
     db.userBonus.aggregate({

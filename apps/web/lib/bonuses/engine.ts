@@ -71,39 +71,60 @@ function isMatchingWeekday(rule: BonusRule, at: Date): boolean {
 
 // ---------- Wallet plumbing ----------
 
-async function creditBonus(tx: Tx, userId: string, amount: Prisma.Decimal): Promise<void> {
-  const wallet = await tx.wallet.findUnique({ where: { userId } });
-  if (wallet) {
-    await tx.wallet.update({
-      where: { userId },
-      data: {
-        bonusBalance: { increment: amount },
-        lockedBalance: { increment: amount },
-      },
-    });
-  } else {
-    await tx.wallet.create({
-      data: {
-        userId,
-        bonusBalance: amount,
-        lockedBalance: amount,
-      },
-    });
-  }
-}
-
 // `sourceType` tells the release path whether to move money. Most
 // grants live in lockedBalance and need lockedBalance -> balance on
-// release. Betting Pass BDT Balance rewards land in `balance`
-// directly with the UserBonus row used purely as a withdrawal-gate
-// tracker; their release must NOT touch the wallet or lockedBalance
-// would go negative. The flag is opt-in: anything else keeps the
-// historical move.
+// release. Sources in this set are credited DIRECTLY to balance at
+// grant time and tracked via a UserBonus row that the withdrawal
+// gate sees and subtracts from withdrawable funds; their release
+// must NOT touch the wallet again or lockedBalance / balance would
+// drift. The flag is opt-in: anything else keeps the historical
+// bonusBalance + lockedBalance move.
+//
+// Deposit-bonus sources ('deposit' from applyDepositBonuses,
+// 'promotion_deposit' from the selected-promotion claim, and
+// 'promotion_claim' for after-the-fact admin claims) were moved into
+// this set per client request: the user should see the bonus credited
+// to their main BDT balance immediately after deposit approval rather
+// than sitting in a separate bonusBalance pool. The withdrawal gate
+// (lib/turnover/deposit-gate.ts) recognises the same source types and
+// keeps the granted amount locked until turnover is met, so this
+// change preserves the existing turnover semantics while matching
+// the client's "wallet shows 1500" expectation.
 const DIRECT_BALANCE_LOCK_SOURCES = new Set([
   'betting_pass_bdt',
   'referral_first_deposit',
   'referral_commission',
+  // Deposit-bonus family - credit lands in balance, withdrawal gate
+  // enforces the turnover lock via UserBonus aggregation.
+  'deposit',
+  'promotion_deposit',
+  'promotion_claim',
+  // Manual admin-issued bonuses land in balance too so the operator
+  // can hand-grant a cash bonus that shows up immediately.
+  'manual',
 ]);
+
+async function creditBonus(tx: Tx, userId: string, amount: Prisma.Decimal, sourceType: string | null = null): Promise<void> {
+  const direct = sourceType !== null && DIRECT_BALANCE_LOCK_SOURCES.has(sourceType);
+  const wallet = await tx.wallet.findUnique({ where: { userId } });
+  if (wallet) {
+    await tx.wallet.update({
+      where: { userId },
+      data: direct
+        ? { balance: { increment: amount } }
+        : {
+            bonusBalance: { increment: amount },
+            lockedBalance: { increment: amount },
+          },
+    });
+  } else {
+    await tx.wallet.create({
+      data: direct
+        ? { userId, balance: amount, bonusBalance: 0, lockedBalance: 0 }
+        : { userId, bonusBalance: amount, lockedBalance: amount },
+    });
+  }
+}
 
 async function releaseBonus(tx: Tx, userId: string, amount: Prisma.Decimal, sourceType: string | null = null): Promise<void> {
   if (sourceType && DIRECT_BALANCE_LOCK_SOURCES.has(sourceType)) {
@@ -168,7 +189,11 @@ export async function grantBonusInTx(tx: Tx, opts: GrantOpts): Promise<{ grantId
     },
   });
 
-  await creditBonus(tx, opts.userId, amount);
+  // Thread the source type through so creditBonus can route the
+  // deposit-bonus family (deposit / promotion_deposit / promotion_claim
+  // / manual) into Wallet.balance directly per the client product
+  // direction (visible bonus on the homepage balance pill).
+  await creditBonus(tx, opts.userId, amount, opts.sourceType ?? null);
 
   await tx.transaction.create({
     data: {

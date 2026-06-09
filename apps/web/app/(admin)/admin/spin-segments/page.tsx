@@ -20,7 +20,7 @@ import { Chip } from '@/components/ui/Chip';
 import { Sparkles, Plus, Pencil, Trash2, RefreshCw, AlertTriangle, ArrowUp, ArrowDown } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 
-type PayoutType = 'coins' | 'bonus' | 'freebet' | 'freespin' | 'nothing';
+type PayoutType = 'coins' | 'bonus' | 'cash' | 'free_bet' | 'freebet' | 'freespin' | 'nothing' | 'loss';
 
 interface Segment {
   id: string;
@@ -360,11 +360,14 @@ export default function AdminSpinSegmentsPage() {
               </FormField>
               <FormField label="Payout type">
                 <Select value={editor.payoutType} onChange={(e) => setEditor({ ...editor, payoutType: e.target.value as PayoutType })}>
-                  <option value="coins">Coins (bonusBalance)</option>
-                  <option value="bonus">Bonus (locked + UserBonus row)</option>
-                  <option value="freebet">Freebet (lockedBalance)</option>
-                  <option value="freespin">Free spin token</option>
+                  <option value="cash">BDT cash (Wallet.balance, turnover-locked)</option>
+                  <option value="free_bet">Free Bet (Wallet.balance, 1x turnover)</option>
+                  <option value="bonus">Bonus (lockedBalance + UserBonus)</option>
+                  <option value="coins">Coins (bonusBalance, non-monetary)</option>
                   <option value="nothing">Try Again (no payout)</option>
+                  <option value="loss">0 BDT (loss, no payout)</option>
+                  <option value="freebet">Freebet legacy (no-op)</option>
+                  <option value="freespin">Free spin token (no-op)</option>
                 </Select>
               </FormField>
               <FormField label="Payout amount">

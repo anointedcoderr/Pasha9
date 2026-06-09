@@ -94,11 +94,31 @@ export async function POST(req: NextRequest) {
 
     const payoutCoins = chosen.payoutType === 'coins' ? chosen.payoutAmount : 0;
     const payoutBonus = chosen.payoutType === 'bonus' ? chosen.payoutAmount : 0;
+    // BDT cash payout per client direction. Money lands in
+    // Wallet.balance immediately so the homepage balance pill shows
+    // the win, and a UserBonus row with sourceType='spin_result_cash'
+    // keeps it locked behind the per-segment turnover. The withdrawal
+    // gate at lib/turnover/deposit-gate.ts subtracts active UserBonus
+    // rows of this source type from the withdrawable balance so the
+    // win cannot leave the platform before its wager requirement
+    // is met.
+    const payoutCash = chosen.payoutType === 'cash' ? chosen.payoutAmount : 0;
+    // Free Bet payout. Same locking strategy as cash; the spec says
+    // the player should be able to wager but not cash it out before
+    // turnover. We pin a 1x turnover on Free Bet wins regardless of
+    // segment-level turnoverX, because the spec frames Free Bet as
+    // "play once, then withdraw if it wins" rather than a multi-
+    // round bonus.
+    const payoutFreeBet = chosen.payoutType === 'free_bet' ? chosen.payoutAmount : 0;
+    // payoutType='loss' / payoutType='nothing' / 0 amount land here
+    // implicitly - we only write a SpinResult row, no wallet move,
+    // no UserBonus.
 
-    // Stable BonusRule for spin bonus payouts (per f3cf57d). The
-    // per-segment turnoverX is captured per UserBonus.
+    // Stable BonusRule for spin bonus + cash + free-bet payouts. The
+    // per-segment turnoverX is captured on the UserBonus, so the
+    // upsert just guarantees a stable rule row to reference.
     let spinBonusRuleId: string | null = null;
-    if (payoutBonus > 0) {
+    if (payoutBonus > 0 || payoutCash > 0 || payoutFreeBet > 0) {
       const rule = await db.bonusRule.upsert({
         where: { code: 'spin_payout' },
         update: {},
@@ -177,6 +197,94 @@ export async function POST(req: NextRequest) {
             reference: `spin:${chosen.id}`,
             description: `Spin reward: ${chosen.label}${tier ? ` on ${tier.nameEn}` : ''}`,
             meta: { spinSegmentId: chosen.id, spinSegmentLabel: chosen.label, tierKey: tier?.key ?? null, turnoverRequired, bonusGrantId: grant.id },
+          },
+        });
+      }
+
+      // BDT cash payout branch. Credits Wallet.balance directly so
+      // the homepage balance pill shows the win. The locked-until-
+      // turnover semantics are tracked via a UserBonus row with
+      // sourceType='spin_result_cash' that the withdrawal gate at
+      // lib/turnover/deposit-gate.ts now recognises (we added that
+      // source to BDT_BALANCE_LOCK_SOURCE_TYPES in the same batch).
+      if (payoutCash > 0 && spinBonusRuleId) {
+        await tx.wallet.upsert({
+          where: { userId },
+          update: { balance: { increment: payoutCash } },
+          create: { userId, balance: payoutCash, bonusBalance: 0, lockedBalance: 0, currency: 'BDT' },
+        });
+
+        const turnoverX = Number(chosen.turnoverX ?? 0);
+        const turnoverRequired = payoutCash * turnoverX;
+        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+        const grant = await tx.userBonus.create({
+          data: {
+            userId,
+            bonusRuleId: spinBonusRuleId,
+            amount: payoutCash,
+            expiresAt,
+            status: 'active',
+            turnoverRequired,
+            turnoverProgress: 0,
+            sourceType: 'spin_result_cash',
+            sourceId: chosen.id,
+            note: `Spin BDT win: ${chosen.label}${tier ? ` (${tier.nameEn})` : ''}`,
+          },
+        });
+        if (!bonusGrantId) bonusGrantId = grant.id;
+
+        await tx.transaction.create({
+          data: {
+            userId,
+            type: 'win',
+            amount: payoutCash,
+            status: 'completed',
+            reference: `spin:${chosen.id}`,
+            description: `Spin BDT reward: ${chosen.label}${tier ? ` on ${tier.nameEn}` : ''}`,
+            meta: { spinSegmentId: chosen.id, spinSegmentLabel: chosen.label, tierKey: tier?.key ?? null, turnoverRequired, bonusGrantId: grant.id, payoutType: 'cash' },
+          },
+        });
+      }
+
+      // Free Bet payout: credits balance with a 1x turnover lock so
+      // the player can wager it but cannot withdraw it without
+      // turning it over at least once.
+      if (payoutFreeBet > 0 && spinBonusRuleId) {
+        await tx.wallet.upsert({
+          where: { userId },
+          update: { balance: { increment: payoutFreeBet } },
+          create: { userId, balance: payoutFreeBet, bonusBalance: 0, lockedBalance: 0, currency: 'BDT' },
+        });
+
+        const turnoverRequired = payoutFreeBet * 1; // 1x for free bet
+        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+        const grant = await tx.userBonus.create({
+          data: {
+            userId,
+            bonusRuleId: spinBonusRuleId,
+            amount: payoutFreeBet,
+            expiresAt,
+            status: 'active',
+            turnoverRequired,
+            turnoverProgress: 0,
+            sourceType: 'spin_result_freebet',
+            sourceId: chosen.id,
+            note: `Spin Free Bet: ${chosen.label}${tier ? ` (${tier.nameEn})` : ''}`,
+          },
+        });
+        if (!bonusGrantId) bonusGrantId = grant.id;
+
+        await tx.transaction.create({
+          data: {
+            userId,
+            type: 'win',
+            amount: payoutFreeBet,
+            status: 'completed',
+            reference: `spin:${chosen.id}`,
+            description: `Spin Free Bet: ${chosen.label}${tier ? ` on ${tier.nameEn}` : ''}`,
+            meta: { spinSegmentId: chosen.id, spinSegmentLabel: chosen.label, tierKey: tier?.key ?? null, turnoverRequired, bonusGrantId: grant.id, payoutType: 'free_bet' },
           },
         });
       }
