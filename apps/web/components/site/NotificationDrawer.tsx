@@ -10,8 +10,9 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
-import { Bell, X, Megaphone, CheckCircle2, BellRing, BellOff } from 'lucide-react';
+import { Bell, X, Megaphone, CheckCircle2, BellRing, BellOff, Volume2, VolumeX } from 'lucide-react';
 import { useLang } from '@/lib/i18n/context';
+import { useSoundContext } from '@/lib/sounds/client';
 import { checkPushSupport, disableDevicePush, enableDevicePush, getNotificationPermission } from '@/lib/push/client';
 
 interface FeedItem {
@@ -46,6 +47,7 @@ const formatRelative = (iso: string, lang: 'en' | 'bn'): string => {
 
 export function NotificationDrawer({ open, onOpenChange, isLoggedIn }: Props) {
   const { lang } = useLang();
+  const soundCtx = useSoundContext();
   const [items, setItems] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -136,23 +138,26 @@ export function NotificationDrawer({ open, onOpenChange, isLoggedIn }: Props) {
     }
   };
 
-  // Play the configured sound (if any) for the newest in-app notification
-  // received while the drawer is open. Browsers gate Audio.play() on a
-  // prior user gesture; the very first time the drawer opens after a
-  // page load may stay silent, which is the documented platform
-  // behaviour rather than a fault.
+  // Play the configured sound for the newest in-app notification when
+  // the drawer is open. Falls back to the operator-uploaded default
+  // ringtone (sound_notification_ring) when the per-message soundUrl
+  // is empty. Respects the player's notification-sound toggle
+  // (notifSoundEnabled) and prefers-reduced-motion, both gated
+  // inside playNotificationSound. Browsers also gate Audio.play() on
+  // a prior user gesture; the very first chime after a cold page
+  // load may stay silent, which is platform behaviour rather than a
+  // fault.
   useEffect(() => {
     if (!items.length) return;
     const top = items[0];
-    if (!top || !top.soundUrl) return;
+    if (!top) return;
     if (lastNotificationId.current === top.id) return;
     lastNotificationId.current = top.id;
-    try {
-      const audio = new Audio(top.soundUrl);
-      audio.volume = 0.8;
-      audio.play().catch(() => { /* autoplay blocked is expected on cold pages */ });
-    } catch { /* swallow */ }
-  }, [items]);
+    if (!soundCtx) return;
+    const resolved = soundCtx.resolveNotificationSound(top.soundUrl);
+    if (!resolved) return;
+    void soundCtx.playNotificationSound(resolved);
+  }, [items, soundCtx]);
 
   const fetchFeed = useCallback(async () => {
     if (!isLoggedIn) {
@@ -317,6 +322,23 @@ export function NotificationDrawer({ open, onOpenChange, isLoggedIn }: Props) {
                       className="inline-flex h-7 items-center rounded-md border border-brand-divider bg-brand-paper px-2 text-[10px] font-semibold text-brand-ink hover:border-brand-yellow-500 disabled:opacity-60"
                     >
                       {testBusy ? (lang === 'bn' ? 'পাঠাচ্ছি...' : 'Sending...') : (lang === 'bn' ? 'টেস্ট পুশ পাঠান' : 'Send test push')}
+                    </button>
+                  ) : null}
+                  {soundCtx ? (
+                    <button
+                      type="button"
+                      onClick={() => soundCtx.setNotifSoundEnabled(!soundCtx.notifSoundEnabled)}
+                      aria-pressed={soundCtx.notifSoundEnabled}
+                      className={`inline-flex h-7 items-center gap-1 rounded-md border px-2 text-[10px] font-semibold transition ${
+                        soundCtx.notifSoundEnabled
+                          ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                          : 'border-brand-divider bg-brand-paper text-brand-inkMute'
+                      }`}
+                    >
+                      {soundCtx.notifSoundEnabled ? <Volume2 className="h-3 w-3" /> : <VolumeX className="h-3 w-3" />}
+                      {lang === 'bn'
+                        ? (soundCtx.notifSoundEnabled ? 'সাউন্ড চালু' : 'সাউন্ড বন্ধ')
+                        : (soundCtx.notifSoundEnabled ? 'Sound on' : 'Sound off')}
                     </button>
                   ) : null}
                   <button

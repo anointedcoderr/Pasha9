@@ -10,7 +10,8 @@ import { Select } from '@/components/ui/Select';
 import { Chip } from '@/components/ui/Chip';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { AdminMediaUpload } from '@/components/admin/AdminMediaUpload';
-import { Bell, Send, CheckCircle2, AlertCircle } from 'lucide-react';
+import { AdminSoundUpload } from '@/components/admin/AdminSoundUpload';
+import { Bell, Send, CheckCircle2, AlertCircle, Play } from 'lucide-react';
 
 interface NotificationRow {
   id: string;
@@ -186,16 +187,16 @@ export default function AdminInAppNotificationsPage() {
             constraintHint="PNG / JPG / WEBP, square or 16/9, max 2 MB"
             onChange={(url) => setCompose({ ...compose, imageUrl: url ?? '' })}
           />
-          <FormField label="Custom sound URL (optional)" hint="Short audio file (mp3 / wav). Plays for the in-app notification card when the visitor's tab is open. Background device sound is controlled by the OS/browser and cannot be overridden by web push payloads on most platforms.">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <Input
-                value={compose.soundUrl}
-                onChange={(e) => setCompose({ ...compose, soundUrl: e.target.value })}
-                placeholder="/uploads/sounds/ping.mp3"
-              />
+          <AdminSoundUpload
+            label="Custom sound (optional)"
+            description="Plays in the player's bell drawer when this notification arrives. Leave empty to fall back to the default ringtone from /admin/site-sounds. Background device push uses the OS chime and cannot be overridden by a web push payload."
+            value={compose.soundUrl || null}
+            onChange={(url) => setCompose({ ...compose, soundUrl: url ?? '' })}
+          />
+          {compose.soundUrl ? (
+            <div className="flex justify-start">
               <button
                 type="button"
-                disabled={!compose.soundUrl}
                 onClick={() => {
                   try {
                     const audio = new Audio(compose.soundUrl);
@@ -205,12 +206,12 @@ export default function AdminInAppNotificationsPage() {
                     setError(`Could not load sound: ${err instanceof Error ? err.message : err}`);
                   }
                 }}
-                className="inline-flex h-9 shrink-0 items-center justify-center rounded-md border border-brand-divider bg-brand-paper px-3 text-xs font-semibold text-brand-ink hover:border-brand-yellow-500 disabled:opacity-50"
+                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-brand-divider bg-brand-paper px-2.5 text-[11px] font-semibold text-brand-ink hover:border-brand-yellow-500"
               >
-                Test sound
+                <Play className="h-3 w-3" /> Test sound
               </button>
             </div>
-          </FormField>
+          ) : null}
           <div className="flex justify-end">
             <Button type="submit" loading={busy} leftIcon={<Send className="h-4 w-4" />}>
               Send notification

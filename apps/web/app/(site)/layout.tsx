@@ -5,6 +5,7 @@ import { useEffect, type ReactNode } from 'react';
 import { Header } from '@/components/site/Header';
 import { Footer } from '@/components/site/Footer';
 import { FloatingContact } from '@/components/site/FloatingContact';
+import { NotificationAutoPrompt } from '@/components/site/NotificationAutoPrompt';
 import { TooltipProvider } from '@/components/ui/Tooltip';
 
 export default function SiteLayout({ children }: { children: ReactNode }) {
@@ -34,6 +35,7 @@ export default function SiteLayout({ children }: { children: ReactNode }) {
         </main>
         <Footer />
         <FloatingContact />
+        <NotificationAutoPrompt />
       </div>
     </TooltipProvider>
   );

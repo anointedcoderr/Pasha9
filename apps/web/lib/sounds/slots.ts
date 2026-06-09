@@ -112,6 +112,14 @@ export const SOUND_SLOTS: SoundSlot[] = [
     descriptionBn: 'উভয় পেজের প্রিমিয়াম CTA চাপলে বাজে।',
     group: 'ui',
   },
+  {
+    key: 'sound_notification_ring', id: 'notification_ring',
+    labelEn: 'Notification: default ringtone',
+    labelBn: 'নোটিফিকেশন: ডিফল্ট রিংটোন',
+    descriptionEn: 'Plays when a new in-app notification arrives and the notification did not specify its own sound. Players can mute this from the bell drawer.',
+    descriptionBn: 'নতুন ইন-অ্যাপ নোটিফিকেশন এলে বাজে (যখন নোটিফিকেশনে নিজস্ব সাউন্ড নেই)। প্লেয়ার ঘণ্টা ড্রয়ার থেকে বন্ধ করতে পারবে।',
+    group: 'ui',
+  },
 ];
 
 export const MASTER_ENABLED_KEY = 'sounds_enabled';

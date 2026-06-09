@@ -17,6 +17,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 
 const STORAGE_MUTED = 'pasha9:sounds_muted';
 const STORAGE_GESTURE = 'pasha9:sounds_gesture';
+const STORAGE_NOTIF_SOUND = 'pasha9:notif_sound_enabled';
 
 interface SoundMap {
   enabled: boolean;
@@ -28,6 +29,22 @@ interface SoundContextValue {
   map: SoundMap | null;
   userMuted: boolean;
   setUserMuted: (muted: boolean) => void;
+  /**
+   * Separate preference for the new-in-app-notification chime. Stays
+   * independent of the global mute so a player can keep the premium
+   * Spin/Lotto sounds off while still hearing the notification ring,
+   * or vice versa. Mirrors the client product spec ("Notification
+   * Sound Disabled - user still receives, but no sound").
+   */
+  notifSoundEnabled: boolean;
+  setNotifSoundEnabled: (enabled: boolean) => void;
+  /** Resolves the URL to play for an incoming notification.
+   *  Per-message soundUrl wins; otherwise the global ringtone slot. */
+  resolveNotificationSound: (perMessageUrl: string | null | undefined) => string | null;
+  /** Plays a one-shot URL respecting notifSoundEnabled and reduced
+   *  motion. Used by the NotificationDrawer for the per-message
+   *  chime; the slot-based play() helper is for premium UI sounds. */
+  playNotificationSound: (url: string | null) => Promise<void>;
   play: (slotId: string, opts?: { volume?: number; loop?: boolean }) => Promise<void>;
   stop: (slotId: string) => void;
   /** True if every gate is passing and playback would actually happen. */
@@ -40,8 +57,13 @@ const SoundContext = createContext<SoundContextValue | null>(null);
 export function SoundProvider({ children }: { children: ReactNode }) {
   const [map, setMap] = useState<SoundMap | null>(null);
   const [userMuted, setUserMutedState] = useState<boolean>(true); // default muted before gesture
+  // Notification sound defaults ON. Notifications are an explicit
+  // user-requested channel (they granted permission), so the chime
+  // is expected behaviour unless they opt out.
+  const [notifSoundEnabled, setNotifSoundEnabledState] = useState<boolean>(true);
   const [reduced, setReduced] = useState<boolean>(false);
   const audiosRef = useRef<Map<string, HTMLAudioElement>>(new Map());
+  const notifAudioRef = useRef<HTMLAudioElement | null>(null);
   const gestureSeenRef = useRef<boolean>(false);
 
   // Load preferences once on mount.
@@ -53,6 +75,8 @@ export function SoundProvider({ children }: { children: ReactNode }) {
       // every modern browser autoplay policy and stops surprise
       // audio on the first page load.
       if (stored === '0') setUserMutedState(false);
+      const notifStored = window.localStorage.getItem(STORAGE_NOTIF_SOUND);
+      if (notifStored === '0') setNotifSoundEnabledState(false);
       gestureSeenRef.current = window.localStorage.getItem(STORAGE_GESTURE) === '1';
     } catch { /* swallow */ }
     if (window.matchMedia) {
@@ -103,6 +127,35 @@ export function SoundProvider({ children }: { children: ReactNode }) {
     try { window.localStorage.setItem(STORAGE_MUTED, muted ? '1' : '0'); } catch { /* swallow */ }
   }, []);
 
+  const setNotifSoundEnabled = useCallback((enabled: boolean) => {
+    setNotifSoundEnabledState(enabled);
+    try { window.localStorage.setItem(STORAGE_NOTIF_SOUND, enabled ? '1' : '0'); } catch { /* swallow */ }
+  }, []);
+
+  const resolveNotificationSound = useCallback(
+    (perMessageUrl: string | null | undefined): string | null => {
+      if (perMessageUrl && perMessageUrl.trim()) return perMessageUrl;
+      return (map?.sounds?.notification_ring ?? null) || null;
+    },
+    [map],
+  );
+
+  const playNotificationSound = useCallback(async (url: string | null) => {
+    if (!url) return;
+    if (!notifSoundEnabled) return;
+    if (reduced) return;
+    try {
+      if (notifAudioRef.current) {
+        notifAudioRef.current.pause();
+        notifAudioRef.current.src = '';
+      }
+      const audio = new Audio(url);
+      audio.volume = Math.max(0, Math.min(1, map?.defaultVolume ?? 0.8));
+      notifAudioRef.current = audio;
+      await audio.play();
+    } catch { /* autoplay blocked / network blip */ }
+  }, [notifSoundEnabled, reduced, map]);
+
   const ensureAudio = useCallback((slotId: string, url: string): HTMLAudioElement => {
     const cached = audiosRef.current.get(slotId);
     if (cached && cached.src === url) return cached;
@@ -136,8 +189,12 @@ export function SoundProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<SoundContextValue>(() => ({
-    map, userMuted, setUserMuted, play, stop, canPlay, reduced,
-  }), [map, userMuted, setUserMuted, play, stop, canPlay, reduced]);
+    map,
+    userMuted, setUserMuted,
+    notifSoundEnabled, setNotifSoundEnabled,
+    resolveNotificationSound, playNotificationSound,
+    play, stop, canPlay, reduced,
+  }), [map, userMuted, setUserMuted, notifSoundEnabled, setNotifSoundEnabled, resolveNotificationSound, playNotificationSound, play, stop, canPlay, reduced]);
 
   return <SoundContext.Provider value={value}>{children}</SoundContext.Provider>;
 }
