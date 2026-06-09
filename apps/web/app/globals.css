@@ -3,6 +3,46 @@
 @tailwind utilities;
 
 /* ---------------------------------------------------------------------------
+ * Touch responsiveness baseline.
+ *
+ * iOS Safari (and several Android WebViews) defer click dispatch by
+ * ~300ms on elements without an explicit touch-action declaration so
+ * that they can detect a double-tap-to-zoom gesture. Combined with
+ * Next.js soft routing that mounts a fresh page tree right after the
+ * login modal closes, that delay surfaces as "buttons unresponsive
+ * after login until the user scrolls" because the first touch wakes
+ * up gesture recognition on the new layout. Declaring manipulation
+ * on every interactive primitive disables the double-tap-zoom path
+ * and makes the first tap after navigation register immediately.
+ *
+ * tap-highlight-color stays visible (very subtle) so users still see
+ * an iOS press feedback. We avoid wholesale `* { touch-action: ... }`
+ * so vertical scroll containers (sliders, the body) keep their
+ * native pan behaviour.
+ * ------------------------------------------------------------------------ */
+a,
+button,
+[role='button'],
+[role='link'],
+[role='tab'],
+[role='menuitem'],
+[role='option'],
+[role='switch'],
+[role='checkbox'],
+[role='radio'],
+label,
+summary,
+input[type='button'],
+input[type='submit'],
+input[type='reset'],
+input[type='checkbox'],
+input[type='radio'],
+select {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: rgba(15, 17, 21, 0.06);
+}
+
+/* ---------------------------------------------------------------------------
  * Light theme overrides (Phase 1 redesign).
  * Activate by wrapping the route tree in a body class="theme-light"; the
  * legacy dark tokens still apply on unscoped routes.

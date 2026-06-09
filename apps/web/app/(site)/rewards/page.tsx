@@ -13,11 +13,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BackBar } from '@/components/site/BackBar';
 import { useT, useLang } from '@/lib/i18n/context';
-import { Trophy, Gift, Calendar, Disc, Check, AlertCircle, X } from 'lucide-react';
+import { Trophy, Gift, Calendar, Disc, Check, AlertCircle, X, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { triggerWalletRefresh } from '@/components/site/WalletStrip';
 import { SpinWheel, type SpinWheelSegment } from '@/components/site/SpinWheel';
 import { SpinTierSelector, SpinWinnersFeed, SpinHowToGetCoins, SpinTermsAccordion, type SpinTierDef } from '@/components/site/SpinSections';
+import { SpinResultModal } from '@/components/site/SpinResultModal';
 
 type Tab = 'store' | 'checkin' | 'spin';
 type RewardType = 'recharge' | 'physical' | 'digital';
@@ -93,6 +94,7 @@ export default function RewardsPage() {
   const [spinning, setSpinning] = useState(false);
   const [landingIndex, setLandingIndex] = useState<number | null>(null);
   const [winnersRefreshKey, setWinnersRefreshKey] = useState(0);
+  const [celebrationOpen, setCelebrationOpen] = useState(false);
   const pendingResultRef = useRef<{ label: string; payoutType: string; payoutAmount: number } | null>(null);
 
   const loadMe = useCallback(async () => {
@@ -260,7 +262,13 @@ export default function RewardsPage() {
 
   const onWheelLandingComplete = useCallback(() => {
     if (pendingResultRef.current) {
-      setSpinResult(pendingResultRef.current);
+      const settled = pendingResultRef.current;
+      setSpinResult(settled);
+      // Surface the celebration modal only when there was an actual
+      // prize. The inline emerald pill (rendered next to the wheel)
+      // still covers the no-prize case so the user is not
+      // left wondering whether the spin completed.
+      if (settled.payoutAmount > 0) setCelebrationOpen(true);
       pendingResultRef.current = null;
     }
     setSpinning(false);
@@ -273,12 +281,44 @@ export default function RewardsPage() {
     <div className="space-y-6 pb-24">
       <BackBar title={t('rewards.title')} />
 
-      <section className="rounded-2xl border border-brand-divider bg-brand-paper p-4 shadow-sm">
-        <div className="flex items-center gap-3">
-          <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-grad-yellow text-brand-ink"><Trophy className="h-5 w-5" /></span>
+      {/* Premium hero band: dark, gold glow, coin balance pinned to
+          the right so the user feels the "casino lobby" weight the
+          rest of the page builds on. Mobile collapses to a tight
+          stacked card while keeping the gold accents readable. */}
+      <section className="relative overflow-hidden rounded-3xl border border-amber-400/25 bg-[linear-gradient(135deg,#1a1107_0%,#241608_55%,#0f0805_100%)] p-5 text-amber-50 shadow-[0_18px_44px_-22px_rgba(245,180,0,0.45)] md:p-7">
+        <span aria-hidden className="pointer-events-none absolute -right-16 -top-16 h-52 w-52 rounded-full bg-amber-400/30 blur-3xl" />
+        <span aria-hidden className="pointer-events-none absolute -left-12 bottom-0 h-40 w-40 rounded-full bg-brand-blue-500/25 blur-3xl" />
+        <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-300/55 to-transparent" />
+
+        <div className="relative grid gap-5 md:grid-cols-[1.4fr_1fr] md:items-center">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-brand-inkMute">{t('rewards.yourBalance')}</p>
-            <p className="text-xl font-extrabold text-brand-ink tabular-nums">{coins.toLocaleString()} coins</p>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-400/15 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-amber-300">
+              <Sparkles className="h-3 w-3" /> {bn ? 'রিওয়ার্ড সেন্টার' : 'Reward Center'}
+            </span>
+            <h1 className="mt-3 text-2xl font-extrabold leading-tight md:text-3xl">
+              {bn ? 'কয়েন কামান, স্পিন করুন, পুরস্কার জিতুন' : 'Earn coins, spin the wheel, claim prizes'}
+            </h1>
+            <p className="mt-2 max-w-md text-sm text-amber-200/80">
+              {bn
+                ? 'ডিপোজিট, প্রতিদিন চেক ইন এবং রেফারেল থেকে কয়েন জমা করুন। এরপর লাকি স্পিন বা রিওয়ার্ড স্টোরে রূপান্তর করুন।'
+                : 'Stack coins from deposits, daily check-ins and referrals. Then convert them into spins or claim rewards from the store.'}
+            </p>
+          </div>
+          <div className="rounded-2xl border border-amber-300/30 bg-amber-300/10 p-4 backdrop-blur">
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-amber-300/85">
+              {t('rewards.yourBalance')}
+            </p>
+            <p className="mt-1 inline-flex items-baseline gap-2 text-3xl font-extrabold tabular-nums text-amber-100 drop-shadow-[0_2px_10px_rgba(245,180,0,0.35)] md:text-4xl">
+              {coins.toLocaleString()}
+              <span className="text-xs font-bold uppercase tracking-wider text-amber-200/80">
+                {bn ? 'কয়েন' : 'coins'}
+              </span>
+            </p>
+            <p className="mt-1 text-[11px] text-amber-200/70">
+              {bn
+                ? `${me?.spin.freeSpinsRemaining ?? 0} টি ফ্রি স্পিন বাকি . ${items.length} টি রিওয়ার্ড উপলব্ধ`
+                : `${me?.spin.freeSpinsRemaining ?? 0} free spins left . ${items.length} reward(s) available`}
+            </p>
           </div>
         </div>
       </section>
@@ -488,6 +528,12 @@ export default function RewardsPage() {
           onConfirm={(payload) => onClaim(claimItem, payload)}
         />
       ) : null}
+
+      <SpinResultModal
+        open={celebrationOpen}
+        result={spinResult}
+        onClose={() => setCelebrationOpen(false)}
+      />
     </div>
   );
 }

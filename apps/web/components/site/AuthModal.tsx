@@ -83,8 +83,17 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
     onSuccess();
     triggerWalletRefresh();
     const next = params?.get('next') ?? '/dashboard';
-    router.push(next);
-    router.refresh();
+    // Defer the route change past the modal close so Radix Dialog's
+    // body-style cleanup (overflow, padding-right that
+    // react-remove-scroll applies while a modal is open) gets a
+    // chance to commit before Next.js mounts the next page. Without
+    // the defer, on iOS Safari the first tap on the new page can be
+    // swallowed because gesture recognition is still attached to the
+    // closing dialog subtree.
+    setTimeout(() => {
+      router.push(next);
+      router.refresh();
+    }, 0);
   };
 
   const onSubmit = async (values: LoginInput) => {
@@ -273,8 +282,14 @@ function SignupForm({ onSuccess, onSwitch }: { onSuccess: () => void; onSwitch: 
       }
       onSuccess();
       triggerWalletRefresh();
-      router.push('/dashboard');
-      router.refresh();
+      // Same cleanup window as the login flow: let Radix Dialog
+      // finish unmounting before we soft-route to /dashboard so
+      // first-tap touch responsiveness on the destination page is
+      // not blocked by the closing modal subtree.
+      setTimeout(() => {
+        router.push('/dashboard');
+        router.refresh();
+      }, 0);
     } catch {
       setApiError({ code: 'NETWORK_ERROR', message: 'Could not reach server' });
     } finally {

@@ -137,7 +137,14 @@ export function FirstVisitAuthPopup() {
   const choose = (kind: 'login' | 'signup', target: string) => {
     setSeen(freq); setOpen(false);
     if (target.startsWith('http')) { window.location.href = target; return; }
-    router.push(target.startsWith('/') ? target : `/?${kind}=1`);
+    // Defer the router push so Radix Dialog can release its body
+    // scroll-lock and unmount its overlay before the auth modal
+    // mounts on the next page. Stacking two Radix dialogs back to
+    // back in the same render tick is what was leaving stale body
+    // styles behind and showing as unresponsive buttons until the
+    // user touched the page.
+    const dest = target.startsWith('/') ? target : `/?${kind}=1`;
+    setTimeout(() => { router.push(dest); }, 0);
   };
 
   const imageOnly = config.imageOnly && Boolean(config.imageUrl);
