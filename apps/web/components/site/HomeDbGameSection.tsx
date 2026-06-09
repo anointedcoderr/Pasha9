@@ -192,8 +192,29 @@ export function HomeDbGameSection({ section }: Props) {
           // box. Cover mode keeps the current full-bleed behaviour.
           const useContain = g.imageFitMode === 'contain' && useImage;
 
+          // Whether any text or button is rendered over the image.
+          // When everything is off we skip the bottom dim gradient
+          // so transparent PNGs / image-only tiles never get a
+          // wasted dark band underneath.
+          const hasOverlayText = !imageOnly && (showName || showPlay);
+
           const inner = (
             <div className="relative aspect-[4/3] overflow-hidden">
+              {/* Category art is rendered as a low-opacity backdrop
+                  behind every tile (not only on image-fail) so
+                  transparent PNGs flow into a tasteful brand-aware
+                  surface instead of a flat black box. Hidden when
+                  the operator opts into image-only mode so a fully
+                  branded asset can occupy the tile cleanly. */}
+              {!imageOnly ? (
+                <CategoryHeroArt
+                  code={artFor(g.category)}
+                  className={cn(
+                    'absolute inset-0 h-full w-full',
+                    useImage ? 'opacity-30' : 'opacity-65',
+                  )}
+                />
+              ) : null}
               {useImage ? (
                 useContain ? (
                   <>
@@ -221,12 +242,10 @@ export function HomeDbGameSection({ section }: Props) {
                     className="absolute inset-0 h-full w-full object-cover"
                   />
                 )
-              ) : (
-                <CategoryHeroArt code={artFor(g.category)} className="absolute inset-0 h-full w-full opacity-65" />
-              )}
-              {imageOnly ? null : (
+              ) : null}
+              {hasOverlayText ? (
                 <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-brand-ink/95 via-brand-ink/40 to-transparent" />
-              )}
+              ) : null}
               {showHotBadge && g.isHot ? (
                 <span className="absolute right-2 top-2 inline-flex h-5 items-center rounded-full border border-rose-300/60 bg-rose-500/25 px-1.5 text-[9px] font-extrabold uppercase tracking-wider text-rose-50 backdrop-blur">HOT</span>
               ) : null}
@@ -268,7 +287,11 @@ export function HomeDbGameSection({ section }: Props) {
                 disabled={busy}
                 onClick={() => onLaunchExternal(g)}
                 className={cn(
-                  'group relative overflow-hidden rounded-2xl border border-white/10 bg-brand-ink text-white shadow-[0_8px_24px_-12px_rgba(0,0,0,0.55)] transition',
+                  // Soft branded backdrop so transparent PNG art
+                  // sits on a tasteful gradient instead of a flat
+                  // black panel. The category SVG behind the image
+                  // adds depth without competing with the artwork.
+                  'group relative overflow-hidden rounded-2xl border border-white/10 bg-[linear-gradient(135deg,#1a1f2e_0%,#0F1115_55%,#1a1f2e_100%)] text-white shadow-[0_8px_24px_-12px_rgba(0,0,0,0.55)] transition',
                   busy && 'opacity-70',
                 )}
               >
@@ -281,7 +304,7 @@ export function HomeDbGameSection({ section }: Props) {
             <Link
               key={tileKey}
               href={g.href ?? '/games'}
-              className="group relative overflow-hidden rounded-2xl border border-white/10 bg-brand-ink text-white shadow-[0_8px_24px_-12px_rgba(0,0,0,0.55)] transition"
+              className="group relative overflow-hidden rounded-2xl border border-white/10 bg-[linear-gradient(135deg,#1a1f2e_0%,#0F1115_55%,#1a1f2e_100%)] text-white shadow-[0_8px_24px_-12px_rgba(0,0,0,0.55)] transition"
             >
               {inner}
               {captionInner}

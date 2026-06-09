@@ -234,8 +234,28 @@ export default function AdminWebsitePage() {
                 label="Favicon"
                 value={faviconUrl}
                 onChange={setFaviconUrl}
-                hint="512 x 512 PNG recommended for PWA / Home Screen, 32 x 32 PNG or SVG for the browser tab. Browsers and search engines cache favicons aggressively. Hard refresh or PWA reinstall may be required to see the new icon, and Google/Bing search-result favicons can take several days to update."
+                hint="512 x 512 PNG for PWA / Home Screen and 32 x 32 PNG or SVG for the browser tab. Pasha 9 serves the same file at /favicon.ico, /icon, /apple-icon and inside the PWA manifest, all with an auto-bumped ?v query that defeats local browser cache on every save."
               />
+              <details className="rounded-lg border border-brand-divider bg-brand-surface px-3 py-2 text-[12px]">
+                <summary className="cursor-pointer font-semibold text-ink-hi">
+                  Why does my browser still show the old favicon?
+                </summary>
+                <div className="mt-2 space-y-1.5 text-ink-mid">
+                  <p>
+                    The current browser tab and bookmarks cache the icon locally for weeks. After
+                    saving here, the live <code className="font-mono">{`<link rel="icon">`}</code>
+                    and <code className="font-mono">/favicon.ico</code> already point at the new
+                    file with a fresh <code className="font-mono">?v</code> query. To see it now:
+                  </p>
+                  <ol className="list-decimal space-y-0.5 pl-5">
+                    <li>Hard refresh the public site (Ctrl + Shift + R on desktop, pull-to-refresh on mobile).</li>
+                    <li>Close and reopen the browser tab if the favicon was already cached.</li>
+                    <li>For PWA / Home Screen icons, uninstall and reinstall the PWA.</li>
+                    <li>For browser search-history suggestions (Firefox Suggest, Chrome address bar), visit the homepage once so the cache refreshes from the new <code className="font-mono">/favicon.ico</code>.</li>
+                    <li>Google / Bing / DuckDuckGo search-result favicons are re-crawled on their schedule (typically 3 to 14 days).</li>
+                  </ol>
+                </div>
+              </details>
 
               <div className="flex justify-end gap-2 pt-2">
                 <Button variant="ghost" onClick={load}>Reset</Button>

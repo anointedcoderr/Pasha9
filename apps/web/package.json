@@ -8,7 +8,8 @@
     "build:noverify": "next build",
     "start": "next start -p 3000",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "generate:vapid": "node -e \"const k=require('web-push').generateVAPIDKeys();const s=process.env.VAPID_SUBJECT||'mailto:info@anointedcoder.com';console.log('# Append to /var/www/pasha9/app/.env then pm2 restart pasha9-web --update-env');console.log('');console.log('VAPID_PUBLIC_KEY='+k.publicKey);console.log('VAPID_PRIVATE_KEY='+k.privateKey);console.log('VAPID_SUBJECT='+s);\""
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",

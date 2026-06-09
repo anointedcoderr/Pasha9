@@ -19,6 +19,18 @@ const nextConfig = {
     formats: ['image/avif', 'image/webp'],
     remotePatterns: [],
   },
+  async rewrites() {
+    // /favicon.ico is the legacy browser convention - tabs,
+    // bookmarks, history-search-suggestions, and the Google
+    // crawler all probe it directly, often skipping the HTML
+    // <link rel="icon"> tag. We rewrite the legacy path to the
+    // same dynamic /icon route handler so the operator's freshly
+    // uploaded favicon serves on every probe and stale third-party
+    // caches refresh on their next visit.
+    return [
+      { source: '/favicon.ico', destination: '/icon' },
+    ];
+  },
   async headers() {
     // Defeats the "application error on first load, works after
     // refresh" pattern. nginx / CDN in front of the app cached

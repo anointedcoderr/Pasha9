@@ -549,7 +549,11 @@ export default function AdminHomepageSectionsPage() {
                     </select>
                   </label>
                   <p className="col-span-2 text-[10px] text-brand-inkMute sm:col-span-3">
-                    Recommended image: 600 x 800 px (3:4) for best fit. For best result, upload images in the recommended ratio.
+                    Card is 4:3. Recommended image: 1200 x 900 (4:3) or 800 x 800 (square).
+                    Cover crops to fill the card with no borders. Contain shows the full image and
+                    fills the gaps with a blurred copy of the same image so the tile never goes
+                    black. For PNG with transparency, prefer Cover so the brand backdrop never
+                    leaks through.
                   </p>
                 </div>
               </details>
