@@ -12,6 +12,10 @@ const ALLOWED: UploadCategory[] = [
   // M4 Phase D upload widget categories.
   'promo_desktop', 'promo_mobile', 'promo_thumbnail', 'promo_background',
   'ambassadors', 'sponsors', 'payment_icons', 'provider_banners',
+  'avatars',
+  // Premium atelier: image assets for Spin + Lotto, and operator-
+  // uploaded sound files for the playback hook.
+  'atelier', 'sounds',
 ];
 
 export async function POST(req: NextRequest) {
