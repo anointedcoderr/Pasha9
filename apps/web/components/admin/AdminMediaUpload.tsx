@@ -190,9 +190,9 @@ export function AdminMediaUpload({
       </div>
 
       {error ? (
-        <div className="flex items-start gap-1.5 rounded-lg border border-rose-300/40 bg-rose-500/10 px-2.5 py-1.5">
-          <AlertTriangle className="mt-[1px] h-3.5 w-3.5 shrink-0 text-rose-200" />
-          <p className="text-[11px] text-rose-100">{error}</p>
+        <div className="flex items-start gap-1.5 rounded-lg border border-rose-400/60 bg-rose-50 px-2.5 py-1.5">
+          <AlertTriangle className="mt-[1px] h-3.5 w-3.5 shrink-0 text-rose-600" />
+          <p className="text-[11px] font-semibold text-rose-700">{error}</p>
         </div>
       ) : null}
 
