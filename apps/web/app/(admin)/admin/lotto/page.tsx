@@ -11,7 +11,7 @@ import { FormField, Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Switch } from '@/components/ui/Switch';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { Ticket, Pencil, Trash2, Plus, Crown, CheckCircle2, Stethoscope, RefreshCcw, Sparkles } from 'lucide-react';
+import { Ticket, Pencil, Trash2, Plus, Crown, CheckCircle2, Stethoscope, RefreshCcw, Sparkles, Trophy, Wand2, List } from 'lucide-react';
 import { formatBDT, formatDateTime } from '@/lib/utils/format';
 import { useLang } from '@/lib/i18n/context';
 
@@ -80,13 +80,44 @@ interface DiagnoseResult {
   samples: Array<{ ticket: string; tier: string; amount: number }>;
 }
 
+interface AdminTicketRow {
+  id: string;
+  number: string;
+  status: string;
+  source: string;
+  generatedAt: string;
+  draw: { id: string; name: string; drawsAt: string | null } | null;
+  user: { id: string; username: string; phone: string } | null;
+}
+
+interface WinnersBreakdown {
+  draw: { id: string; name: string; drawsAt: string | null; status: string };
+  result: { id: string; winningNumber: string; publishedAt: string; totalPaid: number; ticketBaseValue: number } | null;
+  winners: Array<{
+    id: string;
+    ticketNumber: string;
+    prizeTier: string;
+    amount: number;
+    status: string;
+    createdAt: string;
+    creditedAt: string | null;
+    user: { id: string; username: string; phone: string } | null;
+  }>;
+  byTier: Record<string, { count: number; sumAmount: number }>;
+  byStatus: Record<string, { count: number; sumAmount: number }>;
+  total: number;
+  sumAmount: number;
+}
+
 const BLANK: Draw = {
   id: '',
   name: '',
   schedule: '',
   drawsAt: '',
   digitsCount: 4,
-  ticketPrice: 20,
+  // Client spec ticket value. 5 BDT * 2000x = 10,000 BDT 1st prize,
+  // matching the example in the spec doc.
+  ticketPrice: 5,
   prizePool: 100000,
   accent: 'yellow',
   position: 0,
@@ -109,6 +140,17 @@ export default function AdminLottoPage() {
   const [diagnoseBusy, setDiagnoseBusy] = useState(false);
   const [rolloverBusy, setRolloverBusy] = useState(false);
   const [seedBusy, setSeedBusy] = useState(false);
+  // View Tickets browser state
+  const [ticketsOpen, setTicketsOpen] = useState(false);
+  const [ticketsList, setTicketsList] = useState<AdminTicketRow[]>([]);
+  const [ticketsTotal, setTicketsTotal] = useState(0);
+  const [ticketsBusy, setTicketsBusy] = useState(false);
+  const [ticketsFilters, setTicketsFilters] = useState<{ drawId: string; status: string; number: string }>({ drawId: '', status: '', number: '' });
+  // View Winners breakdown state
+  const [winners, setWinners] = useState<WinnersBreakdown | null>(null);
+  const [winnersBusy, setWinnersBusy] = useState(false);
+  // Auto-generate result button state
+  const [generateBusy, setGenerateBusy] = useState(false);
 
   const refresh = useCallback(async () => {
     setError(null);
@@ -253,6 +295,70 @@ export default function AdminLottoPage() {
       setError(e instanceof Error ? e.message : 'Settle failed');
     } finally {
       setBusy(false);
+    }
+  };
+
+  // Auto-generate 23 winning numbers per the client spec. Fills the
+  // settle form so the admin can review + edit before publishing.
+  const runGenerate = async () => {
+    if (!settling) return;
+    setGenerateBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/lotto/${settling.draw.id}/generate-result`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message ?? data.code ?? 'Generate failed');
+      setSettling({
+        ...settling,
+        winningNumber: data.winningNumber,
+        second: data.extraNumbers?.second ?? '',
+        third: data.extraNumbers?.third ?? '',
+        specials: Array.isArray(data.extraNumbers?.specials) ? data.extraNumbers.specials.join(', ') : '',
+        consolations: Array.isArray(data.extraNumbers?.consolations) ? data.extraNumbers.consolations.join(', ') : '',
+      });
+      setDiagnose(null);
+      setToast('Generated 23 winning numbers. Review and edit before publishing.');
+      setTimeout(() => setToast(null), 4000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Generate failed');
+    } finally {
+      setGenerateBusy(false);
+    }
+  };
+
+  const loadTickets = useCallback(async () => {
+    setTicketsBusy(true);
+    setError(null);
+    try {
+      const url = new URL('/api/admin/lotto/tickets', window.location.origin);
+      if (ticketsFilters.drawId) url.searchParams.set('drawId', ticketsFilters.drawId);
+      if (ticketsFilters.status) url.searchParams.set('status', ticketsFilters.status);
+      if (ticketsFilters.number) url.searchParams.set('number', ticketsFilters.number);
+      url.searchParams.set('take', '200');
+      const res = await fetch(url.toString(), { cache: 'no-store' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message ?? data.code ?? 'Failed');
+      setTicketsList(data.tickets as AdminTicketRow[]);
+      setTicketsTotal(Number(data.total ?? 0));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed');
+    } finally {
+      setTicketsBusy(false);
+    }
+  }, [ticketsFilters]);
+
+  const loadWinners = async (drawId: string) => {
+    setWinnersBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/lotto/${drawId}/winners`, { cache: 'no-store' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message ?? data.code ?? 'Failed');
+      setWinners(data as WinnersBreakdown);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed');
+    } finally {
+      setWinnersBusy(false);
     }
   };
 
@@ -403,6 +509,22 @@ export default function AdminLottoPage() {
         )}
       </Card>
 
+      <Card padding="md" className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs text-ink-mid">
+          Browse every ticket, every settled-draw winner, or open the per-draw settle modal.
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            size="sm"
+            variant="neon"
+            leftIcon={<List className="h-3.5 w-3.5" />}
+            onClick={() => { setTicketsOpen(true); void loadTickets(); }}
+          >
+            View All Tickets
+          </Button>
+        </div>
+      </Card>
+
       <Card padding="md" className="mb-4">
         <p className="text-xs text-ink-mid">
           Settling a draw publishes the winning 4-digit number and pays out across six tiers, no double-pay
@@ -494,6 +616,16 @@ export default function AdminLottoPage() {
                       }
                     >
                       Settle
+                    </Button>
+                  ) : null}
+                  {result ? (
+                    <Button
+                      size="sm"
+                      variant="neon"
+                      leftIcon={<Trophy className="h-3.5 w-3.5" />}
+                      onClick={() => loadWinners(d.id)}
+                    >
+                      Winners
                     </Button>
                   ) : null}
                   <Button size="sm" variant="neon" leftIcon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditor({ ...d, drawsAt: d.drawsAt ? d.drawsAt.slice(0, 16) : '' })}>Edit</Button>
@@ -676,6 +808,16 @@ export default function AdminLottoPage() {
               <Button
                 type="button"
                 variant="neon"
+                leftIcon={<Wand2 className="h-3.5 w-3.5" />}
+                loading={generateBusy}
+                onClick={runGenerate}
+                title="Server picks 23 random winning numbers per tier (1st, 2nd, 3rd, 10 specials, 10 consolations). Review and edit before publishing."
+              >
+                Generate
+              </Button>
+              <Button
+                type="button"
+                variant="neon"
                 leftIcon={<Stethoscope className="h-3.5 w-3.5" />}
                 loading={diagnoseBusy}
                 disabled={!/^\d{4}$/.test(settling.winningNumber)}
@@ -688,6 +830,191 @@ export default function AdminLottoPage() {
               </Button>
             </div>
           </form>
+        ) : null}
+      </Modal>
+
+      {/* View All Tickets browser */}
+      <Modal
+        open={ticketsOpen}
+        onOpenChange={(v) => { if (!v) { setTicketsOpen(false); setTicketsList([]); setTicketsTotal(0); } }}
+        title="All lottery tickets"
+        size="xl"
+      >
+        <div className="space-y-3">
+          <div className="grid gap-2 sm:grid-cols-4">
+            <FormField label="Draw">
+              <Select
+                value={ticketsFilters.drawId}
+                onChange={(e) => setTicketsFilters((p) => ({ ...p, drawId: e.target.value }))}
+              >
+                <option value="">All draws</option>
+                {draws.map((d) => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </Select>
+            </FormField>
+            <FormField label="Status">
+              <Select
+                value={ticketsFilters.status}
+                onChange={(e) => setTicketsFilters((p) => ({ ...p, status: e.target.value }))}
+              >
+                <option value="">All statuses</option>
+                <option value="issued">Issued (active)</option>
+                <option value="won">Won</option>
+                <option value="lost">Lost</option>
+                <option value="void">Void</option>
+              </Select>
+            </FormField>
+            <FormField label="Number contains">
+              <Input
+                value={ticketsFilters.number}
+                onChange={(e) => setTicketsFilters((p) => ({ ...p, number: e.target.value.replace(/\D/g, '').slice(0, 4) }))}
+                placeholder="e.g. 1234"
+                inputMode="numeric"
+                maxLength={4}
+              />
+            </FormField>
+            <div className="flex items-end">
+              <Button variant="gold" loading={ticketsBusy} onClick={() => void loadTickets()} className="w-full">
+                Search
+              </Button>
+            </div>
+          </div>
+          <p className="text-xs text-ink-mid">
+            Showing {ticketsList.length} of {ticketsTotal} tickets. Capped at 200 per page; tighten filters to find specific rows.
+          </p>
+          {ticketsList.length === 0 ? (
+            <Card padding="lg"><EmptyState title="No tickets" description="No tickets match the current filters." /></Card>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-base-deep/40 text-xs uppercase tracking-wider text-ink-lo">
+                  <tr>
+                    <th className="px-3 py-2 text-left">Number</th>
+                    <th className="px-3 py-2 text-left">User</th>
+                    <th className="px-3 py-2 text-left">Draw</th>
+                    <th className="px-3 py-2 text-left">Status</th>
+                    <th className="px-3 py-2 text-left">Source</th>
+                    <th className="px-3 py-2 text-left">Issued</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ticketsList.map((t) => (
+                    <tr key={t.id} className="border-b border-neon/10">
+                      <td className="px-3 py-2 font-mono font-bold tabular-nums text-ink-hi">{t.number}</td>
+                      <td className="px-3 py-2 text-ink-mid">
+                        {t.user ? (
+                          <span>
+                            <span className="font-semibold text-ink-hi">{t.user.username}</span>{' '}
+                            <span className="text-[11px] text-ink-lo">{t.user.phone}</span>
+                          </span>
+                        ) : '-'}
+                      </td>
+                      <td className="px-3 py-2 text-ink-mid">{t.draw?.name ?? '-'}</td>
+                      <td className="px-3 py-2">
+                        <Chip tone={t.status === 'won' ? 'ok' : t.status === 'issued' ? 'warn' : 'neutral'}>{t.status}</Chip>
+                      </td>
+                      <td className="px-3 py-2 text-xs text-ink-mid">{t.source}</td>
+                      <td className="px-3 py-2 text-xs text-ink-lo">{formatDateTime(t.generatedAt, lang)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      {/* View Winners breakdown per draw */}
+      <Modal
+        open={!!winners}
+        onOpenChange={(v) => { if (!v) setWinners(null); }}
+        title={winners ? `Winners - ${winners.draw.name}` : 'Winners'}
+        size="xl"
+      >
+        {winnersBusy ? (
+          <p className="text-sm text-ink-mid">Loading winners...</p>
+        ) : winners ? (
+          <div className="space-y-4">
+            {winners.result ? (
+              <Card padding="md">
+                <div className="flex flex-wrap items-baseline justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wider text-ink-lo">Winning number</p>
+                    <p className="font-mono text-2xl font-extrabold tabular-nums text-gradient-gold">{winners.result.winningNumber}</p>
+                  </div>
+                  <div className="text-right text-sm">
+                    <p className="text-ink-mid">
+                      Published <span className="font-semibold text-ink-hi">{formatDateTime(winners.result.publishedAt, lang)}</span>
+                    </p>
+                    <p className="text-ink-mid">
+                      Total paid <span className="font-semibold text-ink-hi">{formatBDT(winners.result.totalPaid)}</span> across {winners.total} winner(s)
+                    </p>
+                  </div>
+                </div>
+              </Card>
+            ) : (
+              <Card padding="md"><p className="text-sm text-ink-mid">Draw not yet settled.</p></Card>
+            )}
+
+            <div className="grid gap-3 md:grid-cols-2">
+              <Card padding="md">
+                <p className="text-[11px] uppercase tracking-wider text-ink-lo">By prize tier</p>
+                <ul className="mt-2 space-y-1 text-sm">
+                  {Object.entries(winners.byTier).map(([tier, agg]) => (
+                    <li key={tier} className="flex items-center justify-between">
+                      <span className="font-mono text-ink-hi">{tier}</span>
+                      <span className="text-ink-mid">{agg.count} <span className="text-ink-lo">({formatBDT(agg.sumAmount)})</span></span>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+              <Card padding="md">
+                <p className="text-[11px] uppercase tracking-wider text-ink-lo">By claim status</p>
+                <ul className="mt-2 space-y-1 text-sm">
+                  {Object.entries(winners.byStatus).map(([status, agg]) => (
+                    <li key={status} className="flex items-center justify-between">
+                      <span className="text-ink-hi">{status}</span>
+                      <span className="text-ink-mid">{agg.count} <span className="text-ink-lo">({formatBDT(agg.sumAmount)})</span></span>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            </div>
+
+            {winners.winners.length === 0 ? (
+              <Card padding="lg"><EmptyState title="No winners" description="This draw produced no winning tickets." /></Card>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-base-deep/40 text-xs uppercase tracking-wider text-ink-lo">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Ticket</th>
+                      <th className="px-3 py-2 text-left">Tier</th>
+                      <th className="px-3 py-2 text-right">Amount</th>
+                      <th className="px-3 py-2 text-left">Status</th>
+                      <th className="px-3 py-2 text-left">User</th>
+                      <th className="px-3 py-2 text-left">Credited</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {winners.winners.map((w) => (
+                      <tr key={w.id} className="border-b border-neon/10">
+                        <td className="px-3 py-2 font-mono font-bold tabular-nums text-ink-hi">{w.ticketNumber}</td>
+                        <td className="px-3 py-2 text-xs text-ink-mid">{w.prizeTier}</td>
+                        <td className="px-3 py-2 text-right font-semibold text-gradient-gold tabular-nums">{formatBDT(w.amount)}</td>
+                        <td className="px-3 py-2">
+                          <Chip tone={w.status === 'credited' ? 'ok' : w.status === 'cancelled' ? 'danger' : 'warn'}>{w.status}</Chip>
+                        </td>
+                        <td className="px-3 py-2 text-ink-mid">{w.user?.username ?? '-'}</td>
+                        <td className="px-3 py-2 text-xs text-ink-lo">{w.creditedAt ? formatDateTime(w.creditedAt, lang) : '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         ) : null}
       </Modal>
     </>

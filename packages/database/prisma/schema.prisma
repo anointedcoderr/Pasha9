@@ -1065,7 +1065,7 @@ model LottoDraw {
   schedule    String?       // human readable: "Daily 19:30", "Friday 22:30"
   drawsAt     DateTime?     // next draw timestamp
   digitsCount Int           @default(4)
-  ticketPrice Decimal       @default(20) @db.Decimal(14, 2)
+  ticketPrice Decimal       @default(5) @db.Decimal(14, 2)
   prizePool   Decimal       @default(0)  @db.Decimal(14, 2)
   accent      String        @default("yellow") // yellow, blue, red, royal
   position    Int           @default(0)

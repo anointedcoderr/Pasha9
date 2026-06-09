@@ -13,7 +13,7 @@ const createSchema = z.object({
   schedule: z.string().max(80).optional().nullable(),
   drawsAt: z.string().datetime().optional().nullable(),
   digitsCount: z.coerce.number().int().min(1).max(10).default(4),
-  ticketPrice: z.coerce.number().min(0).max(1_000_000).default(20),
+  ticketPrice: z.coerce.number().min(0).max(1_000_000).default(5),
   prizePool: z.coerce.number().min(0).max(1_000_000_000).default(0),
   accent: z.enum(['yellow', 'blue', 'red', 'royal']).default('yellow'),
   position: z.coerce.number().int().min(0).max(99).default(0),
