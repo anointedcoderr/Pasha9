@@ -200,50 +200,28 @@ export function HomeDbGameSection({ section }: Props) {
 
           const inner = (
             <div className="relative aspect-[4/3] overflow-hidden">
-              {/* Layer 1 (ALWAYS rendered, including imageOnly mode):
-                  vibrant category SVG art as the base. Transparent
-                  regions of the operator's PNG and transparent edges
-                  of a contain-mode image reveal this vibrant art
-                  instead of the dark tile gradient. The imageOnly
-                  flag hides text overlays (name, play button, badges)
-                  but the backdrop must still render or transparent
-                  uploads look like images floating on a black panel,
-                  which was exactly the client complaint. */}
-              <CategoryHeroArt
-                code={artFor(g.category)}
-                className={cn(
-                  'absolute inset-0 h-full w-full',
-                  useImage ? 'opacity-75' : 'opacity-65',
-                )}
-              />
               {useImage ? (
-                <>
-                  {/* Layer 2: blurred + scaled copy of the operator
-                      image. Provides the "image colour leaks past
-                      the edge" feel for opaque uploads. For
-                      transparent PNGs it is also transparent and
-                      the layer-1 SVG art reads through it. */}
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={g.imageUrl ?? ''}
-                    alt=""
-                    aria-hidden
-                    className="absolute inset-0 h-full w-full scale-125 object-cover blur-lg"
-                  />
-                  {/* Layer 3: the foreground image at the operator
-                      chosen fit. */}
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={g.imageUrl ?? ''}
-                    alt={g.displayName}
-                    onError={() => markImageFailed(tileKey)}
-                    className={cn(
-                      'absolute inset-0 h-full w-full',
-                      useContain ? 'object-contain' : 'object-cover',
-                    )}
-                  />
-                </>
-              ) : null}
+                // Single image, object-cover, fills the entire card.
+                // No backdrops, no decorations, no overlays. Whatever
+                // the operator uploaded IS the card. Transparent
+                // regions reveal the tile background (mahogany) but
+                // nothing decorative is layered behind, so the result
+                // is exactly "image only" with no visual noise.
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={g.imageUrl ?? ''}
+                  alt={g.displayName}
+                  onError={() => markImageFailed(tileKey)}
+                  className="absolute inset-0 h-full w-full object-cover"
+                />
+              ) : (
+                // No upload yet: render the category SVG so a fresh
+                // database is not a wall of empty cards.
+                <CategoryHeroArt
+                  code={artFor(g.category)}
+                  className="absolute inset-0 h-full w-full opacity-90"
+                />
+              )}
               {hasOverlayText ? (
                 <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-brand-ink/95 via-brand-ink/40 to-transparent" />
               ) : null}
