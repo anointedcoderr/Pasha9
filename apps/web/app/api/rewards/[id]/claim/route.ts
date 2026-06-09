@@ -43,6 +43,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const item = await db.rewardItem.findUnique({ where: { id: params.id } });
     if (!item || item.status !== 'active') return jsonError(404, 'REWARD_NOT_FOUND');
 
+    // Pre-check balance for a friendly error. The authoritative
+    // check re-runs inside the transaction so two concurrent claims
+    // of the same item from the same user cannot both pass and
+    // double-debit the bonus balance.
     const wallet = await db.wallet.findUnique({ where: { userId }, select: { bonusBalance: true } });
     const coins = wallet ? Math.floor(Number(wallet.bonusBalance)) : 0;
     if (coins < item.cost) {
@@ -66,20 +70,34 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       payload = parsed.data;
     }
 
-    const claim = await db.$transaction(async (tx) => {
-      await tx.wallet.update({ where: { userId }, data: { bonusBalance: { decrement: item.cost } } });
-      return tx.rewardClaim.create({
-        data: {
-          userId,
-          itemId: item.id,
-          itemTitle: item.title,
-          rewardType: item.rewardType,
-          costPaid: item.cost,
-          status: 'pending',
-          payload,
-        },
+    let claim;
+    try {
+      claim = await db.$transaction(async (tx) => {
+        const liveWallet = await tx.wallet.findUnique({ where: { userId }, select: { bonusBalance: true } });
+        const liveCoins = liveWallet ? Math.floor(Number(liveWallet.bonusBalance)) : 0;
+        if (liveCoins < item.cost) {
+          throw new Error('INSUFFICIENT_COINS_RACE');
+        }
+        await tx.wallet.update({ where: { userId }, data: { bonusBalance: { decrement: item.cost } } });
+        return tx.rewardClaim.create({
+          data: {
+            userId,
+            itemId: item.id,
+            itemTitle: item.title,
+            rewardType: item.rewardType,
+            costPaid: item.cost,
+            status: 'pending',
+            payload,
+          },
+        });
       });
-    });
+    } catch (e) {
+      if (e instanceof Error && e.message === 'INSUFFICIENT_COINS_RACE') {
+        const config = await loadCheckInConfig();
+        return jsonError(409, 'INSUFFICIENT_COINS', config.insufficientCoinsTextEn);
+      }
+      throw e;
+    }
 
     await recordActivity({
       actorId: userId,

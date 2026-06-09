@@ -34,6 +34,7 @@ export async function GET() {
     await ensurePermission('rewards.write');
     const tiers = await db.spinWheelTier.findMany({
       orderBy: [{ position: 'asc' }],
+      take: 100,
       include: { _count: { select: { segments: true, results: true } } },
     });
     return jsonOk({

@@ -69,10 +69,10 @@ export async function POST(req: NextRequest) {
   return jsonOk({
     delivered: send.provider,
     expiresInMinutes: TTL_MIN,
-    // dev-only convenience: return the bare code in dev so the QA
-    // panel can fill it in automatically. Never returned in
-    // production (admin must read the code from NotificationLog
-    // when the manual adapter is in use).
-    devCode: process.env.NODE_ENV !== 'production' ? code : undefined,
+    // The plaintext OTP is never returned in the HTTP response. QA
+    // and the manual SMS adapter both read codes from
+    // /admin/notifications (NotificationLog body field). A
+    // misconfigured NODE_ENV in production would have leaked
+    // single-use OTPs to any caller.
   });
 }

@@ -174,7 +174,10 @@ export function Header() {
     <>
       <MobileTopBar />
 
-      <header className="sticky top-0 z-30 border-b border-brand-divider bg-brand-paper shadow-[0_1px_0_rgba(15,17,21,0.04)]">
+      <header
+        className="sticky top-0 z-30 border-b border-brand-divider bg-brand-paper shadow-[0_1px_0_rgba(15,17,21,0.04)]"
+        style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
+      >
         {/* Top hairline gold glow */}
         <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-brand-yellow-500/35 to-transparent" />
         <div className="relative mx-auto flex h-[68px] max-w-page items-center gap-2 px-2 sm:gap-3 sm:px-3 md:px-6">

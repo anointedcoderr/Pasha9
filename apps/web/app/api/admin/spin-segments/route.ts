@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
       : tierFilter
         ? { tierId: tierFilter }
         : {};
-    const rows = await db.spinSegment.findMany({ where, orderBy: [{ position: 'asc' }] });
+    const rows = await db.spinSegment.findMany({ where, orderBy: [{ position: 'asc' }], take: 200 });
     return jsonOk({
       segments: rows.map((s) => ({
         id: s.id,

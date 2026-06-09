@@ -44,7 +44,10 @@ export function Modal({ open, onOpenChange, title, description, children, footer
             </div>
           ) : null}
           {!hideClose ? (
-            <Dialog.Close className="absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-mid transition hover:bg-brand-surface hover:text-ink-hi focus-visible:ring-2 focus-visible:ring-brand-blue-500/40 outline-none">
+            <Dialog.Close
+              aria-label="Close dialog"
+              className="absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-mid transition hover:bg-brand-surface hover:text-ink-hi focus-visible:ring-2 focus-visible:ring-brand-blue-500/40 outline-none"
+            >
               <X className="h-4 w-4" />
             </Dialog.Close>
           ) : null}
@@ -92,7 +95,10 @@ export function Drawer({
               {description ? <Dialog.Description className="mt-1 text-sm text-ink-lo">{description}</Dialog.Description> : null}
             </div>
           ) : null}
-          <Dialog.Close className="absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-mid hover:bg-brand-surface hover:text-ink-hi focus-visible:ring-2 focus-visible:ring-brand-blue-500/40 outline-none">
+          <Dialog.Close
+            aria-label="Close drawer"
+            className="absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-mid hover:bg-brand-surface hover:text-ink-hi focus-visible:ring-2 focus-visible:ring-brand-blue-500/40 outline-none"
+          >
             <X className="h-4 w-4" />
           </Dialog.Close>
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1 pb-4">{children}</div>

@@ -71,10 +71,14 @@ export async function POST(req: NextRequest) {
     let source: 'free_daily' | 'manual' = 'manual';
     if (freeAvailable > 0) { cost = 0; source = 'free_daily'; }
 
-    const wallet = await db.wallet.findUnique({ where: { userId }, select: { bonusBalance: true } });
-    const coins = wallet ? Math.floor(Number(wallet.bonusBalance)) : 0;
-    if (cost > coins) {
-      return jsonError(400, 'INSUFFICIENT_COINS', `Need ${cost} coins to spin, you have ${coins}.`, { coinsHave: coins, coinsNeeded: cost });
+    // Pre-check balance for a user-friendly error before we run the
+    // weighted pick + transaction. The authoritative balance check
+    // re-runs inside the transaction below so a parallel spin
+    // cannot squeak through between these two reads.
+    const walletPreview = await db.wallet.findUnique({ where: { userId }, select: { bonusBalance: true } });
+    const coinsPreview = walletPreview ? Math.floor(Number(walletPreview.bonusBalance)) : 0;
+    if (cost > coinsPreview) {
+      return jsonError(400, 'INSUFFICIENT_COINS', `Need ${cost} coins to spin, you have ${coinsPreview}.`, { coinsHave: coinsPreview, coinsNeeded: cost });
     }
 
     // Weighted pick. Operator-configurable house raffle - no
@@ -113,7 +117,21 @@ export async function POST(req: NextRequest) {
       spinBonusRuleId = rule.id;
     }
 
-    const result = await db.$transaction(async (tx) => {
+    let result: { spinRow: { id: string }; bonusGrantId: string | null };
+    try {
+      result = await db.$transaction(async (tx) => {
+      // Authoritative balance re-check INSIDE the transaction.
+      // Without this, two concurrent spins that both passed the
+      // pre-check above could both pass the cost check and the
+      // wallet could be driven negative. We use Prisma.Decimal-safe
+      // arithmetic against the raw row.
+      if (cost > 0) {
+        const liveWallet = await tx.wallet.findUnique({ where: { userId }, select: { bonusBalance: true } });
+        const liveCoins = liveWallet ? Math.floor(Number(liveWallet.bonusBalance)) : 0;
+        if (liveCoins < cost) {
+          throw new Error('INSUFFICIENT_COINS_RACE');
+        }
+      }
       if (cost > 0 || payoutCoins > 0) {
         await tx.wallet.upsert({
           where: { userId },
@@ -176,7 +194,13 @@ export async function POST(req: NextRequest) {
         },
       });
       return { spinRow, bonusGrantId };
-    });
+      });
+    } catch (e) {
+      if (e instanceof Error && e.message === 'INSUFFICIENT_COINS_RACE') {
+        return jsonError(409, 'INSUFFICIENT_COINS', 'Another spin used the same coins. Try again.');
+      }
+      throw e;
+    }
 
     await recordActivity({
       actorId: userId,

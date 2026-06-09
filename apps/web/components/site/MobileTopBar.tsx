@@ -62,12 +62,12 @@ export function MobileTopBar() {
         type="button"
         aria-label="Dismiss app download"
         onClick={dismiss}
-        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-brand-inkMute hover:bg-brand-surface"
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-brand-inkMute hover:bg-brand-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue-500/40"
       >
         <X className="h-4 w-4" />
       </button>
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-grad-yellow text-brand-ink">
-        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none">
+      <span role="img" aria-label="Pasha 9" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-grad-yellow text-brand-ink">
+        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" aria-hidden="true">
           <path d="M12 3 L20 8 L20 16 L12 21 L4 16 L4 8 Z" stroke="#0F1115" strokeWidth="1.6" />
           <path d="M12 8 L15 12 L12 16 L9 12 Z" fill="#0F1115" />
         </svg>
@@ -80,7 +80,7 @@ export function MobileTopBar() {
         href={apkUrl ?? '/apk'}
         target={apkUrl ? '_blank' : undefined}
         rel={apkUrl ? 'noreferrer' : undefined}
-        className="btn-yellow inline-flex h-9 items-center rounded-lg px-4 text-sm"
+        className="btn-yellow inline-flex h-11 items-center rounded-lg px-4 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue-500/40"
       >
         {t('navx.downloadApp')}
       </a>

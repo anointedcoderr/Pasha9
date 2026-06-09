@@ -902,6 +902,25 @@ body.theme-light input[type="checkbox"].accent-neon { accent-color: #1E73E8; }
 .png-glow       { animation: png-glow-breathe 2.4s ease-in-out infinite; }
 .png-fade-up    { animation: png-fade-up 0.35s ease-out 1 both; }
 
+/* Honour the OS-level reduced motion preference. Strip every
+ * decorative motion animation declared above so users who get
+ * motion sickness, vestibular issues, or simply prefer a calmer
+ * UI get exactly that. We keep the final visual state so cards
+ * still render their gold border / glow surfaces. */
+@media (prefers-reduced-motion: reduce) {
+  .png-win,
+  .png-loss,
+  .png-tile-flip,
+  .png-reel,
+  .png-ball,
+  .png-wheel,
+  .png-curve-draw,
+  .png-glow,
+  .png-fade-up {
+    animation: none !important;
+  }
+}
+
 /* Premium game card shine sweep: a soft diagonal highlight that
  * passes left-to-right on hover. Combined with .png-card the gold
  * inner border + outer glow + lift add up to a casino-grade thumb. */

@@ -45,8 +45,12 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  // The token is delivered via SMS in production. M1 returns it in dev mode so QA can complete the flow.
-  const devToken = process.env.NODE_ENV === 'production' ? undefined : secret;
+  // The token is delivered via SMS / NotificationLog only. We never
+  // return the raw secret in the HTTP response (a misconfigured
+  // NODE_ENV in production would leak single-use reset tokens to
+  // anyone who could call this endpoint). QA can read the token
+  // from /admin/notifications -> the NotificationLog row created
+  // by the SMS provider.
 
-  return jsonOk({ delivered: 'ok', devToken });
+  return jsonOk({ delivered: 'ok' });
 }

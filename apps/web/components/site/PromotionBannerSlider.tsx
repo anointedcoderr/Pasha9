@@ -53,21 +53,30 @@ export function PromotionBannerSlider({ banners }: { banners: PromotionBannerRow
         if (distance < -40) next();
       }}
     >
-      {active.imageUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={active.imageUrl}
-          alt=""
-          aria-hidden
-          className={cn(
-            'absolute inset-0 h-full w-full object-cover',
-            // Full opacity when the banner is image-only so the
-            // operator's promotional design is uncompromised. Dim and
-            // scrim when text exists so the copy stays legible.
-            (title?.trim() || subtitle?.trim()) ? 'opacity-65' : 'opacity-100',
-          )}
-        />
-      ) : null}
+      {active.imageUrl ? (() => {
+        // When text is present the image is decorative chrome (the
+        // headline/subtitle carry the meaning) so we mark it
+        // aria-hidden with alt="". When the banner is image-only
+        // the image IS the content - we promote alt text so screen
+        // reader users still get a hint about what the promotion
+        // is. The fallback "Promotion banner" label is intentional:
+        // operator-uploaded images do not carry an inherent
+        // description.
+        const hasText = Boolean(title?.trim() || subtitle?.trim());
+        const altText = hasText ? '' : (bn ? 'প্রমোশনাল ব্যানার' : 'Promotion banner');
+        return (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={active.imageUrl}
+            alt={altText}
+            aria-hidden={hasText ? true : undefined}
+            className={cn(
+              'absolute inset-0 h-full w-full object-cover',
+              hasText ? 'opacity-65' : 'opacity-100',
+            )}
+          />
+        );
+      })() : null}
       {(title?.trim() || subtitle?.trim()) ? (
         <>
           <div aria-hidden className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/45 to-transparent" />

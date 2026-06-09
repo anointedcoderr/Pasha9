@@ -119,6 +119,9 @@ export async function GET(req: NextRequest) {
     const rows = await db.bonusRule.findMany({
       where,
       orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }],
+      // Hard cap so this admin endpoint cannot spiral into a
+      // multi-megabyte payload as the bonus catalogue grows.
+      take: 500,
       include: {
         _count: { select: { userBonuses: true, promotionClaims: true } },
       },

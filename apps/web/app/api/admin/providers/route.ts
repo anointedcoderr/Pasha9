@@ -85,7 +85,11 @@ function rowToView(row: {
 export async function GET() {
   return withAuth(async () => {
     await ensurePermission('settings.write');
-    const rows = await db.gameProvider.findMany({ orderBy: { name: 'asc' } });
+    // Providers are aggregated against children (brands + games) in
+    // the joins below, so this list must be the full set. Take is
+    // capped at 200 as a hard ceiling - the realistic operator
+    // count is well under 50.
+    const rows = await db.gameProvider.findMany({ orderBy: { name: 'asc' }, take: 200 });
 
     // Brand + game summaries so the overview card can show
     // "10 brands, 1228 games (1183 active)" plus the brand-name pill

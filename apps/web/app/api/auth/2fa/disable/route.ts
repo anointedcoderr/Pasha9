@@ -11,6 +11,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db/client';
 import { withAuth, recordActivity } from '@/lib/auth/guard';
 import { requireActiveUser } from '@/lib/auth/rbac';
+import { rateLimit } from '@/lib/auth/rate-limit';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 import { verifyTotp, consumeRecoveryCode } from '@/lib/security/totp';
 
@@ -19,6 +20,11 @@ const schema = z.object({ code: z.string().min(4).max(20) });
 export async function POST(req: NextRequest) {
   return withAuth(async () => {
     const session = await requireActiveUser();
+    // Disabling 2FA is destructive: a stolen session cookie should
+    // not be able to grind the TOTP or recovery space. 3 attempts
+    // per minute matches the conservatism of the /challenge bucket.
+    const limit = rateLimit(`2fa-disable:${session.sub}`, 3, 60_000);
+    if (!limit.ok) return jsonError(429, 'RATE_LIMITED', 'Too many attempts. Wait a moment and try again.');
     const body = await req.json().catch(() => ({}));
     const parsed = schema.safeParse(body);
     if (!parsed.success) return jsonError(400, 'VALIDATION');

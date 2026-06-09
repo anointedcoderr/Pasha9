@@ -61,6 +61,10 @@ export async function GET() {
     await ensurePermission('bonuses.read');
     const rows = await db.promoCode.findMany({
       orderBy: [{ isActive: 'desc' }, { createdAt: 'desc' }],
+      // Bounded payload as the promo catalogue grows. Operators
+      // with more than 500 active codes should add a filter or
+      // archive expired codes from the admin console.
+      take: 500,
       include: { _count: { select: { redemptions: true } } },
     });
     return jsonOk({ codes: rows.map(serialize) });

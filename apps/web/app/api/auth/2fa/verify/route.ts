@@ -12,6 +12,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db/client';
 import { withAuth, recordActivity } from '@/lib/auth/guard';
 import { requireActiveUser } from '@/lib/auth/rbac';
+import { rateLimit } from '@/lib/auth/rate-limit';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 import { verifyTotp, generateRecoveryCodes } from '@/lib/security/totp';
 
@@ -20,6 +21,12 @@ const schema = z.object({ code: z.string().min(4).max(10) });
 export async function POST(req: NextRequest) {
   return withAuth(async () => {
     const session = await requireActiveUser();
+    // 5 verification attempts per minute per user. The TOTP
+    // code-space is 1,000,000 so a determined attacker with a
+    // stolen session cookie could in theory grind toward the right
+    // code without this cap.
+    const limit = rateLimit(`2fa-verify:${session.sub}`, 5, 60_000);
+    if (!limit.ok) return jsonError(429, 'RATE_LIMITED', 'Too many attempts. Wait a moment and try again.');
     const body = await req.json().catch(() => ({}));
     const parsed = schema.safeParse(body);
     if (!parsed.success) return jsonError(400, 'VALIDATION');

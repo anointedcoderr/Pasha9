@@ -20,16 +20,17 @@ export function LanguageToggle({ compact, tone = 'light' }: { compact?: boolean;
   const iconClass = tone === 'light' ? 'text-brand-inkMute' : 'text-ink-lo';
 
   return (
-    <div className={cn('inline-flex items-center gap-1 rounded-full border p-1', wrap, compact ? 'h-9' : 'h-10')}>
-      <Globe className={cn('ml-2 mr-1 h-4 w-4', iconClass)} />
+    <div className={cn('inline-flex items-center gap-1 rounded-full border p-1', wrap, compact ? 'h-10' : 'h-11')}>
+      <Globe className={cn('ml-2 mr-1 h-4 w-4', iconClass)} aria-hidden />
       <button
         type="button"
         onClick={() => setLang('bn')}
         className={cn(
-          'rounded-full px-3 text-sm font-medium transition',
-          compact ? 'h-7' : 'h-8',
+          'min-w-[40px] rounded-full px-3 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue-500/40',
+          compact ? 'h-8' : 'h-9',
           lang === 'bn' ? `${activeBg} ${activeText}` : inactive,
         )}
+        aria-label="Bangla"
         aria-pressed={lang === 'bn'}
       >
         BN
@@ -38,10 +39,11 @@ export function LanguageToggle({ compact, tone = 'light' }: { compact?: boolean;
         type="button"
         onClick={() => setLang('en')}
         className={cn(
-          'rounded-full px-3 text-sm font-medium transition',
-          compact ? 'h-7' : 'h-8',
+          'min-w-[40px] rounded-full px-3 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue-500/40',
+          compact ? 'h-8' : 'h-9',
           lang === 'en' ? `${activeBg} ${activeText}` : inactive,
         )}
+        aria-label="English"
         aria-pressed={lang === 'en'}
       >
         EN

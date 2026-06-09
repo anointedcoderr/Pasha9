@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/Button';
 import { FormField, Input, PasswordInput } from '@/components/ui/Input';
 import { Phone, Lock, KeyRound, UserPlus, User as UserIcon, Gift, Smartphone, ArrowLeft } from 'lucide-react';
 import { loginSchema, signupSchema, type LoginInput, type SignupInput } from '@/lib/utils/validation';
-import { useT } from '@/lib/i18n/context';
+import { useT, useLang } from '@/lib/i18n/context';
 import { triggerWalletRefresh } from './WalletStrip';
 
 interface Props {
@@ -64,6 +64,8 @@ export function AuthModal({ open, onOpenChange, initialTab = 'login' }: Props) {
 
 function LoginForm({ onSuccess }: { onSuccess: () => void }) {
   const t = useT();
+  const { lang } = useLang();
+  const bn = lang === 'bn';
   const router = useRouter();
   const params = useSearchParams();
   const [loading, setLoading] = useState(false);
@@ -158,20 +160,29 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
     return (
       <form onSubmit={onSubmitChallenge} className="space-y-4">
         <div className="rounded-lg border border-neon/15 bg-base-deep/40 p-3 text-sm">
-          <p className="font-semibold text-ink-hi">Two-factor verification</p>
+          <p className="font-semibold text-ink-hi">
+            {bn ? 'টু-ফ্যাক্টর যাচাই' : 'Two-factor verification'}
+          </p>
           <p className="mt-1 text-xs text-ink-mid">
-            Signing in as <span className="font-semibold text-ink-hi">{challenge.identifier}</span>.{' '}
+            {bn ? 'লগইন করছেন: ' : 'Signing in as '}
+            <span className="font-semibold text-ink-hi">{challenge.identifier}</span>.{' '}
             {useRecovery
-              ? 'Enter a single-use recovery code.'
-              : 'Enter the 6-digit code from your authenticator app.'}
+              ? (bn ? 'একটি একবার-ব্যবহারযোগ্য রিকভারি কোড দিন।' : 'Enter a single-use recovery code.')
+              : (bn ? 'আপনার অথেনটিকেটর অ্যাপ থেকে ৬ অঙ্কের কোড দিন।' : 'Enter the 6-digit code from your authenticator app.')}
           </p>
         </div>
         <FormField
-          label={useRecovery ? 'Recovery code' : 'Authenticator code'}
+          label={useRecovery
+            ? (bn ? 'রিকভারি কোড' : 'Recovery code')
+            : (bn ? 'অথেনটিকেটর কোড' : 'Authenticator code')}
           required
           hint={useRecovery
-            ? 'Each recovery code works exactly ONCE. Used codes are removed automatically.'
-            : 'Open Google Authenticator / Authy / 1Password and copy the current 6-digit code.'}
+            ? (bn
+                ? 'প্রতিটি রিকভারি কোড শুধুমাত্র একবার কাজ করে। ব্যবহার করা কোড স্বয়ংক্রিয়ভাবে মুছে যায়।'
+                : 'Each recovery code works exactly ONCE. Used codes are removed automatically.')
+            : (bn
+                ? 'Google Authenticator / Authy / 1Password খুলে বর্তমান ৬ অঙ্কের কোড কপি করুন।'
+                : 'Open Google Authenticator / Authy / 1Password and copy the current 6-digit code.')}
         >
           <Input
             leftIcon={useRecovery ? <KeyRound className="h-4 w-4" /> : <Smartphone className="h-4 w-4" />}
@@ -187,7 +198,7 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
           <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{apiError.message ?? apiError.code}</p>
         ) : null}
         <Button full type="submit" size="lg" variant="gold" loading={loading} disabled={!code.trim() || (!useRecovery && code.length !== 6)}>
-          Verify + sign in
+          {bn ? 'যাচাই করুন এবং লগইন' : 'Verify + sign in'}
         </Button>
         <div className="flex items-center justify-between text-sm">
           <button
@@ -195,14 +206,16 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
             onClick={() => { setUseRecovery((v) => !v); setCode(''); setApiError(null); }}
             className="font-semibold text-brand-blue-600 hover:text-brand-blue-700"
           >
-            {useRecovery ? 'Use authenticator code instead' : 'Use recovery code instead'}
+            {useRecovery
+              ? (bn ? 'বদলে অথেনটিকেটর কোড দিন' : 'Use authenticator code instead')
+              : (bn ? 'বদলে রিকভারি কোড দিন' : 'Use recovery code instead')}
           </button>
           <button
             type="button"
             onClick={() => { setChallenge(null); setCode(''); setUseRecovery(false); setApiError(null); }}
             className="inline-flex items-center gap-1 text-ink-mid hover:text-ink-hi"
           >
-            <ArrowLeft className="h-3 w-3" /> Back to login
+            <ArrowLeft className="h-3 w-3" /> {bn ? 'লগইনে ফিরে যান' : 'Back to login'}
           </button>
         </div>
       </form>

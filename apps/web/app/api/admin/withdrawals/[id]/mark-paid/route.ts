@@ -35,31 +35,49 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return jsonOk({ ok: true, alreadyPaid: true, withdrawal: w });
     }
 
-    const updated = await db.$transaction(async (tx) => {
-      const updatedRow = await tx.withdrawal.update({
-        where: { id: w.id },
-        data: {
-          processingState: 'paid',
-          paidAt: new Date(),
-          providerKey: parsed.data.providerKey ?? 'manual',
-          providerRef: parsed.data.providerRef ?? null,
-        },
-      });
-      await tx.withdrawalEvent.create({
-        data: {
-          withdrawalId: w.id,
-          kind: 'paid',
-          actorId: session.sub,
-          actorRole: session.role,
-          note: parsed.data.note || 'Marked paid by admin.',
-          meta: {
+    // The idempotency check above is racy in isolation: two
+    // concurrent operators clicking Mark Paid would both pass the
+    // check and end up writing two WithdrawalEvent rows with
+    // kind='paid'. We re-check the row INSIDE the transaction and
+    // use a conditional updateMany so only one writer succeeds.
+    let updated;
+    try {
+      updated = await db.$transaction(async (tx) => {
+        const result = await tx.withdrawal.updateMany({
+          where: { id: w.id, processingState: { not: 'paid' } },
+          data: {
+            processingState: 'paid',
+            paidAt: new Date(),
             providerKey: parsed.data.providerKey ?? 'manual',
             providerRef: parsed.data.providerRef ?? null,
           },
-        },
+        });
+        if (result.count === 0) {
+          throw new Error('ALREADY_PAID_RACE');
+        }
+        const updatedRow = await tx.withdrawal.findUniqueOrThrow({ where: { id: w.id } });
+        await tx.withdrawalEvent.create({
+          data: {
+            withdrawalId: w.id,
+            kind: 'paid',
+            actorId: session.sub,
+            actorRole: session.role,
+            note: parsed.data.note || 'Marked paid by admin.',
+            meta: {
+              providerKey: parsed.data.providerKey ?? 'manual',
+              providerRef: parsed.data.providerRef ?? null,
+            },
+          },
+        });
+        return updatedRow;
       });
-      return updatedRow;
-    });
+    } catch (e) {
+      if (e instanceof Error && e.message === 'ALREADY_PAID_RACE') {
+        const latest = await db.withdrawal.findUnique({ where: { id: w.id } });
+        return jsonOk({ ok: true, alreadyPaid: true, withdrawal: latest });
+      }
+      throw e;
+    }
 
     await recordActivity({
       actorId: session.sub,

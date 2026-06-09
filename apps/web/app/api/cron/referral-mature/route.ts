@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
   });
 }
 
-export async function GET(req: NextRequest) {
-  // Mirror POST so systemd / curl GET-only schedulers work.
-  return POST(req);
-}
+// GET intentionally not exported. A state-mutating GET would let
+// any logged-in admin trigger referral settlement by loading a
+// page containing <img src="/api/cron/referral-mature">. Cron
+// callers must POST + Authorization: Bearer ${CRON_SECRET}.

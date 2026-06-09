@@ -85,18 +85,37 @@ export function DataTable<T>({
             <thead>
               {table.getHeaderGroups().map((group) => (
                 <tr key={group.id} className="border-b border-neon/10 bg-base-deep/50">
-                  {group.headers.map((header) => (
-                    <th
-                      key={header.id}
-                      className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-ink-lo cursor-pointer select-none"
-                      onClick={header.column.getToggleSortingHandler()}
-                    >
-                      <div className="inline-flex items-center gap-1">
-                        {flexRender(header.column.columnDef.header, header.getContext())}
-                        {{ asc: '▲', desc: '▼' }[header.column.getIsSorted() as string] ?? null}
-                      </div>
-                    </th>
-                  ))}
+                  {group.headers.map((header) => {
+                    const canSort = header.column.getCanSort();
+                    const sortDir = header.column.getIsSorted();
+                    const ariaSort = sortDir === 'asc' ? 'ascending' : sortDir === 'desc' ? 'descending' : 'none';
+                    const onActivate = header.column.getToggleSortingHandler();
+                    return (
+                      <th
+                        key={header.id}
+                        aria-sort={canSort ? ariaSort : undefined}
+                        className={cn(
+                          'px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-ink-lo select-none',
+                          canSort && 'cursor-pointer',
+                        )}
+                      >
+                        {canSort ? (
+                          <button
+                            type="button"
+                            onClick={onActivate}
+                            className="inline-flex items-center gap-1 bg-transparent text-left font-medium uppercase tracking-wider text-ink-lo hover:text-ink-hi focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue-500/40"
+                          >
+                            {flexRender(header.column.columnDef.header, header.getContext())}
+                            <span aria-hidden>{{ asc: '▲', desc: '▼' }[sortDir as string] ?? ''}</span>
+                          </button>
+                        ) : (
+                          <div className="inline-flex items-center gap-1">
+                            {flexRender(header.column.columnDef.header, header.getContext())}
+                          </div>
+                        )}
+                      </th>
+                    );
+                  })}
                 </tr>
               ))}
             </thead>
@@ -108,19 +127,34 @@ export function DataTable<T>({
                   </td>
                 </tr>
               ) : (
-                table.getRowModel().rows.map((row) => (
-                  <tr
-                    key={row.id}
-                    onClick={() => onRowClick?.(row.original)}
-                    className={cn('table-row transition', onRowClick && 'cursor-pointer', rowClassName?.(row.original))}
-                  >
-                    {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id} className="px-4 py-3 align-middle text-ink-hi">
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                      </td>
-                    ))}
-                  </tr>
-                ))
+                table.getRowModel().rows.map((row) => {
+                  const interactive = !!onRowClick;
+                  return (
+                    <tr
+                      key={row.id}
+                      onClick={() => onRowClick?.(row.original)}
+                      onKeyDown={
+                        interactive
+                          ? (e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                onRowClick?.(row.original);
+                              }
+                            }
+                          : undefined
+                      }
+                      role={interactive ? 'button' : undefined}
+                      tabIndex={interactive ? 0 : undefined}
+                      className={cn('table-row transition', interactive && 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue-500/40', rowClassName?.(row.original))}
+                    >
+                      {row.getVisibleCells().map((cell) => (
+                        <td key={cell.id} className="px-4 py-3 align-middle text-ink-hi">
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

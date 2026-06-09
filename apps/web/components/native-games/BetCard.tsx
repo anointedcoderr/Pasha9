@@ -57,7 +57,7 @@ export function BetCard({ bet, setBet, minBet, maxBet, balance, playLabel, onPla
         stickyMobile && 'fixed inset-x-3 bottom-3 z-30 shadow-[0_20px_60px_-20px_rgba(0,0,0,0.7)] md:static md:inset-auto md:shadow-none',
       )}
     >
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
         <div className="flex flex-1 items-center gap-2">
           <label className="text-[10px] font-bold uppercase tracking-wider text-white/55 sm:inline">
             {lang === 'bn' ? 'বেট' : 'Bet'}
@@ -77,7 +77,11 @@ export function BetCard({ bet, setBet, minBet, maxBet, balance, playLabel, onPla
             <span className="text-[10px] font-bold uppercase text-white/45">BDT</span>
           </div>
         </div>
-        <div className="flex shrink-0 gap-1.5">
+        {/* Quick-fill controls go onto their own row on 360px so they
+            never wrap mid-row. On sm+ they shrink to the right of
+            the input as before. The overflow-x-auto + scrollbar-none
+            is a safety net for extra-narrow viewports / large fonts. */}
+        <div className="-mx-1 flex shrink-0 gap-1.5 overflow-x-auto px-1 scrollbar-none sm:mx-0 sm:overflow-visible sm:px-0">
           <QuickBtn onClick={setMin}>Min</QuickBtn>
           <QuickBtn onClick={setHalf}>1/2</QuickBtn>
           <QuickBtn onClick={setDouble}>2x</QuickBtn>

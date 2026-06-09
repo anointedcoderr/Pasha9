@@ -15,7 +15,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Gift, Ticket, Home as HomeIcon, Star, Users, UserPlus, LogIn } from 'lucide-react';
-import { useT } from '@/lib/i18n/context';
+import { useT, useLang } from '@/lib/i18n/context';
 import { MarkerNew } from './markers';
 
 interface Props {
@@ -28,6 +28,8 @@ interface Props {
 
 export function StickyBottomNav({ isLoggedIn, onRequestLogin, onRequestSignup }: Props) {
   const t = useT();
+  const { lang } = useLang();
+  const newLabel = lang === 'bn' ? 'নতুন' : 'NEW';
   const pathnameRaw = usePathname();
   const pathname = pathnameRaw ?? '';
   const onHome = pathname === '/';
@@ -58,7 +60,7 @@ export function StickyBottomNav({ isLoggedIn, onRequestLogin, onRequestSignup }:
       >
         <span className="bnav-icon-wrap relative">
           <Ticket className="h-[18px] w-[18px] text-brand-yellow-700" />
-          <span className="absolute -right-2.5 -top-2"><MarkerNew /></span>
+          <span className="absolute -right-2.5 -top-2"><MarkerNew label={newLabel} /></span>
         </span>
         <span>{t('navx.lotto')}</span>
       </Link>

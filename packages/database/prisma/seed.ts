@@ -45,33 +45,69 @@ async function seedRolesAndPermissions() {
   }
 
   // Permission keys mirror admin route groups. Granular enough for staff RBAC in M2.
+  //
+  // The lower block below adds keys that the route handlers and
+  // lib/auth/admin-permission-map.ts already check for but which
+  // were missing from the original seed. They are additive only -
+  // old keys stay so an admin who already has a role grant does
+  // not lose access during the upgrade. Re-run `pnpm exec prisma
+  // db seed` after deploy to write the new rows.
   const permissions = [
+    // Users
     { key: 'users.read', label: 'View users', group: 'users' },
     { key: 'users.update', label: 'Update user status and profile', group: 'users' },
+    { key: 'users.write', label: 'Mutate user accounts (alias of users.update for new routes)', group: 'users' },
     { key: 'users.balance.adjust', label: 'Adjust user balance', group: 'users' },
+    { key: 'balance.write', label: 'Manual balance adjustments and reversals', group: 'users' },
+    // Wallet
     { key: 'deposits.read', label: 'View deposits', group: 'wallet' },
     { key: 'deposits.review', label: 'Approve or reject deposits', group: 'wallet' },
     { key: 'withdrawals.read', label: 'View withdrawals', group: 'wallet' },
     { key: 'withdrawals.review', label: 'Approve or reject withdrawals', group: 'wallet' },
     { key: 'transactions.read', label: 'View transaction log', group: 'wallet' },
+    { key: 'payments.read', label: 'View payments operations', group: 'wallet' },
+    { key: 'payouts.read', label: 'View payouts operations', group: 'wallet' },
+    { key: 'payment_methods.read', label: 'View payment methods', group: 'wallet' },
+    // Content + media
     { key: 'banners.write', label: 'Manage banners', group: 'content' },
     { key: 'popups.write', label: 'Manage popups', group: 'content' },
     { key: 'promo.write', label: 'Manage promo text', group: 'content' },
     { key: 'homepage.write', label: 'Edit homepage content', group: 'content' },
+    { key: 'ambassador.write', label: 'Edit ambassador and promo video', group: 'content' },
+    // Games
     { key: 'categories.write', label: 'Manage categories', group: 'games' },
     { key: 'providers.write', label: 'Manage providers', group: 'games' },
     { key: 'games.write', label: 'Manage games', group: 'games' },
-    { key: 'bonus.write', label: 'Manage bonus rules', group: 'bonus' },
+    // Bonus
+    // bonus.write (singular) is kept as a deprecated alias for
+    // existing role grants. New routes and the admin-permission-map
+    // use the plural bonuses.* form, seeded below.
+    { key: 'bonus.write', label: 'Manage bonus rules (deprecated, use bonuses.write)', group: 'bonus' },
+    { key: 'bonuses.read', label: 'View bonus rules and grants', group: 'bonus' },
+    { key: 'bonuses.write', label: 'Manage bonus rules, grants and cashback', group: 'bonus' },
+    // Referrals + affiliate
     { key: 'referrals.read', label: 'View referrals', group: 'referrals' },
+    { key: 'referrals.write', label: 'Approve and adjust referrals', group: 'referrals' },
     { key: 'affiliate.read', label: 'View affiliate applications and members', group: 'affiliate' },
     { key: 'affiliate.write', label: 'Approve, reject and manage affiliates', group: 'affiliate' },
     { key: 'affiliate.tiers.write', label: 'Manage commission tier settings', group: 'affiliate' },
-    { key: 'ambassador.write', label: 'Edit ambassador and promo video', group: 'content' },
+    // Lotto + rewards
     { key: 'lotto.write', label: 'Manage lotto draws', group: 'content' },
     { key: 'rewards.write', label: 'Manage reward catalog', group: 'content' },
+    // System
+    { key: 'settings.read', label: 'View system settings and content config', group: 'system' },
     { key: 'settings.write', label: 'Edit system settings', group: 'system' },
     { key: 'activity.read', label: 'View activity log', group: 'system' },
+    { key: 'reports.read', label: 'View reports', group: 'system' },
     { key: 'staff.manage', label: 'Manage staff accounts', group: 'system' },
+    // Security
+    { key: 'security.read', label: 'View security dashboards and IP blocks', group: 'security' },
+    { key: 'security.write', label: 'Manage IP blocks, password resets, 2FA admin', group: 'security' },
+    // Recovery
+    { key: 'recovery.write', label: 'Run player recovery workflows', group: 'recovery' },
+    // Support
+    { key: 'support.read', label: 'View support tickets', group: 'support' },
+    { key: 'support.write', label: 'Reply to and resolve support tickets', group: 'support' },
   ];
 
   for (const p of permissions) {

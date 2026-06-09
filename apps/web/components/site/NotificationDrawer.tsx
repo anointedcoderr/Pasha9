@@ -390,8 +390,22 @@ export function NotificationDrawer({ open, onOpenChange, isLoggedIn }: Props) {
                     void markRead(item.recipientId);
                     if (item.linkUrl) window.location.assign(item.linkUrl);
                   };
+                  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onClick();
+                    }
+                  };
                   return (
-                    <div key={item.recipientId} onClick={onClick} role="button" tabIndex={0}>
+                    <div
+                      key={item.recipientId}
+                      onClick={onClick}
+                      onKeyDown={onKeyDown}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={title}
+                      className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue-500/40"
+                    >
                       {inner}
                     </div>
                   );

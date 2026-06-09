@@ -42,6 +42,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     const amount = new Prisma.Decimal(withdrawal.amount);
 
+    // Pre-check turnover and balance for a fast, friendly error
+    // before opening the transaction. The authoritative balance
+    // check re-runs INSIDE the transaction below so two concurrent
+    // approvals cannot both pass a stale check and double-debit
+    // the wallet.
     const wallet = await db.wallet.findUnique({ where: { userId: withdrawal.userId } });
     if (!wallet) return jsonError(409, 'WALLET_MISSING', 'User has no wallet.');
     const turnover = await computeDepositTurnover(withdrawal.userId);
@@ -57,7 +62,20 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       });
     }
 
-    const updated = await db.$transaction(async (tx) => {
+    let updated;
+    try {
+      updated = await db.$transaction(async (tx) => {
+      // Re-read the wallet inside the transaction so a concurrent
+      // approval on the same user cannot drive the balance
+      // negative. We re-check available funds the same way as the
+      // pre-check but using the row we just read inside the tx.
+      const liveWallet = await tx.wallet.findUnique({ where: { userId: withdrawal.userId } });
+      if (!liveWallet) throw new Error('WALLET_MISSING_RACE');
+      const liveAvailable = Number(liveWallet.balance) - Number(liveWallet.lockedBalance)
+        - turnover.bdtBalanceLocked - turnover.referralBalanceLocked;
+      if (liveAvailable < Number(amount)) {
+        throw new Error('INSUFFICIENT_FUNDS_RACE');
+      }
       const w = await tx.withdrawal.update({
         where: { id: withdrawal.id },
         data: {
@@ -93,7 +111,16 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         },
       });
       return w;
-    });
+      });
+    } catch (e) {
+      if (e instanceof Error && e.message === 'INSUFFICIENT_FUNDS_RACE') {
+        return jsonError(409, 'INSUFFICIENT_FUNDS', 'User withdrawable balance changed since the page loaded. Refresh and try again.');
+      }
+      if (e instanceof Error && e.message === 'WALLET_MISSING_RACE') {
+        return jsonError(409, 'WALLET_MISSING', 'User has no wallet.');
+      }
+      throw e;
+    }
 
     await recordActivity({
       actorId: session.sub,

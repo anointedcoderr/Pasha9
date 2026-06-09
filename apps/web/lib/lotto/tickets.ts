@@ -234,34 +234,48 @@ export async function accrueLotteryTickets(userId: string): Promise<{ generated:
   const blockAmount = settings.ticketRateAmount;
   const ticketsPerBlock = settings.ticketRateCount;
 
-  const agg = await db.deposit.aggregate({
-    where: { userId, status: 'approved' },
-    _sum: { amount: true },
-  });
-  const totalApproved = Number(agg._sum.amount ?? 0);
-  const targetTotal = Math.floor(totalApproved / blockAmount) * ticketsPerBlock;
-
-  const existing = await db.lotteryTicket.count({
-    where: { userId, source: 'deposit_accrual' },
-  });
-
-  const toCreate = Math.max(0, targetTotal - existing);
-  if (toCreate === 0) {
-    return { generated: 0, targetTotal, existing };
-  }
-
+  // findOpenDraw runs outside the transaction below because the
+  // open-draw lookup is not racy in a harmful way: even if the
+  // chosen draw closes between this read and the createMany, the
+  // tickets simply target a draw that has just transitioned, which
+  // the rollover catches on the next cron tick. The dangerous race
+  // is on the (count -> create) pair, which IS atomized below.
   const openDraw = await findOpenDraw();
   const drawId = openDraw?.id ?? null;
 
-  const data = Array.from({ length: toCreate }, () => ({
-    userId,
-    drawId,
-    number: randomTicketNumber(LOTTERY_RULES.digits),
-    source: 'deposit_accrual',
-  }));
+  // Atomize the (count, target, create) pipeline so two concurrent
+  // deposit approvals for the same user cannot both observe
+  // `existing < target` and double the createMany. Without the
+  // transaction we would generate 2x the intended tickets the
+  // moment two admins approve deposits at once for the same
+  // player.
+  return db.$transaction(async (tx) => {
+    const agg = await tx.deposit.aggregate({
+      where: { userId, status: 'approved' },
+      _sum: { amount: true },
+    });
+    const totalApproved = Number(agg._sum.amount ?? 0);
+    const targetTotal = Math.floor(totalApproved / blockAmount) * ticketsPerBlock;
 
-  await db.lotteryTicket.createMany({ data });
-  return { generated: toCreate, targetTotal, existing };
+    const existing = await tx.lotteryTicket.count({
+      where: { userId, source: 'deposit_accrual' },
+    });
+
+    const toCreate = Math.max(0, targetTotal - existing);
+    if (toCreate === 0) {
+      return { generated: 0, targetTotal, existing };
+    }
+
+    const data = Array.from({ length: toCreate }, () => ({
+      userId,
+      drawId,
+      number: randomTicketNumber(LOTTERY_RULES.digits),
+      source: 'deposit_accrual',
+    }));
+
+    await tx.lotteryTicket.createMany({ data });
+    return { generated: toCreate, targetTotal, existing };
+  });
 }
 
 export interface SettleInput {

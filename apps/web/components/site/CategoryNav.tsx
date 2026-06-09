@@ -7,7 +7,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { MarkerHot, MarkerNew } from './markers';
-import { useT } from '@/lib/i18n/context';
+import { useT, useLang } from '@/lib/i18n/context';
 import { ROUTES } from '@/lib/constants/routes';
 
 type Marker = 'hot' | 'new' | null;
@@ -41,6 +41,9 @@ const ITEMS: NavItem[] = [
 export function CategoryNav() {
   const pathname = usePathname();
   const t = useT();
+  const { lang } = useLang();
+  const hotLabel = lang === 'bn' ? 'হট' : 'HOT';
+  const newLabel = lang === 'bn' ? 'নতুন' : 'NEW';
 
   return (
     <nav className="nav-strip hidden lg:block">
@@ -55,8 +58,8 @@ export function CategoryNav() {
               className="nav-strip-link inline-flex shrink-0 items-center gap-1.5"
             >
               <span>{t(`navx.${item.key}`)}</span>
-              {item.marker === 'hot' ? <MarkerHot /> : null}
-              {item.marker === 'new' ? <MarkerNew /> : null}
+              {item.marker === 'hot' ? <MarkerHot label={hotLabel} /> : null}
+              {item.marker === 'new' ? <MarkerNew label={newLabel} /> : null}
             </Link>
           );
         })}

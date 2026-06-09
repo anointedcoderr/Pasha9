@@ -11,6 +11,7 @@ export const dynamic = 'force-dynamic';
 import { db } from '@/lib/db/client';
 import { withAuth } from '@/lib/auth/guard';
 import { requireActiveUser } from '@/lib/auth/rbac';
+import { rateLimit } from '@/lib/auth/rate-limit';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 import { generatePendingEnrollment } from '@/lib/security/totp';
 import QRCode from 'qrcode';
@@ -18,6 +19,12 @@ import QRCode from 'qrcode';
 export async function POST() {
   return withAuth(async () => {
     const session = await requireActiveUser();
+    // QRCode.toDataURL is CPU-bound; without per-user throttling an
+    // authenticated client can hammer this endpoint and trigger a
+    // soft denial-of-service. 5 calls per minute is plenty for the
+    // honest enrollment flow.
+    const limit = rateLimit(`2fa-setup:${session.sub}`, 5, 60_000);
+    if (!limit.ok) return jsonError(429, 'RATE_LIMITED', 'Slow down and try again in a minute.');
     const user = await db.user.findUnique({
       where: { id: session.sub },
       select: { id: true, username: true, totpEnabled: true },

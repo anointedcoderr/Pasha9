@@ -74,7 +74,7 @@ export function AnnouncementPopup() {
               </Dialog.Title>
               <Dialog.Close
                 aria-label="Close"
-                className="flex h-8 w-8 items-center justify-center rounded-full text-brand-inkMute hover:bg-brand-surface"
+                className="flex h-10 w-10 items-center justify-center rounded-full text-brand-inkMute hover:bg-brand-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue-500/40 sm:h-8 sm:w-8"
               >
                 <X className="h-4 w-4" />
               </Dialog.Close>
@@ -95,14 +95,14 @@ export function AnnouncementPopup() {
                   <button
                     aria-label="Previous"
                     onClick={() => setIdx((p) => (p - 1 + slides.length) % slides.length)}
-                    className="absolute left-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-brand-ink shadow"
+                    className="absolute left-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-brand-ink shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue-500/40 sm:h-8 sm:w-8"
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </button>
                   <button
                     aria-label="Next"
                     onClick={() => setIdx((p) => (p + 1) % slides.length)}
-                    className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-brand-ink shadow"
+                    className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-brand-ink shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue-500/40 sm:h-8 sm:w-8"
                   >
                     <ChevronRight className="h-4 w-4" />
                   </button>

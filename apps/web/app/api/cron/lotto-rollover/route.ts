@@ -69,9 +69,11 @@ export async function POST(req: NextRequest) {
   });
 }
 
-export async function GET(req: NextRequest) {
-  // Mirror POST for cron callers that only support GET (eg systemd
-  // timers via curl). Behaviour is identical, including the rollover
-  // write - keep this in mind when wiring schedulers.
-  return POST(req);
-}
+// GET intentionally not exported.
+//
+// A state-mutating GET is a CSRF vector: any logged-in admin who
+// loads a page containing <img src="/api/cron/lotto-rollover"> or
+// follows a malicious link would trigger a draw rollover from
+// their own browser. Cron callers (Unix cron, systemd, Vercel
+// cron) MUST use POST + Authorization: Bearer ${CRON_SECRET}. The
+// curl invocation for cron is documented in scripts/cron-examples.

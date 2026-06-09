@@ -89,7 +89,7 @@ export function SportsbookSection({ section }: Props) {
       }
       const url = typeof j?.launchUrl === 'string' ? j.launchUrl : '';
       if (!url) {
-        setLaunchError('No launch URL returned.');
+        setLaunchError(bn ? 'গেম চালু করার URL পাওয়া যায়নি।' : 'No launch URL returned.');
         return;
       }
       window.location.href = url;

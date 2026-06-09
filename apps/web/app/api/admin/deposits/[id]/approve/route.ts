@@ -109,16 +109,23 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     });
 
     // Ticket accrual runs after the transaction so a partial failure
-    // here cannot roll back the credited deposit.
-    let accrual: { generated: number; targetTotal: number; existing: number } = {
+    // here cannot roll back the credited deposit. The error is
+    // surfaced on the response so the operator sees the player has
+    // a balance but no tickets and can re-run accrual from
+    // /admin/lotto -> Diagnostics.
+    let accrual: { generated: number; targetTotal: number; existing: number; error: string | null } = {
       generated: 0,
       targetTotal: 0,
       existing: 0,
+      error: null,
     };
     try {
-      accrual = await accrueLotteryTickets(deposit.userId);
+      const r = await accrueLotteryTickets(deposit.userId);
+      accrual = { ...r, error: null };
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
       console.error('[deposit-approve] lottery accrual failed', err);
+      accrual.error = msg;
     }
 
     // M2D bonus engine. Runs outside the deposit transaction (same

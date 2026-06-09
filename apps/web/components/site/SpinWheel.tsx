@@ -60,6 +60,21 @@ export function SpinWheel({ segments, spinning, landingIndex, onLandingComplete,
   const labelR = wheelR * 0.62;
 
   const [rotation, setRotation] = useState(0);
+  // Respect the user's OS-level reduced-motion preference. When set
+  // we keep the wheel functional but skip the long 4.6s spin
+  // transition - the wheel snaps to the landing wedge and we fire
+  // onLandingComplete on the next frame. This protects users with
+  // motion sensitivity from a forced animation while preserving the
+  // game outcome semantics.
+  const [reducedMotion, setReducedMotion] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    setReducedMotion(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setReducedMotion(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
 
   // Compute target rotation whenever the parent sets landingIndex +
   // flips spinning to true. We layer FULL_TURNS extra spins on top so
@@ -76,8 +91,15 @@ export function SpinWheel({ segments, spinning, landingIndex, onLandingComplete,
       // rotation so the wheel only ever turns forward.
       const target = Math.ceil(rotation / 360) * 360 + FULL_TURNS * 360 + (360 - wedgeCentre);
       setRotation(target);
+      if (reducedMotion && onLandingComplete) {
+        // No CSS transition to wait on - fire the landing callback
+        // on the next frame so the parent's state machine still
+        // sees the spin -> result sequence in order.
+        const id = window.setTimeout(() => onLandingComplete(), 50);
+        return () => window.clearTimeout(id);
+      }
     }
-  }, [spinning, landingIndex, segments.length, sliceDeg]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [spinning, landingIndex, segments.length, sliceDeg, reducedMotion]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const bulbs = useMemo(() => {
     const arr: Array<{ cx: number; cy: number; delay: number }> = [];
@@ -136,7 +158,9 @@ export function SpinWheel({ segments, spinning, landingIndex, onLandingComplete,
           width: size - 44,
           height: size - 44,
           transform: `rotate(${rotation}deg)`,
-          transition: spinning ? 'transform 4.6s cubic-bezier(0.17, 0.67, 0.32, 1)' : 'none',
+          transition: spinning && !reducedMotion
+            ? 'transform 4.6s cubic-bezier(0.17, 0.67, 0.32, 1)'
+            : 'none',
           willChange: 'transform',
         }}
         onTransitionEnd={() => {

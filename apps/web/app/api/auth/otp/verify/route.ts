@@ -33,6 +33,14 @@ export async function POST(req: NextRequest) {
 
   const { phone, purpose, code } = parsed.data;
 
+  // Per-phone bucket on top of the per-IP bucket. Without this an
+  // attacker behind a NAT or rotating proxy could still enumerate
+  // which Bangladeshi phone numbers have an active OTP by spamming
+  // verify with random codes for many phones. The phone-scoped
+  // bucket caps that enumeration vector.
+  const phoneBucket = rateLimit(`otp-verify:phone:${phone}`, 5, 60_000);
+  if (!phoneBucket.ok) return jsonError(429, 'RATE_LIMITED');
+
   const record = await db.otpCode.findFirst({
     where: {
       phone,

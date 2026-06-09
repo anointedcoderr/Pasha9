@@ -74,6 +74,9 @@ export function FloatingContact() {
       className="fixed bottom-[calc(120px+env(safe-area-inset-bottom))] right-3 z-50 flex flex-col items-end gap-3 lg:bottom-6 lg:right-6"
     >
       <div
+        role="menu"
+        aria-label={labels.tagline}
+        aria-hidden={!open}
         className={cn(
           'w-[228px] origin-bottom-right overflow-hidden rounded-2xl border border-brand-yellow-500/30 bg-brand-paper p-2 shadow-[0_22px_44px_-18px_rgba(15,17,21,0.4),0_0_0_1px_rgba(255,204,0,0.05)] transition-all duration-200',
           open ? 'translate-y-0 scale-100 opacity-100' : 'pointer-events-none translate-y-2 scale-95 opacity-0',
