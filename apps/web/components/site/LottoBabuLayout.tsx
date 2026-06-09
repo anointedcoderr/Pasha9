@@ -362,17 +362,17 @@ export function LottoBabuLayout({
       {/* 1st / 2nd / 3rd prizes */}
       <section className="grid grid-cols-3 gap-2">
         <PrizeCard
-          label={bn ? '১ম পুরস্কার' : '1st Prize'}
+          label={bn ? '1ম পুরস্কার' : '1st Prize'}
           number={latest?.winningNumber ?? null}
           tone="gold"
         />
         <PrizeCard
-          label={bn ? '২য় পুরস্কার' : '2nd Prize'}
+          label={bn ? '2য় পুরস্কার' : '2nd Prize'}
           number={latest?.second ?? null}
           tone="amber"
         />
         <PrizeCard
-          label={bn ? '৩য় পুরস্কার' : '3rd Prize'}
+          label={bn ? '3য় পুরস্কার' : '3rd Prize'}
           number={latest?.third ?? null}
           tone="sand"
         />
