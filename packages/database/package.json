@@ -14,7 +14,8 @@
     "rename:igamingapis-provider": "tsx scripts/rename-igamingapis-provider.ts",
     "recategorize:spribe-crash": "tsx scripts/recategorize-spribe-crash.ts",
     "autotag:jackpot": "tsx scripts/autotag-jackpot.ts",
-    "referral:backfill": "tsx scripts/backfill-referral-balance.ts"
+    "referral:backfill": "tsx scripts/backfill-referral-balance.ts",
+    "install:atelier": "tsx scripts/install-atelier-assets.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

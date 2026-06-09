@@ -18,3 +18,8 @@ coverage
 
 # Nested clones of this repo (in case the project is checked out into itself)
 /Sanjid14/
+
+# Operator-uploaded media (banners, atelier images, sounds, etc.).
+# Lives at UPLOAD_ROOT in production (/var/www/pasha9/uploads). The
+# dev path falls back to ./uploads at the repo root.
+/uploads/
