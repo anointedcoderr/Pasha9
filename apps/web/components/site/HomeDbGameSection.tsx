@@ -200,22 +200,22 @@ export function HomeDbGameSection({ section }: Props) {
 
           const inner = (
             <div className="relative aspect-[4/3] overflow-hidden">
-              {/* Layer 1 (always): vibrant category SVG art as the
-                  base. Transparent regions of the operator's PNG
-                  and transparent edges of a contain-mode image
-                  reveal this vibrant art instead of the dark tile
-                  gradient. Hidden only when the operator opts into
-                  pure-image mode (they accept full responsibility
-                  for the asset's edges). */}
-              {!imageOnly ? (
-                <CategoryHeroArt
-                  code={artFor(g.category)}
-                  className={cn(
-                    'absolute inset-0 h-full w-full',
-                    useImage ? 'opacity-75' : 'opacity-65',
-                  )}
-                />
-              ) : null}
+              {/* Layer 1 (ALWAYS rendered, including imageOnly mode):
+                  vibrant category SVG art as the base. Transparent
+                  regions of the operator's PNG and transparent edges
+                  of a contain-mode image reveal this vibrant art
+                  instead of the dark tile gradient. The imageOnly
+                  flag hides text overlays (name, play button, badges)
+                  but the backdrop must still render or transparent
+                  uploads look like images floating on a black panel,
+                  which was exactly the client complaint. */}
+              <CategoryHeroArt
+                code={artFor(g.category)}
+                className={cn(
+                  'absolute inset-0 h-full w-full',
+                  useImage ? 'opacity-75' : 'opacity-65',
+                )}
+              />
               {useImage ? (
                 <>
                   {/* Layer 2: blurred + scaled copy of the operator
