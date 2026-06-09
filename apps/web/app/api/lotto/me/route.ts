@@ -25,7 +25,12 @@ export async function GET() {
     const userId = session.sub;
     const settings = await loadLottoSettings();
 
-    const [agg, wallet, tickets, winnings, lifetimeAgg, todayAgg] = await Promise.all([
+    // Three additional cheap queries power the Babu-style stats
+    // row: Active Tickets, Last Draw Winning Tickets, and the next
+    // draw timestamp for the countdown. None of these existed in
+    // the original /lotto/me payload, which is why the new public
+    // layout had been showing zeros for the per-user counters.
+    const [agg, wallet, tickets, winnings, lifetimeAgg, todayAgg, openDraw, latestResult, activeTicketsCount] = await Promise.all([
       db.deposit.aggregate({ where: { userId, status: 'approved' }, _sum: { amount: true } }),
       db.wallet.findUnique({ where: { userId } }),
       db.lotteryTicket.findMany({
@@ -45,7 +50,29 @@ export async function GET() {
         where: { userId, createdAt: { gte: startOfTodayUtc() } },
         _sum: { amount: true },
       }),
+      // Next active draw - powers the "Next Draw Starts In"
+      // countdown when there is no upcoming draw on the user's
+      // tickets list (e.g. brand-new account).
+      db.lottoDraw.findFirst({
+        where: { status: 'active', result: { is: null }, closedAt: null },
+        orderBy: { drawsAt: 'asc' },
+        select: { id: true, drawsAt: true },
+      }),
+      // Latest settled result for the "Last Draw Winning Tickets"
+      // count. We compare the user's winnings against the previous
+      // result; if they had no row for it the count is 0.
+      db.lotteryDrawResult.findFirst({
+        orderBy: { publishedAt: 'desc' },
+        select: { id: true, drawId: true, publishedAt: true },
+      }),
+      // Active tickets = issued status, not yet voided / used in a
+      // settled draw. Counts both deposit-accrued and admin-granted.
+      db.lotteryTicket.count({ where: { userId, status: 'issued' } }),
     ]);
+
+    const lastDrawWinningTicketsCount = latestResult
+      ? await db.lotteryWinning.count({ where: { userId, resultId: latestResult.id } })
+      : 0;
 
     const totalApproved = Number(agg._sum.amount ?? 0);
     const earnedTickets = Math.floor(totalApproved / settings.ticketRateAmount) * settings.ticketRateCount;
@@ -72,12 +99,18 @@ export async function GET() {
         ticketsPerBlock: settings.ticketRateCount,
       },
       lottoBalance: Number(wallet?.lottoBalance ?? 0),
+      // Next-draw and last-draw stats added for the new public
+      // Lotto layout. nextDrawAt drives the countdown clock.
+      nextDrawAt: openDraw?.drawsAt ?? null,
+      latestResultPublishedAt: latestResult?.publishedAt ?? null,
       summary: {
         ticketCount,
         wonCount,
         winningCount: winnings.length,
         wonLifetime: Number(lifetimeAgg._sum.amount ?? 0),
         wonToday: Number(todayAgg._sum.amount ?? 0),
+        activeTicketsCount,
+        lastDrawWinningTicketsCount,
       },
       tickets: tickets.map((t) => ({
         id: t.id,

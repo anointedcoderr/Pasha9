@@ -47,8 +47,16 @@ interface ResultRow {
 }
 
 interface MeResponse {
-  summary: { ticketCount: number; wonCount: number; winningCount: number };
+  summary: {
+    ticketCount: number;
+    wonCount: number;
+    winningCount: number;
+    activeTicketsCount?: number;
+    lastDrawWinningTicketsCount?: number;
+    wonLifetime?: number;
+  };
   lottoBalance: number;
+  nextDrawAt?: string | null;
   tickets: Array<{ id: string; status: string }>;
   winnings: Array<{
     id: string;
@@ -178,24 +186,30 @@ export default function LottoPage() {
   }, [loadMe]);
 
   // Resolve next draw time. Prefer the live draws endpoint first;
-  // fall back to derived value from the last result if needed.
-  const nextDrawAt = draws[0]?.drawsAt ?? null;
+  // fall back to whatever the /lotto/me endpoint computed from the
+  // open draw row (covers the case where /api/content/lotto has not
+  // been populated yet on a fresh install).
+  const nextDrawAt = draws[0]?.drawsAt ?? me?.nextDrawAt ?? null;
 
-  // Build the Babu layout's MeBlock from whatever the /api/lotto/me
-  // response gave us. When the visitor is not signed in we hand the
-  // layout null and it renders the sign-in hint.
+  // Build the Babu layout's MeBlock. We trust server-computed
+  // summary fields first - those are the authoritative counts even
+  // when the local tickets/winnings sample is capped at 100/60 rows.
   const meBlock = me
     ? (() => {
-        const activeTickets = me.tickets.filter((t) => t.status === 'issued').length;
-        const lastDrawWinningTickets = previousResult
-          ? me.winnings.filter((w) => w.drawId === previousResult.drawId).length
-          : 0;
+        const activeTickets = me.summary.activeTicketsCount
+          ?? me.tickets.filter((t) => t.status === 'issued').length;
+        const lastDrawWinningTickets = me.summary.lastDrawWinningTicketsCount
+          ?? (previousResult ? me.winnings.filter((w) => w.drawId === previousResult.drawId).length : 0);
         const pendingClaim = me.winnings
           .filter((w) => w.status === 'pending_credit')
           .reduce((acc, w) => acc + Number(w.amount), 0);
-        const lifetimeWinnings = me.winnings
-          .filter((w) => w.status !== 'cancelled')
-          .reduce((acc, w) => acc + Number(w.amount), 0);
+        // Lotto Balance + pending = total "lifetime winnings" view
+        // the client wants. Fall back to the explicit aggregate
+        // when server returns it.
+        const lifetimeWinnings = me.summary.wonLifetime
+          ?? me.winnings
+            .filter((w) => w.status !== 'cancelled')
+            .reduce((acc, w) => acc + Number(w.amount), 0);
         return {
           activeTickets,
           lastDrawWinningTickets,
