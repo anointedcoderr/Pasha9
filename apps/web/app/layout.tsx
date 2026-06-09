@@ -44,10 +44,31 @@ export async function generateMetadata(): Promise<Metadata> {
     authors: [{ name: 'Anointed Coder', url: 'https://t.me/anointedcoder' }],
     creator: 'Anointed Coder',
     publisher: 'Anointed Coder',
+    // Explicit sized variants so every browser cache slot lands
+    // on a freshly versioned URL. The same uploaded file fills
+    // every size because operator uploads are typically a single
+    // square master image, but supplying explicit sizes prevents
+    // browsers from re-using a stale entry from a different size
+    // bucket.
     icons: {
-      icon: favicon,
-      apple: favicon,
+      icon: [
+        { url: favicon, sizes: '16x16', type: 'image/png' },
+        { url: favicon, sizes: '32x32', type: 'image/png' },
+        { url: favicon, sizes: '48x48', type: 'image/png' },
+        { url: favicon, sizes: '192x192', type: 'image/png' },
+        { url: favicon, sizes: '512x512', type: 'image/png' },
+      ],
+      apple: [
+        { url: favicon, sizes: '180x180', type: 'image/png' },
+      ],
       shortcut: favicon,
+    },
+    other: {
+      google: 'notranslate',
+      // Windows tile icon - some browsers pull this for
+      // address-bar suggestion thumbnails on Windows desktop.
+      'msapplication-TileImage': favicon,
+      'msapplication-TileColor': '#0F1115',
     },
     manifest: '/manifest.webmanifest',
     // Block browser translation engines (Google Translate, Edge,
@@ -55,12 +76,8 @@ export async function generateMetadata(): Promise<Metadata> {
     // tree expects to own every text node. When Google Translate
     // replaces text nodes it makes React's reconciler unable to find
     // them later, producing 'Cannot read properties of null (reading
-    // removeChild)' on the next unmount. Belt + suspenders on the
-    // admin shell below pins this for translated browsers that
-    // ignore the meta hint.
-    other: {
-      google: 'notranslate',
-    },
+    // removeChild)' on the next unmount. The notranslate hint lives
+    // in the consolidated `other:` block above.
   };
 }
 
