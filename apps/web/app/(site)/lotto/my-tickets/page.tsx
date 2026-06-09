@@ -15,10 +15,9 @@ import { PageHeader } from '@/components/site/PageHeader';
 import { BackBar } from '@/components/site/BackBar';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Chip } from '@/components/ui/Chip';
 import { Ticket, LogIn, RefreshCw, Trophy } from 'lucide-react';
 import { useT, useLang } from '@/lib/i18n/context';
-import { formatDateTime } from '@/lib/utils/format';
+import { LottoTicketCardPremium } from '@/components/site/LottoPremium';
 
 interface MyResp {
   tickets: Array<{ id: string; number: string; status: string; source: string; drawId: string | null; generatedAt: string }>;
@@ -143,36 +142,30 @@ export default function LottoMyTicketsPage() {
         ))}
       </div>
 
-      <Card padding="md">
-        {loading ? (
-          <p className="text-sm text-ink-mid">Loading...</p>
-        ) : filtered.length === 0 ? (
-          <p className="text-sm text-ink-mid">{lang === 'bn' ? 'এই ক্যাটাগরিতে কোনো টিকিট নেই।' : 'No tickets in this view yet. Approved deposits generate tickets automatically.'}</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[480px] text-sm">
-              <thead className="text-xs uppercase tracking-wider text-ink-lo">
-                <tr>
-                  <th className="px-2 py-2 text-left">{lang === 'bn' ? 'নম্বর' : 'Number'}</th>
-                  <th className="px-2 py-2 text-left">{lang === 'bn' ? 'উৎস' : 'Source'}</th>
-                  <th className="px-2 py-2 text-left">{lang === 'bn' ? 'স্ট্যাটাস' : 'Status'}</th>
-                  <th className="px-2 py-2 text-left">{lang === 'bn' ? 'তারিখ' : 'When'}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((tk) => (
-                  <tr key={tk.id} className="border-t border-neon/10">
-                    <td className="px-2 py-2 font-mono text-base font-bold text-gradient-gold">{tk.number}</td>
-                    <td className="px-2 py-2 text-xs text-ink-mid">{tk.source}</td>
-                    <td className="px-2 py-2"><Chip tone={statusTone(tk.status)}>{tk.status}</Chip></td>
-                    <td className="px-2 py-2 text-xs text-ink-lo">{formatDateTime(tk.generatedAt, lang)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
+      {loading ? (
+        <Card padding="md"><p className="text-sm text-ink-mid">Loading...</p></Card>
+      ) : filtered.length === 0 ? (
+        <Card padding="md">
+          <p className="text-sm text-ink-mid">
+            {lang === 'bn' ? 'এই ক্যাটাগরিতে কোনো টিকিট নেই।' : 'No tickets in this view yet. Approved deposits generate tickets automatically.'}
+          </p>
+        </Card>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {filtered.map((tk, i) => (
+            <LottoTicketCardPremium
+              key={tk.id}
+              id={tk.id}
+              number={tk.number}
+              drawName={null}
+              drawAt={tk.generatedAt}
+              status={tk.status}
+              won={tk.status === 'won'}
+              index={i}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -921,6 +921,184 @@ body.theme-light input[type="checkbox"].accent-neon { accent-color: #1E73E8; }
   }
 }
 
+/* ---------------------------------------------------------------------------
+ * Premium atelier (Spin + Lotto)
+ *
+ * Material-feel tokens, gold-leaf gradients, brass plate surfaces,
+ * gemstone facets, and ambient glow utilities. These power the
+ * /rewards Spin tab and the /lotto pages without leaking into the
+ * rest of the site (every selector is scoped under .pasha-premium
+ * so we cannot accidentally restyle homepage cards).
+ * ------------------------------------------------------------------------ */
+.pasha-premium {
+  /* Color tokens */
+  --pa-onyx:        #0a0a0d;
+  --pa-mahogany:    #2a140c;
+  --pa-velvet:      #3a1d10;
+  --pa-emerald:     #1a3a2a;
+  --pa-jade:        #2f7a52;
+  --pa-sapphire:    #0a1830;
+  --pa-ruby:        #8b1a2b;
+  --pa-burgundy:    #3a1410;
+  --pa-brass:       #b89657;
+  --pa-gold-deep:   #c9952b;
+  --pa-gold:        #d6a847;
+  --pa-gold-light:  #f0d27a;
+  --pa-cream:       #f8e9bf;
+  --pa-bone:        #f4ecd8;
+
+  /* Surface gradients */
+  --pa-grad-gold:        linear-gradient(135deg, #fff0bd 0%, #f0d27a 40%, #c9952b 100%);
+  --pa-grad-gold-rich:   linear-gradient(180deg, #f8e9bf 0%, #d6a847 45%, #8b6312 100%);
+  --pa-grad-brass:       linear-gradient(180deg, #d6b46e 0%, #b89657 50%, #7a5d2a 100%);
+  --pa-grad-mahogany:    radial-gradient(140% 90% at 50% 0%, #4a2818 0%, #2a140c 60%, #160a06 100%);
+  --pa-grad-emerald:     radial-gradient(140% 90% at 50% 0%, #2a5a3c 0%, #1a3a2a 60%, #0a1f15 100%);
+  --pa-grad-sapphire:    radial-gradient(140% 90% at 50% 0%, #1a2a52 0%, #0a1830 60%, #050b1a 100%);
+  --pa-grad-onyx:        radial-gradient(140% 90% at 50% 0%, #1c1c22 0%, #0a0a0d 60%, #000 100%);
+
+  /* Shadows */
+  --pa-glow-gold:        0 18px 48px -22px rgba(245, 180, 0, 0.65);
+  --pa-glow-gold-strong: 0 24px 60px -18px rgba(245, 180, 0, 0.85);
+  --pa-glow-ruby:        0 18px 48px -22px rgba(139, 26, 43, 0.65);
+  --pa-glow-jade:        0 18px 48px -22px rgba(47, 122, 82, 0.65);
+  --pa-glow-sapphire:    0 18px 48px -22px rgba(30, 64, 175, 0.55);
+
+  /* Typography */
+  --pa-font-display:     var(--font-display), 'Cinzel', Georgia, serif;
+}
+
+.pasha-premium .pa-display {
+  font-family: var(--pa-font-display);
+  letter-spacing: 0.02em;
+}
+
+/* Brass plate utility: an engraved label background. Used for
+ * tier names, jackpot amounts, balance plaques. */
+.pasha-premium .pa-brass-plate {
+  background: var(--pa-grad-brass);
+  border: 1px solid rgba(245, 220, 130, 0.45);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 240, 200, 0.6),
+    inset 0 -2px 4px rgba(70, 50, 10, 0.45),
+    0 6px 14px -8px rgba(15, 17, 21, 0.5);
+}
+
+/* Gold-leaf text utility. Reads as actual gold rather than a flat
+ * yellow because of the multi-stop vertical gradient + soft
+ * drop-shadow. */
+.pasha-premium .pa-gold-text {
+  background: var(--pa-grad-gold-rich);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+}
+
+/* Gold sweep accent line under section headings. */
+.pasha-premium .pa-gold-rule {
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, rgba(245, 180, 0, 0.6) 50%, transparent 100%);
+}
+
+/* Diagonal shine sweep that runs on hover. Apply to a relative
+ * parent and let this absolute child do the work. */
+.pasha-premium .pa-shine {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  border-radius: inherit;
+}
+.pasha-premium .pa-shine::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -60%;
+  width: 35%;
+  height: 200%;
+  transform: rotate(20deg) translateX(0%);
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 240, 200, 0.0) 30%, rgba(255, 240, 200, 0.35) 50%, rgba(255, 240, 200, 0.0) 70%, transparent 100%);
+  transition: transform 900ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.pasha-premium .pa-shine-trigger:hover .pa-shine::after,
+.pasha-premium .pa-shine-active .pa-shine::after {
+  transform: rotate(20deg) translateX(550%);
+}
+
+/* Vignette overlay used over hero backdrops to darken the edges so
+ * uploaded photography integrates cleanly with the UI on top. */
+.pasha-premium .pa-vignette {
+  background: radial-gradient(120% 80% at 50% 40%, transparent 50%, rgba(0,0,0,0.55) 100%);
+}
+
+/* Subtle ambient gold dust particles (CSS-only, no JS). Add the
+ * class to any positioned container; particles are decorative. */
+.pasha-premium .pa-dust {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(2px 2px at 12% 24%, rgba(255, 220, 140, 0.55), transparent 60%),
+    radial-gradient(1.5px 1.5px at 28% 78%, rgba(255, 220, 140, 0.4), transparent 60%),
+    radial-gradient(2.5px 2.5px at 67% 42%, rgba(255, 220, 140, 0.5), transparent 60%),
+    radial-gradient(1.5px 1.5px at 82% 80%, rgba(255, 220, 140, 0.35), transparent 60%),
+    radial-gradient(2px 2px at 47% 14%, rgba(255, 220, 140, 0.45), transparent 60%);
+  animation: pa-dust-drift 18s ease-in-out infinite;
+}
+@keyframes pa-dust-drift {
+  0%, 100% { transform: translateY(0); opacity: 0.85; }
+  50%      { transform: translateY(-6px); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pasha-premium .pa-dust { animation: none; }
+}
+
+/* Split-flap tile animation used by the Lotto countdown. */
+@keyframes pa-flap {
+  0%   { transform: rotateX(0deg);    }
+  50%  { transform: rotateX(-90deg);  }
+  100% { transform: rotateX(-180deg); }
+}
+.pasha-premium .pa-flap {
+  animation: pa-flap 280ms ease-in-out 1 forwards;
+  transform-origin: center bottom;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pasha-premium .pa-flap { animation: none; }
+}
+
+/* Ticker marquee for the live winners stream. */
+@keyframes pa-marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+.pasha-premium .pa-marquee {
+  animation: pa-marquee 32s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pasha-premium .pa-marquee { animation: none; }
+}
+
+/* Holographic foil shimmer used on physical-feel ticket cards. */
+@keyframes pa-holo {
+  0%, 100% { background-position: 0% 50%; }
+  50%      { background-position: 100% 50%; }
+}
+.pasha-premium .pa-holo {
+  background: linear-gradient(110deg,
+    transparent 20%,
+    rgba(180, 220, 255, 0.45) 35%,
+    rgba(255, 200, 230, 0.45) 50%,
+    rgba(200, 255, 220, 0.45) 65%,
+    transparent 80%);
+  background-size: 220% 100%;
+  animation: pa-holo 5s ease-in-out infinite;
+  mix-blend-mode: screen;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pasha-premium .pa-holo { animation: none; }
+}
+
 /* Premium game card shine sweep: a soft diagonal highlight that
  * passes left-to-right on hover. Combined with .png-card the gold
  * inner border + outer glow + lift add up to a casino-grade thumb. */

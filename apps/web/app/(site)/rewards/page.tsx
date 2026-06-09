@@ -16,9 +16,15 @@ import { useT, useLang } from '@/lib/i18n/context';
 import { Trophy, Gift, Calendar, Disc, Check, AlertCircle, X, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { triggerWalletRefresh } from '@/components/site/WalletStrip';
-import { SpinWheel, type SpinWheelSegment } from '@/components/site/SpinWheel';
-import { SpinTierSelector, SpinWinnersFeed, SpinHowToGetCoins, SpinTermsAccordion, type SpinTierDef } from '@/components/site/SpinSections';
-import { SpinResultModal } from '@/components/site/SpinResultModal';
+import { type SpinWheelSegment } from '@/components/site/SpinWheel';
+import { SpinHowToGetCoins, SpinTermsAccordion, type SpinTierDef } from '@/components/site/SpinSections';
+import {
+  SpinStage,
+  SpinTierCardRow,
+  SpinPremiumWheel,
+  SpinWinCelebration,
+  SpinWinnersMarquee,
+} from '@/components/site/SpinPremium';
 
 type Tab = 'store' | 'checkin' | 'spin';
 type RewardType = 'recharge' | 'physical' | 'digital';
@@ -430,9 +436,9 @@ export default function RewardsPage() {
             </p>
           </section>
         ) : (
-          <section className="space-y-4">
+          <section className="space-y-5">
             {tiers.length > 0 ? (
-              <SpinTierSelector
+              <SpinTierCardRow
                 tiers={tiers}
                 selectedKey={selectedTierKey}
                 onSelect={(k) => { setSelectedTierKey(k); setSpinResult(null); setLandingIndex(null); }}
@@ -441,77 +447,30 @@ export default function RewardsPage() {
               />
             ) : null}
 
-            <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
-              <div className="rounded-2xl border border-brand-divider bg-gradient-to-b from-[#1a1107] to-[#0c0805] p-5 text-amber-50 shadow-[inset_0_1px_0_rgba(255,200,90,0.18),0_20px_50px_-30px_rgba(245,180,0,0.55)]">
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <h2 className="text-lg font-extrabold uppercase tracking-wider text-amber-200">
-                    {selectedTier
-                      ? (bn && selectedTier.nameBn ? selectedTier.nameBn : selectedTier.nameEn)
-                      : (bn ? (spinCfg?.titleBn ?? 'লাকি স্পিন') : (spinCfg?.titleEn ?? 'Lucky Spin'))}
-                  </h2>
-                  <p className="text-[11px] text-amber-300/80">
-                    {bn ? 'কয়েন ব্যালেন্স' : 'Coin balance'}: <span className="font-bold text-amber-100">{coins.toLocaleString()}</span>
-                  </p>
-                </div>
-                <p className="mt-1 text-[11px] text-amber-200/70">
-                  {selectedTier
-                    ? (bn && selectedTier.descriptionBn ? selectedTier.descriptionBn : selectedTier.descriptionEn)
-                    : (bn ? (spinCfg?.rulesBn ?? '') : (spinCfg?.rulesEn ?? ''))}
-                </p>
+            <SpinStage
+              coins={coins}
+              freeSpinsRemaining={selectedTier
+                ? (freeRemainingByTier[selectedTier.key] ?? selectedTier.freeSpinsPerDay)
+                : (me?.spin.freeSpinsRemaining ?? 0)}
+              costPerSpin={selectedTier ? selectedTier.costPerSpin : (spinCfg?.costPerSpinCoins ?? 100)}
+              tierLabel={selectedTier
+                ? (bn && selectedTier.nameBn ? selectedTier.nameBn : selectedTier.nameEn)
+                : (bn ? (spinCfg?.titleBn ?? 'লাকি স্পিন') : (spinCfg?.titleEn ?? 'Lucky Spin'))}
+              tierDescription={selectedTier
+                ? ((bn && selectedTier.descriptionBn ? selectedTier.descriptionBn : selectedTier.descriptionEn) ?? '')
+                : (bn ? (spinCfg?.rulesBn ?? '') : (spinCfg?.rulesEn ?? ''))}
+            >
+              <SpinPremiumWheel
+                segments={activeSegments}
+                spinning={spinning}
+                landingIndex={landingIndex}
+                onLandingComplete={onWheelLandingComplete}
+                disabled={spinning || activeSegments.length === 0}
+                onSpinClick={onSpin}
+              />
+            </SpinStage>
 
-                <div className="mt-5 flex flex-col items-center gap-4">
-                  <SpinWheel
-                    segments={activeSegments}
-                    spinning={spinning}
-                    landingIndex={landingIndex}
-                    onLandingComplete={onWheelLandingComplete}
-                    size={320}
-                    disabled={spinning || activeSegments.length === 0}
-                    onSpinClick={onSpin}
-                    centerLabel={bn ? 'স্পিন' : 'SPIN'}
-                  />
-                  <div className="flex flex-wrap items-center justify-center gap-2 text-[11px]">
-                    <span className="rounded-full border border-amber-300/40 bg-amber-300/10 px-2.5 py-1 font-bold uppercase tracking-wider text-amber-200">
-                      {selectedTier
-                        ? (bn ? `প্রতি স্পিন ${selectedTier.costPerSpin} কয়েন` : `${selectedTier.costPerSpin} coins / spin`)
-                        : (bn ? `প্রতি স্পিন ${spinCfg?.costPerSpinCoins ?? 100} কয়েন` : `${spinCfg?.costPerSpinCoins ?? 100} coins / spin`)}
-                    </span>
-                    <span className="rounded-full border border-emerald-300/40 bg-emerald-300/10 px-2.5 py-1 font-bold uppercase tracking-wider text-emerald-200">
-                      {selectedTier
-                        ? (bn ? `${freeRemainingByTier[selectedTier.key] ?? selectedTier.freeSpinsPerDay} ফ্রি স্পিন বাকি` : `${freeRemainingByTier[selectedTier.key] ?? selectedTier.freeSpinsPerDay} free spins left`)
-                        : (bn ? `${me?.spin.freeSpinsRemaining ?? 0} ফ্রি স্পিন বাকি` : `${me?.spin.freeSpinsRemaining ?? 0} free spins left`)}
-                    </span>
-                  </div>
-
-                  {spinResult ? (
-                    <div className="w-full max-w-md rounded-xl border border-emerald-400/40 bg-emerald-500/15 px-4 py-3 text-emerald-100">
-                      <p className="text-sm font-extrabold">
-                        {bn ? `অভিনন্দন! আপনি জিতেছেন ${spinResult.label}` : `You won ${spinResult.label}!`}
-                      </p>
-                      {spinResult.payoutAmount > 0 ? (
-                        <p className="mt-1 text-[11px] text-emerald-200/90">
-                          {spinResult.payoutType === 'bonus'
-                            ? (bn
-                                ? `+${spinResult.payoutAmount} বোনাস লকড। উইথড্রয়াল আগে টার্নওভার সম্পূর্ণ করুন।`
-                                : `+${spinResult.payoutAmount} bonus locked. Complete turnover before withdrawal.`)
-                            : spinResult.payoutType === 'coins'
-                              ? (bn ? `+${spinResult.payoutAmount} কয়েন আপনার ব্যালেন্সে যোগ হয়েছে।` : `+${spinResult.payoutAmount} coins added to your balance.`)
-                              : `+${spinResult.payoutAmount}`}
-                        </p>
-                      ) : (
-                        <p className="mt-1 text-[11px] text-emerald-200/90">
-                          {bn ? 'পরের বার শুভকামনা।' : 'Better luck next time.'}
-                        </p>
-                      )}
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <SpinWinnersFeed tierKey={selectedTierKey} refreshKey={winnersRefreshKey} />
-              </div>
-            </div>
+            <SpinWinnersMarquee tierKey={selectedTierKey} refreshKey={winnersRefreshKey} />
 
             <SpinHowToGetCoins />
             <SpinTermsAccordion />
@@ -529,9 +488,18 @@ export default function RewardsPage() {
         />
       ) : null}
 
-      <SpinResultModal
+      <SpinWinCelebration
         open={celebrationOpen}
         result={spinResult}
+        isJackpot={(() => {
+          // Detect jackpot: top-tier wedge with the largest payout in
+          // the active segments. Falls back to false when the wheel
+          // is between tiers.
+          if (!spinResult) return false;
+          if (activeSegments.length === 0) return false;
+          const top = Math.max(...activeSegments.map((s) => s.payoutAmount ?? 0));
+          return top > 0 && spinResult.payoutAmount >= top;
+        })()}
         onClose={() => setCelebrationOpen(false)}
       />
     </div>

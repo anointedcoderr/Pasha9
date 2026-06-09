@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next';
-import { fontAdmin, fontBn, fontEn } from '@/styles/fonts';
+import { fontAdmin, fontBn, fontDisplay, fontEn } from '@/styles/fonts';
 import { Providers } from './providers';
 import { resolveLang } from '@/lib/i18n/server';
 import { TrackingScripts } from '@/components/site/TrackingScripts';
@@ -205,7 +205,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const bodyFont = initialLang === 'bn' ? 'font-bn' : 'font-en';
 
   return (
-    <html lang={initialLang} data-lang={initialLang} translate="no" suppressHydrationWarning className={`${fontBn.variable} ${fontEn.variable} ${fontAdmin.variable} notranslate`}>
+    <html lang={initialLang} data-lang={initialLang} translate="no" suppressHydrationWarning className={`${fontBn.variable} ${fontEn.variable} ${fontAdmin.variable} ${fontDisplay.variable} notranslate`}>
       <head>
         {/* DOM guard runs synchronously before any other script so
             React's first render sees the forgiving prototypes. */}

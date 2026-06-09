@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { Logo } from './Logo';
 import { LanguageToggle } from './LanguageToggle';
+import { SoundToggle } from './SoundToggle';
 import { AuthModal } from './AuthModal';
 import { MobileDrawer } from './MobileDrawer';
 import { MobileTopBar } from './MobileTopBar';
@@ -207,6 +208,7 @@ export function Header() {
                 <div className="hidden md:block">
                   <LanguageToggle compact />
                 </div>
+                <SoundToggle variant="compact" />
                 <button
                   type="button"
                   onClick={notif.onOpen}
@@ -254,6 +256,7 @@ export function Header() {
                 <div className="hidden md:block">
                   <LanguageToggle compact />
                 </div>
+                <SoundToggle variant="compact" />
                 <button
                   type="button"
                   onClick={notif.onOpen}

@@ -32,7 +32,9 @@ export type UploadCategory =
   | 'sponsors'
   | 'payment_icons'
   | 'provider_banners'
-  | 'avatars';
+  | 'avatars'
+  | 'sounds'
+  | 'atelier';
 
 export interface AdminMediaUploadProps {
   label: string;
@@ -66,6 +68,8 @@ const ACCEPT_BY_CATEGORY: Record<UploadCategory, string> = {
   payment_icons: 'image/png,image/jpeg,image/webp,image/svg+xml',
   provider_banners: 'image/png,image/jpeg,image/webp',
   avatars: 'image/png,image/jpeg,image/webp',
+  sounds: 'audio/mpeg,audio/mp4,audio/ogg,audio/wav,audio/webm',
+  atelier: 'image/png,image/jpeg,image/webp,image/svg+xml',
 };
 
 export function AdminMediaUpload({

@@ -15,11 +15,11 @@ import { PageHeader } from '@/components/site/PageHeader';
 import { BackBar } from '@/components/site/BackBar';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Chip } from '@/components/ui/Chip';
 import { Trophy, LogIn, RefreshCw, Ticket, Wallet } from 'lucide-react';
 import { useT, useLang } from '@/lib/i18n/context';
-import { formatBDT, formatDateTime } from '@/lib/utils/format';
+import { formatBDT } from '@/lib/utils/format';
 import { triggerWalletRefresh } from '@/components/site/WalletStrip';
+import { LottoCertificateCard } from '@/components/site/LottoPremium';
 
 interface WinningRow {
   id: string;
@@ -31,6 +31,11 @@ interface WinningRow {
   drawId: string | null;
   createdAt: string;
   creditedAt: string | null;
+  // /api/lotto/me already returns these; the prior interface omitted
+  // them. The certificate card renders the winning number alongside
+  // the player's ticket so the win story reads at a glance.
+  winningNumber?: string;
+  publishedAt?: string;
 }
 
 interface MyResp {
@@ -153,39 +158,36 @@ export default function LottoMyWinningsPage() {
         ) : winnings.length === 0 ? (
           <p className="mt-3 text-sm text-ink-mid">{lang === 'bn' ? 'এখনো কোনো জয় নেই। অনুমোদিত জমার সাথে টিকিট তৈরি হয়।' : 'No winnings yet. Approved deposits generate tickets, and settled tickets land here.'}</p>
         ) : (
-          <div className="mt-3 overflow-x-auto">
-            <table className="w-full min-w-[520px] text-sm">
-              <thead className="text-xs uppercase tracking-wider text-ink-lo">
-                <tr>
-                  <th className="px-2 py-2 text-left">{lang === 'bn' ? 'টিকিট' : 'Ticket'}</th>
-                  <th className="px-2 py-2 text-left">{lang === 'bn' ? 'টিয়ার' : 'Tier'}</th>
-                  <th className="px-2 py-2 text-right">{lang === 'bn' ? 'পরিমাণ' : 'Amount'}</th>
-                  <th className="px-2 py-2 text-left">{lang === 'bn' ? 'স্ট্যাটাস' : 'Status'}</th>
-                  <th className="px-2 py-2 text-left">{lang === 'bn' ? 'তারিখ' : 'When'}</th>
-                  <th className="px-2 py-2 text-right">{lang === 'bn' ? 'অ্যাকশন' : 'Action'}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {winnings.map((w) => (
-                  <tr key={w.id} className="border-t border-neon/10">
-                    <td className="px-2 py-2 font-mono text-base font-bold text-gradient-gold">{w.ticketNumber}</td>
-                    <td className="px-2 py-2 text-xs text-ink-mid">{w.prizeTier}</td>
-                    <td className="px-2 py-2 text-right tabular-nums text-emerald-400 font-semibold">{formatBDT(w.amount)}</td>
-                    <td className="px-2 py-2">
-                      <Chip tone={w.status === 'credited' ? 'ok' : w.status === 'cancelled' ? 'danger' : 'warn'}>{w.status}</Chip>
-                    </td>
-                    <td className="px-2 py-2 text-xs text-ink-lo">{formatDateTime(w.createdAt, lang)}</td>
-                    <td className="px-2 py-2 text-right">
-                      {w.status === 'pending_credit' ? (
-                        <Button size="sm" variant="gold" loading={claimingId === w.id} onClick={() => claim(w.id)}>
-                          {lang === 'bn' ? 'দাবি' : 'Claim'}
-                        </Button>
-                      ) : null}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {winnings.map((w, i) => (
+              <div key={w.id} className="space-y-2">
+                <LottoCertificateCard
+                  ticketNumber={w.ticketNumber}
+                  prizeTier={w.prizeTier}
+                  amount={Number(w.amount)}
+                  date={w.publishedAt ?? w.createdAt}
+                  winningNumber={w.winningNumber ?? w.ticketNumber}
+                  index={i}
+                />
+                {w.status === 'pending_credit' ? (
+                  <Button
+                    size="sm"
+                    variant="gold"
+                    loading={claimingId === w.id}
+                    onClick={() => claim(w.id)}
+                    className="w-full"
+                  >
+                    {lang === 'bn' ? `${formatBDT(Number(w.amount))} দাবি করুন` : `Claim ${formatBDT(Number(w.amount))}`}
+                  </Button>
+                ) : (
+                  <p className="text-center text-[11px] text-ink-mid">
+                    {w.status === 'credited'
+                      ? (lang === 'bn' ? 'লটো ব্যালেন্সে জমা' : 'Credited to lotto balance')
+                      : (lang === 'bn' ? 'বাতিল' : 'Cancelled')}
+                  </p>
+                )}
+              </div>
+            ))}
           </div>
         )}
         <p className="mt-3 text-[11px] text-ink-mid">

@@ -12,6 +12,12 @@ import Link from 'next/link';
 import { CategoryHero } from '@/components/site/CategoryHero';
 import { BackBar } from '@/components/site/BackBar';
 import { LottoCountdown } from '@/components/site/LottoCountdown';
+import {
+  LottoHeroPremium,
+  LottoBallTumbler,
+  LottoWinningChips,
+  LottoResultMosaic,
+} from '@/components/site/LottoPremium';
 import { useLang } from '@/lib/i18n/context';
 import {
   Ticket,
@@ -179,60 +185,18 @@ export default function LottoPage() {
     <div className="space-y-6">
       <BackBar title={lang === 'bn' ? 'লটো' : 'Lotto'} />
 
-      <CategoryHero
-        kicker={lang === 'bn' ? '4D লটারি' : '4D Lottery'}
-        title={lang === 'bn' ? 'পাশা ৯ ডেইলি 4D লটারি' : 'Pasha 9 Daily 4D Lottery'}
-        description={
-          lang === 'bn'
-            ? 'প্রতিদিন সন্ধ্যা ৭:৩০ টায় ড্র। ডিপোজিট থেকে টিকেট জেনারেট হয়।'
-            : 'Draws every day at 7:30 PM BST. Tickets are earned automatically from approved deposits.'
-        }
-        accent="yellow"
-        category="lotto"
-        chips={[
-          { label: 'Daily', tone: 'gold' },
-          { label: '4D Draw', tone: 'rose' },
-          { label: 'Deposit Earn', tone: 'sky' },
-        ]}
-      />
-
-      {/* Top strip: jackpot + countdown + draw timing */}
-      <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-[linear-gradient(135deg,#0F1115_0%,#1A1D24_60%,#0F1115_100%)] p-5 text-white shadow-[0_18px_44px_-22px_rgba(0,0,0,0.7)] md:p-7">
-        <span aria-hidden className="pointer-events-none absolute -right-12 -top-12 h-48 w-48 rounded-full bg-brand-yellow-500/30 blur-3xl" />
-        <span aria-hidden className="pointer-events-none absolute -left-16 bottom-0 h-44 w-44 rounded-full bg-fuchsia-500/20 blur-3xl" />
-        <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-300/45 to-transparent" />
-
-        <div className="relative grid gap-5 md:grid-cols-2 md:items-center">
-          <div>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-yellow-500/15 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-brand-yellow-300">
-              <Clock className="h-3 w-3" /> {lang === 'bn' ? 'দৈনিক ড্র' : 'Daily Draw'}
-            </span>
-            <p className="mt-2 text-[10px] font-bold uppercase tracking-[0.22em] text-white/55">
-              {lang === 'bn' ? 'এই ড্রয়ের জ্যাকপট' : 'This draw jackpot'}
-            </p>
-            <p className="mt-1 inline-flex items-baseline gap-2 text-4xl font-extrabold tabular-nums text-brand-yellow-300 drop-shadow-[0_3px_10px_rgba(245,180,0,0.35)] md:text-5xl">
-              {featured?.prizePool != null ? formatBDT(Number(featured.prizePool), { compact: true }) : '-'}
-              <span className="text-xs font-bold uppercase tracking-wider text-white/60">BDT</span>
-            </p>
-            <p className="mt-3 text-sm text-white/85">
-              {lang === 'bn'
-                ? `টিকেট বেস ভ্যালু ${featured?.ticketPrice ?? 20} টাকা . প্রতিদিন সন্ধ্যা ৭:৩০ টায় ড্র।`
-                : `Ticket base ${featured?.ticketPrice ?? 20} BDT . Every day at 7:30 PM BST.`}
-            </p>
-            <div className="mt-4">
-              <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.18em] text-amber-200/80">
-                {lang === 'bn' ? 'পরবর্তী ড্র' : 'Next draw'}
-              </p>
-              <LottoCountdown drawsAt={featured?.drawsAt ?? null} />
-            </div>
-          </div>
-          {me ? (
-            <LottoSelfStrip me={me} lang={lang} />
-          ) : (
-            <LottoLockedCta lang={lang} />
-          )}
-        </div>
-      </section>
+      <LottoHeroPremium
+        jackpot={Number(featured?.prizePool ?? 0)}
+        ticketBase={Number(featured?.ticketPrice ?? 20)}
+        drawsAt={featured?.drawsAt ?? null}
+        schedule={featured?.schedule ?? null}
+      >
+        {me ? (
+          <LottoSelfStrip me={me} lang={lang} />
+        ) : (
+          <LottoLockedCta lang={lang} />
+        )}
+      </LottoHeroPremium>
 
       {/* Winner of the Day + tab navigator. The WOTD card is the
           opening visual for every visit; the tab bar lets the visitor
@@ -386,70 +350,36 @@ export default function LottoPage() {
             </Link>
           </div>
         </div>
-        {results.length === 0 ? (
-          <div className="card-light flex items-center gap-3 p-4">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-yellow-500/15 text-brand-yellow-600">
-              <Sparkles className="h-5 w-5" />
-            </span>
-            <p className="text-sm text-brand-inkSoft">
-              {lang === 'bn'
-                ? 'প্রথম ফলাফলের জন্য অপেক্ষা করুন - প্রকাশের সাথে সাথে এখানে দেখা যাবে।'
-                : 'No results yet - the first winning number will appear here as soon as it is published.'}
+        {/* Featured latest result: full ball-tumbler reveal + extras
+            rendered as premium enamel chips. */}
+        {results[0] ? (
+          <div className="mb-4 rounded-2xl border border-amber-400/25 p-5" style={{ background: 'var(--pa-grad-mahogany)' }}>
+            <p className="pa-display pa-gold-text text-center text-[11px] font-black uppercase tracking-[0.32em]">
+              {lang === 'bn' ? 'সর্বশেষ ফলাফল' : 'Latest result'}
+            </p>
+            <p className="text-center text-[10px] text-amber-200/65">
+              {results[0].drawName} . {formatDateTime(results[0].publishedAt, lang)}
+            </p>
+            <div className="mt-4 flex justify-center">
+              <LottoBallTumbler number={results[0].winningNumber} />
+            </div>
+            <p className="mt-3 text-center text-[11px] text-amber-100/80">
+              {results[0].totalWinners} {lang === 'bn' ? 'বিজয়ী' : 'winner(s)'} . {formatBDT(results[0].totalPaid)} {lang === 'bn' ? 'পরিশোধিত' : 'paid'}
             </p>
           </div>
-        ) : (
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-            {results.slice(0, 30).map((r) => (
-              <article key={r.id} className="card-light overflow-hidden">
-                <div className="bg-[linear-gradient(135deg,#15171C_0%,#0F1115_100%)] p-4 text-white">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-white/65">{r.drawName}</p>
-                  <p className="mt-2 text-[10px] uppercase tracking-wider text-white/55">{lang === 'bn' ? '১ম পুরস্কার' : '1st prize'}</p>
-                  <div className="mt-1 flex justify-center gap-2">
-                    {r.winningNumber.split('').map((d, i) => (
-                      <span key={i} className="flex h-12 w-10 items-center justify-center rounded-lg bg-brand-yellow-500 text-xl font-extrabold text-brand-ink">
-                        {d}
-                      </span>
-                    ))}
-                  </div>
-                  {r.extraNumbers ? (
-                    <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
-                      {r.extraNumbers.second ? (
-                        <div className="rounded-md bg-white/5 p-2">
-                          <p className="text-[9px] uppercase text-white/55">{lang === 'bn' ? '২য়' : '2nd'}</p>
-                          <p className="mt-0.5 font-mono text-base font-extrabold text-white">{r.extraNumbers.second}</p>
-                        </div>
-                      ) : null}
-                      {r.extraNumbers.third ? (
-                        <div className="rounded-md bg-white/5 p-2">
-                          <p className="text-[9px] uppercase text-white/55">{lang === 'bn' ? '৩য়' : '3rd'}</p>
-                          <p className="mt-0.5 font-mono text-base font-extrabold text-white">{r.extraNumbers.third}</p>
-                        </div>
-                      ) : null}
-                      {Array.isArray(r.extraNumbers.specials) && r.extraNumbers.specials.length > 0 ? (
-                        <div className="col-span-2 rounded-md bg-white/5 p-2">
-                          <p className="text-[9px] uppercase text-white/55">{lang === 'bn' ? 'বিশেষ পুরস্কার' : 'Special'}</p>
-                          <p className="mt-0.5 break-all font-mono text-[12px] font-bold text-white">{r.extraNumbers.specials.join(' . ')}</p>
-                        </div>
-                      ) : null}
-                      {Array.isArray(r.extraNumbers.consolations) && r.extraNumbers.consolations.length > 0 ? (
-                        <div className="col-span-2 rounded-md bg-white/5 p-2">
-                          <p className="text-[9px] uppercase text-white/55">{lang === 'bn' ? 'সান্ত্বনা' : 'Consolation'}</p>
-                          <p className="mt-0.5 break-all font-mono text-[12px] font-bold text-white">{r.extraNumbers.consolations.join(' . ')}</p>
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </div>
-                <div className="px-4 py-3">
-                  <p className="text-[11px] text-brand-inkMute">{formatDateTime(r.publishedAt, lang)}</p>
-                  <p className="mt-1 text-sm text-brand-inkSoft">
-                    {r.totalWinners} {lang === 'bn' ? 'বিজয়ী' : 'winner(s)'} · {formatBDT(r.totalPaid)} {lang === 'bn' ? 'পরিশোধিত' : 'paid'}
-                  </p>
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
+        ) : null}
+
+        {/* Result history calendar mosaic */}
+        <LottoResultMosaic
+          results={results.slice(0, 30).map((r) => ({
+            id: r.id,
+            drawsAt: r.drawsAt,
+            publishedAt: r.publishedAt,
+            winningNumber: r.winningNumber,
+            totalWinners: r.totalWinners,
+            totalPaid: r.totalPaid,
+          }))}
+        />
       </section>
 
       {/* Prize structure */}

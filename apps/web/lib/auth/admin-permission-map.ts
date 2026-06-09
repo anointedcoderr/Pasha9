@@ -107,6 +107,8 @@ export const ADMIN_PERMISSION_MAP: AdminPermissionEntry[] = [
   { prefix: '/admin/staff', permission: 'staff.manage' },
 
   // System
+  { prefix: '/admin/site-sounds', permission: 'settings.write' },
+  { prefix: '/admin/atelier', permission: 'settings.write' },
   { prefix: '/admin/integrations', permission: 'settings.write' },
   { prefix: '/admin/deposit-prompt', permission: 'settings.write' },
   { prefix: '/admin/support', permission: 'support.read' },
@@ -214,6 +216,8 @@ export const ADMIN_MENU_PERMISSIONS: Record<string, string> = {
   passwordResets: 'security.write',
   staff: 'staff.manage',
   // System
+  siteSounds: 'settings.write',
+  atelier: 'settings.write',
   integrations: 'settings.write',
   depositPrompt: 'settings.write',
   support: 'support.read',

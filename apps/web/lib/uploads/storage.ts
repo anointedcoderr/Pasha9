@@ -27,10 +27,14 @@ export type UploadCategory =
   | 'sponsors'
   | 'payment_icons'
   | 'provider_banners'
-  | 'avatars';
+  | 'avatars'
+  // Premium atelier additions.
+  | 'sounds'
+  | 'atelier';
 
 const IMG = new Set(['image/png', 'image/jpeg', 'image/webp']);
 const IMG_PLUS_SVG = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml']);
+const AUDIO = new Set(['audio/mpeg', 'audio/mp4', 'audio/ogg', 'audio/wav', 'audio/webm']);
 
 const MIME_BY_CATEGORY: Record<UploadCategory, Set<string>> = {
   banners: IMG,
@@ -50,6 +54,8 @@ const MIME_BY_CATEGORY: Record<UploadCategory, Set<string>> = {
   payment_icons: IMG_PLUS_SVG,
   provider_banners: IMG,
   avatars: IMG,
+  sounds: AUDIO,
+  atelier: IMG_PLUS_SVG,
 };
 
 const MAX_BYTES_BY_CATEGORY: Record<UploadCategory, number> = {
@@ -70,6 +76,8 @@ const MAX_BYTES_BY_CATEGORY: Record<UploadCategory, number> = {
   payment_icons: 512 * 1024,
   provider_banners: 3 * 1024 * 1024,
   avatars: 2 * 1024 * 1024,
+  sounds: 256 * 1024,
+  atelier: 4 * 1024 * 1024,
 };
 
 const EXT_BY_MIME: Record<string, string> = {
@@ -80,6 +88,11 @@ const EXT_BY_MIME: Record<string, string> = {
   'application/pdf': '.pdf',
   'application/vnd.android.package-archive': '.apk',
   'application/octet-stream': '.apk',
+  'audio/mpeg': '.mp3',
+  'audio/mp4': '.m4a',
+  'audio/ogg': '.ogg',
+  'audio/wav': '.wav',
+  'audio/webm': '.weba',
 };
 
 function sanitiseStem(name: string): string {
