@@ -200,26 +200,29 @@ export function HomeDbGameSection({ section }: Props) {
 
           const inner = (
             <div className="relative aspect-[4/3] overflow-hidden">
-              {/* Category art fills the tile only when there is NO
-                  uploaded image. With an image we replace this with
-                  a blurred copy of the uploaded image itself so the
-                  letterbox / transparency areas never reveal a flat
-                  panel of any colour. */}
-              {!useImage && !imageOnly ? (
+              {/* Layer 1 (always): vibrant category SVG art as the
+                  base. Transparent regions of the operator's PNG
+                  and transparent edges of a contain-mode image
+                  reveal this vibrant art instead of the dark tile
+                  gradient. Hidden only when the operator opts into
+                  pure-image mode (they accept full responsibility
+                  for the asset's edges). */}
+              {!imageOnly ? (
                 <CategoryHeroArt
                   code={artFor(g.category)}
-                  className="absolute inset-0 h-full w-full opacity-65"
+                  className={cn(
+                    'absolute inset-0 h-full w-full',
+                    useImage ? 'opacity-75' : 'opacity-65',
+                  )}
                 />
               ) : null}
               {useImage ? (
                 <>
-                  {/* Universal blurred backdrop. Whether the operator
-                      picked cover (image fills the box, no gaps) or
-                      contain (letterbox visible) or uploaded a PNG
-                      with transparent regions, the backdrop renders
-                      a stretched + blurred copy of the same image so
-                      the tile always reads as one cohesive surface
-                      instead of "image floating on a dark panel". */}
+                  {/* Layer 2: blurred + scaled copy of the operator
+                      image. Provides the "image colour leaks past
+                      the edge" feel for opaque uploads. For
+                      transparent PNGs it is also transparent and
+                      the layer-1 SVG art reads through it. */}
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={g.imageUrl ?? ''}
@@ -227,6 +230,8 @@ export function HomeDbGameSection({ section }: Props) {
                     aria-hidden
                     className="absolute inset-0 h-full w-full scale-125 object-cover blur-lg"
                   />
+                  {/* Layer 3: the foreground image at the operator
+                      chosen fit. */}
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={g.imageUrl ?? ''}
@@ -287,7 +292,11 @@ export function HomeDbGameSection({ section }: Props) {
                   // sits on a tasteful gradient instead of a flat
                   // black panel. The category SVG behind the image
                   // adds depth without competing with the artwork.
-                  'group relative overflow-hidden rounded-2xl border border-white/10 bg-[linear-gradient(135deg,#1a1f2e_0%,#0F1115_55%,#1a1f2e_100%)] text-white shadow-[0_8px_24px_-12px_rgba(0,0,0,0.55)] transition',
+                  // Brand-tinted base. If every other rendering layer is
+                  // transparent (e.g. an aggressive PNG with no surround),
+                  // the tile still reads as warm casino chrome instead of
+                  // a flat black panel.
+                  'group relative overflow-hidden rounded-2xl border border-white/10 bg-[linear-gradient(135deg,#3a2a1a_0%,#1a1410_55%,#3a2a1a_100%)] text-white shadow-[0_8px_24px_-12px_rgba(0,0,0,0.55)] transition',
                   busy && 'opacity-70',
                 )}
               >
@@ -300,7 +309,7 @@ export function HomeDbGameSection({ section }: Props) {
             <Link
               key={tileKey}
               href={g.href ?? '/games'}
-              className="group relative overflow-hidden rounded-2xl border border-white/10 bg-[linear-gradient(135deg,#1a1f2e_0%,#0F1115_55%,#1a1f2e_100%)] text-white shadow-[0_8px_24px_-12px_rgba(0,0,0,0.55)] transition"
+              className="group relative overflow-hidden rounded-2xl border border-white/10 bg-[linear-gradient(135deg,#3a2a1a_0%,#1a1410_55%,#3a2a1a_100%)] text-white shadow-[0_8px_24px_-12px_rgba(0,0,0,0.55)] transition"
             >
               {inner}
               {captionInner}
