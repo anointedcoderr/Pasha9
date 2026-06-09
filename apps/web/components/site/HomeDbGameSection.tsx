@@ -200,48 +200,44 @@ export function HomeDbGameSection({ section }: Props) {
 
           const inner = (
             <div className="relative aspect-[4/3] overflow-hidden">
-              {/* Category art is rendered as a low-opacity backdrop
-                  behind every tile (not only on image-fail) so
-                  transparent PNGs flow into a tasteful brand-aware
-                  surface instead of a flat black box. Hidden when
-                  the operator opts into image-only mode so a fully
-                  branded asset can occupy the tile cleanly. */}
-              {!imageOnly ? (
+              {/* Category art fills the tile only when there is NO
+                  uploaded image. With an image we replace this with
+                  a blurred copy of the uploaded image itself so the
+                  letterbox / transparency areas never reveal a flat
+                  panel of any colour. */}
+              {!useImage && !imageOnly ? (
                 <CategoryHeroArt
                   code={artFor(g.category)}
-                  className={cn(
-                    'absolute inset-0 h-full w-full',
-                    useImage ? 'opacity-30' : 'opacity-65',
-                  )}
+                  className="absolute inset-0 h-full w-full opacity-65"
                 />
               ) : null}
               {useImage ? (
-                useContain ? (
-                  <>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={g.imageUrl ?? ''}
-                      alt=""
-                      aria-hidden
-                      className="absolute inset-0 h-full w-full scale-110 object-cover blur-md brightness-50"
-                    />
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={g.imageUrl ?? ''}
-                      alt={g.displayName}
-                      onError={() => markImageFailed(tileKey)}
-                      className="absolute inset-0 h-full w-full object-contain"
-                    />
-                  </>
-                ) : (
-                  // eslint-disable-next-line @next/next/no-img-element
+                <>
+                  {/* Universal blurred backdrop. Whether the operator
+                      picked cover (image fills the box, no gaps) or
+                      contain (letterbox visible) or uploaded a PNG
+                      with transparent regions, the backdrop renders
+                      a stretched + blurred copy of the same image so
+                      the tile always reads as one cohesive surface
+                      instead of "image floating on a dark panel". */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={g.imageUrl ?? ''}
+                    alt=""
+                    aria-hidden
+                    className="absolute inset-0 h-full w-full scale-125 object-cover blur-lg"
+                  />
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={g.imageUrl ?? ''}
                     alt={g.displayName}
                     onError={() => markImageFailed(tileKey)}
-                    className="absolute inset-0 h-full w-full object-cover"
+                    className={cn(
+                      'absolute inset-0 h-full w-full',
+                      useContain ? 'object-contain' : 'object-cover',
+                    )}
                   />
-                )
+                </>
               ) : null}
               {hasOverlayText ? (
                 <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-brand-ink/95 via-brand-ink/40 to-transparent" />
