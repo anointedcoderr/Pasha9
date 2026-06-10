@@ -199,7 +199,17 @@ export function HomeDbGameSection({ section }: Props) {
           const hasOverlayText = !imageOnly && (showName || showPlay);
 
           const inner = (
-            <div className="relative aspect-[4/3] overflow-hidden">
+            // Card image area is now SQUARE (was aspect-[4/3]).
+            // Casino game art - JILI, Spribe, Habanero, Evolution etc. -
+            // is published as 1:1 (or very close to it). A 4:3 container
+            // forced object-cover to crop the top and bottom of every
+            // square upload, which made centred subjects (slot machine
+            // reels, gold coin laurel, Aviator wordmark) appear to
+            // float in a dark frame even though the image WAS the
+            // card content. Square fits the source aspect exactly so
+            // the image fills the frame edge to edge with no crop and
+            // no visible chrome.
+            <div className="relative aspect-square overflow-hidden">
               {useImage ? (
                 // Single image, object-cover, fills the entire card.
                 // No backdrops, no decorations, no overlays. Whatever
