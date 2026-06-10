@@ -85,6 +85,9 @@ export async function syncTierToBonusRule(tier: {
   percentage: number;
   isActive: boolean;
   position: number;
+  // Optional - tiers created before turnoverX shipped read as
+  // undefined. Default to 0 (no per-grant wager lock) for those.
+  turnoverX?: Prisma.Decimal | number | null;
   titleEn?: string | null;
   titleBn?: string | null;
   descriptionEn?: string | null;
@@ -103,6 +106,16 @@ export async function syncTierToBonusRule(tier: {
   const description = tier.descriptionEn?.trim() || null;
   const descriptionBn = tier.descriptionBn?.trim() || null;
   const bannerUrl = tier.bannerUrl?.trim() || null;
+  // turnoverX is the per-grant wager multiplier. e.g. 10 means the
+  // bonus must be wagered 10x before the player can withdraw it.
+  // The bonus engine multiplies bonus.amount by this value to set
+  // UserBonus.turnoverRequired, and addTurnover ticks down the
+  // requirement as the player wagers. Negative or non-finite values
+  // collapse to 0 so a malformed admin input cannot lock funds
+  // forever.
+  const rawTurnover = tier.turnoverX == null ? 0 : Number(tier.turnoverX);
+  const safeTurnover = Number.isFinite(rawTurnover) && rawTurnover > 0 ? rawTurnover : 0;
+  const turnoverX = new Prisma.Decimal(safeTurnover);
 
   const data = {
     name,
@@ -115,7 +128,7 @@ export async function syncTierToBonusRule(tier: {
     description,
     descriptionBn,
     bannerUrl,
-    turnoverX: new Prisma.Decimal(0),
+    turnoverX,
     validityDays: 30,
     priority,
     meta: { managedBy: 'deposit_bonus_tier', tierId: tier.id } as Prisma.JsonObject,
@@ -156,6 +169,7 @@ export async function resolveActiveTierRule(tier: {
   percentage: number;
   isActive: boolean;
   position: number;
+  turnoverX?: Prisma.Decimal | number | null;
   titleEn?: string | null;
   titleBn?: string | null;
   descriptionEn?: string | null;

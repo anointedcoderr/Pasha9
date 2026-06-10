@@ -20,6 +20,8 @@ import { syncTierToBonusRule, removeTierBonusRule } from '@/lib/bonuses/deposit-
 const patchSchema = z.object({
   minDeposit: z.coerce.number().min(0).max(10_000_000).optional(),
   percentage: z.coerce.number().int().min(0).max(100).optional(),
+  // Per-grant wager multiplier (see DepositBonusTier model comment).
+  turnoverX: z.coerce.number().min(0).max(50).optional(),
   isActive: z.boolean().optional(),
   position: z.number().int().min(0).max(9999).optional(),
   titleEn: z.string().trim().max(120).optional().nullable(),

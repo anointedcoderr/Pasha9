@@ -22,6 +22,7 @@ interface TierRow {
   id: string;
   minDeposit: number;
   percentage: number;
+  turnoverX: number;
   isActive: boolean;
   position: number;
   titleEn: string | null;
@@ -60,7 +61,7 @@ export default function AdminDepositBonusTiersPage() {
     try {
       const r = await fetch('/api/admin/deposit-bonus-tiers', {
         method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ minDeposit: 1000, percentage: 3, isActive: true }),
+        body: JSON.stringify({ minDeposit: 1000, percentage: 3, turnoverX: 0, isActive: true }),
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j?.message ?? j?.code ?? 'Create failed');
@@ -144,6 +145,7 @@ export default function AdminDepositBonusTiersPage() {
 function TierEditor({ row, saving, onPatch, onDelete }: { row: TierRow; saving: boolean; onPatch: (p: Partial<TierRow>) => void; onDelete: () => void }) {
   const [minDeposit, setMinDeposit] = useState(String(row.minDeposit));
   const [percentage, setPercentage] = useState(String(row.percentage));
+  const [turnoverX, setTurnoverX] = useState(String(row.turnoverX ?? 0));
   const [position, setPosition] = useState(String(row.position));
   const [titleEn, setTitleEn] = useState(row.titleEn ?? '');
   const [titleBn, setTitleBn] = useState(row.titleBn ?? '');
@@ -154,17 +156,19 @@ function TierEditor({ row, saving, onPatch, onDelete }: { row: TierRow; saving: 
   useEffect(() => {
     setMinDeposit(String(row.minDeposit));
     setPercentage(String(row.percentage));
+    setTurnoverX(String(row.turnoverX ?? 0));
     setPosition(String(row.position));
     setTitleEn(row.titleEn ?? '');
     setTitleBn(row.titleBn ?? '');
     setDescriptionEn(row.descriptionEn ?? '');
     setDescriptionBn(row.descriptionBn ?? '');
     setBannerUrl(row.bannerUrl ?? '');
-  }, [row.id, row.minDeposit, row.percentage, row.position, row.titleEn, row.titleBn, row.descriptionEn, row.descriptionBn, row.bannerUrl]);
+  }, [row.id, row.minDeposit, row.percentage, row.turnoverX, row.position, row.titleEn, row.titleBn, row.descriptionEn, row.descriptionBn, row.bannerUrl]);
 
   const dirty = (
     Number(minDeposit) !== row.minDeposit ||
     Number(percentage) !== row.percentage ||
+    Number(turnoverX) !== (row.turnoverX ?? 0) ||
     Number(position) !== row.position ||
     titleEn !== (row.titleEn ?? '') ||
     titleBn !== (row.titleBn ?? '') ||
@@ -183,6 +187,12 @@ function TierEditor({ row, saving, onPatch, onDelete }: { row: TierRow; saving: 
         <label className="block w-24">
           <span className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">Percent</span>
           <input type="number" value={percentage} onChange={(e) => setPercentage(e.target.value)} className={inputCls} />
+        </label>
+        <label className="block w-28">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute" title="Wager multiplier on the bonus. 0 = no per-bonus lock; the lifetime deposit gate still applies. 10 = player must wager bonus x10 before withdrawing it.">
+            Wager x
+          </span>
+          <input type="number" step="0.5" min="0" max="50" value={turnoverX} onChange={(e) => setTurnoverX(e.target.value)} className={inputCls} />
         </label>
         <label className="block w-20">
           <span className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">Position</span>
@@ -236,6 +246,7 @@ function TierEditor({ row, saving, onPatch, onDelete }: { row: TierRow; saving: 
           onClick={() => onPatch({
             minDeposit: Number(minDeposit),
             percentage: Number(percentage),
+            turnoverX: Math.max(0, Number(turnoverX) || 0),
             position: Number(position),
             titleEn: titleEn || null,
             titleBn: titleBn || null,

@@ -1864,6 +1864,17 @@ model DepositBonusTier {
   percentage   Int
   isActive     Boolean  @default(true)
   position     Int      @default(0)
+  // Per-grant wager multiplier applied to the bonus amount. e.g. a
+  // 500 BDT bonus with turnoverX=10 creates a UserBonus grant with
+  // turnoverRequired=5000. The withdrawal gate (deposit-gate.ts)
+  // aggregates active UserBonus rows in the deposit family and blocks
+  // withdrawal until the wager progress catches up. Default 0 keeps
+  // backwards compatibility with tiers created before this field
+  // shipped - bonus credits to balance but is not under its own lock,
+  // and the lifetime deposit_turnover_multiplier gate is the only
+  // wager requirement. Set to a positive value to require the player
+  // to wager the bonus before being able to withdraw it.
+  turnoverX    Decimal  @default(0) @db.Decimal(10, 2)
   // Admin-curated card data. When set, /promotions and /admin previews
   // render this content instead of the auto-generated "Auto-managed by
   // /admin/deposit-bonus-tiers" placeholder. titleEn/Bn override the

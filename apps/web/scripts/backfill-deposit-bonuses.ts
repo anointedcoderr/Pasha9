@@ -75,16 +75,23 @@ async function loadCandidates(): Promise<Candidate[]> {
 // resolves, the activity log write is skipped (the financial rows
 // are still the source of truth - the audit log is nice-to-have).
 async function resolveAuditActor(reviewerId: string | null): Promise<{ id: string; role: string } | null> {
+  // User.role is a relation to a Role table, NOT a string column.
+  // ActivityLog.actorRole is the string column. Select role.key from
+  // the relation so we can shove a plain string into the audit log.
   if (reviewerId) {
-    const r = await db.user.findUnique({ where: { id: reviewerId }, select: { id: true, role: true } });
-    if (r) return { id: r.id, role: r.role };
+    const r = await db.user.findUnique({
+      where: { id: reviewerId },
+      select: { id: true, role: { select: { key: true } } },
+    });
+    if (r && r.role) return { id: r.id, role: r.role.key };
   }
   const fallback = await db.user.findFirst({
-    where: { role: { in: ['super_admin', 'admin'] } },
-    select: { id: true, role: true },
+    where: { role: { is: { key: { in: ['super_admin', 'admin'] } } } },
+    select: { id: true, role: { select: { key: true } } },
     orderBy: { createdAt: 'asc' },
   });
-  return fallback;
+  if (fallback && fallback.role) return { id: fallback.id, role: fallback.role.key };
+  return null;
 }
 
 async function backfillOne(c: Candidate): Promise<void> {

@@ -21,6 +21,9 @@ import { syncTierToBonusRule } from '@/lib/bonuses/deposit-tiers';
 const createSchema = z.object({
   minDeposit: z.coerce.number().min(0).max(10_000_000),
   percentage: z.coerce.number().int().min(0).max(100),
+  // Per-grant wager multiplier. Capped at 50x to match the global
+  // BonusRule.turnoverX upper bound, and floored at 0 (no lock).
+  turnoverX: z.coerce.number().min(0).max(50).optional(),
   isActive: z.boolean().optional(),
   position: z.number().int().min(0).max(9999).optional(),
   titleEn: z.string().trim().max(120).optional().nullable(),
@@ -41,6 +44,7 @@ export async function GET() {
         id: t.id,
         minDeposit: Number(t.minDeposit),
         percentage: t.percentage,
+        turnoverX: Number(t.turnoverX),
         isActive: t.isActive,
         position: t.position,
         titleEn: t.titleEn,
@@ -68,6 +72,7 @@ export async function POST(req: NextRequest) {
       data: {
         minDeposit: parsed.data.minDeposit,
         percentage: parsed.data.percentage,
+        turnoverX: parsed.data.turnoverX ?? 0,
         isActive: parsed.data.isActive ?? true,
         position: parsed.data.position ?? 0,
         titleEn: parsed.data.titleEn ?? null,
