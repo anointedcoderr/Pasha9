@@ -92,6 +92,21 @@ export async function POST(req: NextRequest) {
       return jsonError(409, 'EMPTY_AUDIENCE', 'No users matched the selected audience.');
     }
 
+    // Phase 1: create the Notification + every NotificationRecipient
+    // with deliveredAt=null. We commit the in-app payload now so the
+    // /api/me/notifications endpoint can already return the rows,
+    // but we DO NOT claim delivery yet because the web-push channel
+    // (the only channel that actually wakes a user's device) has not
+    // been attempted.
+    //
+    // Before this split the route wrote deliveredAt=new Date() inside
+    // the transaction. /admin/notifications then showed "delivered to
+    // 1000 / 1000" regardless of whether a single push left the
+    // server. Operators interpreted that as "the broadcast went out"
+    // and players never got a push. Splitting the write means
+    // deliveredAt is only stamped once the push dispatch returned
+    // with a non-error status, so the admin view reflects actual
+    // delivery and a 0-of-1000-pushed broadcast is visible as such.
     const notification = await db.$transaction(async (tx) => {
       const created = await tx.notification.create({
         data: {
@@ -118,7 +133,7 @@ export async function POST(req: NextRequest) {
           data: slice.map((uid) => ({
             notificationId: created.id,
             userId: uid,
-            deliveredAt: new Date(),
+            deliveredAt: null,
           })),
           skipDuplicates: true,
         });
@@ -127,10 +142,9 @@ export async function POST(req: NextRequest) {
       return created;
     });
 
-    // Best-effort web push dispatch. In-app notifications above are
-    // the source of truth; push is an additional channel that may
-    // require VAPID configuration and per-user device subscriptions.
-    // Failures never block the in-app delivery.
+    // Phase 2: attempt the web push. Best-effort; in-app rows already
+    // exist and are query-visible to the recipients even if push is
+    // not configured. Failures never block the in-app delivery.
     const pushResult = await dispatchPushToUsers(userIds, {
       title: data.titleEn,
       body: data.bodyEn ?? null,
@@ -142,6 +156,36 @@ export async function POST(req: NextRequest) {
       console.error('[notifications] push dispatch failed', err);
       return { attempted: 0, sent: 0, failed: 0, status: 'failed' as const, details: 'dispatch_threw' };
     });
+
+    // Phase 3: stamp deliveredAt now that we know whether the push
+    // landed. Policy:
+    //   - pushResult.attempted === 0 -> push was not attempted at all
+    //     (no VAPID config, no eligible subscriptions). Treat the
+    //     in-app row as the canonical delivery channel and stamp
+    //     deliveredAt=now() so the admin view reads as delivered.
+    //   - pushResult.sent > 0 -> at least one push left the server.
+    //     The dispatcher does not return per-user success today, so
+    //     mark all recipients delivered (we already have aggregate
+    //     pushAttempted/pushFailed in the ActivityLog meta for the
+    //     operator to drill into).
+    //   - pushResult.sent === 0 && pushResult.attempted > 0 -> push
+    //     was attempted and every attempt failed (provider down,
+    //     network error, expired subscriptions). Leave deliveredAt
+    //     null so the admin view shows the broadcast as undelivered.
+    //     The in-app row still exists so the user will see it on
+    //     their next /me/notifications fetch, but the operator now
+    //     has a clear signal that the push channel failed.
+    const pushSucceeded = pushResult.attempted === 0 || pushResult.sent > 0;
+    if (pushSucceeded) {
+      try {
+        await db.notificationRecipient.updateMany({
+          where: { notificationId: notification.id, deliveredAt: null },
+          data: { deliveredAt: new Date() },
+        });
+      } catch (err) {
+        console.error('[notifications] deliveredAt stamp failed', err);
+      }
+    }
 
     await recordActivity({
       actorId: session.sub,

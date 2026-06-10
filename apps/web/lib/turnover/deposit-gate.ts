@@ -59,6 +59,17 @@ const BDT_BALANCE_LOCK_SOURCE_TYPES: string[] = [
   // so the player cannot withdraw the win before turning it over.
   'spin_result_cash',
   'spin_result_freebet',
+  // Betting Pass bonus/coins/freebet reward kinds (sourceType=
+  // 'betting_pass') and the cashback campaign + promo code paths
+  // create UserBonus rows with a positive turnoverRequired but
+  // were not enforced by the gate before. Players could withdraw
+  // these bonuses before completing the wager requirement. These
+  // three source types match what the engines actually write -
+  // see lib/betting-pass/engine.ts:275, lib/cashback/engine.ts:163,
+  // lib/promo-codes/redeem.ts:144 - and close the bypass.
+  'betting_pass',
+  'cashback_campaign',
+  'promo_code',
 ];
 const REFERRAL_LOCK_SOURCE_TYPES = ['referral_first_deposit', 'referral_commission'];
 

@@ -48,12 +48,20 @@ export async function POST(req: NextRequest, { params }: { params: { id: string;
     if (tx.status !== 'accepted') return jsonError(409, 'NOT_ROLLBACKABLE', `Only accepted transactions can be rolled back. Current status: ${tx.status}.`);
     if (!tx.userId) return jsonError(409, 'NO_WALLET_OWNER', 'This transaction has no resolved user; nothing to refund.');
 
-    // Original wallet impact = -bet + win. The rollback writes the
-    // OPPOSITE delta so the wallet ends up exactly where it was
-    // before the callback landed.
+    // Original wallet impact uses the row's stored netResult, which
+    // is the EXACT signed delta the settlement applied (post double-
+    // debit guard, see lib/providers/wallet.ts:247-251). Recomputing
+    // it here as winAmount - betAmount was wrong whenever the
+    // double-debit guard suppressed the bet leg of a SETTLE callback
+    // that followed a prior BET callback for the same gameRound:
+    // betAmount=100 winAmount=150 stored, but the settlement only
+    // applied +150 (effectiveBet=0). The old recompute treated the
+    // delta as 150-100=50 and clawed back too little, leaving the
+    // wallet 100 BDT richer than it should have been. Using
+    // netResult mirrors what actually moved.
     const bet = dec(tx.betAmount);
     const win = dec(tx.winAmount);
-    const originalImpact = win.sub(bet);          // signed wallet delta from the original callback
+    const originalImpact = dec(tx.netResult);     // signed wallet delta the settlement actually applied
     const adjustDelta = originalImpact.neg();     // what we apply now to undo it
 
     const result = await db.$transaction(async (txdb) => {

@@ -538,13 +538,15 @@ export async function markPayoutPaid(payoutId: string, reviewerId: string, opts?
     if (!p) throw new Error('PAYOUT_NOT_FOUND');
     if (p.status === 'paid') return;
     if (p.status === 'rejected') throw new Error('PAYOUT_REJECTED');
+
+    const now = new Date();
     await tx.commissionPayout.update({
       where: { id: payoutId },
       data: {
         status: 'paid',
-        paidAt: new Date(),
+        paidAt: now,
         reviewerId,
-        reviewedAt: p.reviewedAt ?? new Date(),
+        reviewedAt: p.reviewedAt ?? now,
         ...(opts?.providerKey ? { providerKey: opts.providerKey } : {}),
         ...(opts?.providerRef ? { providerRef: opts.providerRef } : {}),
         ...(opts?.adminNote ? { adminNote: opts.adminNote } : {}),
@@ -556,6 +558,60 @@ export async function markPayoutPaid(payoutId: string, reviewerId: string, opts?
       where: { payoutId },
       data: { status: 'paid' },
     });
+
+    // Settle the matching ReferralClaim and credit the affiliate's
+    // Wallet.balance. Before this block the admin "mark paid" action
+    // only flipped CommissionPayout.status and AffiliateCommission
+    // rows; the ReferralClaim stayed at status='pending' / walletTxId
+    // null / paidAt null, and the affiliate's Wallet was never
+    // incremented. The user saw their claim hanging in /me/referrals
+    // forever even though the admin had marked the payout paid.
+    //
+    // ReferralClaim.payoutId is @unique so there is at most one claim
+    // per payout, and findUnique by payoutId is the canonical lookup.
+    const claim = await tx.referralClaim.findUnique({ where: { payoutId } });
+    if (claim && claim.status !== 'paid') {
+      const amount = new Prisma.Decimal(p.amount);
+
+      const wallet = await tx.wallet.findUnique({ where: { userId: p.affiliateId } });
+      if (wallet) {
+        await tx.wallet.update({
+          where: { userId: p.affiliateId },
+          data: { balance: { increment: amount } },
+        });
+      } else {
+        await tx.wallet.create({
+          data: { userId: p.affiliateId, balance: amount, bonusBalance: 0, lockedBalance: 0 },
+        });
+      }
+
+      const ledger = await tx.transaction.create({
+        data: {
+          userId: p.affiliateId,
+          type: 'referral',
+          status: 'completed',
+          amount,
+          reference: payoutId,
+          description: `Referral payout settled`,
+          meta: {
+            payoutId,
+            referralClaimId: claim.id,
+            method: p.method,
+            providerKey: opts?.providerKey ?? p.providerKey ?? null,
+            providerRef: opts?.providerRef ?? p.providerRef ?? null,
+          } as Prisma.JsonObject,
+        },
+      });
+
+      await tx.referralClaim.update({
+        where: { id: claim.id },
+        data: {
+          status: 'paid',
+          paidAt: now,
+          walletTxId: ledger.id,
+        },
+      });
+    }
   });
 }
 
