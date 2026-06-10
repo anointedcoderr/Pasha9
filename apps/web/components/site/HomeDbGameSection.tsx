@@ -199,24 +199,32 @@ export function HomeDbGameSection({ section }: Props) {
           const hasOverlayText = !imageOnly && (showName || showPlay);
 
           const inner = (
-            // Card image area is now SQUARE (was aspect-[4/3]).
-            // Casino game art - JILI, Spribe, Habanero, Evolution etc. -
-            // is published as 1:1 (or very close to it). A 4:3 container
-            // forced object-cover to crop the top and bottom of every
-            // square upload, which made centred subjects (slot machine
-            // reels, gold coin laurel, Aviator wordmark) appear to
-            // float in a dark frame even though the image WAS the
-            // card content. Square fits the source aspect exactly so
-            // the image fills the frame edge to edge with no crop and
-            // no visible chrome.
-            <div className="relative aspect-square overflow-hidden">
+            // Pure square card. Everything - image, name, play button,
+            // badges - lives inside this aspect-square box. Previously
+            // the card was image-square PLUS a caption strip pulled up
+            // by negative margin (-mt-7), which left the dark wrapper
+            // gradient visible above and below any upload that did not
+            // fully cover the square: portrait screenshots, transparent
+            // PNGs, or images with built-in black bars all bled the
+            // wrapper through, which read as black borders on the
+            // first-row tiles.
+            //
+            // The fix is to make the wrapper BE the square, drop the
+            // outer dark mahogany gradient from the parent Link/button,
+            // and put the name + play button as an absolute overlay
+            // pinned to the bottom of the image with the dim-to-black
+            // gradient backing them up for readability. Matches the
+            // Babu88 reference layout exactly: the card visible area
+            // is the image, full bleed, with the play pill floating
+            // on the bottom.
+            <div className="relative aspect-square overflow-hidden rounded-2xl bg-brand-surface">
               {useImage ? (
-                // Single image, object-cover, fills the entire card.
-                // No backdrops, no decorations, no overlays. Whatever
-                // the operator uploaded IS the card. Transparent
-                // regions reveal the tile background (mahogany) but
-                // nothing decorative is layered behind, so the result
-                // is exactly "image only" with no visual noise.
+                // Single image, object-cover, fills the entire square.
+                // Whatever the operator uploaded IS the card. Transparent
+                // regions reveal bg-brand-surface (matches the page
+                // background, no longer the dark mahogany) so a
+                // partial-coverage image reads as a clean tile not a
+                // letterboxed photo.
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={g.imageUrl ?? ''}
@@ -233,7 +241,10 @@ export function HomeDbGameSection({ section }: Props) {
                 />
               )}
               {hasOverlayText ? (
-                <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-brand-ink/95 via-brand-ink/40 to-transparent" />
+                // Dim gradient backing for the bottom-overlay caption.
+                // Only the bottom third gets darkened so the upper part
+                // of the artwork stays clean.
+                <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-2/5 bg-gradient-to-t from-brand-ink/95 via-brand-ink/55 to-transparent" />
               ) : null}
               {showHotBadge && g.isHot ? (
                 <span className="absolute right-2 top-2 inline-flex h-5 items-center rounded-full border border-rose-300/60 bg-rose-500/25 px-1.5 text-[9px] font-extrabold uppercase tracking-wider text-rose-50 backdrop-blur">HOT</span>
@@ -253,21 +264,36 @@ export function HomeDbGameSection({ section }: Props) {
                   {g.providerName}
                 </span>
               ) : null}
-            </div>
-          );
-
-          const captionInner = imageOnly || (!showName && !showPlay) ? null : (
-            <div className="relative -mt-7 px-3 pb-3 pt-0 text-left">
-              {showName ? <h3 className="truncate text-sm font-extrabold leading-tight text-white">{g.displayName}</h3> : null}
-              {showPlay ? (
-                <p className="mt-1 inline-flex h-7 items-center gap-1 rounded-full bg-gradient-to-b from-amber-300 to-amber-500 px-2.5 text-[10px] font-extrabold uppercase tracking-wider text-[#3A1F00] shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]">
-                  <Play className="h-3 w-3" />
-                  {busy ? (lang === 'bn' ? 'লোড...' : 'Loading...') : (lang === 'bn' ? 'খেলুন' : 'Play')}
-                </p>
+              {/* Name + play button overlay, pinned to the bottom of
+                  the image. Replaces the old captionInner that sat
+                  below the image with a negative top margin. Now the
+                  card is pure aspect-square - no chrome below the
+                  image, no wrapper gradient bleeding through. */}
+              {!imageOnly && (showName || showPlay) ? (
+                <div className="absolute inset-x-0 bottom-0 px-2.5 pb-2 text-left">
+                  {showName ? <h3 className="truncate text-sm font-extrabold leading-tight text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]">{g.displayName}</h3> : null}
+                  {showPlay ? (
+                    <p className="mt-1 inline-flex h-7 items-center gap-1 rounded-full bg-gradient-to-b from-amber-300 to-amber-500 px-2.5 text-[10px] font-extrabold uppercase tracking-wider text-[#3A1F00] shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]">
+                      <Play className="h-3 w-3" />
+                      {busy ? (lang === 'bn' ? 'লোড...' : 'Loading...') : (lang === 'bn' ? 'খেলুন' : 'Play')}
+                    </p>
+                  ) : null}
+                </div>
               ) : null}
             </div>
           );
 
+          // captionInner is gone - everything is inside `inner` now so
+          // the outer Link/button is purely structural and never
+          // contributes a background colour that could bleed through.
+          const captionInner = null;
+
+          // Outer wrapper is purely structural now. No background, no
+          // border, no gradient - the inner aspect-square already
+          // carries the rounded corners, the surface background and
+          // the play-button overlay. Removing the dark mahogany
+          // gradient closes the bleed-through path the operator
+          // reported on the first-row tile.
           if (isExternal) {
             return (
               <button
@@ -276,15 +302,7 @@ export function HomeDbGameSection({ section }: Props) {
                 disabled={busy}
                 onClick={() => onLaunchExternal(g)}
                 className={cn(
-                  // Soft branded backdrop so transparent PNG art
-                  // sits on a tasteful gradient instead of a flat
-                  // black panel. The category SVG behind the image
-                  // adds depth without competing with the artwork.
-                  // Brand-tinted base. If every other rendering layer is
-                  // transparent (e.g. an aggressive PNG with no surround),
-                  // the tile still reads as warm casino chrome instead of
-                  // a flat black panel.
-                  'group relative overflow-hidden rounded-2xl border border-white/10 bg-[linear-gradient(135deg,#3a2a1a_0%,#1a1410_55%,#3a2a1a_100%)] text-white shadow-[0_8px_24px_-12px_rgba(0,0,0,0.55)] transition',
+                  'group block transition active:translate-y-px',
                   busy && 'opacity-70',
                 )}
               >
@@ -297,7 +315,7 @@ export function HomeDbGameSection({ section }: Props) {
             <Link
               key={tileKey}
               href={g.href ?? '/games'}
-              className="group relative overflow-hidden rounded-2xl border border-white/10 bg-[linear-gradient(135deg,#3a2a1a_0%,#1a1410_55%,#3a2a1a_100%)] text-white shadow-[0_8px_24px_-12px_rgba(0,0,0,0.55)] transition"
+              className="group block transition active:translate-y-px"
             >
               {inner}
               {captionInner}
