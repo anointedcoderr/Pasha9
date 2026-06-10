@@ -251,7 +251,13 @@ export interface TicketRow {
   status: string;
   drawId: string | null;
   generatedAt: string | Date;
-  draw: { id: string; name: string; drawsAt: string | Date | null } | null;
+  draw: {
+    id: string;
+    name: string;
+    drawsAt: string | Date | null;
+    settledAt?: string | Date | null;
+    closedAt?: string | Date | null;
+  } | null;
 }
 
 export interface PastResultRow {
@@ -269,16 +275,55 @@ export interface PastResultRow {
   } | null;
 }
 
-// Active vs Past split. status === 'issued' means the ticket is still
-// holding for an upcoming draw; anything else (won, used, voided)
-// belongs in the Past sub-tab.
+// Active vs Past split:
+//   Active = ticket.status === 'issued' AND the attached draw has NOT
+//            been settled yet. Tickets with no drawId (waiting for the
+//            next assignment by the rollover cron) also show as Active.
+//            Once the operator publishes the result, the settle engine
+//            flips every issued ticket on that draw to 'won' or 'lost'
+//            so they fall out of this list automatically.
+//   Past   = anything not 'issued' (won, lost, used, voided) OR an
+//            'issued' ticket whose draw has already been settled
+//            (defensive guard against the rare race where the settle
+//            transaction skipped a flip).
+//
+// Status label maps to a friendly word the player can read:
+//   issued + draw open       -> "Pending draw"
+//   issued + no draw yet     -> "Awaiting next draw"
+//   issued + draw settled    -> "No win" (defensive)
+//   won                      -> "Won"
+//   lost                     -> "Lost"
+//   used                     -> "Used"
+//   voided                   -> "Voided"
+// The raw "issued" badge the operator complained about is gone.
+function statusLabelFor(t: TicketRow, bn: boolean): { label: string; tone: 'pending' | 'awaiting' | 'won' | 'lost' | 'neutral' } {
+  if (t.status === 'won') return { label: bn ? 'জিতেছেন' : 'Won', tone: 'won' };
+  if (t.status === 'lost') return { label: bn ? 'হারেছেন' : 'Lost', tone: 'lost' };
+  if (t.status === 'voided') return { label: bn ? 'বাতিল' : 'Voided', tone: 'lost' };
+  if (t.status === 'used') return { label: bn ? 'ব্যবহৃত' : 'Used', tone: 'neutral' };
+  // status === 'issued' from here on
+  if (!t.draw || t.draw.drawsAt == null) {
+    return { label: bn ? 'পরবর্তী ড্রয়ের জন্য' : 'Awaiting next draw', tone: 'awaiting' };
+  }
+  if (t.draw.settledAt) {
+    return { label: bn ? 'জিতেননি' : 'No win', tone: 'lost' };
+  }
+  return { label: bn ? 'ড্রয়ের অপেক্ষায়' : 'Pending draw', tone: 'pending' };
+}
+
 function MyTicketsTab({ tickets }: { tickets: TicketRow[] }) {
   const { lang } = useLang();
   const bn = lang === 'bn';
   const [sub, setSub] = useState<'active' | 'past'>('active');
 
-  const active = useMemo(() => tickets.filter((t) => t.status === 'issued'), [tickets]);
-  const past = useMemo(() => tickets.filter((t) => t.status !== 'issued'), [tickets]);
+  const active = useMemo(
+    () => tickets.filter((t) => t.status === 'issued' && (!t.draw || !t.draw.settledAt)),
+    [tickets],
+  );
+  const past = useMemo(
+    () => tickets.filter((t) => t.status !== 'issued' || (t.draw?.settledAt != null)),
+    [tickets],
+  );
   const rows = sub === 'active' ? active : past;
 
   return (
@@ -323,28 +368,32 @@ function MyTicketsTab({ tickets }: { tickets: TicketRow[] }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-brand-divider">
-              {rows.slice(0, 30).map((t) => (
-                <tr key={t.id} className="bg-brand-paper">
-                  <td className="px-3 py-2 font-bold tabular-nums text-brand-ink">{t.number}</td>
-                  <td className="px-3 py-2 text-xs text-brand-inkSoft">
-                    {t.draw?.name ?? '----'}
-                    {t.draw?.drawsAt ? (
-                      <span className="ml-1 text-brand-inkMute">({formatIsoDate(t.draw.drawsAt)})</span>
-                    ) : null}
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <span className={cn(
-                      'inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider',
-                      t.status === 'won' && 'bg-emerald-500/15 text-emerald-700',
-                      t.status === 'issued' && 'bg-amber-500/15 text-amber-700',
-                      t.status === 'used' && 'bg-brand-surface text-brand-inkMute',
-                      t.status === 'voided' && 'bg-rose-500/15 text-rose-700',
-                    )}>
-                      {t.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
+              {rows.slice(0, 30).map((t) => {
+                const sl = statusLabelFor(t, bn);
+                return (
+                  <tr key={t.id} className="bg-brand-paper">
+                    <td className="px-3 py-2 font-bold tabular-nums text-brand-ink">{t.number}</td>
+                    <td className="px-3 py-2 text-xs text-brand-inkSoft">
+                      {t.draw?.name ?? (bn ? 'পরবর্তী' : 'Next')}
+                      {t.draw?.drawsAt ? (
+                        <span className="ml-1 text-brand-inkMute">({formatIsoDate(t.draw.drawsAt)})</span>
+                      ) : null}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <span className={cn(
+                        'inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider',
+                        sl.tone === 'won' && 'bg-emerald-500/15 text-emerald-700',
+                        sl.tone === 'lost' && 'bg-rose-500/15 text-rose-700',
+                        sl.tone === 'pending' && 'bg-amber-500/15 text-amber-700',
+                        sl.tone === 'awaiting' && 'bg-sky-500/15 text-sky-700',
+                        sl.tone === 'neutral' && 'bg-brand-surface text-brand-inkMute',
+                      )}>
+                        {sl.label}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

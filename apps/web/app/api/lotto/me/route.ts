@@ -37,7 +37,12 @@ export async function GET() {
         where: { userId },
         orderBy: { generatedAt: 'desc' },
         take: 100,
-        include: { draw: { select: { id: true, name: true, drawsAt: true } } },
+        // settledAt + closedAt let the UI tell a current-draw ticket
+        // (settledAt IS NULL = the draw has not been published yet)
+        // from a residual issued-but-stale row attached to a draw the
+        // operator already ran. Active Tickets on /lotto only shows
+        // rows where the draw has not been settled.
+        include: { draw: { select: { id: true, name: true, drawsAt: true, settledAt: true, closedAt: true } } },
       }),
       db.lotteryWinning.findMany({
         where: { userId },
@@ -119,7 +124,13 @@ export async function GET() {
         source: t.source,
         drawId: t.drawId,
         generatedAt: t.generatedAt,
-        draw: t.draw ? { id: t.draw.id, name: t.draw.name, drawsAt: t.draw.drawsAt } : null,
+        draw: t.draw ? {
+          id: t.draw.id,
+          name: t.draw.name,
+          drawsAt: t.draw.drawsAt,
+          settledAt: t.draw.settledAt,
+          closedAt: t.draw.closedAt,
+        } : null,
       })),
       winnings: winnings.map((w) => ({
         id: w.id,

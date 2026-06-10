@@ -20,6 +20,7 @@ import { cn } from '@/lib/utils/cn';
 import { triggerWalletRefresh } from '@/components/site/WalletStrip';
 import { LottoBabuLayout, type PastResultRow, type TicketRow } from '@/components/site/LottoBabuLayout';
 import { LottoBannerCarousel } from '@/components/site/LottoBannerCarousel';
+import { LottoWinCelebration, type LottoWin } from '@/components/site/LottoWinCelebration';
 
 interface LiveDraw {
   id: string;
@@ -65,13 +66,26 @@ interface MeResponse {
     source?: string | null;
     drawId: string | null;
     generatedAt: string;
-    draw: { id: string; name: string; drawsAt: string | null } | null;
+    draw: {
+      id: string;
+      name: string;
+      drawsAt: string | null;
+      settledAt?: string | null;
+      closedAt?: string | null;
+    } | null;
   }>;
   winnings: Array<{
     id: string;
+    ticketNumber?: string;
+    prizeTier?: string;
     amount: number;
     status: string;
+    createdAt?: string;
+    creditedAt?: string | null;
+    resultId?: string | null;
     drawId: string | null;
+    winningNumber?: string;
+    publishedAt?: string;
   }>;
 }
 
@@ -147,6 +161,7 @@ export default function LottoPage() {
   const [me, setMe] = useState<MeResponse | null>(null);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [claimBusy, setClaimBusy] = useState(false);
+  const [winPopup, setWinPopup] = useState<{ win: LottoWin; total: number } | null>(null);
 
   const loadMe = useCallback(async () => {
     try {
@@ -156,6 +171,56 @@ export default function LottoPage() {
       if (j && !j.code) setMe(j as MeResponse);
     } catch { /* swallow */ }
   }, []);
+
+  // Detect a fresh winning row and pop the celebration. We key the
+  // dismissal on the winning id in localStorage so the popup never
+  // re-appears for a win the player has already acknowledged, even
+  // across reloads. "Fresh" means status is one the player can still
+  // act on (pending_credit or credited) and the player has not yet
+  // closed the popup for that id.
+  useEffect(() => {
+    if (!me || !me.winnings || me.winnings.length === 0) return;
+    if (winPopup) return;
+    if (typeof window === 'undefined') return;
+    let seen: Set<string>;
+    try {
+      const raw = window.localStorage.getItem('lotto.seenWins');
+      seen = new Set(raw ? (JSON.parse(raw) as string[]) : []);
+    } catch {
+      seen = new Set();
+    }
+    const fresh = me.winnings
+      .filter((w) => w.status === 'pending_credit' || w.status === 'credited')
+      .filter((w) => !seen.has(w.id));
+    if (fresh.length === 0) return;
+    const headline = fresh[0];
+    const totalPending = me.winnings
+      .filter((w) => w.status === 'pending_credit')
+      .reduce((acc, w) => acc + Number(w.amount), 0);
+    setWinPopup({
+      win: {
+        id: headline.id,
+        ticketNumber: headline.ticketNumber ?? '----',
+        prizeTier: headline.prizeTier ?? 'first_exact',
+        amount: Number(headline.amount),
+        winningNumber: headline.winningNumber ?? null,
+      },
+      total: totalPending > 0 ? totalPending : Number(headline.amount),
+    });
+  }, [me, winPopup]);
+
+  const dismissWinPopup = useCallback(() => {
+    if (!winPopup) return;
+    try {
+      if (typeof window !== 'undefined') {
+        const raw = window.localStorage.getItem('lotto.seenWins');
+        const arr = raw ? (JSON.parse(raw) as string[]) : [];
+        const next = Array.from(new Set([...arr, winPopup.win.id])).slice(-200);
+        window.localStorage.setItem('lotto.seenWins', JSON.stringify(next));
+      }
+    } catch { /* swallow */ }
+    setWinPopup(null);
+  }, [winPopup]);
 
   useEffect(() => {
     let alive = true;
@@ -203,12 +268,19 @@ export default function LottoPage() {
           ?? me.tickets.filter((t) => t.status === 'issued').length;
         const lastDrawWinningTickets = me.summary.lastDrawWinningTicketsCount
           ?? (previousResult ? me.winnings.filter((w) => w.drawId === previousResult.drawId).length : 0);
-        const pendingClaim = me.winnings
+        // "My Winnings" must reflect the money the player can actually
+        // act on. In auto-credit mode the settle engine credits
+        // Wallet.lottoBalance immediately AND flips every LotteryWinning
+        // row to status='credited' - so filtering on
+        // status='pending_credit' (the old behaviour) returned 0 and
+        // the player saw "My Winnings: 0" while their lottoBalance
+        // held the prize. We now read lottoBalance directly and add
+        // any still-pending claims on top, which is the union of both
+        // claim modes.
+        const pendingFromWinnings = me.winnings
           .filter((w) => w.status === 'pending_credit')
           .reduce((acc, w) => acc + Number(w.amount), 0);
-        // Lotto Balance + pending = total "lifetime winnings" view
-        // the client wants. Fall back to the explicit aggregate
-        // when server returns it.
+        const claimableTotal = Math.max(0, Number(me.lottoBalance) + pendingFromWinnings);
         const lifetimeWinnings = me.summary.wonLifetime
           ?? me.winnings
             .filter((w) => w.status !== 'cancelled')
@@ -216,17 +288,28 @@ export default function LottoPage() {
         return {
           activeTickets,
           lastDrawWinningTickets,
-          pendingClaimTotal: pendingClaim,
+          pendingClaimTotal: claimableTotal,
           lifetimeWinnings,
-          hasClaimable: pendingClaim > 0,
+          hasClaimable: claimableTotal > 0,
         };
       })()
     : null;
 
-  // Click handler for the Claim button: claims every pending winning
-  // in sequence. The /api/lotto/winnings/:id/claim endpoint is
-  // transactional and idempotent so this loop is safe even if the
-  // user mashes the button mid-flight.
+  // Click handler for the Claim button. Two phases:
+  //   1. In manual mode each LotteryWinning row sits at
+  //      status='pending_credit' until the player taps Claim. POST
+  //      /api/lotto/winnings/:id/claim moves the row to 'credited'
+  //      and bumps Wallet.lottoBalance. This loop is transactional +
+  //      idempotent so re-clicking is safe.
+  //   2. Once every pending winning is collected, transfer the whole
+  //      lottoBalance to Wallet.balance via POST /api/lotto/transfer.
+  //      In auto-credit mode the first loop is a no-op (no pending
+  //      rows) and the transfer is the only step that runs; in manual
+  //      mode both run in sequence.
+  //
+  // Before this change the button only ran step 1, which meant auto-
+  // credit players whose lottoBalance held a winning prize had a Claim
+  // button that did nothing.
   const onClaim = async () => {
     if (!me) return;
     setClaimBusy(true);
@@ -236,6 +319,20 @@ export default function LottoPage() {
         await fetch(`/api/lotto/winnings/${w.id}/claim`, {
           method: 'POST',
           credentials: 'include',
+        }).catch(() => null);
+      }
+      // Re-read me to pick up the lottoBalance after pending claims
+      // landed (each claim bumped Wallet.lottoBalance). Then sweep the
+      // entire lotto balance to the main wallet.
+      const r = await fetch('/api/lotto/me', { cache: 'no-store', credentials: 'include' });
+      const fresh = r.ok ? (await r.json().catch(() => null)) as MeResponse | null : null;
+      const transferable = fresh ? Number(fresh.lottoBalance) : Number(me.lottoBalance);
+      if (transferable > 0) {
+        await fetch('/api/lotto/transfer', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ amount: transferable }),
         }).catch(() => null);
       }
       triggerWalletRefresh();
@@ -261,6 +358,15 @@ export default function LottoPage() {
   return (
     <div className="space-y-5">
       <BackBar title={lang === 'bn' ? 'লটো' : 'Lotto'} />
+
+      {/* Premium win popup. Opens automatically when a fresh winning
+          row lands and the player has not already dismissed it. */}
+      <LottoWinCelebration
+        open={!!winPopup}
+        win={winPopup?.win ?? null}
+        totalWinnings={winPopup?.total}
+        onClose={dismissWinPopup}
+      />
 
       {/* Operator-managed banner carousel (image or video) - empty
           when no rows are active, the layout below absorbs the space. */}
