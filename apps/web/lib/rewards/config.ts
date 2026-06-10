@@ -155,7 +155,11 @@ export const DEFAULT_TIERS: DefaultTierSpec[] = [
     nameBn: 'হুইল অফ গ্র্যান্ড ফরচুন',
     descriptionEn: 'Mid-tier prizes. Bigger swings.',
     descriptionBn: 'মাঝারি স্তরের পুরস্কার। বড় সম্ভাবনা।',
-    costPerSpin: 70,
+    // Cost bumped 70 -> 100 to match the client's 30 / 100 / 500
+    // coin ladder. The seed POST upserts by key without overwriting
+    // operator edits, so existing rows pre-seeded at 70 stay; the
+    // operator can adjust per-tier via /admin/spin-tiers.
+    costPerSpin: 100,
     freeSpinsPerDay: 1,
     color: '#C0C0C0',
     position: 1,

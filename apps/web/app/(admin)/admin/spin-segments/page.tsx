@@ -103,6 +103,19 @@ export default function AdminSpinSegmentsPage() {
 
   useEffect(() => { refresh(); /* eslint-disable-line react-hooks/exhaustive-deps */ }, []);
 
+  // Honour ?tierId=<id> in the URL so deep-links from /admin/spin-tiers
+  // land on the correct tier tab. Runs whenever tiers reload so the
+  // deep-link works even when the query param outpaces the fetch.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const targetTier = params.get('tierId');
+    if (!targetTier) return;
+    if (tiers.some((t) => t.id === targetTier)) {
+      setActiveTab(targetTier);
+    }
+  }, [tiers]);
+
   const visibleSegments = segments.filter((s) => (activeTab === LEGACY_TAB ? s.tierId == null : s.tierId === activeTab));
   const hasLegacyRows = segments.some((s) => s.tierId == null);
 

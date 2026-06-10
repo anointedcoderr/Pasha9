@@ -125,6 +125,7 @@ const GROUPS = [
       { key: 'rewardClaims', href: ROUTES.admin.rewardClaims, icon: Gift },
       { key: 'bettingPass', href: ROUTES.admin.bettingPass, icon: Sparkles },
       { key: 'bettingPassBanners', href: '/admin/betting-pass/banners', icon: Sparkles },
+      { key: 'spinTiers', href: '/admin/spin-tiers', icon: Sparkles },
       { key: 'spinSegments', href: ROUTES.admin.spinSegments, icon: Sparkles },
       { key: 'nativeGames', href: ROUTES.admin.nativeGames, icon: Gamepad2 },
     ],
