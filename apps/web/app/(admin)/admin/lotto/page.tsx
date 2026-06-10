@@ -628,6 +628,26 @@ export default function AdminLottoPage() {
                       Winners
                     </Button>
                   ) : null}
+                  {result ? (
+                    <Button
+                      size="sm"
+                      variant="neon"
+                      onClick={async () => {
+                        if (!confirm('Score every orphan ticket against this draw\'s result and credit winners?\n\nUse this when tickets were created BEFORE the draw existed (drawId=null) and the original settle reported 0 winners even though tickets matched.\n\nIdempotent: re-running after a successful pass does nothing.')) return;
+                        try {
+                          const r = await fetch(`/api/admin/lotto/${d.id}/score-orphans`, { method: 'POST' });
+                          const j = await r.json();
+                          if (!r.ok) throw new Error(j?.message ?? j?.code ?? 'Failed');
+                          alert(`Done. Attached ${j.attached} ticket(s), ${j.winners} winner(s), ${j.paid} BDT credited.`);
+                          await load();
+                        } catch (e) {
+                          alert(`Score orphans failed: ${e instanceof Error ? e.message : String(e)}`);
+                        }
+                      }}
+                    >
+                      Score orphans
+                    </Button>
+                  ) : null}
                   <Button size="sm" variant="neon" leftIcon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditor({ ...d, drawsAt: d.drawsAt ? d.drawsAt.slice(0, 16) : '' })}>Edit</Button>
                   <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => remove(d.id)}>Delete</Button>
                 </div>
