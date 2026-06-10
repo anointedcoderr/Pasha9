@@ -48,11 +48,13 @@ interface Candidate {
   bonusAmount: Prisma.Decimal;
   promotionRuleId: string | null;
   promotionCode: string | null;
+  reviewerId: string | null;
 }
 
 async function loadCandidates(): Promise<Candidate[]> {
   const rows = await db.$queryRaw<Candidate[]>`
-    SELECT d.id, d."userId", d.amount, d."bonusAmount", d."promotionRuleId", d."promotionCode"
+    SELECT d.id, d."userId", d.amount, d."bonusAmount", d."promotionRuleId",
+           d."promotionCode", d."reviewerId"
       FROM "Deposit" d
      WHERE d.status = 'approved'
        AND d."bonusAmount" IS NOT NULL
@@ -67,8 +69,27 @@ async function loadCandidates(): Promise<Candidate[]> {
   return rows;
 }
 
+// ActivityLog.actorId is a foreign key into User, so 'system' is not
+// a valid value. Use the deposit's original reviewer when present,
+// otherwise fall back to any super-admin we can find. If neither
+// resolves, the activity log write is skipped (the financial rows
+// are still the source of truth - the audit log is nice-to-have).
+async function resolveAuditActor(reviewerId: string | null): Promise<{ id: string; role: string } | null> {
+  if (reviewerId) {
+    const r = await db.user.findUnique({ where: { id: reviewerId }, select: { id: true, role: true } });
+    if (r) return { id: r.id, role: r.role };
+  }
+  const fallback = await db.user.findFirst({
+    where: { role: { in: ['super_admin', 'admin'] } },
+    select: { id: true, role: true },
+    orderBy: { createdAt: 'asc' },
+  });
+  return fallback;
+}
+
 async function backfillOne(c: Candidate): Promise<void> {
-  await db.$transaction(async (tx) => {
+  const auditActor = await resolveAuditActor(c.reviewerId);
+  const grantId = await db.$transaction(async (tx) => {
     const bonus = new Prisma.Decimal(c.bonusAmount);
 
     const wallet = await tx.wallet.findUnique({ where: { userId: c.userId } });
@@ -116,23 +137,36 @@ async function backfillOne(c: Candidate): Promise<void> {
       },
     });
 
-    await tx.activityLog.create({
-      data: {
-        actorId: 'system',
-        actorRole: 'system',
-        action: 'BACKFILL_DEPOSIT_BONUS',
-        target: c.id,
-        detail: `Credited ${bonus.toString()} BDT bonus`,
-        meta: {
-          userId: c.userId,
-          depositId: c.id,
-          bonusGrantId: grant.id,
-          bonusAmount: Number(bonus),
-          promotionRuleId: c.promotionRuleId,
-        } as Prisma.JsonObject,
-      },
-    });
+    return grant.id;
   });
+
+  // Audit log outside the financial transaction so a missing actor
+  // user (e.g. reviewer deleted, no super_admin remaining) cannot
+  // roll back the bonus credit. Best-effort.
+  if (auditActor) {
+    try {
+      await db.activityLog.create({
+        data: {
+          actorId: auditActor.id,
+          actorRole: auditActor.role,
+          action: 'BACKFILL_DEPOSIT_BONUS',
+          target: c.id,
+          detail: `Credited ${new Prisma.Decimal(c.bonusAmount).toString()} BDT bonus`,
+          meta: {
+            userId: c.userId,
+            depositId: c.id,
+            bonusGrantId: grantId,
+            bonusAmount: Number(c.bonusAmount),
+            promotionRuleId: c.promotionRuleId,
+          } as Prisma.JsonObject,
+        },
+      });
+    } catch (err) {
+      console.warn(`  audit log skipped for deposit=${c.id}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  } else {
+    console.warn(`  audit log skipped for deposit=${c.id}: no valid actor user found`);
+  }
 }
 
 async function main(): Promise<void> {
