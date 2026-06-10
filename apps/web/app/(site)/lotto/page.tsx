@@ -19,6 +19,7 @@ import { ChevronDown, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { triggerWalletRefresh } from '@/components/site/WalletStrip';
 import { LottoBabuLayout, type PastResultRow, type TicketRow } from '@/components/site/LottoBabuLayout';
+import { LottoBannerCarousel } from '@/components/site/LottoBannerCarousel';
 
 interface LiveDraw {
   id: string;
@@ -260,6 +261,10 @@ export default function LottoPage() {
   return (
     <div className="space-y-5">
       <BackBar title={lang === 'bn' ? 'লটো' : 'Lotto'} />
+
+      {/* Operator-managed banner carousel (image or video) - empty
+          when no rows are active, the layout below absorbs the space. */}
+      <LottoBannerCarousel />
 
       <LottoBabuLayout
         latest={layoutLatest}

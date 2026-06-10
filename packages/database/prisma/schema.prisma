@@ -1059,6 +1059,32 @@ model CommissionPayout {
 
 // ---------- Lotto draws and reward catalog (Phase 5) ----------
 
+// Banner slot at the top of /lotto. Operator can upload an image or
+// an MP4 video and choose a sort order. Multiple active banners
+// rotate in a carousel. Video banners default to autoplay + muted +
+// loop (which most mobile browsers require to allow autoplay at
+// all); the public viewer exposes mute/unmute and play/pause
+// controls regardless of the row's defaults.
+model LottoBanner {
+  id          String   @id @default(cuid())
+  kind        String   @default("image") // 'image' | 'video'
+  imageUrl    String?  // /uploads/banners/...
+  videoUrl    String?  // /uploads/videos/...
+  posterUrl   String?  // optional video poster image
+  titleEn     String?
+  titleBn     String?
+  ctaUrl      String?  // optional click target
+  autoplay    Boolean  @default(true)
+  muted       Boolean  @default(true)
+  loop        Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
+}
+
 model LottoDraw {
   id          String        @id @default(cuid())
   name        String

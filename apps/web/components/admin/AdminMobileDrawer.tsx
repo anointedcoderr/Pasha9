@@ -128,6 +128,7 @@ const GROUPS = [
     labelKey: 'groupLottoRewards',
     items: [
       { key: 'lotto', href: '/admin/lotto', icon: Ticket },
+      { key: 'lottoBanners', href: '/admin/lotto-banners', icon: Ticket },
       { key: 'rewards', href: '/admin/rewards', icon: Trophy },
       { key: 'rewardClaims', href: ROUTES.admin.rewardClaims, icon: Gift },
       { key: 'bettingPass', href: ROUTES.admin.bettingPass, icon: Sparkles },
