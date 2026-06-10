@@ -32,7 +32,7 @@ import { accrueBettingPassOnDeposit } from '@/lib/betting-pass/engine';
 import { sendSms } from '@/lib/sms/service';
 import { fireEvent } from '@/lib/tracking/dispatcher';
 import { applySelectedDepositPromotion } from '@/lib/promotions/deposit';
-import { pickBestTier } from '@/lib/bonuses/deposit-tiers';
+import { pickBestTier, resolveActiveTierRule } from '@/lib/bonuses/deposit-tiers';
 
 const schema = z.object({
   adminNote: z.string().max(500).optional(),
@@ -143,20 +143,32 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     // tier BonusRule onto the row. If the deposit promised a bonus
     // (bonusAmount > 0) but lost the rule reference, re-resolve from
     // the best matching tier so the player is credited correctly.
+    //
+    // The resolver self-heals: when the tier-synced BonusRule is
+    // missing or inactive it runs syncTierToBonusRule inline and
+    // re-reads. Before this change a tier that drifted out of sync
+    // (rule deleted out of band, or a tier created before the sync
+    // code shipped) left the deposit row with promotionRuleId=NULL,
+    // the recovery lookup also returned NULL, the approve route
+    // fell through to applyDepositBonuses() which iterates the
+    // active reload/promo/first_deposit list but did not find the
+    // tier rule, and the player got the deposit with no bonus
+    // grant - exactly the symptom the operator reported.
     let effectivePromotionRuleId: string | null = deposit.promotionRuleId;
     if (!effectivePromotionRuleId && Number(deposit.bonusAmount ?? 0) > 0) {
       try {
         const tierPreview = await pickBestTier(Number(amount));
         if (tierPreview?.tier && tierPreview.bonusAmount > 0) {
-          const tierRule = await db.bonusRule.findUnique({
-            where: { code: `deposit_tier_${tierPreview.tier.id}` },
-          });
-          if (tierRule && tierRule.status === 'active') {
-            effectivePromotionRuleId = tierRule.id;
-            await db.deposit.update({
-              where: { id: deposit.id },
-              data: { promotionRuleId: tierRule.id, promotionCode: tierRule.code },
-            });
+          const matchingTier = await db.depositBonusTier.findUnique({ where: { id: tierPreview.tier.id } });
+          if (matchingTier) {
+            const resolved = await resolveActiveTierRule(matchingTier);
+            if (resolved) {
+              effectivePromotionRuleId = resolved.id;
+              await db.deposit.update({
+                where: { id: deposit.id },
+                data: { promotionRuleId: resolved.id, promotionCode: resolved.code },
+              });
+            }
           }
         }
       } catch (err) {

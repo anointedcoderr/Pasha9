@@ -25,7 +25,7 @@ import { requireActiveUser } from '@/lib/auth/rbac';
 import { withAuth, recordActivity } from '@/lib/auth/guard';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 import { rateLimit } from '@/lib/auth/rate-limit';
-import { pickBestTier } from '@/lib/bonuses/deposit-tiers';
+import { pickBestTier, resolveActiveTierRule } from '@/lib/bonuses/deposit-tiers';
 import { previewDepositPromotion } from '@/lib/promotions/deposit';
 import { resolveClaimBehavior } from '@/lib/promotions/config';
 
@@ -99,12 +99,22 @@ export async function POST(req: NextRequest) {
     // route fell through to applyDepositBonuses() which iterates the
     // first_deposit / reload / promo rules but did not find the
     // tier-synced rule by name, leaving the player un-credited.
-    let resolvedPromotionRule = promotionRule;
+    //
+    // The lookup is now via resolveActiveTierRule which self-heals
+    // if the tier-synced rule is missing or inactive: it calls
+    // syncTierToBonusRule inline and re-reads. Without this the
+    // submit row saved promotionRuleId=NULL whenever the sync had
+    // drifted (rule deleted out of band, or tier created before
+    // the sync code shipped), which silently killed the bonus
+    // grant at approval time.
+    let resolvedPromotionRule: { id: string; code: string | null } | null = promotionRule;
     if (!resolvedPromotionRule && tierPreview?.tier && tierPreview.bonusAmount > 0) {
-      const tierCode = `deposit_tier_${tierPreview.tier.id}`;
-      const tierRule = await db.bonusRule.findUnique({ where: { code: tierCode } });
-      if (tierRule && tierRule.status === 'active') {
-        resolvedPromotionRule = tierRule;
+      const matchingTier = await db.depositBonusTier.findUnique({ where: { id: tierPreview.tier.id } });
+      if (matchingTier) {
+        const resolved = await resolveActiveTierRule(matchingTier);
+        if (resolved) {
+          resolvedPromotionRule = { id: resolved.id, code: resolved.code };
+        }
       }
     }
 

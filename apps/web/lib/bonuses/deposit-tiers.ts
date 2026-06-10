@@ -136,6 +136,47 @@ export async function removeTierBonusRule(tierId: string): Promise<void> {
   await db.bonusRule.deleteMany({ where: { code } });
 }
 
+/** Guarantee the BonusRule backing an active tier is present, fresh,
+ *  and active. Used by /api/deposits at submit time and by
+ *  /api/admin/deposits/[id]/approve in the recovery branch so the
+ *  engine never falls through to "no rule found" when a tier matches.
+ *
+ *  Self-healing was added because the in-memory observation was:
+ *  the tier exists with isActive=true, pickBestTier returns a
+ *  positive bonusAmount, the preview UI promises 500 BDT, but the
+ *  saved Deposit row has promotionRuleId=NULL because the matching
+ *  BonusRule either was never synced (legacy tier created before the
+ *  sync code shipped) or got flipped to status='hidden' / deleted
+ *  out of band. The fix runs syncTierToBonusRule inline whenever
+ *  the lookup returns null or a non-active row, then re-fetches.
+ *  Returns null only when the tier itself is inactive. */
+export async function resolveActiveTierRule(tier: {
+  id: string;
+  minDeposit: Prisma.Decimal | number;
+  percentage: number;
+  isActive: boolean;
+  position: number;
+  titleEn?: string | null;
+  titleBn?: string | null;
+  descriptionEn?: string | null;
+  descriptionBn?: string | null;
+  bannerUrl?: string | null;
+}): Promise<{ id: string; code: string } | null> {
+  if (!tier.isActive) return null;
+  const code = tierToCode(tier.id);
+  let rule = await db.bonusRule.findUnique({ where: { code }, select: { id: true, code: true, status: true } });
+  if (rule && rule.status === 'active') return { id: rule.id, code: rule.code! };
+  try {
+    await syncTierToBonusRule(tier);
+  } catch (err) {
+    console.error('[deposit-bonus-tiers] inline resolve sync failed', err);
+    return null;
+  }
+  rule = await db.bonusRule.findUnique({ where: { code }, select: { id: true, code: true, status: true } });
+  if (!rule || rule.status !== 'active') return null;
+  return { id: rule.id, code: rule.code! };
+}
+
 /** Re-sync every tier to its BonusRule. Used by the admin "Resync"
  *  button so a stuck row can be reconciled on demand. */
 export async function resyncAllTiers(): Promise<{ synced: number; removed: number }> {
