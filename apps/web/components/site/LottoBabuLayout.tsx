@@ -1,8 +1,6 @@
 // Built by Anointed Coder.
 //
-// Babu88-style flat layout for the /lotto page. Replaces the premium
-// Cinzel + ball-tumbler + certificate stack with a conventional
-// tabular layout the client signed off on:
+// Babu88-style flat layout for the /lotto page.
 //
 //   Winner of the Day {date}
 //   1st / 2nd / 3rd Prize cards (yellow)
@@ -14,14 +12,18 @@
 //   Lifetime Winnings
 //   Active Tickets | Last Draw Winning Tickets
 //   How to earn tickets?
-//   Brand Ambassadors
-//   Sponsorships
+//   [ My Tickets | Past Results ] tabs
+//
+// Brand Ambassadors and Sponsorship sections were retired per client
+// direction: the lotto page is now strictly lottery-related content,
+// and the tab section below the per-user stats replaces them with the
+// historical browser the operator asked for.
 //
 // Pure presentation; all data fetching stays on the parent page.
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
 import { useLang } from '@/lib/i18n/context';
@@ -52,6 +54,15 @@ function formatWinnerDate(input: string | Date | null): string {
   const day = d.getDate();
   const month = d.getMonth() + 1;
   return `${day}/${month}`;
+}
+
+function formatIsoDate(input: string | Date | null): string {
+  if (!input) return '----';
+  const d = new Date(input);
+  const y = d.getFullYear();
+  const m = pad(d.getMonth() + 1);
+  const day = pad(d.getDate());
+  return `${y}-${m}-${day}`;
 }
 
 // ---------- prize cards ----------
@@ -232,82 +243,215 @@ function HowToEarnLink() {
   );
 }
 
-// ---------- Ambassadors + Sponsors ----------
+// ---------- Tabs: My Tickets + Past Results ----------
 
-export interface AmbassadorRow {
+export interface TicketRow {
   id: string;
-  nameEn: string;
-  nameBn: string | null;
-  iconUrl: string | null;
-  subtitle: string | null;
+  number: string;
+  status: string;
+  drawId: string | null;
+  generatedAt: string | Date;
+  draw: { id: string; name: string; drawsAt: string | Date | null } | null;
 }
 
-function AmbassadorList({ rows }: { rows: AmbassadorRow[] }) {
+export interface PastResultRow {
+  id: string;
+  drawId: string;
+  drawName: string;
+  drawsAt: string | Date | null;
+  winningNumber: string;
+  publishedAt: string | Date;
+  extraNumbers?: {
+    second?: string | null;
+    third?: string | null;
+    specials?: string[];
+    consolations?: string[];
+  } | null;
+}
+
+// Active vs Past split. status === 'issued' means the ticket is still
+// holding for an upcoming draw; anything else (won, used, voided)
+// belongs in the Past sub-tab.
+function MyTicketsTab({ tickets }: { tickets: TicketRow[] }) {
   const { lang } = useLang();
-  if (rows.length === 0) return null;
+  const bn = lang === 'bn';
+  const [sub, setSub] = useState<'active' | 'past'>('active');
+
+  const active = useMemo(() => tickets.filter((t) => t.status === 'issued'), [tickets]);
+  const past = useMemo(() => tickets.filter((t) => t.status !== 'issued'), [tickets]);
+  const rows = sub === 'active' ? active : past;
+
   return (
-    <section className="rounded-xl border border-brand-divider bg-[#0F1115] px-4 py-5 text-white">
-      <h3 className="text-base font-extrabold text-brand-yellow-400">
-        {lang === 'bn' ? 'ব্র্যান্ড অ্যাম্বাসেডর' : 'Brand Ambassadors'}
-      </h3>
-      <ul className="mt-4 grid gap-3 sm:grid-cols-2">
-        {rows.map((row) => {
-          const name = lang === 'bn' && row.nameBn ? row.nameBn : row.nameEn;
-          return (
-            <li key={row.id} className="flex items-center gap-3">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white/10">
-                {row.iconUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={row.iconUrl} alt={name} className="h-full w-full object-cover" />
-                ) : (
-                  <span className="text-base font-bold text-brand-yellow-300">{name.charAt(0)}</span>
-                )}
-              </div>
-              <div className="min-w-0">
-                <p className="truncate text-sm font-bold">{name}</p>
-                {row.subtitle ? (
-                  <p className="truncate text-xs text-white/70">{row.subtitle}</p>
-                ) : null}
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-    </section>
+    <div className="space-y-3">
+      <div className="inline-flex rounded-lg border border-brand-divider bg-brand-surface p-0.5">
+        <button
+          type="button"
+          onClick={() => setSub('active')}
+          className={cn(
+            'rounded-md px-3 py-1 text-xs font-bold uppercase tracking-wider transition',
+            sub === 'active' ? 'bg-brand-paper text-brand-ink shadow-sm' : 'text-brand-inkMute',
+          )}
+        >
+          {bn ? `অ্যাক্টিভ (${active.length})` : `Active (${active.length})`}
+        </button>
+        <button
+          type="button"
+          onClick={() => setSub('past')}
+          className={cn(
+            'rounded-md px-3 py-1 text-xs font-bold uppercase tracking-wider transition',
+            sub === 'past' ? 'bg-brand-paper text-brand-ink shadow-sm' : 'text-brand-inkMute',
+          )}
+        >
+          {bn ? `অতীত (${past.length})` : `Past (${past.length})`}
+        </button>
+      </div>
+
+      {rows.length === 0 ? (
+        <p className="rounded-lg bg-brand-surface px-3 py-6 text-center text-sm text-brand-inkMute">
+          {sub === 'active'
+            ? (bn ? 'কোনো অ্যাক্টিভ টিকেট নেই। ডিপোজিট করুন এবং প্রতি 1,200 টাকায় 2টি টিকেট পান।' : 'No active tickets yet. Deposit 1,200 BDT to earn 2 tickets.')
+            : (bn ? 'এখনো কোনো অতীত টিকেট নেই।' : 'No past tickets yet.')}
+        </p>
+      ) : (
+        <div className="overflow-hidden rounded-lg border border-brand-divider">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-brand-surface text-[10px] uppercase tracking-wider text-brand-inkMute">
+              <tr>
+                <th className="px-3 py-2">{bn ? 'নং' : 'Number'}</th>
+                <th className="px-3 py-2">{bn ? 'ড্র' : 'Draw'}</th>
+                <th className="px-3 py-2 text-right">{bn ? 'স্ট্যাটাস' : 'Status'}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-brand-divider">
+              {rows.slice(0, 30).map((t) => (
+                <tr key={t.id} className="bg-brand-paper">
+                  <td className="px-3 py-2 font-bold tabular-nums text-brand-ink">{t.number}</td>
+                  <td className="px-3 py-2 text-xs text-brand-inkSoft">
+                    {t.draw?.name ?? '----'}
+                    {t.draw?.drawsAt ? (
+                      <span className="ml-1 text-brand-inkMute">({formatIsoDate(t.draw.drawsAt)})</span>
+                    ) : null}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <span className={cn(
+                      'inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider',
+                      t.status === 'won' && 'bg-emerald-500/15 text-emerald-700',
+                      t.status === 'issued' && 'bg-amber-500/15 text-amber-700',
+                      t.status === 'used' && 'bg-brand-surface text-brand-inkMute',
+                      t.status === 'voided' && 'bg-rose-500/15 text-rose-700',
+                    )}>
+                      {t.status}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   );
 }
 
-function SponsorList({ rows }: { rows: AmbassadorRow[] }) {
+// Past Results: dropdown of past published draws + full display for
+// the selected row (mirrors the headline prize cards + Special /
+// Consolation grids).
+function PastResultsTab({ results }: { results: PastResultRow[] }) {
   const { lang } = useLang();
-  if (rows.length === 0) return null;
+  const bn = lang === 'bn';
+  const [selectedId, setSelectedId] = useState<string | null>(results[0]?.id ?? null);
+
+  useEffect(() => {
+    // Auto-select the first option when the results list changes
+    // (initial load, locale switch, refetch).
+    if (results.length > 0 && !results.find((r) => r.id === selectedId)) {
+      setSelectedId(results[0].id);
+    }
+  }, [results, selectedId]);
+
+  const selected = useMemo(
+    () => results.find((r) => r.id === selectedId) ?? null,
+    [results, selectedId],
+  );
+
+  if (results.length === 0) {
+    return (
+      <p className="rounded-lg bg-brand-surface px-3 py-6 text-center text-sm text-brand-inkMute">
+        {bn ? 'এখনো কোনো অতীত ফলাফল প্রকাশিত হয়নি।' : 'No past results published yet.'}
+      </p>
+    );
+  }
+
   return (
-    <section className="rounded-xl border border-brand-divider bg-[#0F1115] px-4 py-5 text-white">
-      <h3 className="text-base font-extrabold text-brand-yellow-400">
-        {lang === 'bn' ? 'স্পনসরশিপ' : 'Sponsorships'}
-      </h3>
-      <ul className="mt-4 grid gap-3 sm:grid-cols-2">
-        {rows.map((row) => {
-          const name = lang === 'bn' && row.nameBn ? row.nameBn : row.nameEn;
+    <div className="space-y-3">
+      <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-brand-inkMute">
+        <span>{bn ? 'ড্র বেছে নিন' : 'Select draw'}</span>
+        <select
+          value={selectedId ?? ''}
+          onChange={(e) => setSelectedId(e.target.value)}
+          className="flex-1 rounded-lg border border-brand-divider bg-brand-paper px-3 py-2 text-sm font-bold text-brand-ink"
+        >
+          {results.map((r, idx) => (
+            <option key={r.id} value={r.id}>
+              {formatIsoDate(r.publishedAt)} | {r.drawName || `#${results.length - idx}`}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      {selected ? (
+        <div className="space-y-2">
+          <p className="text-sm font-extrabold text-brand-ink">
+            {bn ? `দিনের বিজয়ী ${formatWinnerDate(selected.publishedAt)}` : `Winner of the Day ${formatWinnerDate(selected.publishedAt)}`}
+          </p>
+          <div className="grid grid-cols-3 gap-2">
+            <PrizeCard label={bn ? '1ম পুরস্কার' : '1st Prize'} number={selected.winningNumber ?? null} tone="gold" />
+            <PrizeCard label={bn ? '2য় পুরস্কার' : '2nd Prize'} number={selected.extraNumbers?.second ?? null} tone="amber" />
+            <PrizeCard label={bn ? '3য় পুরস্কার' : '3rd Prize'} number={selected.extraNumbers?.third ?? null} tone="sand" />
+          </div>
+          <NumberGrid title={bn ? 'বিশেষ' : 'Special'} numbers={selected.extraNumbers?.specials ?? []} />
+          <NumberGrid title={bn ? 'সান্ত্বনা' : 'Consolation'} numbers={selected.extraNumbers?.consolations ?? []} />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function LottoTabsSection({ tickets, pastResults }: { tickets: TicketRow[]; pastResults: PastResultRow[] }) {
+  const { lang } = useLang();
+  const bn = lang === 'bn';
+  const [tab, setTab] = useState<'my-tickets' | 'past-results'>('my-tickets');
+
+  return (
+    <section className="overflow-hidden rounded-xl border border-brand-divider bg-brand-paper">
+      <div className="grid grid-cols-2">
+        {(['my-tickets', 'past-results'] as const).map((key) => {
+          const active = tab === key;
+          const label = key === 'my-tickets'
+            ? (bn ? 'আমার টিকেট' : 'My Tickets')
+            : (bn ? 'অতীত ফলাফল' : 'Past Results');
           return (
-            <li key={row.id} className="flex items-center gap-3">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white/10">
-                {row.iconUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={row.iconUrl} alt={name} className="h-full w-full object-contain" />
-                ) : (
-                  <span className="text-base font-bold text-brand-yellow-300">{name.charAt(0)}</span>
-                )}
-              </div>
-              <div className="min-w-0">
-                <p className="truncate text-sm font-bold">{name}</p>
-                {row.subtitle ? (
-                  <p className="truncate text-xs text-white/70">{row.subtitle}</p>
-                ) : null}
-              </div>
-            </li>
+            <button
+              key={key}
+              type="button"
+              onClick={() => setTab(key)}
+              className={cn(
+                'border-b-2 px-3 py-3 text-sm font-bold uppercase tracking-wider transition',
+                active
+                  ? 'border-brand-yellow-500 text-brand-ink'
+                  : 'border-transparent text-brand-inkMute hover:text-brand-ink',
+              )}
+            >
+              {label}
+            </button>
           );
         })}
-      </ul>
+      </div>
+      <div className="border-t border-brand-divider px-3 py-3 sm:px-4 sm:py-4">
+        {tab === 'my-tickets'
+          ? <MyTicketsTab tickets={tickets} />
+          : <PastResultsTab results={pastResults} />}
+      </div>
     </section>
   );
 }
@@ -335,10 +479,10 @@ export interface LottoBabuLayoutProps {
     lifetimeWinnings: number;
     hasClaimable: boolean;
   } | null;
-  /** Public ambassador rows for the bottom section. */
-  ambassadors: AmbassadorRow[];
-  /** Public sponsor rows for the bottom section. */
-  sponsors: AmbassadorRow[];
+  /** Signed-in user's tickets for the My Tickets tab. */
+  tickets: TicketRow[];
+  /** Past published draws for the Past Results tab. */
+  pastResults: PastResultRow[];
   /** Claim button handler. Optional; CTA disables when not provided. */
   onClaim?: () => void;
   /** Whether the claim button is processing. */
@@ -346,17 +490,23 @@ export interface LottoBabuLayoutProps {
 }
 
 export function LottoBabuLayout({
-  latest, nextDrawAt, me, ambassadors, sponsors, onClaim, claimBusy,
+  latest, nextDrawAt, me, tickets, pastResults, onClaim, claimBusy,
 }: LottoBabuLayoutProps) {
   const { lang } = useLang();
   const bn = lang === 'bn';
-  const dateLabel = latest ? formatWinnerDate(latest.publishedAt) : formatWinnerDate(null);
+  const hasLatest = !!latest;
+  const dateLabel = latest ? formatWinnerDate(latest.publishedAt) : null;
 
   return (
     <div className="space-y-3">
-      {/* Winner of the Day header */}
+      {/* Winner of the Day header. When the database has no published
+          results yet the header reads "Awaiting first draw" rather
+          than today's date, which used to read alongside dashes for
+          every prize and gave the impression the page was broken. */}
       <h2 className="text-lg font-extrabold text-brand-ink">
-        {bn ? `দিনের বিজয়ী ${dateLabel}` : `Winner of the Day ${dateLabel}`}
+        {hasLatest
+          ? (bn ? `দিনের বিজয়ী ${dateLabel}` : `Winner of the Day ${dateLabel}`)
+          : (bn ? 'প্রথম ড্রয়ের অপেক্ষায়' : 'Awaiting first draw')}
       </h2>
 
       {/* 1st / 2nd / 3rd prizes */}
@@ -415,9 +565,9 @@ export function LottoBabuLayout({
         </section>
       )}
 
-      {/* Brand Ambassadors + Sponsorships at the bottom */}
-      <AmbassadorList rows={ambassadors} />
-      <SponsorList rows={sponsors} />
+      {/* My Tickets and Past Results tabs (replaces the ambassador
+          and sponsor sections per client direction). */}
+      <LottoTabsSection tickets={tickets} pastResults={pastResults} />
     </div>
   );
 }

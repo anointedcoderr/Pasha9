@@ -2,13 +2,13 @@
 //
 // /lotto - public Lotto landing.
 //
-// Babu88-style flat layout (per client direction): Winner of the Day
-// header, 1st/2nd/3rd prize cards, Special grid, Consolation grid,
-// next-draw countdown, Earn Tickets CTA, per-user winnings + ticket
-// stats, brand ambassadors, sponsorships, and the FAQ accordion at
-// the bottom. The premium Cinzel + ball-tumbler + certificate
-// components were retired in favour of the conventional layout the
-// client signed off on.
+// Babu88-style flat layout: Winner of the Day header, 1st/2nd/3rd
+// prize cards, Special grid, Consolation grid, next-draw countdown,
+// Earn Tickets CTA, per-user winnings + ticket stats, a tabbed
+// My Tickets / Past Results section, and the FAQ accordion at the
+// bottom. The Brand Ambassadors and Sponsorship sections were
+// removed per client direction - the lotto page is strictly
+// lottery-related content now.
 
 'use client';
 
@@ -18,7 +18,7 @@ import { useLang } from '@/lib/i18n/context';
 import { ChevronDown, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { triggerWalletRefresh } from '@/components/site/WalletStrip';
-import { LottoBabuLayout, type AmbassadorRow } from '@/components/site/LottoBabuLayout';
+import { LottoBabuLayout, type PastResultRow, type TicketRow } from '@/components/site/LottoBabuLayout';
 
 interface LiveDraw {
   id: string;
@@ -57,7 +57,15 @@ interface MeResponse {
   };
   lottoBalance: number;
   nextDrawAt?: string | null;
-  tickets: Array<{ id: string; status: string }>;
+  tickets: Array<{
+    id: string;
+    number: string;
+    status: string;
+    source?: string | null;
+    drawId: string | null;
+    generatedAt: string;
+    draw: { id: string; name: string; drawsAt: string | null } | null;
+  }>;
   winnings: Array<{
     id: string;
     amount: number;
@@ -134,9 +142,8 @@ export default function LottoPage() {
   const [draws, setDraws] = useState<LiveDraw[]>([]);
   const [latest, setLatest] = useState<ResultRow | null>(null);
   const [previousResult, setPreviousResult] = useState<ResultRow | null>(null);
+  const [pastResults, setPastResults] = useState<ResultRow[]>([]);
   const [me, setMe] = useState<MeResponse | null>(null);
-  const [ambassadors, setAmbassadors] = useState<AmbassadorRow[]>([]);
-  const [sponsors, setSponsors] = useState<AmbassadorRow[]>([]);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [claimBusy, setClaimBusy] = useState(false);
 
@@ -158,29 +165,24 @@ export default function LottoPage() {
       })
       .catch(() => {});
 
-    // Pull the latest two published results: the newest powers the
-    // Winner of the Day block, the second-newest is what the
-    // "Last Draw Winning Tickets" stat counts against.
-    fetch('/api/content/lotto/results?take=2')
+    // Pull the last 60 published results in one shot. The newest
+    // (arr[0]) powers the Winner of the Day block, the second-newest
+    // is what the "Last Draw Winning Tickets" stat counts against,
+    // and the full list feeds the Past Results tab's dropdown.
+    // take=60 gives roughly two months of daily draws, enough for
+    // the historical browser without paging.
+    fetch('/api/content/lotto/results?take=60')
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (!alive) return;
         const arr = Array.isArray(data?.results) ? (data.results as ResultRow[]) : [];
         setLatest(arr[0] ?? null);
         setPreviousResult(arr[1] ?? null);
+        setPastResults(arr);
       })
       .catch(() => {});
 
     loadMe();
-
-    fetch('/api/content/about-display')
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (!alive) return;
-        setAmbassadors(Array.isArray(data?.ambassadors) ? (data.ambassadors as AmbassadorRow[]) : []);
-        setSponsors(Array.isArray(data?.sponsors) ? (data.sponsors as AmbassadorRow[]) : []);
-      })
-      .catch(() => {});
 
     return () => { alive = false; };
   }, [loadMe]);
@@ -263,8 +265,8 @@ export default function LottoPage() {
         latest={layoutLatest}
         nextDrawAt={nextDrawAt}
         me={meBlock}
-        ambassadors={ambassadors}
-        sponsors={sponsors}
+        tickets={(me?.tickets ?? []) as TicketRow[]}
+        pastResults={(pastResults as unknown) as PastResultRow[]}
         onClaim={onClaim}
         claimBusy={claimBusy}
       />
