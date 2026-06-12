@@ -39,6 +39,9 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
       if (msg === 'DRAW_NOT_SETTLED') {
         return jsonError(409, 'DRAW_NOT_SETTLED', 'This draw has not been settled yet. Score-orphans only runs after a draw has a published winning number.');
       }
+      if (msg === 'LOTTO_ORPHANS_ALREADY_SCORED') {
+        return jsonError(409, 'ORPHANS_ALREADY_SCORED', 'Another scoring pass already claimed these tickets (double click or a second admin). No double credit happened - refresh the draw list to see the result of the first run.');
+      }
       console.error('[admin/lotto/score-orphans] failed', err);
       return jsonError(500, 'SCORE_FAILED', msg);
     }

@@ -256,33 +256,24 @@ export async function accrueLotteryTickets(userId: string): Promise<{ generated:
   const blockAmount = settings.ticketRateAmount;
   const ticketsPerBlock = settings.ticketRateCount;
 
-  // findOpenDraw runs outside the transaction below because the
-  // open-draw lookup is not racy in a harmful way: even if the
-  // chosen draw closes between this read and the createMany, the
-  // tickets simply target a draw that has just transitioned, which
-  // the rollover catches on the next cron tick.
-  //
-  // CRITICAL: if no draw is available (fresh install, every prior
-  // draw already settled, operator deleted them all), fall through
-  // to ensureDefaultDailyDraw so the new tickets always get a
-  // drawId. Without this fallback, tickets were stored with
-  // drawId=null and never picked up by settle, which is the
-  // "ticket matched the winning number but I got 0 credit" bug
-  // the operator reported on production.
-  // Resolve drawId. The audit flagged a critical edge case: a
-  // redundant findUnique after ensureDefaultDailyDraw could return
-  // null under replication lag or a delete race, producing a
-  // tickets-created-with-drawId=null bug. We now trust the id that
-  // ensureDefaultDailyDraw guarantees and skip the extra read.
-  let openDraw = await findOpenDraw();
-  let drawId: string | null = null;
-  if (openDraw) {
-    drawId = openDraw.id;
-  } else {
+  // Pre-resolve a candidate open draw OUTSIDE the transaction (the
+  // lookup loads settings and applies the cutoff window - cheap
+  // reads, no writes). The candidate is RE-VALIDATED inside the
+  // transaction below before any ticket is written: a draw that
+  // settles or closes between this read and the write is rejected
+  // there, so tickets can no longer attach to a just-settled draw
+  // and silently miss scoring (the "ticket matched the winning
+  // number but I got 0 credit" race). Should the narrow
+  // re-check-to-commit window still lose a race, rolloverDraws()
+  // re-attaches issued tickets stuck on settled draws to the next
+  // open draw, so the failure self-heals on the next cron tick.
+  const candidate = await findOpenDraw();
+  let candidateId: string | null = candidate?.id ?? null;
+  if (!candidateId) {
     const ensured = await ensureDefaultDailyDraw();
-    drawId = ensured.draw.id;
+    candidateId = ensured.draw.id;
   }
-  if (!drawId) {
+  if (!candidateId) {
     // Defensive: ensureDefaultDailyDraw should always return an id;
     // if it did not, do not proceed - bubble up so the caller sees
     // a real error instead of silently creating orphan tickets.
@@ -296,6 +287,28 @@ export async function accrueLotteryTickets(userId: string): Promise<{ generated:
   // moment two admins approve deposits at once for the same
   // player.
   return db.$transaction(async (tx) => {
+    // Re-validate the candidate draw under the transaction: it must
+    // still be active, unsettled and not closed at the moment the
+    // tickets are written. Falls back to any other open draw, then
+    // to seeding the canonical daily draw, so tickets always end up
+    // with an OPEN drawId.
+    let open = await tx.lottoDraw.findFirst({
+      where: { id: candidateId, status: 'active', result: { is: null }, closedAt: null },
+      select: { id: true },
+    });
+    if (!open) {
+      open = await tx.lottoDraw.findFirst({
+        where: { status: 'active', result: { is: null }, closedAt: null },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true },
+      });
+    }
+    if (!open) {
+      const ensured = await ensureDefaultDailyDraw(tx);
+      open = { id: ensured.draw.id };
+    }
+    const drawId = open.id;
+
     const agg = await tx.deposit.aggregate({
       where: { userId, status: 'approved' },
       _sum: { amount: true },
@@ -462,6 +475,10 @@ export async function settleDraw(input: SettleInput): Promise<SettleResult> {
         totalWinners,
         totalPaid: new Prisma.Decimal(totalPaid),
         extraNumbers: extraNumbersJson ?? Prisma.JsonNull,
+        // Pin the effective claim mode on the result so late scoring
+        // passes (score-orphans) credit winners the same way this
+        // settlement did.
+        claimMode,
       },
     });
 
@@ -480,7 +497,13 @@ export async function settleDraw(input: SettleInput): Promise<SettleResult> {
       });
     }
 
-    // Mark every issued ticket from this draw as either "won" or "lost".
+    // Mark every SCORED ticket as either "won" or "lost". The lost
+    // flip is scoped to the ids read above rather than a blanket
+    // { drawId, status: 'issued' } filter: a ticket accrued onto this
+    // draw after the read would otherwise be flipped to "lost"
+    // without ever being scored against the winning number. Left as
+    // 'issued', the rolloverDraws() sweep re-attaches it to the next
+    // open draw where it competes normally.
     const winningTicketIds = winningCalcs.map((row) => row.ticket.id);
     if (winningTicketIds.length > 0) {
       await tx.lotteryTicket.updateMany({
@@ -488,10 +511,12 @@ export async function settleDraw(input: SettleInput): Promise<SettleResult> {
         data: { status: 'won' },
       });
     }
-    await tx.lotteryTicket.updateMany({
-      where: { drawId: draw.id, status: 'issued' },
-      data: { status: 'lost' },
-    });
+    if (tickets.length > 0) {
+      await tx.lotteryTicket.updateMany({
+        where: { id: { in: tickets.map((t) => t.id) }, status: 'issued' },
+        data: { status: 'lost' },
+      });
+    }
 
     // In auto-credit mode the wallet is bumped here. In manual mode
     // we leave Wallet.lottoBalance untouched; the player walks each
@@ -537,9 +562,16 @@ export async function settleDraw(input: SettleInput): Promise<SettleResult> {
  * against an already-settled draw's result. This is the recovery path for the
  * "tickets matched the winning number but no credit" scenario, which happens
  * when tickets were generated before the draw existed (drawId=null) and the
- * operator later settled the draw with 0 attached tickets. Idempotent: a
- * second run finds 0 unscored issued rows because the first run flipped
- * everything to won/lost.
+ * operator later settled the draw with 0 attached tickets.
+ *
+ * Concurrency-safe idempotency: the orphan read AND the status flips
+ * run inside one transaction, and every updateMany carries a
+ * status='issued' guard with a count check. If two runs race (double
+ * click, two admins), the loser's guarded update matches fewer rows
+ * than it read, throws LOTTO_ORPHANS_ALREADY_SCORED and rolls back -
+ * so wallets are credited exactly once. The unique index on
+ * LotteryWinning.ticketId is the database-level backstop for the
+ * same guarantee.
  *
  * Behaviour mirrors settleDraw's matching + credit path:
  *   - attach orphan tickets to this draw
@@ -559,19 +591,6 @@ export async function scoreOrphanTicketsAgainstResult(input: {
   if (!draw.result) throw new Error('DRAW_NOT_SETTLED');
   const result = draw.result;
 
-  const orphans = await db.lotteryTicket.findMany({
-    where: {
-      status: 'issued',
-      OR: [
-        { drawId: null },
-        { drawId: input.drawId },
-      ],
-    },
-  });
-  if (orphans.length === 0) {
-    return { attached: 0, scored: 0, winners: 0, paid: 0, alreadySettled: true };
-  }
-
   const prizes: PrizeStructure = {
     baseValue: Number(result.ticketBaseValue),
     firstMult: Number(result.prize1xMult),
@@ -581,44 +600,65 @@ export async function scoreOrphanTicketsAgainstResult(input: {
     consoMult: Number(result.prizeConsoMult),
   };
 
-  const calcs = orphans.map((t) => ({
-    ticket: t,
-    calc: computePrizeForTicket(t.number, result.winningNumber, prizes),
-  }));
-  const winners = calcs.filter((r) => r.calc.tier !== 'none');
-  const losers = calcs.filter((r) => r.calc.tier === 'none');
-  const totalPaid = winners.reduce((sum, w) => sum + w.calc.amount, 0);
-
-  // Per-user aggregate so each user's wallet is bumped once even if
-  // they had multiple winning tickets.
-  const perUser = new Map<string, number>();
-  for (const w of winners) {
-    perUser.set(w.ticket.userId, (perUser.get(w.ticket.userId) ?? 0) + w.calc.amount);
-  }
-
-  const settings = await loadLottoSettings();
-  const claimMode = settings.claimMode;
+  // The result row pins the claim mode that took effect when the draw
+  // settled, so this late pass credits winners the same way the
+  // original settlement did - NOT whatever the global
+  // lotto_claim_mode happens to be today.
+  const claimMode: 'auto' | 'manual' = result.claimMode === 'manual' ? 'manual' : 'auto';
   const winningStatus = claimMode === 'manual' ? 'pending_credit' : 'credited';
 
-  await db.$transaction(async (tx) => {
-    // 1. Attach orphans to this draw.
-    await tx.lotteryTicket.updateMany({
-      where: { id: { in: orphans.map((o) => o.id) } },
-      data: { drawId: input.drawId },
+  return db.$transaction(async (tx) => {
+    const orphans = await tx.lotteryTicket.findMany({
+      where: {
+        status: 'issued',
+        OR: [
+          { drawId: null },
+          { drawId: input.drawId },
+        ],
+      },
     });
+    if (orphans.length === 0) {
+      return { attached: 0, scored: 0, winners: 0, paid: 0, alreadySettled: true };
+    }
 
-    // 2. Flip ticket status.
+    const calcs = orphans.map((t) => ({
+      ticket: t,
+      calc: computePrizeForTicket(t.number, result.winningNumber, prizes),
+    }));
+    const winners = calcs.filter((r) => r.calc.tier !== 'none');
+    const losers = calcs.filter((r) => r.calc.tier === 'none');
+    const totalPaid = winners.reduce((sum, w) => sum + w.calc.amount, 0);
+
+    // Per-user aggregate so each user's wallet is bumped once even if
+    // they had multiple winning tickets.
+    const perUser = new Map<string, number>();
+    for (const w of winners) {
+      perUser.set(w.ticket.userId, (perUser.get(w.ticket.userId) ?? 0) + w.calc.amount);
+    }
+
+    // 1+2. Attach orphans to this draw and flip their status in one
+    // guarded write per outcome. The status='issued' guard plus the
+    // count check is the double-credit lock: a concurrent run that
+    // already claimed any of these rows makes the count fall short,
+    // which aborts and rolls back this entire transaction before any
+    // wallet is touched.
     if (winners.length > 0) {
-      await tx.lotteryTicket.updateMany({
-        where: { id: { in: winners.map((w) => w.ticket.id) } },
-        data: { status: 'won' },
+      const claimed = await tx.lotteryTicket.updateMany({
+        where: { id: { in: winners.map((w) => w.ticket.id) }, status: 'issued' },
+        data: { drawId: input.drawId, status: 'won' },
       });
+      if (claimed.count !== winners.length) {
+        throw new Error('LOTTO_ORPHANS_ALREADY_SCORED');
+      }
     }
     if (losers.length > 0) {
-      await tx.lotteryTicket.updateMany({
-        where: { id: { in: losers.map((r) => r.ticket.id) } },
-        data: { status: 'lost' },
+      const claimed = await tx.lotteryTicket.updateMany({
+        where: { id: { in: losers.map((r) => r.ticket.id) }, status: 'issued' },
+        data: { drawId: input.drawId, status: 'lost' },
       });
+      if (claimed.count !== losers.length) {
+        throw new Error('LOTTO_ORPHANS_ALREADY_SCORED');
+      }
     }
 
     // 3. LotteryWinning rows for every winner.
@@ -665,15 +705,15 @@ export async function scoreOrphanTicketsAgainstResult(input: {
         },
       });
     }
-  });
 
-  return {
-    attached: orphans.length,
-    scored: calcs.length,
-    winners: winners.length,
-    paid: round2(totalPaid),
-    alreadySettled: true,
-  };
+    return {
+      attached: orphans.length,
+      scored: calcs.length,
+      winners: winners.length,
+      paid: round2(totalPaid),
+      alreadySettled: true,
+    };
+  }, { timeout: 30_000 });
 }
 
 /**
@@ -785,9 +825,14 @@ function nextDailyDrawAt(): Date {
  *   - the admin "Create Daily 4D Draw" empty-state button
  *   - rolloverDraws(), so a misconfigured deploy self-heals on the
  *     first cron tick
+ *   - accrueLotteryTickets(), which passes its transaction client so
+ *     the seeded draw is created atomically with the tickets that
+ *     need it
  */
-export async function ensureDefaultDailyDraw(): Promise<{ draw: { id: string; name: string; drawsAt: Date | null }; created: boolean }> {
-  const existing = await db.lottoDraw.findFirst({
+export async function ensureDefaultDailyDraw(
+  client: Prisma.TransactionClient | typeof db = db,
+): Promise<{ draw: { id: string; name: string; drawsAt: Date | null }; created: boolean }> {
+  const existing = await client.lottoDraw.findFirst({
     where: {
       name: DEFAULT_DAILY_DRAW.name,
       status: 'active',
@@ -800,7 +845,7 @@ export async function ensureDefaultDailyDraw(): Promise<{ draw: { id: string; na
     return { draw: { id: existing.id, name: existing.name, drawsAt: existing.drawsAt }, created: false };
   }
   const drawsAt = nextDailyDrawAt();
-  const created = await db.lottoDraw.create({
+  const created = await client.lottoDraw.create({
     data: {
       name: DEFAULT_DAILY_DRAW.name,
       schedule: DEFAULT_DAILY_DRAW.schedule,
@@ -843,6 +888,7 @@ export async function rolloverDraws(): Promise<{
   activeAfter: number;
   defaultSeeded: boolean;
   defaultDrawId: string | null;
+  rescued: number;
   message: string;
 }> {
   const now = new Date();
@@ -927,12 +973,40 @@ export async function rolloverDraws(): Promise<{
     }
   }
 
+  // Rescue sweep, every tick: tickets that are still 'issued' but
+  // point at a draw that already HAS a result can never be scored by
+  // that draw's settlement - they raced onto it in the moment it was
+  // being settled. Re-attach them (plus any drawId=null stragglers
+  // that survived the paths above) to an open draw so they compete
+  // in the next settlement. Draws that are merely closed and awaiting
+  // their settle keep their tickets.
+  let rescued = 0;
+  const rescueTarget = await db.lottoDraw.findFirst({
+    where: { status: 'active', result: { is: null }, closedAt: null },
+    orderBy: { createdAt: 'desc' },
+    select: { id: true },
+  });
+  if (rescueTarget) {
+    const sweep = await db.lotteryTicket.updateMany({
+      where: {
+        status: 'issued',
+        OR: [
+          { drawId: null },
+          { draw: { is: { result: { isNot: null } } } },
+        ],
+      },
+      data: { drawId: rescueTarget.id },
+    });
+    rescued = sweep.count;
+  }
+
   const messageParts: string[] = [];
   if (closedIds.length) messageParts.push(`closed ${closedIds.length}`);
   if (seededIds.length) messageParts.push(`seeded ${seededIds.length} next-day`);
   if (defaultSeeded) messageParts.push('seeded canonical Daily 4D (no active draw existed)');
-  if (!closedIds.length && !seededIds.length && !defaultSeeded) {
-    messageParts.push('no past-due draws found; nothing to close or seed');
+  if (rescued) messageParts.push(`rescued ${rescued} stranded ticket(s) onto an open draw`);
+  if (!closedIds.length && !seededIds.length && !defaultSeeded && !rescued) {
+    messageParts.push('no past-due draws found; nothing to close, seed or rescue');
   }
 
   return {
@@ -943,6 +1017,7 @@ export async function rolloverDraws(): Promise<{
     activeAfter,
     defaultSeeded,
     defaultDrawId,
+    rescued,
     message: messageParts.join(' . '),
   };
 }

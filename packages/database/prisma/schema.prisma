@@ -1197,6 +1197,11 @@ model LotteryDrawResult {
   //     specials?: string[], consolations?: string[] }
   // Null when only the canonical winning number was published.
   extraNumbers      Json?
+  // The claim mode that took effect for THIS settlement ('auto' |
+  // 'manual'). Persisted so late scoring passes (score-orphans)
+  // credit winners the same way the original settle did, instead of
+  // whatever the global lotto_claim_mode happens to be at that time.
+  claimMode         String    @default("auto")
 
   draw      LottoDraw         @relation(fields: [drawId], references: [id])
   winnings  LotteryWinning[]
@@ -1212,7 +1217,11 @@ model LotteryWinning {
   id           String   @id @default(cuid())
   userId       String
   resultId     String
-  ticketId     String?
+  // Unique so a ticket can never be paid twice, even if two scoring
+  // passes race each other (settle vs score-orphans, double admin
+  // click). NULLs are exempt (Postgres), which keeps legacy /
+  // manual-award rows without a ticket reference valid.
+  ticketId     String?  @unique
   ticketNumber String
   prizeTier    String   // first_exact | first_ibox | second | third | special | consolation
   amount       Decimal  @db.Decimal(14, 2)
