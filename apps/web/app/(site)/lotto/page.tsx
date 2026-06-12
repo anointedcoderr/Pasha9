@@ -222,6 +222,49 @@ export default function LottoPage() {
     setWinPopup(null);
   }, [winPopup]);
 
+  // Background polling for /api/lotto/me so a settle that lands while
+  // the player is sitting on /lotto surfaces the win popup + the
+  // updated lottoBalance without requiring a manual refresh. The
+  // poll runs every 30 seconds while the tab is visible and pauses
+  // when the tab is backgrounded so we do not burn network on
+  // sleeping devices. We also re-poll the moment the tab returns to
+  // the foreground so the celebration appears immediately on tab
+  // switch back. Without this, players who logged in 10 minutes
+  // before the 7:30 PM draw watched the countdown hit zero and
+  // then saw nothing - the audit traced the symptom to this exact
+  // gap.
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    let alive = true;
+    let id: number | null = null;
+    const tick = () => { if (alive) void loadMe(); };
+    const start = () => {
+      if (id != null) return;
+      id = window.setInterval(tick, 30_000);
+    };
+    const stop = () => {
+      if (id == null) return;
+      window.clearInterval(id);
+      id = null;
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') { tick(); start(); }
+      else stop();
+    };
+    if (document.visibilityState === 'visible') start();
+    document.addEventListener('visibilitychange', onVisibility);
+    // Also refresh after a deposit / wallet event since both flows
+    // can produce new tickets that should appear in Active.
+    const onWalletRefresh = () => tick();
+    window.addEventListener('pasha9:wallet-refresh', onWalletRefresh);
+    return () => {
+      alive = false;
+      stop();
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pasha9:wallet-refresh', onWalletRefresh);
+    };
+  }, [loadMe]);
+
   useEffect(() => {
     let alive = true;
     fetch('/api/content/lotto')

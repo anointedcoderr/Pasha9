@@ -75,9 +75,25 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         meta: { winningNumber: parsed.data.winningNumber, ...result },
       });
 
-      return jsonOk({ ok: true, ...result });
+      // Surface a clear warning when the settle landed but no ticket
+      // matched - the operator needs to know this happened so they
+      // can investigate (wrong drawId, ticket attached to a
+      // different draw, drawid=null orphans) before assuming the
+      // engine is broken. Without this flag the admin UI shows
+      // "settled" with no indication that 0 BDT went out.
+      const warning = result.totalWinners === 0
+        ? 'Settled successfully but ZERO tickets matched. If you expected winners, the tickets are probably attached to a different draw or are still orphaned. Click "Score orphans" on this draw card to score any drawId=null tickets against this result.'
+        : null;
+
+      return jsonOk({ ok: true, ...result, warning });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Settle failed';
+      if (message === 'DRAW_ALREADY_SETTLED') {
+        return jsonError(409, 'DRAW_ALREADY_SETTLED', 'This draw has already been settled. Re-running settle is not allowed.');
+      }
+      if (message === 'WINNING_NUMBER_INVALID') {
+        return jsonError(400, 'WINNING_NUMBER_INVALID', 'Winning number must be exactly 4 digits.');
+      }
       return jsonError(400, 'SETTLE_FAILED', message);
     }
   });

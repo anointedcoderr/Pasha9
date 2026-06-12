@@ -148,20 +148,42 @@ export interface PrizeStructure {
  * Score one ticket against the winning number across all 6 tiers.
  * Returns the single highest-paying tier (no double-pay across tiers).
  * Precedence: 1st_exact > 1st_ibox > special > 2nd > 3rd > consolation.
+ *
+ * Defensive trims: tickets stored with stray whitespace (operator
+ * pasted "1234 " into the admin generator, or a database export
+ * round-trip preserved a trailing newline) would silently fail
+ * every === / .slice comparison below and return tier='none' even
+ * though the digits matched. The audit flagged this as a real
+ * source of "ticket matched but I got no credit" reports.
  */
-export function computePrizeForTicket(ticket: string, winning: string, prizes: PrizeStructure): PrizeCalc {
+export function computePrizeForTicket(rawTicket: string, rawWinning: string, prizes: PrizeStructure): PrizeCalc {
+  const ticket = (rawTicket ?? '').trim();
+  const winning = (rawWinning ?? '').trim();
   if (ticket.length !== winning.length) return { tier: 'none', amount: 0 };
 
   // 1st exact
   if (ticket === winning) {
     return { tier: 'first_exact', amount: round2(prizes.baseValue * prizes.firstMult) };
   }
-  // 1st iBox (same multiset, different order)
+  // 1st iBox (same multiset, different order). When every digit in
+  // the winning number is identical (e.g. "1111"), uniquePermutations
+  // is 1 and iBox is mathematically impossible - if it were a match
+  // it would have been caught by the exact branch above. The audit
+  // flagged a fallthrough where the function dropped into the
+  // "special" check on the same ticket; making the no-op explicit
+  // closes that path.
   if (isPermutation(ticket, winning)) {
     const unique = uniquePermutations(winning);
     if (unique > 1) {
       return { tier: 'first_ibox', amount: round2((prizes.baseValue * prizes.firstMult) / unique) };
     }
+    // unique === 1: ticket digits permute to the winning digits, but
+    // there is only one permutation - which the exact branch already
+    // handled. If we got here, the exact comparison disagreed with
+    // the permutation comparison, which can only happen on different
+    // strings of identical multisets of length 1+ (impossible for
+    // unique === 1). Treat as no-match rather than fall through.
+    return { tier: 'none', amount: 0 };
   }
   // Special: first 2 digits exact (and not already qualified above)
   if (prizes.specialMult > 0 && ticket.slice(0, 2) === winning.slice(0, 2)) {
@@ -247,12 +269,25 @@ export async function accrueLotteryTickets(userId: string): Promise<{ generated:
   // drawId=null and never picked up by settle, which is the
   // "ticket matched the winning number but I got 0 credit" bug
   // the operator reported on production.
+  // Resolve drawId. The audit flagged a critical edge case: a
+  // redundant findUnique after ensureDefaultDailyDraw could return
+  // null under replication lag or a delete race, producing a
+  // tickets-created-with-drawId=null bug. We now trust the id that
+  // ensureDefaultDailyDraw guarantees and skip the extra read.
   let openDraw = await findOpenDraw();
-  if (!openDraw) {
+  let drawId: string | null = null;
+  if (openDraw) {
+    drawId = openDraw.id;
+  } else {
     const ensured = await ensureDefaultDailyDraw();
-    openDraw = await db.lottoDraw.findUnique({ where: { id: ensured.draw.id } });
+    drawId = ensured.draw.id;
   }
-  const drawId = openDraw?.id ?? null;
+  if (!drawId) {
+    // Defensive: ensureDefaultDailyDraw should always return an id;
+    // if it did not, do not proceed - bubble up so the caller sees
+    // a real error instead of silently creating orphan tickets.
+    throw new Error('LOTTO_NO_OPEN_DRAW_AVAILABLE');
+  }
 
   // Atomize the (count, target, create) pipeline so two concurrent
   // deposit approvals for the same user cannot both observe
