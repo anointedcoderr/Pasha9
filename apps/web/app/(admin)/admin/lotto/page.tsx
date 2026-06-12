@@ -639,7 +639,7 @@ export default function AdminLottoPage() {
                           const j = await r.json();
                           if (!r.ok) throw new Error(j?.message ?? j?.code ?? 'Failed');
                           alert(`Done. Attached ${j.attached} ticket(s), ${j.winners} winner(s), ${j.paid} BDT credited.`);
-                          await load();
+                          await refresh();
                         } catch (e) {
                           alert(`Score orphans failed: ${e instanceof Error ? e.message : String(e)}`);
                         }
