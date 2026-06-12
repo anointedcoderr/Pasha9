@@ -90,10 +90,31 @@ export function FirstVisitAuthPopup() {
     if (freq === 'once_per_session' && hasSeenSession()) return;
     if ((freq === 'once_per_day' || freq === 'once_per_30_days') && hasSeenCookie()) return;
 
+    // The first-visit popup only ever opens when /api/auth/me
+    // returns a confirmed-guest response (HTTP 200 with user=null
+    // or HTTP 401). Any transient failure - network blip, 5xx, the
+    // brief window during a soft-routing back-navigation where the
+    // session cookie has not yet round-tripped - is treated as
+    // "uncertain, do nothing" rather than "user is a guest, show
+    // the popup". Without that guard, a real player who pressed
+    // back after a navigation could see the Join Pasha 9 popup
+    // flash for ~1.2s on top of their authenticated session.
     let cancelled = false;
-    fetch('/api/auth/me', { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
+    fetch('/api/auth/me', { cache: 'no-store', credentials: 'include' })
+      .then(async (r) => {
+        if (cancelled) return;
+        if (!r.ok) {
+          if (r.status === 401) {
+            // Confirmed guest.
+            const id = window.setTimeout(() => { if (!cancelled) setOpen(true); }, SHOW_DELAY_MS);
+            return () => window.clearTimeout(id);
+          }
+          // 5xx / network blip - do nothing, do NOT mark seen so a
+          // future fresh load can still surface the popup if the
+          // operator wanted it.
+          return;
+        }
+        const data = await r.json().catch(() => null);
         if (cancelled) return;
         if (data?.user) {
           setSeen(freq);
@@ -102,7 +123,7 @@ export function FirstVisitAuthPopup() {
         const id = window.setTimeout(() => { if (!cancelled) setOpen(true); }, SHOW_DELAY_MS);
         return () => window.clearTimeout(id);
       })
-      .catch(() => {});
+      .catch(() => { /* network failure - do nothing */ });
     return () => { cancelled = true; };
   }, [config]);
 

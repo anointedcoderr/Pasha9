@@ -65,14 +65,41 @@ export function Header() {
   // after refresh" report).
   const [authLoaded, setAuthLoaded] = useState(false);
 
-  // Open auth modal from query params (?login=1 or ?signup=1) used by drawer + bottom nav
+  // Open auth modal from query params (?login=1 or ?signup=1) used by
+  // drawer + bottom nav.
+  //
+  // This effect was the source of the "logged in user sees login
+  // popup after pressing back" report. The original implementation
+  // fired whenever the URL carried login=1 or signup=1 with no
+  // regard for whether the player was already authenticated and
+  // never stripped the trigger from the URL once it had been
+  // consumed. So a guest clicking deposit, landing on /?login=1,
+  // logging in, navigating to /dashboard, and then pressing back
+  // returned the browser to /?login=1 - the previous history entry -
+  // which re-fired this effect and re-opened the login dialog on
+  // an already-authenticated session.
+  //
+  // The fix waits for the initial /api/auth/me probe (authLoaded),
+  // strips the trigger param via history.replaceState so the URL
+  // can never re-trigger again on a subsequent back-navigation,
+  // and only opens the dialog when the user is actually a guest
+  // (me is null after the probe).
   useEffect(() => {
+    if (!authLoaded) return;
     const l = params?.get('login');
     const s = params?.get('signup');
+    if (l !== '1' && s !== '1') return;
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('login');
+      url.searchParams.delete('signup');
+      window.history.replaceState({}, '', url.toString());
+    }
+    if (me) return;
     if (l === '1') { setTab('login'); auth.onOpen(); }
     else if (s === '1') { setTab('signup'); auth.onOpen(); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params?.get('login'), params?.get('signup')]);
+  }, [params?.get('login'), params?.get('signup'), authLoaded, me]);
 
   // Same-page event channel for components (WalletStrip guest card,
   // etc) that need to open the modal without relying on a search-param
