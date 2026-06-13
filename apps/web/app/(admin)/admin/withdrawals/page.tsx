@@ -12,7 +12,7 @@ import { Modal, Drawer } from '@/components/ui/Modal';
 import { FormField, Input, Textarea } from '@/components/ui/Input';
 import { formatBDT, formatDateTime } from '@/lib/utils/format';
 import { useLang } from '@/lib/i18n/context';
-import { ArrowUpToLine, CheckCircle2, XCircle, BanknoteIcon, PauseCircle, PlayCircle, History, Eye } from 'lucide-react';
+import { ArrowUpToLine, CheckCircle2, XCircle, BanknoteIcon, PauseCircle, PlayCircle, History, Eye, Zap } from 'lucide-react';
 import type { ColumnDef } from '@tanstack/react-table';
 
 interface WithdrawalRow {
@@ -74,6 +74,17 @@ export default function AdminWithdrawalsPage() {
   const [paidNote, setPaidNote] = useState('');
   const [paidProviderKey, setPaidProviderKey] = useState('manual');
 
+  // ChaopaoPay payout state. The Send via ChaopaoPay button only
+  // surfaces when the operator has enabled the gateway in
+  // /admin/payments AND the withdrawal's method maps to a
+  // ChaopaoPay-supported channel (bKash or Nagad). chaopaopayBusyId
+  // disables the button on the row currently being sent so a
+  // double-click cannot fire two payouts (the backend already has a
+  // state-race guard, but UI guarding is friendlier).
+  const [chaopaopayAvailable, setChaopaopayAvailable] = useState(false);
+  const [chaopaopayMethods, setChaopaopayMethods] = useState<string[]>([]);
+  const [chaopaopayBusyId, setChaopaopayBusyId] = useState<string | null>(null);
+
   const [drawerId, setDrawerId] = useState<string | null>(null);
   const [drawerData, setDrawerData] = useState<DetailPayload['withdrawal'] | null>(null);
   const [drawerLoading, setDrawerLoading] = useState(false);
@@ -93,6 +104,25 @@ export default function AdminWithdrawalsPage() {
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  // Probe the ChaopaoPay availability endpoint on mount. The Send
+  // via ChaopaoPay button is gated on this so the page does not
+  // surface a button that would 502 if the operator has not enabled
+  // the gateway in /admin/payments yet.
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/payments/chaopaopay/availability', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!alive || !j) return;
+        if (j.available) {
+          setChaopaopayAvailable(true);
+          setChaopaopayMethods(Array.isArray(j.methods) ? j.methods.filter((m: unknown): m is string => typeof m === 'string') : []);
+        }
+      })
+      .catch(() => { /* probe is best-effort */ });
+    return () => { alive = false; };
+  }, []);
 
   // Load the detail drawer when a row is selected.
   useEffect(() => {
@@ -136,6 +166,67 @@ export default function AdminWithdrawalsPage() {
       setToast({ kind: 'err', text: e instanceof Error ? e.message : 'Action failed' });
       setTimeout(() => setToast(null), 4500);
     }
+  };
+
+  // Send the approved withdrawal out via ChaopaoPay's payout API.
+  // The backend endpoint at
+  // /api/admin/payments/chaopaopay/send-payout/[withdrawalId] is
+  // idempotent: a second click on the same row gets back
+  // alreadyInitiated and no double-send happens. On success the row
+  // transitions to processingState='payout_initiated' and the actual
+  // 'paid' flip is owned by the payout webhook. The operator
+  // explicitly clicks this (two-click flow) so they can double-check
+  // the account number on the row before money leaves.
+  const sendViaChaopaoPay = async (r: WithdrawalRow) => {
+    if (chaopaopayBusyId) return;
+    const accountConfirm = window.confirm(
+      `Send BDT ${formatBDT(r.amount)} to ${r.accountName} (${r.accountNumber}) via ChaopaoPay ${r.method}?\n\n` +
+      'This will call ChaopaoPay payout API. The actual settlement to bKash/Nagad happens after the gateway processes the payout (usually within 1-2 minutes).',
+    );
+    if (!accountConfirm) return;
+    setChaopaopayBusyId(r.id);
+    try {
+      const res = await fetch(`/api/admin/payments/chaopaopay/send-payout/${r.id}`, { method: 'POST' });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        const msg = data?.message ?? data?.code ?? 'ChaopaoPay payout failed';
+        throw new Error(msg);
+      }
+      if (data?.alreadyInitiated) {
+        setToast({ kind: 'ok', text: `Already initiated for ${r.username}. Waiting for the gateway webhook to confirm.` });
+      } else if (data?.alreadyPaid) {
+        setToast({ kind: 'ok', text: `Already paid for ${r.username}.` });
+      } else {
+        const gw = data?.gateway ?? {};
+        setToast({
+          kind: 'ok',
+          text: `ChaopaoPay payout initiated for ${r.username}. Net ${formatBDT(Number(gw.netAmount ?? r.amount))} after BDT ${formatBDT(Number(gw.fee ?? 0))} fee. Tracking ${gw.providerTxId ?? '(no ref)'}.`,
+        });
+      }
+      setTimeout(() => setToast(null), 6000);
+      await refresh();
+    } catch (e) {
+      setToast({ kind: 'err', text: e instanceof Error ? e.message : 'ChaopaoPay payout failed' });
+      setTimeout(() => setToast(null), 6000);
+    } finally {
+      setChaopaopayBusyId(null);
+    }
+  };
+
+  // True when the withdrawal's saved method maps to a ChaopaoPay-
+  // supported channel. Accepts both the original 'bkash'/'nagad'
+  // strings (set by the player on the manual form) and the gateway-
+  // prefixed 'chaopaopay_bkash' / 'chaopaopay_nagad' (set when the
+  // deposit ChaopaoPay flow is used - here it does not matter, the
+  // server-side resolve function accepts both).
+  const canSendViaChaopaoPay = (r: WithdrawalRow): boolean => {
+    if (!chaopaopayAvailable) return false;
+    if (r.status !== 'approved') return false;
+    if (r.processingState === 'paid' || r.processingState === 'payout_initiated') return false;
+    const m = r.method.toLowerCase();
+    if (chaopaopayMethods.includes('bkash') && (m === 'bkash' || m === 'chaopaopay_bkash')) return true;
+    if (chaopaopayMethods.includes('nagad') && (m === 'nagad' || m === 'chaopaopay_nagad')) return true;
+    return false;
   };
 
   const toggleHold = async (row: WithdrawalRow, hold: boolean) => {
@@ -231,7 +322,21 @@ export default function AdminWithdrawalsPage() {
                   <Button size="sm" variant="danger" leftIcon={<XCircle className="h-3 w-3" />} onClick={() => { setItem(r); setAction('reject'); setApprovalOpen(true); }}>Reject</Button>
                 </>
               ) : r.status === 'approved' && r.processingState !== 'paid' ? (
-                <Button size="sm" variant="gold" leftIcon={<BanknoteIcon className="h-3 w-3" />} onClick={() => setPaidTarget(r)}>Mark Paid</Button>
+                <>
+                  {canSendViaChaopaoPay(r) ? (
+                    <Button
+                      size="sm"
+                      variant="neon"
+                      leftIcon={<Zap className="h-3 w-3" />}
+                      loading={chaopaopayBusyId === r.id}
+                      disabled={chaopaopayBusyId !== null && chaopaopayBusyId !== r.id}
+                      onClick={() => sendViaChaopaoPay(r)}
+                    >
+                      Send via ChaopaoPay
+                    </Button>
+                  ) : null}
+                  <Button size="sm" variant="gold" leftIcon={<BanknoteIcon className="h-3 w-3" />} onClick={() => setPaidTarget(r)}>Mark Paid</Button>
+                </>
               ) : (
                 <span className="text-xs text-ink-lo">Resolved</span>
               )}
@@ -240,7 +345,12 @@ export default function AdminWithdrawalsPage() {
         },
       },
     ],
-    [lang],
+    // chaopaopayBusyId + chaopaopayAvailable + chaopaopayMethods are
+    // referenced inside cell renderers (the Send via ChaopaoPay
+    // button's loading state and gate). Without them in the deps the
+    // memoized cells would close over stale values and the button
+    // would not flip back out of its loading spinner after a payout.
+    [lang, chaopaopayBusyId, chaopaopayAvailable, chaopaopayMethods],
   );
 
   const pendingCount = rows.filter((r) => r.status === 'pending').length;
