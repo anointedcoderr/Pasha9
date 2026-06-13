@@ -38,6 +38,7 @@ import {
   Ticket,
   Globe,
   ShieldCheck,
+  KeyRound,
   BarChart3,
   Sparkles,
   FileCheck,
@@ -164,6 +165,7 @@ const GROUPS = [
     labelKey: 'groupSecurityAndStaff',
     items: [
       { key: 'security', href: ROUTES.admin.security, icon: ShieldCheck },
+      { key: 'account', href: ROUTES.admin.account, icon: KeyRound },
       { key: 'passwordResets', href: ROUTES.admin.passwordResets, icon: FileKey2 },
       { key: 'staff', href: ROUTES.admin.staff, icon: Users },
     ],
