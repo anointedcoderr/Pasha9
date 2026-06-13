@@ -24,10 +24,10 @@ import { Button } from '@/components/ui/Button';
 import { depositSchema, type DepositInput } from '@/lib/utils/validation';
 import { useT, useLang } from '@/lib/i18n/context';
 import { triggerWalletRefresh } from '@/components/site/WalletStrip';
-import { AlertTriangle, CheckCircle2, Lock, LogIn, Upload, X, ExternalLink, Zap } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Lock, LogIn, Upload, X, ExternalLink } from 'lucide-react';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { DepositWithdrawTabs } from '@/components/wallet/DepositWithdrawTabs';
-import { PaymentMethodPicker } from '@/components/wallet/PaymentMethodPicker';
+import { cn } from '@/lib/utils/cn';
 import { SelectedMethodCard } from '@/components/wallet/SelectedMethodCard';
 
 const QUICK = [500, 1000, 2000, 5000, 10000, 25000];
@@ -91,16 +91,24 @@ export default function DepositPage() {
   const [auth, setAuth] = useState<AuthState>({ kind: 'checking' });
   const [methods, setMethods] = useState<PublicMethod[]>([]);
   const [methodsLoaded, setMethodsLoaded] = useState(false);
-  // ChaopaoPay availability + "Quick Pay" gateway redirect state.
-  // The probe runs once at mount; the buttons only render when the
+  // ChaopaoPay availability + selected payment-method state. The
+  // probe runs once at mount; gateway tiles only render when the
   // operator has the credentials configured in /admin/payments.
-  // expressBusy keeps the buttons disabled while we open the gateway
+  // expressBusy keeps the tile disabled while we open the gateway
   // round-trip so the player cannot double-click and create two
   // pending deposits.
+  //
+  // gatewayChoice is null when the player has not picked anything OR
+  // has picked a manual method (the manual selection lives on the
+  // react-hook-form `method` field). When it is set to 'bkash' or
+  // 'nagad', the manual TX-ID / proof card is hidden and the bottom
+  // CTA becomes "Pay BDT X with bKash/Nagad" which opens the
+  // ChaopaoPay-hosted payment page.
   const [expressAvailable, setExpressAvailable] = useState(false);
   const [expressMethods, setExpressMethods] = useState<string[]>([]);
   const [expressBusy, setExpressBusy] = useState<null | 'bkash' | 'nagad'>(null);
   const [expressError, setExpressError] = useState<string | null>(null);
+  const [gatewayChoice, setGatewayChoice] = useState<null | 'bkash' | 'nagad'>(null);
   const [notices, setNotices] = useState<NoticeRow[]>([]);
   const [noticeOpen, setNoticeOpen] = useState(false);
   const [preview, setPreview] = useState<PreviewState>({ bonusPercentage: 0, bonusAmount: 0, totalCredit: 0 });
@@ -457,67 +465,11 @@ export default function DepositPage() {
         </Card>
       ) : null}
 
-      {/* ChaopaoPay Quick Pay. Renders only when the operator has
-          enabled the gateway in /admin/payments. Bypasses the manual
-          TX upload flow: player enters an amount above, taps a button,
-          gets redirected to the bKash/Nagad hosted payment page, and
-          the wallet auto-credits within 30 seconds of payment. */}
-      {expressAvailable && auth.kind === 'authed' && !submitted ? (
-        <Card padding="md" className="mx-auto mb-4 max-w-2xl border border-amber-300/50 bg-gradient-to-br from-amber-50 to-orange-50">
-          <div className="flex items-start gap-3">
-            <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-500/20 text-amber-700">
-              <Zap className="h-4 w-4" />
-            </span>
-            <div className="flex-1">
-              <p className="text-sm font-bold text-amber-900">
-                {lang === 'bn' ? 'এক্সপ্রেস পে - অটো ক্রেডিট' : 'Express Pay - auto-credit'}
-              </p>
-              <p className="mt-0.5 text-xs text-amber-800">
-                {lang === 'bn'
-                  ? 'বিকাশ অথবা নগদ অ্যাপ থেকে সরাসরি পেমেন্ট করুন। ৩০ সেকেন্ডের মধ্যে অটো-ক্রেডিট হবে, কোনো ম্যানুয়াল অনুমোদনের প্রয়োজন নেই।'
-                  : 'Pay directly from bKash or Nagad. Wallet credits within 30 seconds, no manual approval needed.'}
-              </p>
-              <p className="mt-2 text-[11px] font-semibold text-amber-800">
-                {lang === 'bn' ? 'উপরে পরিমাণ লিখুন তারপর চাপুন' : 'Enter the amount above, then tap one:'}
-              </p>
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                {expressMethods.includes('bkash') ? (
-                  <button
-                    type="button"
-                    onClick={() => onExpressPay('bkash')}
-                    disabled={!!expressBusy || (Number(watchedAmount) || 0) < 100}
-                    className="inline-flex h-11 items-center justify-center rounded-xl bg-[#e2136e] px-4 text-sm font-extrabold text-white shadow transition active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {expressBusy === 'bkash'
-                      ? (lang === 'bn' ? 'লোড...' : 'Opening...')
-                      : (lang === 'bn' ? 'বিকাশে পে করুন' : 'Pay with bKash')}
-                  </button>
-                ) : null}
-                {expressMethods.includes('nagad') ? (
-                  <button
-                    type="button"
-                    onClick={() => onExpressPay('nagad')}
-                    disabled={!!expressBusy || (Number(watchedAmount) || 0) < 100}
-                    className="inline-flex h-11 items-center justify-center rounded-xl bg-[#ec1c24] px-4 text-sm font-extrabold text-white shadow transition active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {expressBusy === 'nagad'
-                      ? (lang === 'bn' ? 'লোড...' : 'Opening...')
-                      : (lang === 'bn' ? 'নগদে পে করুন' : 'Pay with Nagad')}
-                  </button>
-                ) : null}
-              </div>
-              {expressError ? (
-                <p className="mt-2 text-xs font-semibold text-rose-700">{expressError}</p>
-              ) : null}
-              <p className="mt-2 text-[11px] text-amber-800">
-                {lang === 'bn'
-                  ? 'অথবা পুরোনো পদ্ধতিতে নিচের ফর্ম ব্যবহার করুন।'
-                  : 'Or use the manual upload form below.'}
-              </p>
-            </div>
-          </div>
-        </Card>
-      ) : null}
+      {/* The old big "Express Pay" yellow card was retired in favour
+          of the per-method tile grid below. Gateway methods (bKash,
+          Nagad) appear as their own tiles alongside the operator's
+          manual deposit methods, so the player just taps one icon
+          and the page routes to the right flow. */}
 
       {submitted ? (
         <Card tone="elev" className="mx-auto max-w-2xl text-center">
@@ -582,19 +534,117 @@ export default function DepositPage() {
             </Card>
 
             <Card padding="lg">
-              <CardHeader title={t('deposit.method')} subtitle={lang === 'bn' ? 'যে মাধ্যমে পেমেন্ট পাঠিয়েছেন সেটি বেছে নিন' : 'Pick how you sent the payment'} />
-              {!methodsLoaded ? (
-                <p className="text-sm text-ink-mid">{lang === 'bn' ? 'মাধ্যম লোড হচ্ছে...' : 'Loading methods...'}</p>
-              ) : methods.length === 0 ? (
-                <p className="text-sm text-ink-mid">{lang === 'bn' ? 'কোনো ডিপোজিট মাধ্যম কনফিগার করা নেই।' : 'No deposit methods configured.'}</p>
+              <CardHeader
+                title={lang === 'bn' ? 'মূল্য পরিশোধ পদ্ধতি' : 'Payment method'}
+                subtitle={lang === 'bn'
+                  ? 'একটি পদ্ধতি বেছে নিন। বিকাশ ও নগদ অটো-ক্রেডিট, অন্যান্য ম্যানুয়াল অনুমোদন।'
+                  : 'Pick a method. bKash and Nagad auto-credit, others go through manual review.'}
+              />
+              {!methodsLoaded && !expressAvailable ? (
+                <p className="text-sm text-ink-mid">{lang === 'bn' ? 'লোড হচ্ছে...' : 'Loading...'}</p>
               ) : (
                 <>
-                  <PaymentMethodPicker
-                    methods={methods.map((m) => ({ id: m.id, name: m.name, type: m.type, iconUrl: m.iconUrl }))}
-                    selectedName={watchedMethodName ?? ''}
-                    onSelect={(name) => setValue('method', name, { shouldValidate: true })}
-                  />
-                  {method ? (
+                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                    {/* Gateway tiles - bKash + Nagad route to ChaopaoPay
+                        when the operator has enabled the gateway in
+                        /admin/payments. The "AUTO" badge differentiates
+                        these from manual methods of the same brand. */}
+                    {expressAvailable && expressMethods.includes('bkash') ? (
+                      <button
+                        type="button"
+                        onClick={() => { setGatewayChoice('bkash'); setValue('method', '', { shouldValidate: false }); setExpressError(null); }}
+                        className={cn(
+                          'group relative flex aspect-square flex-col items-center justify-center gap-1.5 overflow-hidden rounded-xl border-2 bg-white p-2 text-center transition active:translate-y-px',
+                          gatewayChoice === 'bkash' ? 'border-amber-500 shadow-[0_0_0_3px_rgba(245,180,0,0.18)]' : 'border-transparent hover:border-amber-300/60',
+                        )}
+                      >
+                        <span className="absolute right-1 top-1 inline-flex items-center rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[8px] font-extrabold uppercase tracking-wider text-emerald-700">
+                          {lang === 'bn' ? 'অটো' : 'AUTO'}
+                        </span>
+                        <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#e2136e] text-base font-extrabold text-white shadow-sm">
+                          bK
+                        </span>
+                        <span className="text-[11px] font-bold text-ink-hi">bKash</span>
+                      </button>
+                    ) : null}
+                    {expressAvailable && expressMethods.includes('nagad') ? (
+                      <button
+                        type="button"
+                        onClick={() => { setGatewayChoice('nagad'); setValue('method', '', { shouldValidate: false }); setExpressError(null); }}
+                        className={cn(
+                          'group relative flex aspect-square flex-col items-center justify-center gap-1.5 overflow-hidden rounded-xl border-2 bg-white p-2 text-center transition active:translate-y-px',
+                          gatewayChoice === 'nagad' ? 'border-amber-500 shadow-[0_0_0_3px_rgba(245,180,0,0.18)]' : 'border-transparent hover:border-amber-300/60',
+                        )}
+                      >
+                        <span className="absolute right-1 top-1 inline-flex items-center rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[8px] font-extrabold uppercase tracking-wider text-emerald-700">
+                          {lang === 'bn' ? 'অটো' : 'AUTO'}
+                        </span>
+                        <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#ec1c24] text-base font-extrabold text-white shadow-sm">
+                          N
+                        </span>
+                        <span className="text-[11px] font-bold text-ink-hi">Nagad</span>
+                      </button>
+                    ) : null}
+
+                    {/* Manual method tiles - skip brand duplicates of
+                        bKash and Nagad when the gateway is enabled so
+                        the player is not presented with two identical-
+                        looking icons that route to different flows. */}
+                    {methods
+                      .filter((m) => {
+                        if (!expressAvailable) return true;
+                        const n = m.name.trim().toLowerCase();
+                        if (expressMethods.includes('bkash') && n === 'bkash') return false;
+                        if (expressMethods.includes('nagad') && n === 'nagad') return false;
+                        return true;
+                      })
+                      .map((m) => {
+                        const isSelected = !gatewayChoice && watchedMethodName === m.name;
+                        return (
+                          <button
+                            type="button"
+                            key={m.id}
+                            onClick={() => { setGatewayChoice(null); setValue('method', m.name, { shouldValidate: true }); }}
+                            className={cn(
+                              'group relative flex aspect-square flex-col items-center justify-center gap-1.5 overflow-hidden rounded-xl border-2 bg-white p-2 text-center transition active:translate-y-px',
+                              isSelected ? 'border-amber-500 shadow-[0_0_0_3px_rgba(245,180,0,0.18)]' : 'border-transparent hover:border-amber-300/60',
+                            )}
+                          >
+                            <span className="absolute right-1 top-1 inline-flex items-center rounded-full bg-brand-surface px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-ink-lo">
+                              {lang === 'bn' ? 'ম্যানুয়াল' : 'MANUAL'}
+                            </span>
+                            {m.iconUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={m.iconUrl} alt={m.name} className="h-11 w-11 rounded-xl object-contain" />
+                            ) : (
+                              <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-amber-300 to-amber-500 text-base font-extrabold text-[#3A1F00] shadow-sm">
+                                {m.name.charAt(0).toUpperCase()}
+                              </span>
+                            )}
+                            <span className="truncate max-w-full text-[11px] font-bold text-ink-hi">{m.name}</span>
+                          </button>
+                        );
+                      })}
+                  </div>
+
+                  {/* Selected method details. The gateway tiles show a
+                      short "redirects to bKash/Nagad" hint; manual
+                      tiles render the operator-configured
+                      SelectedMethodCard with payment instructions. */}
+                  {gatewayChoice ? (
+                    <div className="mt-4 rounded-xl border border-emerald-300/60 bg-emerald-50 p-3 text-sm text-emerald-900">
+                      <p className="font-semibold">
+                        {lang === 'bn'
+                          ? `${gatewayChoice === 'bkash' ? 'বিকাশ' : 'নগদ'} পেমেন্ট অটো-ক্রেডিট হবে`
+                          : `${gatewayChoice === 'bkash' ? 'bKash' : 'Nagad'} payment auto-credits`}
+                      </p>
+                      <p className="mt-1 text-xs">
+                        {lang === 'bn'
+                          ? `নিচের "${gatewayChoice === 'bkash' ? 'বিকাশে' : 'নগদে'} পে করুন" বোতাম চাপলে ${gatewayChoice === 'bkash' ? 'বিকাশ' : 'নগদ'} পেমেন্ট পৃষ্ঠায় চলে যাবেন। পেমেন্ট সফল হলে ৩০ সেকেন্ডের মধ্যে ওয়ালেট ক্রেডিট হবে।`
+                          : `Tap the "${gatewayChoice === 'bkash' ? 'Pay with bKash' : 'Pay with Nagad'}" button below to open the secure payment page. Wallet credits within 30 seconds of successful payment.`}
+                      </p>
+                    </div>
+                  ) : method ? (
                     <SelectedMethodCard
                       mode="deposit"
                       className="mt-4"
@@ -610,16 +660,23 @@ export default function DepositPage() {
                       }}
                     />
                   ) : null}
-                  {method?.minDeposit ? (
+                  {!gatewayChoice && method?.minDeposit ? (
                     <p className="mt-2 text-[11px] text-ink-lo">
                       {lang === 'bn' ? 'এই মাধ্যমের সীমা: ' : 'This method: '} Min BDT {method.minDeposit.toLocaleString()}
                       {method.maxDeposit ? ` . Max BDT ${method.maxDeposit.toLocaleString()}` : ''}
                     </p>
                   ) : null}
+                  {expressError ? (
+                    <p className="mt-2 text-xs font-semibold text-rose-700">{expressError}</p>
+                  ) : null}
                 </>
               )}
             </Card>
 
+            {/* Verification card is only meaningful for manual
+                methods. Gateway flow does not need TX-ID or proof -
+                the webhook signature is the verification. */}
+            {!gatewayChoice ? (
             <Card padding="lg">
               <CardHeader title="Verification" subtitle="Paste the TX ID and upload screenshot" />
               <div className="grid gap-4 md:grid-cols-2">
@@ -666,6 +723,7 @@ export default function DepositPage() {
                 <p className="mt-2 text-[11px] text-ink-lo">PNG, JPG, WEBP or PDF, max 8 MB.</p>
               )}
             </Card>
+            ) : null}
 
             {isSubmitted && errorEntries.length > 0 ? (
               <div className="rounded-md border border-amber-300/60 bg-amber-50 px-3 py-2 text-sm text-amber-900">
@@ -687,9 +745,31 @@ export default function DepositPage() {
               </div>
             ) : null}
 
-            <Button type="submit" size="lg" loading={loading} disabled={!canSubmit} className="w-full md:w-auto">
-              {t('deposit.submit')}
-            </Button>
+            {/* Action button switches between gateway redirect and
+                manual submit based on the currently selected tile.
+                Both share the same disabled-on-checking auth +
+                in-flight upload guard. */}
+            {gatewayChoice ? (
+              <button
+                type="button"
+                onClick={() => onExpressPay(gatewayChoice)}
+                disabled={!canSubmit || !!expressBusy || (Number(watchedAmount) || 0) < 100}
+                className={cn(
+                  'inline-flex h-12 w-full items-center justify-center rounded-xl px-5 text-base font-extrabold text-white shadow transition active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50 md:w-auto',
+                  gatewayChoice === 'bkash' ? 'bg-[#e2136e]' : 'bg-[#ec1c24]',
+                )}
+              >
+                {expressBusy
+                  ? (lang === 'bn' ? 'লোড...' : 'Opening...')
+                  : (lang === 'bn'
+                      ? `BDT ${(Number(watchedAmount) || 0).toLocaleString()} ${gatewayChoice === 'bkash' ? 'বিকাশে' : 'নগদে'} পে করুন`
+                      : `Pay BDT ${(Number(watchedAmount) || 0).toLocaleString()} with ${gatewayChoice === 'bkash' ? 'bKash' : 'Nagad'}`)}
+              </button>
+            ) : (
+              <Button type="submit" size="lg" loading={loading} disabled={!canSubmit || !watchedMethodName} className="w-full md:w-auto">
+                {t('deposit.submit')}
+              </Button>
+            )}
           </form>
         </div>
       )}
