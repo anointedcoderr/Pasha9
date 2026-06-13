@@ -24,7 +24,7 @@ import { Button } from '@/components/ui/Button';
 import { depositSchema, type DepositInput } from '@/lib/utils/validation';
 import { useT, useLang } from '@/lib/i18n/context';
 import { triggerWalletRefresh } from '@/components/site/WalletStrip';
-import { AlertTriangle, CheckCircle2, Lock, LogIn, Upload, X, ExternalLink } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Lock, LogIn, Upload, X, ExternalLink, Zap } from 'lucide-react';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { DepositWithdrawTabs } from '@/components/wallet/DepositWithdrawTabs';
 import { PaymentMethodPicker } from '@/components/wallet/PaymentMethodPicker';
@@ -91,6 +91,16 @@ export default function DepositPage() {
   const [auth, setAuth] = useState<AuthState>({ kind: 'checking' });
   const [methods, setMethods] = useState<PublicMethod[]>([]);
   const [methodsLoaded, setMethodsLoaded] = useState(false);
+  // ChaopaoPay availability + "Quick Pay" gateway redirect state.
+  // The probe runs once at mount; the buttons only render when the
+  // operator has the credentials configured in /admin/payments.
+  // expressBusy keeps the buttons disabled while we open the gateway
+  // round-trip so the player cannot double-click and create two
+  // pending deposits.
+  const [expressAvailable, setExpressAvailable] = useState(false);
+  const [expressMethods, setExpressMethods] = useState<string[]>([]);
+  const [expressBusy, setExpressBusy] = useState<null | 'bkash' | 'nagad'>(null);
+  const [expressError, setExpressError] = useState<string | null>(null);
   const [notices, setNotices] = useState<NoticeRow[]>([]);
   const [noticeOpen, setNoticeOpen] = useState(false);
   const [preview, setPreview] = useState<PreviewState>({ bonusPercentage: 0, bonusAmount: 0, totalCredit: 0 });
@@ -133,6 +143,21 @@ export default function DepositPage() {
         setMethodsLoaded(true);
       })
       .catch(() => { if (alive) setMethodsLoaded(true); });
+
+    // Probe whether the ChaopaoPay deposit gateway is enabled and
+    // which methods (bkash, nagad) the operator has turned on. The
+    // Quick Pay card only renders when at least one method comes
+    // back available.
+    fetch('/api/payments/chaopaopay/availability', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!alive) return;
+        if (j?.available && Array.isArray(j.methods) && j.methods.length > 0) {
+          setExpressAvailable(true);
+          setExpressMethods(j.methods.filter((m: unknown): m is string => typeof m === 'string'));
+        }
+      })
+      .catch(() => { /* probe is best-effort; Quick Pay just stays hidden */ });
 
     fetch('/api/content/deposit-notice', { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
@@ -336,6 +361,55 @@ export default function DepositPage() {
     }
   };
 
+  // Quick Pay click handler. Calls /api/payments/chaopaopay/create-deposit
+  // and redirects the player to the ChaopaoPay-hosted bKash/Nagad
+  // payment page returned in paymentUrl. The webhook + service layer
+  // auto-credit the wallet within ~30 seconds of payment.
+  const onExpressPay = useCallback(async (method: 'bkash' | 'nagad') => {
+    setExpressError(null);
+    setServerError(null);
+    setServerDetail(null);
+
+    if (auth.kind !== 'authed') {
+      router.push('/?login=1');
+      return;
+    }
+    const amount = Number(watchedAmount) || 0;
+    if (amount < 100) {
+      setExpressError(lang === 'bn' ? 'নূন্যতম ডিপোজিট ১০০ টাকা।' : 'Minimum deposit is 100 BDT.');
+      return;
+    }
+
+    setExpressBusy(method);
+    try {
+      const res = await fetch('/api/payments/chaopaopay/create-deposit', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          amount,
+          method,
+          promotionId: promotionIntent?.promotionId ?? undefined,
+          promoCode: promotionIntent?.promoCode ?? undefined,
+        }),
+      });
+      const data = await res.json().catch(() => null) as { paymentUrl?: string; code?: string; message?: string } | null;
+      if (!res.ok || !data?.paymentUrl) {
+        const msg = data?.message ?? data?.code ?? `Gateway error (${res.status}).`;
+        setExpressError(lang === 'bn'
+          ? `গেটওয়ে ত্রুটি: ${msg}. নিচের ফর্ম ব্যবহার করে ম্যানুয়াল ডিপোজিট করুন।`
+          : `${msg} Please use the manual form below.`);
+        return;
+      }
+      // Hand off to ChaopaoPay's hosted payment page.
+      window.location.href = data.paymentUrl;
+    } catch (err) {
+      setExpressError(lang === 'bn' ? 'নেটওয়ার্ক ত্রুটি। আবার চেষ্টা করুন।' : 'Network error. Please try again.');
+    } finally {
+      setExpressBusy(null);
+    }
+  }, [auth.kind, watchedAmount, promotionIntent, router, lang]);
+
   const newRequest = () => {
     setSubmitted(false);
     setSubmittedDepositId(null);
@@ -380,6 +454,68 @@ export default function DepositPage() {
               ? (lang === 'bn' ? `${preview.promotionName} অনুমোদনের পর প্রয়োগ হবে।` : `${preview.promotionName} will be applied after approval.`)
               : (lang === 'bn' ? 'যোগ্য হলে অনুমোদনের পর বোনাস প্রয়োগ হবে।' : 'The bonus will be applied after approval when eligible.')}
           </p>
+        </Card>
+      ) : null}
+
+      {/* ChaopaoPay Quick Pay. Renders only when the operator has
+          enabled the gateway in /admin/payments. Bypasses the manual
+          TX upload flow: player enters an amount above, taps a button,
+          gets redirected to the bKash/Nagad hosted payment page, and
+          the wallet auto-credits within 30 seconds of payment. */}
+      {expressAvailable && auth.kind === 'authed' && !submitted ? (
+        <Card padding="md" className="mx-auto mb-4 max-w-2xl border border-amber-300/50 bg-gradient-to-br from-amber-50 to-orange-50">
+          <div className="flex items-start gap-3">
+            <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-500/20 text-amber-700">
+              <Zap className="h-4 w-4" />
+            </span>
+            <div className="flex-1">
+              <p className="text-sm font-bold text-amber-900">
+                {lang === 'bn' ? 'এক্সপ্রেস পে - অটো ক্রেডিট' : 'Express Pay - auto-credit'}
+              </p>
+              <p className="mt-0.5 text-xs text-amber-800">
+                {lang === 'bn'
+                  ? 'বিকাশ অথবা নগদ অ্যাপ থেকে সরাসরি পেমেন্ট করুন। ৩০ সেকেন্ডের মধ্যে অটো-ক্রেডিট হবে, কোনো ম্যানুয়াল অনুমোদনের প্রয়োজন নেই।'
+                  : 'Pay directly from bKash or Nagad. Wallet credits within 30 seconds, no manual approval needed.'}
+              </p>
+              <p className="mt-2 text-[11px] font-semibold text-amber-800">
+                {lang === 'bn' ? 'উপরে পরিমাণ লিখুন তারপর চাপুন' : 'Enter the amount above, then tap one:'}
+              </p>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                {expressMethods.includes('bkash') ? (
+                  <button
+                    type="button"
+                    onClick={() => onExpressPay('bkash')}
+                    disabled={!!expressBusy || (Number(watchedAmount) || 0) < 100}
+                    className="inline-flex h-11 items-center justify-center rounded-xl bg-[#e2136e] px-4 text-sm font-extrabold text-white shadow transition active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {expressBusy === 'bkash'
+                      ? (lang === 'bn' ? 'লোড...' : 'Opening...')
+                      : (lang === 'bn' ? 'বিকাশে পে করুন' : 'Pay with bKash')}
+                  </button>
+                ) : null}
+                {expressMethods.includes('nagad') ? (
+                  <button
+                    type="button"
+                    onClick={() => onExpressPay('nagad')}
+                    disabled={!!expressBusy || (Number(watchedAmount) || 0) < 100}
+                    className="inline-flex h-11 items-center justify-center rounded-xl bg-[#ec1c24] px-4 text-sm font-extrabold text-white shadow transition active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {expressBusy === 'nagad'
+                      ? (lang === 'bn' ? 'লোড...' : 'Opening...')
+                      : (lang === 'bn' ? 'নগদে পে করুন' : 'Pay with Nagad')}
+                  </button>
+                ) : null}
+              </div>
+              {expressError ? (
+                <p className="mt-2 text-xs font-semibold text-rose-700">{expressError}</p>
+              ) : null}
+              <p className="mt-2 text-[11px] text-amber-800">
+                {lang === 'bn'
+                  ? 'অথবা পুরোনো পদ্ধতিতে নিচের ফর্ম ব্যবহার করুন।'
+                  : 'Or use the manual upload form below.'}
+              </p>
+            </div>
+          </div>
         </Card>
       ) : null}
 
