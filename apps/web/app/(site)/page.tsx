@@ -23,6 +23,7 @@ import { AmbassadorVideoSection } from '@/components/site/AmbassadorVideoSection
 import { HomepageVideoCarousel, type VideoRow } from '@/components/site/HomepageVideoCarousel';
 import { PromoPair } from '@/components/site/PromoPair';
 import { AppDownloadSection } from '@/components/site/AppDownloadSection';
+import { HomeSpinShortcut } from '@/components/site/HomeSpinShortcut';
 import { HomeDbGameSection } from '@/components/site/HomeDbGameSection';
 import { SportsbookSection } from '@/components/site/SportsbookSection';
 import { SportsFixturesCarousel } from '@/components/site/SportsFixturesCarousel';
@@ -157,6 +158,7 @@ export default function HomePage() {
 
       <AnnouncementPopup />
       <FirstVisitAuthPopup />
+      <HomeSpinShortcut />
     </div>
   );
 }
