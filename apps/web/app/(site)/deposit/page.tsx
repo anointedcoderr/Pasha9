@@ -217,12 +217,17 @@ export default function DepositPage() {
     }
   }, [setValue]);
 
-  // Default method = first DB method once it loads.
-  useEffect(() => {
-    if (methodsLoaded && methods.length > 0 && !watch('method')) {
-      setValue('method', methods[0].name);
-    }
-  }, [methodsLoaded, methods, setValue, watch]);
+  // No default method is auto-selected on mount. Before the Babu88-
+  // style tile grid, the page assumed the player would always work
+  // through the manual flow, so it auto-picked methods[0] so the
+  // SelectedMethodCard + Verification card had a method to render
+  // against. After the gateway tiles shipped this auto-pick became
+  // a footgun: if methods[0] happened to be the operator's manual
+  // Nagad / bKash entry, the manual wallet number popped up the
+  // moment the page mounted even though the player had not tapped
+  // anything. The operator reported this as a bug. Removing the
+  // auto-pick keeps both bottom cards blank until the player
+  // explicitly taps a tile.
 
   const watchedAmount = watch('amount');
   const watchedMethodName = watch('method');
@@ -588,14 +593,20 @@ export default function DepositPage() {
 
                     {/* Manual method tiles - skip brand duplicates of
                         bKash and Nagad when the gateway is enabled so
-                        the player is not presented with two identical-
-                        looking icons that route to different flows. */}
+                        the player is not presented with two icons
+                        that route to different flows for the same
+                        brand. Substring match is intentional: the
+                        operator's admin labels are usually in Bangla
+                        or hybrid ("Nagad ডিপোজিট", "bKash Cash In",
+                        "Nagad Send Money") and exact-equality filter
+                        let every one of those leak through as a
+                        confusing duplicate. */}
                     {methods
                       .filter((m) => {
                         if (!expressAvailable) return true;
                         const n = m.name.trim().toLowerCase();
-                        if (expressMethods.includes('bkash') && n === 'bkash') return false;
-                        if (expressMethods.includes('nagad') && n === 'nagad') return false;
+                        if (expressMethods.includes('bkash') && n.includes('bkash')) return false;
+                        if (expressMethods.includes('nagad') && n.includes('nagad')) return false;
                         return true;
                       })
                       .map((m) => {
@@ -674,9 +685,13 @@ export default function DepositPage() {
             </Card>
 
             {/* Verification card is only meaningful for manual
-                methods. Gateway flow does not need TX-ID or proof -
-                the webhook signature is the verification. */}
-            {!gatewayChoice ? (
+                methods AFTER a method is actually picked. Before the
+                player taps a tile, the card stays hidden so the page
+                does not advertise the manual TX-ID flow at the
+                player who is about to tap bKash for the auto
+                gateway. Gateway flow itself never needs TX-ID or
+                proof - the webhook signature is the verification. */}
+            {!gatewayChoice && method ? (
             <Card padding="lg">
               <CardHeader title="Verification" subtitle="Paste the TX ID and upload screenshot" />
               <div className="grid gap-4 md:grid-cols-2">
@@ -747,8 +762,9 @@ export default function DepositPage() {
 
             {/* Action button switches between gateway redirect and
                 manual submit based on the currently selected tile.
-                Both share the same disabled-on-checking auth +
-                in-flight upload guard. */}
+                Hidden entirely when nothing is picked so the page
+                does not show a disabled "Submit Request" button
+                before the player has even chosen a method. */}
             {gatewayChoice ? (
               <button
                 type="button"
@@ -765,10 +781,14 @@ export default function DepositPage() {
                       ? `BDT ${(Number(watchedAmount) || 0).toLocaleString()} ${gatewayChoice === 'bkash' ? 'বিকাশে' : 'নগদে'} পে করুন`
                       : `Pay BDT ${(Number(watchedAmount) || 0).toLocaleString()} with ${gatewayChoice === 'bkash' ? 'bKash' : 'Nagad'}`)}
               </button>
-            ) : (
-              <Button type="submit" size="lg" loading={loading} disabled={!canSubmit || !watchedMethodName} className="w-full md:w-auto">
+            ) : method ? (
+              <Button type="submit" size="lg" loading={loading} disabled={!canSubmit} className="w-full md:w-auto">
                 {t('deposit.submit')}
               </Button>
+            ) : (
+              <p className="text-sm text-ink-mid">
+                {lang === 'bn' ? 'চালিয়ে যেতে উপরে একটি পেমেন্ট পদ্ধতি বেছে নিন।' : 'Pick a payment method above to continue.'}
+              </p>
             )}
           </form>
         </div>
