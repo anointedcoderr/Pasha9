@@ -10,6 +10,7 @@ import { testAdapter, testSettings } from './test';
 import { bkashAdapter, bkashSettings } from './bkash';
 import { nagadAdapter, nagadSettings } from './nagad';
 import { rocketAdapter, rocketSettings } from './rocket';
+import { chaopaopayAdapter, chaopaopaySettings } from './chaopaopay';
 import type { ProviderAdapter, ProviderKey, ProviderSettingsSchema } from './types';
 
 interface Entry {
@@ -43,6 +44,11 @@ const REGISTRY: Record<ProviderKey, Entry> = {
     adapter: rocketAdapter,
     settings: rocketSettings,
     description: 'Rocket payment gateway. Requires merchant credentials + HMAC secret. Signature scaffold ships in M2B.',
+  },
+  chaopaopay: {
+    adapter: chaopaopayAdapter,
+    settings: chaopaopaySettings,
+    description: 'ChaopaoPay BD aggregator. One merchant account covers both bKash (method_code 101) and Nagad (method_code 102). Webhook signature verification is live; payouts require the withdraw password.',
   },
 };
 
