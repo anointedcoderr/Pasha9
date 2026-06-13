@@ -9,7 +9,7 @@
 // For M2C, all real providers are scaffolds. The manual + test
 // adapters are immediately usable.
 
-export type PayoutProviderKey = 'manual' | 'test' | 'bkash' | 'nagad' | 'rocket';
+export type PayoutProviderKey = 'manual' | 'test' | 'bkash' | 'nagad' | 'rocket' | 'chaopaopay';
 
 export type PayoutProviderStatus = 'live' | 'requires_credentials' | 'disabled' | 'manual';
 

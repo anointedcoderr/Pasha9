@@ -225,3 +225,98 @@ export function mapChaopaoPayStatus(raw: string): 'success' | 'failed' | 'pendin
   if (s === 'failed' || s === 'cancelled' || s === 'refunded') return 'failed';
   return 'pending'; // 'pending' and 'processing'
 }
+
+/**
+ * Map ChaopaoPay's status strings to the payout-side ('paid' | 'failed'
+ * | 'pending') the platform's payout service uses. Same mapping as
+ * the deposit side, with 'completed' -> 'paid' instead of 'success'.
+ */
+export function mapChaopaoPayPayoutStatus(raw: string): 'paid' | 'failed' | 'pending' {
+  const s = raw.toLowerCase().trim();
+  if (s === 'completed') return 'paid';
+  if (s === 'failed' || s === 'cancelled' || s === 'refunded') return 'failed';
+  return 'pending';
+}
+
+export interface CreatePayOutInput {
+  trxId: string;
+  amount: number;
+  method: ChaopaoPayMethod;
+  accountNumber: string;
+  accountName: string;
+  notifyUrl: string;
+  bankName?: string | null;
+  branchName?: string | null;
+  routingNumber?: string | null;
+  description?: string | null;
+}
+
+export interface CreatePayOutResult {
+  transactionId: string;
+  trxId: string;
+  amount: number;
+  fee: number;
+  netAmount: number;
+  currency: string;
+  status: string;
+  methodCode: number;
+  accountNumber: string;
+  createdAt: string | null;
+  raw: unknown;
+}
+
+/**
+ * Send a payout to a player's bKash / Nagad account. Requires the
+ * withdraw password configured under
+ * payment_chaopaopay_withdraw_password - ChaopaoPay rejects with
+ * INVALID_WITHDRAW_PASS otherwise. The fee is computed by the
+ * gateway (returned in the response); we surface it on the
+ * Withdrawal row so the operator can reconcile margins.
+ */
+export async function createChaopaoPayOut(input: CreatePayOutInput): Promise<CreatePayOutResult> {
+  const settings = await readSettings();
+  if (!settings.enabled) throw new Error('CHAOPAOPAY_DISABLED');
+  if (!settings.withdrawPassword) throw new Error('CHAOPAOPAY_WITHDRAW_PASSWORD_MISSING');
+  const headers = buildAuthHeaders(settings);
+
+  const body = {
+    trx_id: input.trxId,
+    amount: Number(input.amount.toFixed(2)),
+    method_code: CHAOPAOPAY_METHOD_CODE[input.method],
+    account_number: input.accountNumber.trim(),
+    account_name: input.accountName.trim().slice(0, 80),
+    notify_url: input.notifyUrl,
+    withdraw_password: settings.withdrawPassword,
+    ...(input.bankName ? { bank_name: input.bankName } : {}),
+    ...(input.branchName ? { branch_name: input.branchName } : {}),
+    ...(input.routingNumber ? { routing_number: input.routingNumber } : {}),
+    ...(input.description ? { description: input.description.slice(0, 200) } : {}),
+  };
+
+  const url = `${settings.baseUrl}/payout/create.php`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(15_000),
+  });
+  const json = await res.json().catch(() => null) as { success?: boolean; message?: string; data?: Record<string, unknown> } | null;
+  if (!res.ok || !json || json.success !== true || !json.data) {
+    const msg = json?.message ?? `Gateway responded ${res.status}`;
+    throw new Error(`CHAOPAOPAY_PAYOUT_FAILED:${msg}`);
+  }
+  const data = json.data;
+  return {
+    transactionId: typeof data.transaction_id === 'string' ? data.transaction_id : '',
+    trxId: typeof data.trx_id === 'string' ? data.trx_id : input.trxId,
+    amount: Number(data.amount ?? input.amount),
+    fee: Number(data.fee ?? 0),
+    netAmount: Number(data.net_amount ?? input.amount),
+    currency: typeof data.currency === 'string' ? data.currency : 'BDT',
+    status: typeof data.status === 'string' ? data.status : 'pending',
+    methodCode: Number(data.method_code ?? CHAOPAOPAY_METHOD_CODE[input.method]),
+    accountNumber: typeof data.account_number === 'string' ? data.account_number : input.accountNumber,
+    createdAt: typeof data.created_at === 'string' ? data.created_at : null,
+    raw: json,
+  };
+}

@@ -5,6 +5,7 @@ import { testPayout, testPayoutSettings } from './test';
 import { bkashPayout, bkashPayoutSettings } from './bkash';
 import { nagadPayout, nagadPayoutSettings } from './nagad';
 import { rocketPayout, rocketPayoutSettings } from './rocket';
+import { chaopaopayPayout, chaopaopayPayoutSettings } from './chaopaopay';
 import type { PayoutAdapter, PayoutProviderKey, PayoutSettingsSchema } from './types';
 
 interface Entry {
@@ -38,6 +39,11 @@ const REGISTRY: Record<PayoutProviderKey, Entry> = {
     adapter: rocketPayout,
     settings: rocketPayoutSettings,
     description: 'Rocket payout. Reuses the deposit-side merchant credentials + HMAC secret. Signature scaffold ships in M2C.',
+  },
+  chaopaopay: {
+    adapter: chaopaopayPayout,
+    settings: chaopaopayPayoutSettings,
+    description: 'ChaopaoPay payout. Reuses the deposit-side credentials plus the withdraw password (separate field). One adapter covers bKash + Nagad payouts via method_code 101 / 102.',
   },
 };
 
