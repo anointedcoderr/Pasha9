@@ -19,6 +19,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
 import { Users, Copy, Check, LogIn, Wallet, Clock, AlertCircle, Share2, ArrowRight, RefreshCw, MessageCircle, Send, Facebook, MessageSquare, Mail } from 'lucide-react';
+import { CopyRow } from '@/components/ui/CopyRow';
 import { useT, useLang } from '@/lib/i18n/context';
 import { formatBDT, formatDate, formatDateTime } from '@/lib/utils/format';
 import { triggerWalletRefresh } from '@/components/site/WalletStrip';
@@ -292,8 +293,8 @@ export default function ReferralPage() {
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="card-glow space-y-5 p-6 lg:col-span-2">
           <div className="grid gap-4 md:grid-cols-2">
-            <CopyField label={t('referral.code')} value={data.user.referralCode || '-'} onCopy={() => copy(data.user.referralCode, 'code')} copied={copied === 'code'} />
-            <CopyField label={t('referral.link')} value={data.user.inviteLink || '-'} onCopy={() => copy(data.user.inviteLink, 'link')} copied={copied === 'link'} />
+            <CopyRow label={t('referral.code')} value={data.user.referralCode || '-'} />
+            <CopyRow label={t('referral.link')} value={data.user.inviteLink || '-'} />
           </div>
 
           <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
@@ -549,22 +550,6 @@ export default function ReferralPage() {
             : `Commissions become claimable after a ${data.settings.holdDays}-day hold. ${data.settings.cadence === 'auto' ? 'Auto cadence: claim whenever a balance is available.' : `Cadence: ${data.settings.cadence}.`}`}
         </p>
       </Card>
-    </div>
-  );
-}
-
-function CopyField({ label, value, onCopy, copied }: { label: string; value: string; onCopy: () => void; copied: boolean }) {
-  return (
-    <div>
-      <p className="mb-2 text-xs uppercase tracking-wider text-ink-lo">{label}</p>
-      <div className="flex items-center gap-2">
-        <code className="flex-1 truncate rounded-xl border border-neon/15 bg-base-deep/60 px-3 py-2.5 font-mono text-sm text-ink-hi">
-          {value}
-        </code>
-        <Button size="md" variant="neon" onClick={onCopy} leftIcon={copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}>
-          {copied ? 'Copied' : 'Copy'}
-        </Button>
-      </div>
     </div>
   );
 }

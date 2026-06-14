@@ -15,6 +15,7 @@ import { Select } from '@/components/ui/Select';
 import { useLang } from '@/lib/i18n/context';
 import { formatBDT, formatDate } from '@/lib/utils/format';
 import { Briefcase, Copy, Check, Wallet, Users, Share2, Send, MessageCircle, Lock, Sparkles, ImageIcon, Link2, Banknote } from 'lucide-react';
+import { CopyRow } from '@/components/ui/CopyRow';
 
 interface Me {
   user: {
@@ -217,26 +218,24 @@ export default function DashboardAffiliateCenter() {
             <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-lo">
               {lang === 'bn' ? 'আপনার রেফারেল কোড' : 'Your referral code'}
             </p>
-            <div className="mt-2 flex items-center gap-2">
-              <code className="flex-1 truncate rounded-lg border border-neon/15 bg-base-deep/40 px-3 py-2.5 font-mono text-base font-bold text-ink-hi">
-                {me.user.referralCode}
-              </code>
-              <Button variant="neon" leftIcon={copied === 'code' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />} onClick={() => copy(me.user.referralCode, 'code')}>
-                {copied === 'code' ? (lang === 'bn' ? 'কপি হয়েছে' : 'Copied') : (lang === 'bn' ? 'কপি' : 'Copy')}
-              </Button>
+            <div className="mt-2">
+              <CopyRow
+                value={me.user.referralCode}
+                copyLabel={lang === 'bn' ? 'কপি' : 'Copy'}
+                copiedLabel={lang === 'bn' ? 'কপি হয়েছে' : 'Copied'}
+              />
             </div>
           </div>
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-lo">
               {lang === 'bn' ? 'রেফারেল লিঙ্ক' : 'Referral link'}
             </p>
-            <div className="mt-2 flex items-center gap-2">
-              <code className="flex-1 truncate rounded-lg border border-neon/15 bg-base-deep/40 px-3 py-2.5 font-mono text-sm text-ink-hi">
-                {referralLink}
-              </code>
-              <Button variant="gold" leftIcon={copied === 'link' ? <Check className="h-4 w-4" /> : <Link2 className="h-4 w-4" />} onClick={() => copy(referralLink, 'link')}>
-                {copied === 'link' ? (lang === 'bn' ? 'কপি হয়েছে' : 'Copied') : (lang === 'bn' ? 'কপি' : 'Copy')}
-              </Button>
+            <div className="mt-2">
+              <CopyRow
+                value={referralLink}
+                copyLabel={lang === 'bn' ? 'কপি' : 'Copy'}
+                copiedLabel={lang === 'bn' ? 'কপি হয়েছে' : 'Copied'}
+              />
             </div>
             <p className="mt-2 inline-flex flex-wrap gap-2 text-xs text-ink-lo">
               <span className="inline-flex items-center gap-1"><Share2 className="h-3 w-3" />{lang === 'bn' ? 'এক ট্যাপে শেয়ার' : 'Share via'}</span>
