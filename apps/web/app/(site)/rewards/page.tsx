@@ -11,6 +11,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { BackBar } from '@/components/site/BackBar';
 import { useT, useLang } from '@/lib/i18n/context';
 import { Trophy, Gift, Calendar, Disc, Check, AlertCircle, X, Sparkles } from 'lucide-react';
@@ -86,7 +87,17 @@ export default function RewardsPage() {
   const t = useT();
   const { lang } = useLang();
   const bn = lang === 'bn';
-  const [tab, setTab] = useState<Tab>('store');
+  const searchParams = useSearchParams();
+  // Resolve the initial tab from the URL so deep links from the
+  // floating HomeSpinShortcut (/rewards?tab=spin) and the planned
+  // /spin redirect (rewards?tab=spin) land directly on the Spin
+  // tab. Default to 'store' for any unrecognised or missing value.
+  const initialTab = ((): Tab => {
+    const t = searchParams?.get('tab')?.trim().toLowerCase();
+    if (t === 'spin' || t === 'checkin' || t === 'store') return t as Tab;
+    return 'store';
+  })();
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [items, setItems] = useState<PublicRewardItem[]>([]);
   const [me, setMe] = useState<RewardsMe | null>(null);
   const [tiers, setTiers] = useState<PublicSpinTier[]>([]);

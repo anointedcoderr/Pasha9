@@ -38,7 +38,7 @@ export function HomeSpinShortcut() {
     <Link
       href="/rewards?tab=spin"
       aria-label={bn ? 'স্পিন হুইল' : 'Spin Wheel'}
-      className="group fixed bottom-[calc(200px+env(safe-area-inset-bottom))] right-3 z-40 flex flex-col items-center gap-1 lg:bottom-[calc(96px+env(safe-area-inset-bottom))] lg:right-6"
+      className="group fixed bottom-[calc(180px+env(safe-area-inset-bottom))] right-2 z-40 flex flex-col items-center gap-1 lg:bottom-[calc(88px+env(safe-area-inset-bottom))] lg:right-5"
     >
       <span
         aria-hidden
