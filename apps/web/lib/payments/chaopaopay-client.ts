@@ -24,6 +24,8 @@ interface ChaopaoPaySettings {
   apiKey: string | null;
   secretKey: string | null;
   withdrawPassword: string | null;
+  bkashIcon: string | null;
+  nagadIcon: string | null;
 }
 
 async function readSettings(): Promise<ChaopaoPaySettings> {
@@ -37,6 +39,8 @@ async function readSettings(): Promise<ChaopaoPaySettings> {
           'payment_chaopaopay_api_key',
           'payment_chaopaopay_secret_key',
           'payment_chaopaopay_withdraw_password',
+          'payment_chaopaopay_bkash_icon',
+          'payment_chaopaopay_nagad_icon',
         ],
       },
     },
@@ -50,6 +54,8 @@ async function readSettings(): Promise<ChaopaoPaySettings> {
     apiKey: m.get('payment_chaopaopay_api_key') ?? null,
     secretKey: m.get('payment_chaopaopay_secret_key') ?? null,
     withdrawPassword: m.get('payment_chaopaopay_withdraw_password') ?? null,
+    bkashIcon: m.get('payment_chaopaopay_bkash_icon') ?? null,
+    nagadIcon: m.get('payment_chaopaopay_nagad_icon') ?? null,
   };
 }
 

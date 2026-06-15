@@ -23,5 +23,11 @@ export async function GET() {
     minAmount: 100,
     maxAmount: 500_000,
     currency: 'BDT',
+    // Operator-uploaded tile icons (null when unset; the deposit page
+    // falls back to the built-in bK / N badges).
+    icons: {
+      bkash: cfg.bkashIcon,
+      nagad: cfg.nagadIcon,
+    },
   });
 }

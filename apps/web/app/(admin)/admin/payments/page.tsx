@@ -16,6 +16,7 @@ import { Chip } from '@/components/ui/Chip';
 import { Button } from '@/components/ui/Button';
 import { FormField, Input, PasswordInput } from '@/components/ui/Input';
 import { Switch } from '@/components/ui/Switch';
+import { AdminMediaUpload } from '@/components/admin/AdminMediaUpload';
 import {
   Wallet as WalletIcon,
   Phone,
@@ -30,7 +31,7 @@ import { cn } from '@/lib/utils/cn';
 
 type IconName = 'wallet' | 'phone' | 'banknote' | 'flask-conical' | 'shield-check';
 type ProviderStatus = 'live' | 'requires_credentials' | 'disabled' | 'manual';
-type FieldKind = 'text' | 'secret' | 'toggle' | 'select';
+type FieldKind = 'text' | 'secret' | 'toggle' | 'select' | 'image';
 
 interface Field {
   key: string;
@@ -233,6 +234,28 @@ function ProviderCard({ provider, onSaved }: { provider: ProviderSummary; onSave
                       placeholder={f.hasValue ? '************' : 'Enter value'}
                     />
                   </FormField>
+                );
+              }
+              if (f.kind === 'image') {
+                // AdminMediaUpload owns its own preview + Replace +
+                // Remove controls and posts to /api/admin/uploads
+                // with the payment_icons category. Server-side MIME
+                // + size + IDOR guards live in lib/uploads/storage.ts.
+                // Removing the file just sets the draft to '' so the
+                // upcoming PATCH writes an empty SystemSetting value
+                // and the deposit page falls back to the built-in
+                // brand badge.
+                return (
+                  <div key={f.key} className="md:col-span-2">
+                    <AdminMediaUpload
+                      label={f.label}
+                      hint={f.hint}
+                      value={current || null}
+                      category="payment_icons"
+                      onChange={(url) => setDraft((d) => ({ ...d, [f.key]: url ?? '' }))}
+                      constraintHint="PNG/JPG/WebP/SVG . square . <=200KB"
+                    />
+                  </div>
                 );
               }
               return (

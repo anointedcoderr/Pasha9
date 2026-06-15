@@ -48,6 +48,8 @@ async function readSettings() {
           'payment_chaopaopay_api_key',
           'payment_chaopaopay_secret_key',
           'payment_chaopaopay_withdraw_password',
+          'payment_chaopaopay_bkash_icon',
+          'payment_chaopaopay_nagad_icon',
         ],
       },
     },
@@ -61,6 +63,8 @@ async function readSettings() {
     apiKey: m.get('payment_chaopaopay_api_key') ?? null,
     secretKey: m.get('payment_chaopaopay_secret_key') ?? null,
     withdrawPassword: m.get('payment_chaopaopay_withdraw_password') ?? null,
+    bkashIcon: m.get('payment_chaopaopay_bkash_icon') ?? null,
+    nagadIcon: m.get('payment_chaopaopay_nagad_icon') ?? null,
   };
 }
 
@@ -200,5 +204,7 @@ export const chaopaopaySettings: ProviderSettingsSchema = {
     { key: 'payment_chaopaopay_api_key', label: 'API Key (pk_...)', kind: 'text', hint: 'From the API Credentials section of the merchant panel.' },
     { key: 'payment_chaopaopay_secret_key', label: 'Secret Key (sk_...)', kind: 'secret', hint: 'Used to verify webhook signatures. Never exposed publicly.' },
     { key: 'payment_chaopaopay_withdraw_password', label: 'Withdraw Password', kind: 'secret', hint: 'Required for payouts only. Set when withdrawal automation is enabled.' },
+    { key: 'payment_chaopaopay_bkash_icon', label: 'bKash tile icon', kind: 'image', hint: 'Square PNG/JPG/WebP/SVG shown on the deposit tile grid. Leave empty to use the built-in bK badge.' },
+    { key: 'payment_chaopaopay_nagad_icon', label: 'Nagad tile icon', kind: 'image', hint: 'Square PNG/JPG/WebP/SVG shown on the deposit tile grid. Leave empty to use the built-in N badge.' },
   ],
 };

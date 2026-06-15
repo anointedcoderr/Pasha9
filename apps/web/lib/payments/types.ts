@@ -58,7 +58,7 @@ export interface ProviderSettingsSchema {
   fields: Array<{
     key: string;          // SystemSetting key, eg "payment_bkash_app_secret"
     label: string;
-    kind: 'text' | 'secret' | 'toggle' | 'select';
+    kind: 'text' | 'secret' | 'toggle' | 'select' | 'image';
     options?: string[];   // for kind=select
     hint?: string;
   }>;

@@ -106,6 +106,7 @@ export default function DepositPage() {
   // ChaopaoPay-hosted payment page.
   const [expressAvailable, setExpressAvailable] = useState(false);
   const [expressMethods, setExpressMethods] = useState<string[]>([]);
+  const [expressIcons, setExpressIcons] = useState<{ bkash: string | null; nagad: string | null }>({ bkash: null, nagad: null });
   const [expressBusy, setExpressBusy] = useState<null | 'bkash' | 'nagad'>(null);
   const [expressError, setExpressError] = useState<string | null>(null);
   const [gatewayChoice, setGatewayChoice] = useState<null | 'bkash' | 'nagad'>(null);
@@ -163,6 +164,11 @@ export default function DepositPage() {
         if (j?.available && Array.isArray(j.methods) && j.methods.length > 0) {
           setExpressAvailable(true);
           setExpressMethods(j.methods.filter((m: unknown): m is string => typeof m === 'string'));
+          const icons = j.icons ?? {};
+          setExpressIcons({
+            bkash: typeof icons.bkash === 'string' && icons.bkash.trim() ? icons.bkash : null,
+            nagad: typeof icons.nagad === 'string' && icons.nagad.trim() ? icons.nagad : null,
+          });
         }
       })
       .catch(() => { /* probe is best-effort; Quick Pay just stays hidden */ });
@@ -566,9 +572,19 @@ export default function DepositPage() {
                         <span className="absolute right-1 top-1 inline-flex items-center rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[8px] font-extrabold uppercase tracking-wider text-emerald-700">
                           {lang === 'bn' ? 'অটো' : 'AUTO'}
                         </span>
-                        <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#e2136e] text-base font-extrabold text-white shadow-sm">
-                          bK
-                        </span>
+                        {expressIcons.bkash ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={expressIcons.bkash}
+                            alt="bKash"
+                            className="h-11 w-11 rounded-xl object-contain"
+                            onError={() => setExpressIcons((s) => ({ ...s, bkash: null }))}
+                          />
+                        ) : (
+                          <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#e2136e] text-base font-extrabold text-white shadow-sm">
+                            bK
+                          </span>
+                        )}
                         <span className="text-[11px] font-bold text-ink-hi">bKash</span>
                       </button>
                     ) : null}
@@ -584,9 +600,19 @@ export default function DepositPage() {
                         <span className="absolute right-1 top-1 inline-flex items-center rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[8px] font-extrabold uppercase tracking-wider text-emerald-700">
                           {lang === 'bn' ? 'অটো' : 'AUTO'}
                         </span>
-                        <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#ec1c24] text-base font-extrabold text-white shadow-sm">
-                          N
-                        </span>
+                        {expressIcons.nagad ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={expressIcons.nagad}
+                            alt="Nagad"
+                            className="h-11 w-11 rounded-xl object-contain"
+                            onError={() => setExpressIcons((s) => ({ ...s, nagad: null }))}
+                          />
+                        ) : (
+                          <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#ec1c24] text-base font-extrabold text-white shadow-sm">
+                            N
+                          </span>
+                        )}
                         <span className="text-[11px] font-bold text-ink-hi">Nagad</span>
                       </button>
                     ) : null}
