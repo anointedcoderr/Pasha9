@@ -1328,6 +1328,11 @@ model SpinWheelTier {
   iconUrl         String?
   position        Int      @default(0)
   isActive        Boolean  @default(true)
+  // Bumped on every payout-config change (segment activation, exclude
+  // toggle, weight or amount edit). The 5b engine snapshots this value
+  // onto WheelSpin so we can prove the eligible pool at spin time even
+  // after later edits.
+  configVersion   Int      @default(1)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -1347,15 +1352,52 @@ model SpinSegment {
   turnoverX    Decimal  @default(0) @db.Decimal(6, 2)
   position     Int      @default(0)
   isActive     Boolean  @default(true)
+  // Server-only payout-eligibility flag. Set to true to keep the wedge
+  // on the visual wheel (so the animation does not change for players)
+  // but exclude it from the engine's weighted pick pool. NEVER returned
+  // to the client; only the admin spin-segments endpoint exposes it.
+  excludeFromWins Boolean   @default(false)
+  excludeReason   String?
+  excludeSetBy    String?  // ActivityLog actorId of the admin who last toggled it
+  excludeSetAt    DateTime?
   tierId       String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  tier    SpinWheelTier? @relation(fields: [tierId], references: [id], onDelete: SetNull)
-  results SpinResult[]
+  tier     SpinWheelTier?     @relation(fields: [tierId], references: [id], onDelete: SetNull)
+  results  SpinResult[]
+  audits   SpinSegmentAudit[]
 
   @@index([isActive, position])
   @@index([tierId, isActive, position])
+  @@index([excludeFromWins, tierId])
+}
+
+// Every toggle, edit or delete of a SpinSegment writes one of these.
+// Captures who, when, before/after snapshots and the optional reason
+// the admin typed when flipping excludeFromWins. The compliance
+// engineering brief requires this trail so the operator can prove that
+// no-prize wedges are not silently flipped on/off mid-event.
+//
+// segmentId uses onDelete:SetNull so the audit row survives the
+// segment being deleted; the before/after JSON snapshots carry the
+// segment label + tier link so the history view is still readable.
+model SpinSegmentAudit {
+  id            String   @id @default(cuid())
+  segmentId     String?
+  actorId       String?
+  actorRole     String?
+  changeType    String   // 'exclude_on' | 'exclude_off' | 'edit' | 'create' | 'delete'
+  reason        String?
+  before        Json?
+  after         Json?
+  configVersion Int?     // tier configVersion snapshot at change time
+  createdAt     DateTime @default(now())
+
+  segment SpinSegment? @relation(fields: [segmentId], references: [id], onDelete: SetNull)
+
+  @@index([segmentId, createdAt])
+  @@index([changeType, createdAt])
 }
 
 // One row per spin. Used for history + audit.

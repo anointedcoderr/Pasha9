@@ -17,7 +17,7 @@ import { Select } from '@/components/ui/Select';
 import { Switch } from '@/components/ui/Switch';
 import { Modal } from '@/components/ui/Modal';
 import { Chip } from '@/components/ui/Chip';
-import { Sparkles, Plus, Pencil, Trash2, RefreshCw, AlertTriangle, ArrowUp, ArrowDown } from 'lucide-react';
+import { Sparkles, Plus, Pencil, Trash2, RefreshCw, AlertTriangle, ArrowUp, ArrowDown, Ban, Check } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 
 type PayoutType = 'coins' | 'bonus' | 'cash' | 'free_bet' | 'freebet' | 'freespin' | 'nothing' | 'loss';
@@ -33,6 +33,12 @@ interface Segment {
   position: number;
   isActive: boolean;
   tierId: string | null;
+  // Server-only payout-eligibility metadata. Never round-trips to the
+  // public spin wheel endpoint; admin-only.
+  excludeFromWins: boolean;
+  excludeReason: string | null;
+  excludeSetBy: string | null;
+  excludeSetAt: string | null;
 }
 
 interface Tier {
@@ -61,6 +67,10 @@ const BLANK: Segment = {
   position: 0,
   isActive: true,
   tierId: null,
+  excludeFromWins: false,
+  excludeReason: null,
+  excludeSetBy: null,
+  excludeSetAt: null,
 };
 
 export default function AdminSpinSegmentsPage() {
@@ -73,6 +83,13 @@ export default function AdminSpinSegmentsPage() {
   const [editor, setEditor] = useState<Segment | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Confirm-dialog state for the Winnable / Exclude-from-wins toggle.
+  // The dialog asks for a reason string so the audit row is useful;
+  // typing a reason is required when EXCLUDING (turning Winnable off)
+  // and optional when re-enabling.
+  const [excludeTarget, setExcludeTarget] = useState<Segment | null>(null);
+  const [excludeReasonDraft, setExcludeReasonDraft] = useState('');
+  const [excludeBusy, setExcludeBusy] = useState(false);
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
@@ -148,6 +165,8 @@ export default function AdminSpinSegmentsPage() {
         turnoverX: Number(editor.turnoverX),
         position: Number(editor.position),
         isActive: editor.isActive,
+        excludeFromWins: editor.excludeFromWins,
+        excludeReason: editor.excludeReason ?? null,
         tierId: editor.tierId ?? null,
       };
       const r = editor.id
@@ -183,6 +202,46 @@ export default function AdminSpinSegmentsPage() {
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Delete failed');
+    }
+  };
+
+  const openExcludeDialog = (segment: Segment) => {
+    setExcludeTarget(segment);
+    // Pre-fill the reason field when an admin is editing an existing
+    // exclusion reason; clear it when toggling a fresh segment.
+    setExcludeReasonDraft(segment.excludeFromWins ? segment.excludeReason ?? '' : '');
+  };
+
+  const submitExcludeToggle = async () => {
+    if (!excludeTarget) return;
+    const turningOff = !excludeTarget.excludeFromWins;
+    // When EXCLUDING a wedge (Winnable -> off) the audit trail wants a
+    // reason. Re-enabling without a reason is fine.
+    if (turningOff && excludeReasonDraft.trim().length === 0) {
+      setError('Reason is required when excluding a wedge from the win pool.');
+      return;
+    }
+    setExcludeBusy(true);
+    setError(null);
+    try {
+      const r = await fetch('/api/admin/spin-segments', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          id: excludeTarget.id,
+          excludeFromWins: turningOff,
+          excludeReason: turningOff ? excludeReasonDraft.trim() : null,
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j?.message ?? j?.code ?? 'Toggle failed');
+      setExcludeTarget(null);
+      setExcludeReasonDraft('');
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Toggle failed');
+    } finally {
+      setExcludeBusy(false);
     }
   };
 
@@ -334,6 +393,9 @@ export default function AdminSpinSegmentsPage() {
                 </p>
               </div>
               <Chip tone={s.isActive ? 'ok' : 'neutral'}>{s.isActive ? 'active' : 'inactive'}</Chip>
+              <Chip tone={s.excludeFromWins ? 'warn' : 'ok'}>
+                {s.excludeFromWins ? 'display only' : 'winnable'}
+              </Chip>
               <div className="flex items-center gap-1">
                 <button
                   type="button"
@@ -354,8 +416,22 @@ export default function AdminSpinSegmentsPage() {
                   <ArrowDown className="h-3.5 w-3.5" />
                 </button>
               </div>
+              <Button
+                size="sm"
+                variant={s.excludeFromWins ? 'gold' : 'ghost'}
+                leftIcon={s.excludeFromWins ? <Check className="h-3.5 w-3.5" /> : <Ban className="h-3.5 w-3.5" />}
+                onClick={() => openExcludeDialog(s)}
+              >
+                {s.excludeFromWins ? 'Make winnable' : 'Exclude'}
+              </Button>
               <Button size="sm" variant="ghost" leftIcon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditor(s)}>Edit</Button>
               <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => removeSegment(s.id)}>Delete</Button>
+              {s.excludeFromWins && s.excludeReason ? (
+                <p className="basis-full pl-12 text-[11px] italic text-amber-300">
+                  Excluded: {s.excludeReason}
+                  {s.excludeSetAt ? ` . ${new Date(s.excludeSetAt).toLocaleString()}` : ''}
+                </p>
+              ) : null}
             </Card>
           ))}
         </div>
@@ -399,10 +475,92 @@ export default function AdminSpinSegmentsPage() {
                 <p className="text-sm font-semibold text-brand-ink">Active</p>
                 <Switch checked={editor.isActive} onChange={(v) => setEditor({ ...editor, isActive: v })} />
               </div>
+              <div className="md:col-span-2 rounded-lg border border-amber-400/40 bg-amber-500/5 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-semibold text-brand-ink">Winnable</p>
+                    <p className="text-[11px] text-brand-inkMute">
+                      When OFF the wedge stays on the visual wheel but the engine never picks it. Players cannot tell from the spin animation.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={!editor.excludeFromWins}
+                    onChange={(v) => setEditor({ ...editor, excludeFromWins: !v })}
+                  />
+                </div>
+                {editor.excludeFromWins ? (
+                  <FormField label="Exclusion reason" hint="Recorded on the audit trail. Required when first marking a wedge display-only.">
+                    <Input
+                      value={editor.excludeReason ?? ''}
+                      onChange={(e) => setEditor({ ...editor, excludeReason: e.target.value })}
+                      placeholder="e.g. Grand prize budget exhausted for this campaign window"
+                    />
+                  </FormField>
+                ) : null}
+              </div>
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="ghost" type="button" onClick={() => setEditor(null)}>Cancel</Button>
               <Button type="submit" loading={busy}>Save</Button>
+            </div>
+          </form>
+        ) : null}
+      </Modal>
+
+      <Modal
+        open={!!excludeTarget}
+        onOpenChange={(v) => { if (!v) { setExcludeTarget(null); setExcludeReasonDraft(''); } }}
+        title={excludeTarget?.excludeFromWins ? 'Make wedge winnable' : 'Exclude wedge from wins'}
+        size="md"
+      >
+        {excludeTarget ? (
+          <form
+            className="space-y-3"
+            onSubmit={(e) => { e.preventDefault(); void submitExcludeToggle(); }}
+          >
+            <div className="rounded-lg border border-amber-400/40 bg-amber-500/5 p-3 text-xs text-amber-100">
+              <p className="font-bold">
+                {excludeTarget.excludeFromWins
+                  ? `Re-enable the "${excludeTarget.label}" wedge?`
+                  : `Mark the "${excludeTarget.label}" wedge as display-only?`}
+              </p>
+              <p className="mt-1">
+                {excludeTarget.excludeFromWins
+                  ? 'Engine will start picking this wedge again on the next spin. The action is logged with your operator ID and the time stamp.'
+                  : 'The wedge stays on the visual wheel. The engine will skip it for every subsequent spin, the change is recorded on the audit trail, and the tier configVersion is bumped.'}
+              </p>
+            </div>
+            <FormField
+              label="Reason"
+              hint={excludeTarget.excludeFromWins
+                ? 'Optional. Why is this wedge being re-enabled?'
+                : 'Required. Why is this wedge no longer winnable?'}
+              required={!excludeTarget.excludeFromWins}
+            >
+              <Input
+                value={excludeReasonDraft}
+                onChange={(e) => setExcludeReasonDraft(e.target.value)}
+                placeholder={excludeTarget.excludeFromWins
+                  ? 'e.g. Budget restored, campaign restart'
+                  : 'e.g. Grand prize budget exhausted for this campaign window'}
+                autoFocus
+              />
+            </FormField>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button
+                variant="ghost"
+                type="button"
+                onClick={() => { setExcludeTarget(null); setExcludeReasonDraft(''); }}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                loading={excludeBusy}
+                variant={excludeTarget.excludeFromWins ? 'gold' : 'danger'}
+              >
+                {excludeTarget.excludeFromWins ? 'Make winnable' : 'Exclude wedge'}
+              </Button>
             </div>
           </form>
         ) : null}
