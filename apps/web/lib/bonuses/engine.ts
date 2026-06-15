@@ -102,6 +102,12 @@ const DIRECT_BALANCE_LOCK_SOURCES = new Set([
   // Manual admin-issued bonuses land in balance too so the operator
   // can hand-grant a cash bonus that shows up immediately.
   'manual',
+  // Cashback campaigns credit Wallet.balance with a turnover lock
+  // tracked via UserBonus (matching the spin cash-payout pattern).
+  // Without this entry the legacy grantBonusInTx path would have
+  // routed cashback into bonusBalance + lockedBalance, which is why
+  // operators reported "cashback not added to user balance".
+  'cashback_campaign',
 ]);
 
 async function creditBonus(tx: Tx, userId: string, amount: Prisma.Decimal, sourceType: string | null = null): Promise<void> {

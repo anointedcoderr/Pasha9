@@ -2432,6 +2432,10 @@ model Notification {
   priority    String   @default("normal")
   status      String   @default("sent")
   audience    String   @default("all")
+  // Category tag used by the player-side UI to pick the right
+  // celebration popup. Free string; known values are 'cashback',
+  // 'lotto_win', 'spin_win', null for generic broadcast.
+  kind        String?
   createdById String?
   createdAt   DateTime @default(now())
 
@@ -2551,6 +2555,14 @@ model CashbackCampaign {
   startsAt     DateTime?
   endsAt       DateTime?
   isActive     Boolean  @default(true)
+  // Scope filter. 'all' (default) sums every bet/win Transaction in
+  // the window; 'match' restricts the sum to Transaction rows whose
+  // meta.scope is one of scopeKeys (e.g. ['casino'], ['sports'],
+  // ['casino','live_casino']). Bet/win Transactions stamp
+  // meta.scope at write time (native games stamp 'casino'; sports
+  // / external providers will stamp their own scope when integrated).
+  scopeType    String   @default("all")
+  scopeKeys    String[] @default([])
   bonusRuleId  String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt

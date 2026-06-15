@@ -291,7 +291,7 @@ export async function settleDiceBet(input: DiceBetInput): Promise<DiceBetResult>
         amount: bet.neg(),
         reference: round.id,
         description: 'Pasha Dice bet',
-        meta: { gameCode: game.gameCode, roundId: round.id, sessionId: session.id, nonce } as Prisma.JsonObject,
+        meta: { gameCode: game.gameCode, roundId: round.id, sessionId: session.id, nonce, scope: 'casino' } as Prisma.JsonObject,
       },
     });
 
@@ -309,7 +309,7 @@ export async function settleDiceBet(input: DiceBetInput): Promise<DiceBetResult>
           amount: outcome.payout,
           reference: round.id,
           description: 'Pasha Dice win',
-          meta: { gameCode: game.gameCode, roundId: round.id, sessionId: session.id, nonce } as Prisma.JsonObject,
+          meta: { gameCode: game.gameCode, roundId: round.id, sessionId: session.id, nonce, scope: 'casino' } as Prisma.JsonObject,
         },
       });
     }
@@ -454,7 +454,7 @@ async function settleInstant<R extends InstantOutcome>(input: InstantSettleInput
         amount: input.betAmount.neg(),
         reference: round.id,
         description: outcome.description + ' bet',
-        meta: { gameCode: game.gameCode, roundId: round.id, sessionId: session.id, nonce } as Prisma.JsonObject,
+        meta: { gameCode: game.gameCode, roundId: round.id, sessionId: session.id, nonce, scope: 'casino' } as Prisma.JsonObject,
       },
     });
 
@@ -472,7 +472,7 @@ async function settleInstant<R extends InstantOutcome>(input: InstantSettleInput
           amount: outcome.payout,
           reference: round.id,
           description: outcome.description + ' win',
-          meta: { gameCode: game.gameCode, roundId: round.id, sessionId: session.id, nonce } as Prisma.JsonObject,
+          meta: { gameCode: game.gameCode, roundId: round.id, sessionId: session.id, nonce, scope: 'casino' } as Prisma.JsonObject,
         },
       });
     }
@@ -879,7 +879,7 @@ export async function startMinesRound(input: MinesStartInput): Promise<MinesStar
         amount: bet.neg(),
         reference: round.id,
         description: 'Pasha Mines bet',
-        meta: { gameCode: game.gameCode, roundId: round.id, sessionId: session.id, nonce, mineCount: input.mineCount } as Prisma.JsonObject,
+        meta: { gameCode: game.gameCode, roundId: round.id, sessionId: session.id, nonce, mineCount: input.mineCount, scope: 'casino' } as Prisma.JsonObject,
       },
     });
 
@@ -1095,7 +1095,7 @@ export async function cashoutMines(input: MinesCashoutInput): Promise<MinesCasho
         amount: payout,
         reference: round.id,
         description: 'Pasha Mines cashout',
-        meta: { gameCode: game.gameCode, roundId: round.id, sessionId: round.sessionId, multiplier: multiplier.toFixed(4) } as Prisma.JsonObject,
+        meta: { gameCode: game.gameCode, roundId: round.id, sessionId: round.sessionId, multiplier: multiplier.toFixed(4), scope: 'casino' } as Prisma.JsonObject,
       },
     });
 

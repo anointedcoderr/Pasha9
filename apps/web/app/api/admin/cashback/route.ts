@@ -23,6 +23,13 @@ const createSchema = z.object({
   startsAt: z.string().datetime().optional().nullable(),
   endsAt: z.string().datetime().optional().nullable(),
   isActive: z.boolean().optional().default(true),
+  // Scope filter. 'all' counts every bet/win Transaction; 'match'
+  // restricts to rows whose meta.scope is one of scopeKeys.
+  scopeType: z.enum(['all', 'match']).optional().default('all'),
+  scopeKeys: z.array(z.string().trim().min(1).max(40)).max(40).optional().default([]),
+  // Optional legacy field. The engine now upserts a stable
+  // cashback_payout BonusRule internally so the operator no longer has
+  // to hand-pick one. Accepted on input for backwards compatibility.
   bonusRuleId: z.string().trim().min(1).max(60).optional().nullable(),
 });
 
@@ -39,6 +46,8 @@ function serialize(c: Awaited<ReturnType<typeof db.cashbackCampaign.findMany>>[n
     startsAt: c.startsAt,
     endsAt: c.endsAt,
     isActive: c.isActive,
+    scopeType: c.scopeType,
+    scopeKeys: c.scopeKeys,
     bonusRuleId: c.bonusRuleId,
     createdAt: c.createdAt,
     updatedAt: c.updatedAt,
@@ -65,12 +74,15 @@ export async function POST(req: NextRequest) {
     if (!parsed.success) return jsonError(400, 'VALIDATION', undefined, { issues: parsed.error.issues });
     const data = parsed.data;
 
-    if (data.turnoverX > 0 && !data.bonusRuleId) {
-      return jsonError(400, 'VALIDATION', 'A Bonus Rule is required when turnoverX > 0 so the credited cashback can carry a turnover lock.');
-    }
     if (data.bonusRuleId) {
       const rule = await db.bonusRule.findUnique({ where: { id: data.bonusRuleId } });
       if (!rule) return jsonError(400, 'VALIDATION', 'Bonus Rule not found.');
+    }
+    // If scopeType='match' is selected, the operator must supply at
+    // least one scope key. The engine treats empty scopeKeys as 'no
+    // matches' which would silently pay zero users.
+    if (data.scopeType === 'match' && data.scopeKeys.length === 0) {
+      return jsonError(400, 'VALIDATION', 'Select at least one scope (Sports, Casino, Live Casino, or a specific provider) when scope is set to Match.');
     }
 
     const created = await db.cashbackCampaign.create({
@@ -85,6 +97,8 @@ export async function POST(req: NextRequest) {
         startsAt: data.startsAt ? new Date(data.startsAt) : null,
         endsAt: data.endsAt ? new Date(data.endsAt) : null,
         isActive: data.isActive,
+        scopeType: data.scopeType,
+        scopeKeys: data.scopeKeys,
         bonusRuleId: data.bonusRuleId ?? null,
       },
     });

@@ -6,6 +6,7 @@ import { Header } from '@/components/site/Header';
 import { Footer } from '@/components/site/Footer';
 import { FloatingContact } from '@/components/site/FloatingContact';
 import { NotificationAutoPrompt } from '@/components/site/NotificationAutoPrompt';
+import { CashbackCelebration } from '@/components/site/CashbackCelebration';
 import { TooltipProvider } from '@/components/ui/Tooltip';
 
 export default function SiteLayout({ children }: { children: ReactNode }) {
@@ -36,6 +37,7 @@ export default function SiteLayout({ children }: { children: ReactNode }) {
         <Footer />
         <FloatingContact />
         <NotificationAutoPrompt />
+        <CashbackCelebration />
       </div>
     </TooltipProvider>
   );

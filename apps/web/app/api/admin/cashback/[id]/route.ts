@@ -23,6 +23,8 @@ const patchSchema = z.object({
   startsAt: z.string().datetime().nullable().optional(),
   endsAt: z.string().datetime().nullable().optional(),
   isActive: z.boolean().optional(),
+  scopeType: z.enum(['all', 'match']).optional(),
+  scopeKeys: z.array(z.string().trim().min(1).max(40)).max(40).optional(),
   bonusRuleId: z.string().trim().min(1).max(60).nullable().optional(),
 });
 
@@ -40,6 +42,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       const rule = await db.bonusRule.findUnique({ where: { id: d.bonusRuleId } });
       if (!rule) return jsonError(400, 'VALIDATION', 'Bonus Rule not found.');
     }
+    if (d.scopeType === 'match' && Array.isArray(d.scopeKeys) && d.scopeKeys.length === 0) {
+      return jsonError(400, 'VALIDATION', 'Select at least one scope key when scope is set to Match.');
+    }
 
     const updated = await db.cashbackCampaign.update({
       where: { id: params.id },
@@ -54,6 +59,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         ...(d.startsAt !== undefined ? { startsAt: d.startsAt ? new Date(d.startsAt) : null } : {}),
         ...(d.endsAt !== undefined ? { endsAt: d.endsAt ? new Date(d.endsAt) : null } : {}),
         ...(d.isActive !== undefined ? { isActive: d.isActive } : {}),
+        ...(d.scopeType !== undefined ? { scopeType: d.scopeType } : {}),
+        ...(d.scopeKeys !== undefined ? { scopeKeys: d.scopeKeys } : {}),
         ...(d.bonusRuleId !== undefined ? { bonusRuleId: d.bonusRuleId } : {}),
       },
     });

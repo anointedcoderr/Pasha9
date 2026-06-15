@@ -13,6 +13,8 @@ import { Chip } from '@/components/ui/Chip';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { TrendingUp, Plus, Pencil, Trash2, Play, AlertCircle, CheckCircle2 } from 'lucide-react';
 
+type ScopeType = 'all' | 'match';
+
 interface CampaignRow {
   id: string;
   nameEn: string;
@@ -25,9 +27,24 @@ interface CampaignRow {
   startsAt: string | null;
   endsAt: string | null;
   isActive: boolean;
+  scopeType: ScopeType;
+  scopeKeys: string[];
   bonusRuleId: string | null;
   payoutCount: number;
 }
+
+// Predefined scope keys the operator can pick from. The list maps to
+// the meta.scope values the bet/win writers stamp on Transaction rows.
+// Native games stamp 'casino'; sports/live providers stamp their own
+// keys when integrated. The free-form chip input below lets the
+// operator add provider-specific keys ahead of integration.
+const PREDEFINED_SCOPES = [
+  { key: 'casino', labelEn: 'Casino', labelBn: 'ক্যাসিনো' },
+  { key: 'live_casino', labelEn: 'Live Casino', labelBn: 'লাইভ ক্যাসিনো' },
+  { key: 'sports', labelEn: 'Sports Betting', labelBn: 'স্পোর্টস বেটিং' },
+  { key: 'slots', labelEn: 'Slots', labelBn: 'স্লট' },
+  { key: 'fish', labelEn: 'Fishing', labelBn: 'ফিশিং' },
+] as const;
 
 interface BonusRuleOption {
   id: string;
@@ -66,6 +83,8 @@ const BLANK: CampaignRow = {
   startsAt: null,
   endsAt: null,
   isActive: true,
+  scopeType: 'all',
+  scopeKeys: [],
   bonusRuleId: null,
   payoutCount: 0,
 };
@@ -126,7 +145,8 @@ export default function AdminCashbackPage() {
       startsAt: editor.startsAt ? new Date(editor.startsAt).toISOString() : null,
       endsAt: editor.endsAt ? new Date(editor.endsAt).toISOString() : null,
       isActive: editor.isActive,
-      bonusRuleId: editor.turnoverX > 0 ? editor.bonusRuleId : null,
+      scopeType: editor.scopeType,
+      scopeKeys: editor.scopeType === 'match' ? editor.scopeKeys : [],
     };
     try {
       const isNew = !editor.id;
@@ -212,7 +232,7 @@ export default function AdminCashbackPage() {
                 </div>
                 {c.nameBn ? <p className="text-sm text-ink-mid">{c.nameBn}</p> : null}
                 <p className="text-[11px] text-ink-lo">
-                  {c.percentage}% . Cap {c.maxCashback ? `${c.maxCashback.toLocaleString()} BDT` : 'unlimited'} . Turnover {c.turnoverX || 0}x
+                  {c.percentage}% . Cap {c.maxCashback ? `${c.maxCashback.toLocaleString()} BDT` : 'unlimited'} . Turnover {c.turnoverX || 0}x . Scope {c.scopeType === 'all' ? 'all games' : (c.scopeKeys.length > 0 ? c.scopeKeys.join(', ') : 'NONE')}
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -271,18 +291,102 @@ export default function AdminCashbackPage() {
               <FormField label="Max cashback (BDT)" hint="0 disables the cap.">
                 <Input type="number" min="0" step="1" value={String(editor.maxCashback)} onChange={(e) => setEditor({ ...editor, maxCashback: Number(e.target.value) || 0 })} />
               </FormField>
-              <FormField label="Turnover (x)" hint="When > 0, the credit routes through a Bonus Rule.">
+              <FormField label="Turnover (x)" hint="0 = no wager lock. Positive values lock the cashback in balance until wagered.">
                 <Input type="number" min="0" step="0.5" value={String(editor.turnoverX)} onChange={(e) => setEditor({ ...editor, turnoverX: Number(e.target.value) || 0 })} />
               </FormField>
             </div>
-            {editor.turnoverX > 0 ? (
-              <FormField label="Bonus Rule (carries turnover)" required>
-                <Select value={editor.bonusRuleId ?? ''} onChange={(e) => setEditor({ ...editor, bonusRuleId: e.target.value || null })}>
-                  <option value="">Select a rule</option>
-                  {rules.map((r) => <option key={r.id} value={r.id}>{r.name} ({r.type}, {r.turnoverX}x)</option>)}
-                </Select>
-              </FormField>
-            ) : null}
+
+            {/* Scope picker. 'All games' is the default and matches every
+                completed bet/win Transaction in the period. 'Specific scopes'
+                lets the operator restrict the cashback base to a subset of
+                game categories or providers - the engine filters
+                Transaction.meta.scope against the configured keys. */}
+            <FormField
+              label="Apply to"
+              hint="Choose which losses count toward this campaign's cashback."
+            >
+              <div className="space-y-3 rounded-xl border border-brand-divider bg-brand-paper p-3">
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditor({ ...editor, scopeType: 'all', scopeKeys: [] })}
+                    className={
+                      'inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-xs font-bold uppercase tracking-wider transition ' +
+                      (editor.scopeType === 'all'
+                        ? 'border-brand-yellow-500 bg-brand-yellow-500/15 text-brand-ink'
+                        : 'border-brand-divider text-brand-inkSoft hover:text-brand-ink')
+                    }
+                  >
+                    All games
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditor({ ...editor, scopeType: 'match' })}
+                    className={
+                      'inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-xs font-bold uppercase tracking-wider transition ' +
+                      (editor.scopeType === 'match'
+                        ? 'border-brand-yellow-500 bg-brand-yellow-500/15 text-brand-ink'
+                        : 'border-brand-divider text-brand-inkSoft hover:text-brand-ink')
+                    }
+                  >
+                    Specific scopes
+                  </button>
+                </div>
+
+                {editor.scopeType === 'match' ? (
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap gap-2">
+                      {PREDEFINED_SCOPES.map((s) => {
+                        const checked = editor.scopeKeys.includes(s.key);
+                        return (
+                          <button
+                            type="button"
+                            key={s.key}
+                            onClick={() => setEditor({
+                              ...editor,
+                              scopeKeys: checked
+                                ? editor.scopeKeys.filter((k) => k !== s.key)
+                                : [...editor.scopeKeys, s.key],
+                            })}
+                            className={
+                              'inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[11px] font-semibold transition ' +
+                              (checked
+                                ? 'border-emerald-500 bg-emerald-500/15 text-emerald-200'
+                                : 'border-brand-divider text-brand-inkSoft hover:text-brand-ink')
+                            }
+                          >
+                            {checked ? <CheckCircle2 className="h-3.5 w-3.5" /> : null}
+                            {s.labelEn}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Free-form provider/extra-key input. Operator types
+                        a scope key (e.g. "jili", "pgsoft", "evolution")
+                        and presses Enter to add it. */}
+                    <FreeFormScopeInput
+                      values={editor.scopeKeys.filter((k) => !PREDEFINED_SCOPES.some((p) => p.key === k))}
+                      onAdd={(v) => {
+                        if (editor.scopeKeys.includes(v)) return;
+                        setEditor({ ...editor, scopeKeys: [...editor.scopeKeys, v] });
+                      }}
+                      onRemove={(v) => setEditor({ ...editor, scopeKeys: editor.scopeKeys.filter((k) => k !== v) })}
+                    />
+
+                    <p className="text-[11px] text-brand-inkMute">
+                      Bet/win Transactions must stamp <code className="font-mono">meta.scope</code> for the
+                      filter to match. Native games already stamp <code className="font-mono">casino</code>;
+                      external providers stamp their own scope when integrated. Empty list = no cashback paid.
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-brand-inkMute">
+                    Cashback base sums every completed bet/win Transaction in the period, regardless of game type.
+                  </p>
+                )}
+              </div>
+            </FormField>
             <div className="grid gap-3 md:grid-cols-2">
               <FormField label="Starts at">
                 <Input type="datetime-local" value={toLocalInput(editor.startsAt)} onChange={(e) => setEditor({ ...editor, startsAt: e.target.value || null })} />
@@ -322,5 +426,43 @@ export default function AdminCashbackPage() {
         ) : null}
       </Modal>
     </>
+  );
+}
+
+function FreeFormScopeInput({ values, onAdd, onRemove }: { values: string[]; onAdd: (v: string) => void; onRemove: (v: string) => void }) {
+  const [draft, setDraft] = useState('');
+  const commit = () => {
+    const v = draft.trim().toLowerCase().replace(/[^a-z0-9:_\-]/g, '');
+    if (!v) return;
+    onAdd(v);
+    setDraft('');
+  };
+  return (
+    <div className="space-y-1">
+      <div className="flex flex-wrap items-center gap-1.5">
+        {values.map((v) => (
+          <span key={v} className="inline-flex h-7 items-center gap-1 rounded-full border border-brand-divider bg-brand-surface px-2 text-[10px] font-bold uppercase tracking-wider text-brand-ink">
+            {v}
+            <button type="button" onClick={() => onRemove(v)} className="text-rose-400 hover:text-rose-300">
+              x
+            </button>
+          </span>
+        ))}
+        <input
+          type="text"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              commit();
+            }
+          }}
+          onBlur={commit}
+          placeholder="Add provider key (e.g. jili) and press Enter"
+          className="h-7 min-w-[180px] flex-1 rounded-md border border-brand-divider bg-brand-paper px-2 text-[11px] text-brand-ink placeholder:text-brand-inkMute focus:border-brand-yellow-500 focus:outline-none"
+        />
+      </div>
+    </div>
   );
 }
