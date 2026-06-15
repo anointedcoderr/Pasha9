@@ -125,7 +125,11 @@ export default function RewardsPage() {
       .then((r) => r.json())
       .then((j) => { if (alive) setItems((j?.items ?? []) as PublicRewardItem[]); })
       .catch(() => {});
-    fetch('/api/content/spin-wheel', { cache: 'no-store' })
+    // ts query bust intermediate proxy / mobile webview cache so a
+    // segment label edit in /admin/spin-segments is reflected on the
+    // device immediately. The server already sets no-store on this
+    // route; this is defence in depth.
+    fetch(`/api/content/spin-wheel?ts=${Date.now()}`, { cache: 'no-store' })
       .then((r) => r.json())
       .then((j) => {
         if (!alive) return;

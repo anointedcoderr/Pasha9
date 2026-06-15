@@ -15,11 +15,28 @@
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
+export const fetchCache = 'force-no-store';
 
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/client';
-import { jsonOk, jsonError } from '@/lib/auth/errors';
+import { jsonError } from '@/lib/auth/errors';
 import { loadSpinConfig } from '@/lib/rewards/config';
+
+// Explicit no-cache headers on every response so an intermediate
+// proxy / browser webview cannot serve stale segment labels after the
+// operator edits a wedge in /admin/spin-segments. The operator
+// reported "wheel shows old label 25 after saving 100 in admin" -
+// the SAVE was correct but the device kept reading a cached payload.
+const NO_CACHE_HEADERS = {
+  'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+  'Pragma': 'no-cache',
+  'Expires': '0',
+  'Vary': '*',
+};
+
+function noCacheJson(payload: unknown, status = 200) {
+  return NextResponse.json(payload, { status, headers: NO_CACHE_HEADERS });
+}
 
 function publicSegment(s: { id: string; label: string; color: string; position: number; payoutType: string; payoutAmount: number; turnoverX: { toString(): string } | number }) {
   return {
@@ -46,7 +63,7 @@ export async function GET(req: NextRequest) {
       },
     });
     if (!tier || !tier.isActive) return jsonError(404, 'TIER_NOT_FOUND');
-    return jsonOk({
+    return noCacheJson({
       config,
       tier: {
         id: tier.id,
@@ -82,7 +99,7 @@ export async function GET(req: NextRequest) {
     ...legacySegments.map(publicSegment),
   ];
 
-  return jsonOk({
+  return noCacheJson({
     config,
     tiers: tiers.map((t) => ({
       id: t.id,

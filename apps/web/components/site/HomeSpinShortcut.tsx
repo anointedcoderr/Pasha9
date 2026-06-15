@@ -47,11 +47,14 @@ export function HomeSpinShortcut() {
         {bn ? 'নতুন' : 'NEW'}
       </span>
       <span className="relative inline-flex h-16 w-16 items-center justify-center drop-shadow-[0_6px_22px_rgba(245,180,0,0.45)]">
-        {/* Continuously rotating wheel */}
+        {/* Continuously rotating wheel. pointer-events-none so taps
+            land on the parent Link instead of the rotating SVG - some
+            mobile webviews (iOS Safari + WebView reports observed)
+            otherwise swallow the tap when the transform is mid-frame. */}
         <svg
           viewBox="0 0 100 100"
           aria-hidden
-          className="absolute inset-0 h-full w-full"
+          className="pointer-events-none absolute inset-0 h-full w-full"
           style={{ animation: 'pasha-spin 7s linear infinite' }}
         >
           <defs>

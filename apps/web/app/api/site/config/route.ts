@@ -8,13 +8,20 @@
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
+export const fetchCache = 'force-no-store';
 
+import { NextResponse } from 'next/server';
 import { db } from '@/lib/db/client';
-import { jsonOk } from '@/lib/auth/errors';
 
 const PUBLIC_KEYS = [
   'forgot_password_enabled',
 ] as const;
+
+const NO_CACHE_HEADERS = {
+  'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+  'Pragma': 'no-cache',
+  'Expires': '0',
+};
 
 export async function GET() {
   let forgotEnabled = false;
@@ -28,5 +35,8 @@ export async function GET() {
   } catch {
     // DB hiccup -> defaults are all off, which is the safe direction.
   }
-  return jsonOk({ forgotPasswordEnabled: forgotEnabled });
+  return NextResponse.json(
+    { forgotPasswordEnabled: forgotEnabled },
+    { headers: NO_CACHE_HEADERS },
+  );
 }

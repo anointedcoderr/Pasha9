@@ -356,11 +356,19 @@ export default function WithdrawPage() {
   const turnoverBlocks = turnover.loaded && !turnover.isMet;
   const canSubmit = auth.kind === 'authed' && !loading && methods.length > 0 && !turnoverBlocks;
 
+  // Respect the operator's choice. When the per-method PaymentMethod
+  // row carries an explicit min/max, that wins (operator opted into a
+  // method-specific override). When it does not, the global
+  // SystemSetting limits.min / limits.max from /admin/withdrawal-limits
+  // are used directly. The previous Math.max/Math.min logic ignored
+  // the global setting whenever the per-method row had a higher
+  // hardcoded value left over from the seed - which is why operators
+  // saw "Minimum 500 BDT" after lowering the global to 100.
   const effectiveMin = selectedMethod?.minWithdrawal != null
-    ? Math.max(limits.min, selectedMethod.minWithdrawal)
+    ? selectedMethod.minWithdrawal
     : limits.min;
   const effectiveMax = selectedMethod?.maxWithdrawal != null
-    ? Math.min(limits.max, selectedMethod.maxWithdrawal)
+    ? selectedMethod.maxWithdrawal
     : limits.max;
 
   return (

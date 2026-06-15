@@ -315,7 +315,14 @@ export function HeroSlider() {
                 loop
                 playsInline
                 preload="metadata"
-                className="absolute inset-0 h-full w-full object-cover"
+                className={cn(
+                  'absolute inset-0 h-full w-full',
+                  // Textless slides preserve the operator's artwork edge
+                  // to edge (object-contain). Text slides keep the
+                  // fill-then-crop behaviour because the side dim
+                  // gradient absorbs any cropping.
+                  isTextless ? 'object-contain object-center' : 'object-cover object-center',
+                )}
                 onError={(e) => {
                   // Fall back to poster if the browser cannot decode the source.
                   (e.currentTarget as HTMLVideoElement).style.display = 'none';
@@ -326,7 +333,10 @@ export function HeroSlider() {
               <img
                 src={slide.imageUrl ?? ''}
                 alt=""
-                className="absolute inset-0 h-full w-full object-cover"
+                className={cn(
+                  'absolute inset-0 h-full w-full',
+                  isTextless ? 'object-contain object-center' : 'object-cover object-center',
+                )}
                 loading="eager"
                 decoding="async"
               />
@@ -362,10 +372,14 @@ export function HeroSlider() {
       </div>
 
       {isTextless ? (
-        // Image / video only banner: no text column, the media fills
-        // the full slide height. We still reserve the same minimum
-        // height so the slider does not jump between slides.
-        <div className="relative grid min-h-[260px] grid-cols-1 md:min-h-[360px]" />
+        // Image / video only banner. Lock the slide to a 2:1 aspect
+        // ratio on every device so the artwork keeps the same shape
+        // across iPhone, Android and desktop (the previous min-h-only
+        // layout produced different crops per viewport because the
+        // viewport-relative width vs fixed-height differed). Combined
+        // with object-contain above this guarantees the whole banner
+        // is visible without device-specific cropping.
+        <div className="relative grid aspect-[2/1] min-h-[180px] grid-cols-1 sm:aspect-[5/2] md:aspect-[3/1] md:min-h-[280px]" />
       ) : (
         <div className="relative grid min-h-[260px] grid-cols-1 items-center gap-6 px-5 py-8 md:min-h-[360px] md:grid-cols-2 md:px-10 md:py-12">
           <AnimatePresence mode="wait">

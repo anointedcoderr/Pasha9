@@ -167,8 +167,19 @@ function FirebaseFlow({ router, bn }: { router: ReturnType<typeof useRouter>; bn
         setError(bn ? 'অবৈধ ফোন নম্বর।' : 'Invalid phone number.');
       } else if (code === 'auth/quota-exceeded') {
         setError(bn ? 'SMS কোটা শেষ। অপারেটরের সাথে যোগাযোগ করুন।' : 'SMS quota exhausted. Please contact support.');
+      } else if (code === 'auth/unauthorized-domain') {
+        // Surface the actionable cause to the operator browsing the
+        // page during smoke-test - the domain has not yet been added
+        // to Firebase's authorised list.
+        setError(bn
+          ? 'এই ডোমেইনটি Firebase-এ অনুমোদিত নয়। অপারেটরের সাথে যোগাযোগ করুন।'
+          : 'This domain is not authorised in Firebase. Add pasha9.com to Firebase Authentication -> Settings -> Authorised domains.');
+      } else if (code === 'auth/billing-not-enabled') {
+        setError(bn ? 'Firebase বিলিং সক্রিয় নয়।' : 'Firebase Blaze plan is not active.');
+      } else if (code === 'auth/captcha-check-failed') {
+        setError(bn ? 'reCAPTCHA যাচাই ব্যর্থ। পৃষ্ঠা রিফ্রেশ করুন এবং আবার চেষ্টা করুন।' : 'reCAPTCHA verification failed. Refresh the page and try again.');
       } else {
-        setError(bn ? 'SMS পাঠানো যায়নি। আবার চেষ্টা করুন।' : 'Could not send SMS. Please try again.');
+        setError(bn ? `SMS পাঠানো যায়নি (${code || 'unknown'})। আবার চেষ্টা করুন।` : `Could not send SMS (${code || 'unknown'}). Please try again.`);
       }
     } finally {
       setBusy(false);
