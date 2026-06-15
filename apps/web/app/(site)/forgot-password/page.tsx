@@ -1,22 +1,418 @@
 // Built by Anointed Coder.
 //
-// Public forgot-password entry page. The user submits a username,
-// phone or email. The endpoint always returns a generic success
-// message so account existence is never revealed. The admin reviews
-// the request from /admin/password-resets and approves to issue a
-// one-time token that the user then redeems at /reset-password.
+// Public forgot-password entry. Two parallel flows:
+//
+//  1. SMS reset (Firebase Phone Auth). Three steps: phone -> SMS code
+//     -> new password. Renders only when the operator has flipped
+//     SystemSetting 'forgot_password_enabled' = '1' (admin probes
+//     /api/site/config for the flag). Firebase handles SMS delivery,
+//     invisible reCAPTCHA and per-phone abuse controls; the server
+//     verifies the resulting Firebase ID token and mints a single-
+//     use PasswordResetToken.
+//
+//  2. Admin-assisted reset (legacy). Player submits username/phone/
+//     email; admin reviews from /admin/password-resets and hands
+//     back a one-time code that the player redeems at /reset-password.
+//
+// When the Firebase flow is available the legacy card collapses to a
+// small "Need help? Contact support" footer; otherwise the legacy
+// form is the entire page (back-compat with deploys before the
+// Firebase keys were provisioned).
 
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useT, useLang } from '@/lib/i18n/context';
-import { ArrowLeft, KeyRound, MessageCircle, CheckCircle2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useLang } from '@/lib/i18n/context';
+import {
+  ArrowLeft,
+  KeyRound,
+  MessageCircle,
+  CheckCircle2,
+  Phone,
+  Lock,
+  Eye,
+  EyeOff,
+} from 'lucide-react';
+import { getFirebaseClientAuth, isFirebaseClientConfigured } from '@/lib/firebase/client';
+import { bdPhoneVariants } from '@/lib/firebase/phone';
+
+type Step = 'phone' | 'code' | 'password' | 'done';
+
+interface SiteConfig {
+  forgotPasswordEnabled: boolean;
+}
 
 export default function ForgotPasswordPage() {
-  const t = useT();
+  const router = useRouter();
   const { lang } = useLang();
   const bn = lang === 'bn';
+
+  // ----- Feature-flag probe -----
+  const [config, setConfig] = useState<SiteConfig | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/site/config', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!alive) return;
+        setConfig({
+          forgotPasswordEnabled: Boolean(j?.forgotPasswordEnabled),
+        });
+      })
+      .catch(() => { if (alive) setConfig({ forgotPasswordEnabled: false }); });
+    return () => { alive = false; };
+  }, []);
+
+  const firebaseAvailable = isFirebaseClientConfigured();
+  const smsFlowOn = !!config?.forgotPasswordEnabled && firebaseAvailable;
+
+  return (
+    <div className="mx-auto w-full max-w-md py-8">
+      <div className="rounded-2xl border border-brand-divider bg-brand-paper p-6 shadow-sm">
+        <Link href="/" className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-brand-inkMute hover:text-brand-ink">
+          <ArrowLeft className="h-3.5 w-3.5" /> {bn ? 'হোম' : 'Home'}
+        </Link>
+
+        <h1 className="mt-3 inline-flex items-center gap-2 text-2xl font-extrabold text-brand-ink">
+          <KeyRound className="h-5 w-5 text-brand-yellow-700" />
+          {bn ? 'পাসওয়ার্ড ভুলে গেছেন?' : 'Forgot password?'}
+        </h1>
+        <p className="mt-1 text-sm text-brand-inkSoft">
+          {bn
+            ? 'আপনার রেজিস্টার্ড ফোন নম্বরে SMS কোড পেয়ে পাসওয়ার্ড রিসেট করুন।'
+            : 'Reset your password using the SMS code sent to your registered phone.'}
+        </p>
+
+        {config === null ? (
+          <p className="mt-6 text-sm text-brand-inkSoft">{bn ? 'লোড হচ্ছে...' : 'Loading...'}</p>
+        ) : smsFlowOn ? (
+          <FirebaseFlow router={router} bn={bn} />
+        ) : (
+          <LegacyFlow bn={bn} />
+        )}
+
+        <div className="mt-6 border-t border-brand-divider pt-4 text-xs text-brand-inkMute">
+          <p>
+            {bn ? 'মনে আছে?' : 'Remembered it?'}{' '}
+            <Link href="/?login=1" className="font-semibold text-brand-blue-600 hover:text-brand-blue-700">
+              {bn ? 'লগইন' : 'Log in'}
+            </Link>
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =============================================================
+// Firebase three-step flow
+// =============================================================
+
+function FirebaseFlow({ router, bn }: { router: ReturnType<typeof useRouter>; bn: boolean }) {
+  const [step, setStep] = useState<Step>('phone');
+  const [phone, setPhone] = useState('');
+  const [code, setCode] = useState('');
+  const [newPw, setNewPw] = useState('');
+  const [showPw, setShowPw] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [resetToken, setResetToken] = useState<string | null>(null);
+
+  // Firebase ConfirmationResult lives across step transitions so the
+  // verify call has the right verifier in scope.
+  const confirmationRef = useRef<import('firebase/auth').ConfirmationResult | null>(null);
+  const recaptchaRef = useRef<import('firebase/auth').RecaptchaVerifier | null>(null);
+
+  // Tear down the invisible reCAPTCHA verifier when the component
+  // unmounts so a back-nav does not leak a hidden iframe.
+  useEffect(() => () => {
+    try { recaptchaRef.current?.clear(); } catch { /* ok */ }
+  }, []);
+
+  const sendCode = async () => {
+    setBusy(true); setError(null);
+    try {
+      const variants = bdPhoneVariants(phone);
+      if (!variants) {
+        setError(bn ? 'সঠিক বাংলাদেশী মোবাইল নম্বর লিখুন।' : 'Enter a valid Bangladesh mobile number (01XXXXXXXXX).');
+        return;
+      }
+      const auth = getFirebaseClientAuth();
+      if (!auth) {
+        setError(bn ? 'SMS রিসেট এখন উপলব্ধ নয়।' : 'SMS reset is not available right now.');
+        return;
+      }
+      auth.languageCode = bn ? 'bn' : 'en';
+
+      const { RecaptchaVerifier, signInWithPhoneNumber } = await import('firebase/auth');
+      // Reuse a single invisible verifier across retries. Firebase
+      // throws when the same container hosts two verifiers, so the
+      // ref ensures we instantiate once.
+      if (!recaptchaRef.current) {
+        recaptchaRef.current = new RecaptchaVerifier(auth, 'pasha9-recaptcha', {
+          size: 'invisible',
+        });
+      }
+      const confirmation = await signInWithPhoneNumber(auth, variants.e164, recaptchaRef.current);
+      confirmationRef.current = confirmation;
+      setStep('code');
+    } catch (err: unknown) {
+      console.error('[forgot] sendCode failed', err);
+      const code = (err as { code?: string })?.code ?? '';
+      if (code === 'auth/too-many-requests') {
+        setError(bn ? 'অনেক বেশি চেষ্টা। কিছুক্ষণ পরে আবার চেষ্টা করুন।' : 'Too many attempts. Please try again later.');
+      } else if (code === 'auth/invalid-phone-number') {
+        setError(bn ? 'অবৈধ ফোন নম্বর।' : 'Invalid phone number.');
+      } else if (code === 'auth/quota-exceeded') {
+        setError(bn ? 'SMS কোটা শেষ। অপারেটরের সাথে যোগাযোগ করুন।' : 'SMS quota exhausted. Please contact support.');
+      } else {
+        setError(bn ? 'SMS পাঠানো যায়নি। আবার চেষ্টা করুন।' : 'Could not send SMS. Please try again.');
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const verifyCode = async () => {
+    setBusy(true); setError(null);
+    try {
+      if (!confirmationRef.current) {
+        setError(bn ? 'কোডটি মেয়াদোত্তীর্ণ। নতুন SMS রিকোয়েস্ট করুন।' : 'Code expired. Request a new SMS.');
+        setStep('phone');
+        return;
+      }
+      const cred = await confirmationRef.current.confirm(code.trim());
+      const idToken = await cred.user.getIdToken(/* forceRefresh */ true);
+
+      const r = await fetch('/api/auth/forgot/phone/verify', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ idToken }),
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok) {
+        if (j?.code === 'FORGOT_DISABLED') {
+          setError(bn ? 'SMS রিসেট বর্তমানে বন্ধ। অপারেটরের সাথে যোগাযোগ করুন।' : 'SMS reset is currently disabled. Please contact support.');
+        } else if (r.status === 429) {
+          setError(bn ? 'অনেক বেশি চেষ্টা।' : 'Too many attempts.');
+        } else {
+          setError(bn ? 'যাচাই ব্যর্থ। নতুন কোড রিকোয়েস্ট করুন।' : 'Verification failed. Request a new code.');
+        }
+        return;
+      }
+      if (!j?.resetToken) {
+        // Enumeration-safe: server verified but the phone is not
+        // registered. We surface a friendly error at this point so
+        // the player knows to contact support.
+        setError(bn
+          ? 'এই ফোন নম্বরে কোনো অ্যাকাউন্ট পাওয়া যায়নি। লাইভ সাপোর্টে যোগাযোগ করুন।'
+          : 'No account is registered to this phone. Please contact support.');
+        return;
+      }
+      setResetToken(j.resetToken);
+      setStep('password');
+      // Sign the temporary Firebase user out so the device does not
+      // hold a residual phone-auth session.
+      try { await cred.user.delete(); } catch { /* ok */ }
+    } catch (err: unknown) {
+      console.error('[forgot] verifyCode failed', err);
+      const code = (err as { code?: string })?.code ?? '';
+      if (code === 'auth/invalid-verification-code') {
+        setError(bn ? 'কোডটি ভুল। আবার চেষ্টা করুন।' : 'Incorrect code. Try again.');
+      } else if (code === 'auth/code-expired') {
+        setError(bn ? 'কোডের মেয়াদ শেষ। নতুন SMS রিকোয়েস্ট করুন।' : 'Code expired. Request a new SMS.');
+      } else {
+        setError(bn ? 'যাচাই ব্যর্থ।' : 'Verification failed.');
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submitPassword = async () => {
+    setBusy(true); setError(null);
+    try {
+      if (newPw.length < 6) {
+        setError(bn ? 'পাসওয়ার্ড কমপক্ষে ৬ অক্ষর হতে হবে।' : 'Password must be at least 6 characters.');
+        return;
+      }
+      const r = await fetch('/api/auth/forgot/phone/reset', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ resetToken, newPassword: newPw }),
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok) {
+        const code = j?.code as string | undefined;
+        if (code === 'EXPIRED') setError(bn ? 'লিংকের মেয়াদ শেষ।' : 'Link expired.');
+        else if (code === 'ALREADY_USED') setError(bn ? 'লিংকটি ইতিমধ্যে ব্যবহার করা হয়েছে।' : 'Link already used.');
+        else if (code === 'INVALID_TOKEN') setError(bn ? 'লিংকটি অবৈধ।' : 'Link invalid.');
+        else setError(bn ? 'রিসেট ব্যর্থ।' : 'Reset failed.');
+        return;
+      }
+      setStep('done');
+      setTimeout(() => router.push('/?login=1'), 2500);
+    } catch (err) {
+      console.error('[forgot] submitPassword failed', err);
+      setError(bn ? 'নেটওয়ার্ক ত্রুটি।' : 'Network error.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="mt-5 space-y-4">
+      {/* Step strip */}
+      <ol className="flex items-center justify-between gap-1 text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">
+        {(['phone', 'code', 'password', 'done'] as Step[]).map((s, i) => {
+          const order: Step[] = ['phone', 'code', 'password', 'done'];
+          const active = order.indexOf(step) >= i;
+          return (
+            <li key={s} className="flex flex-1 items-center gap-1">
+              <span className={
+                'inline-flex h-5 w-5 items-center justify-center rounded-full ' +
+                (active ? 'bg-brand-yellow-500 text-[#3a1f00]' : 'bg-brand-divider text-brand-inkMute')
+              }>{i + 1}</span>
+              <span className={active ? 'text-brand-ink' : ''}>
+                {s === 'phone' ? (bn ? 'ফোন' : 'Phone') : s === 'code' ? (bn ? 'কোড' : 'Code') : s === 'password' ? (bn ? 'পাসওয়ার্ড' : 'Password') : (bn ? 'সফল' : 'Done')}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+
+      {/* Step 1 - Phone */}
+      {step === 'phone' ? (
+        <form onSubmit={(e) => { e.preventDefault(); void sendCode(); }} className="space-y-3">
+          <label className="block">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-brand-inkMute">
+              {bn ? 'ফোন নম্বর' : 'Phone number'}
+            </span>
+            <div className="relative mt-1">
+              <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-inkMute" />
+              <input
+                type="tel"
+                inputMode="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                autoComplete="tel"
+                placeholder="01XXXXXXXXX"
+                className="h-11 w-full rounded-lg border border-brand-divider bg-brand-paper pl-9 pr-3 text-sm text-brand-ink placeholder:text-brand-inkMute focus:outline-none focus:ring-2 focus:ring-brand-yellow-500/40"
+              />
+            </div>
+          </label>
+
+          {error ? <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p> : null}
+
+          <button type="submit" disabled={busy} className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-gradient-to-b from-amber-300 to-amber-500 text-sm font-extrabold uppercase tracking-wider text-[#3A1F00] disabled:opacity-70">
+            {busy ? (bn ? 'পাঠানো হচ্ছে...' : 'Sending...') : (bn ? 'SMS কোড পাঠান' : 'Send SMS code')}
+          </button>
+
+          <p className="text-[11px] text-brand-inkMute">
+            {bn
+              ? 'আপনার রেজিস্টার্ড নম্বরে SMS কোড পাঠানো হবে। কেবলমাত্র বাংলাদেশের নম্বর সাপোর্ট করা হয়।'
+              : 'An SMS code will be sent to your registered number. Only Bangladesh numbers are supported.'}
+          </p>
+        </form>
+      ) : null}
+
+      {/* Step 2 - Code */}
+      {step === 'code' ? (
+        <form onSubmit={(e) => { e.preventDefault(); void verifyCode(); }} className="space-y-3">
+          <label className="block">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-brand-inkMute">
+              {bn ? '৬-সংখ্যার কোড' : '6-digit code'}
+            </span>
+            <input
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              value={code}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+              placeholder="123456"
+              className="mt-1 h-11 w-full rounded-lg border border-brand-divider bg-brand-paper px-3 text-center text-lg font-mono tracking-[0.5em] text-brand-ink placeholder:text-brand-inkMute focus:outline-none focus:ring-2 focus:ring-brand-yellow-500/40"
+            />
+          </label>
+
+          {error ? <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p> : null}
+
+          <button type="submit" disabled={busy || code.length !== 6} className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-gradient-to-b from-amber-300 to-amber-500 text-sm font-extrabold uppercase tracking-wider text-[#3A1F00] disabled:opacity-70">
+            {busy ? (bn ? 'যাচাই হচ্ছে...' : 'Verifying...') : (bn ? 'কোড যাচাই করুন' : 'Verify code')}
+          </button>
+
+          <button type="button" onClick={() => { setStep('phone'); setCode(''); }} className="text-xs font-semibold text-brand-blue-600 hover:text-brand-blue-700">
+            {bn ? 'অন্য নম্বর দিন' : 'Use a different phone'}
+          </button>
+        </form>
+      ) : null}
+
+      {/* Step 3 - New password */}
+      {step === 'password' ? (
+        <form onSubmit={(e) => { e.preventDefault(); void submitPassword(); }} className="space-y-3">
+          <label className="block">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-brand-inkMute">
+              {bn ? 'নতুন পাসওয়ার্ড' : 'New password'}
+            </span>
+            <div className="relative mt-1">
+              <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-inkMute" />
+              <input
+                type={showPw ? 'text' : 'password'}
+                autoComplete="new-password"
+                value={newPw}
+                onChange={(e) => setNewPw(e.target.value)}
+                placeholder={bn ? 'কমপক্ষে ৬ অক্ষর' : 'At least 6 characters'}
+                className="h-11 w-full rounded-lg border border-brand-divider bg-brand-paper pl-9 pr-9 text-sm text-brand-ink placeholder:text-brand-inkMute focus:outline-none focus:ring-2 focus:ring-brand-yellow-500/40"
+              />
+              <button type="button" onClick={() => setShowPw((v) => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 text-brand-inkMute hover:text-brand-ink">
+                {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </label>
+
+          {error ? <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p> : null}
+
+          <button type="submit" disabled={busy || newPw.length < 6} className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-gradient-to-b from-amber-300 to-amber-500 text-sm font-extrabold uppercase tracking-wider text-[#3A1F00] disabled:opacity-70">
+            {busy ? (bn ? 'রিসেট হচ্ছে...' : 'Resetting...') : (bn ? 'পাসওয়ার্ড রিসেট করুন' : 'Reset password')}
+          </button>
+
+          <p className="text-[11px] text-brand-inkMute">
+            {bn
+              ? 'রিসেট করার পরে আপনার অন্য সব ডিভাইস থেকে লগআউট হবে।'
+              : 'Resetting will sign you out of every other device.'}
+          </p>
+        </form>
+      ) : null}
+
+      {/* Step 4 - Done */}
+      {step === 'done' ? (
+        <div className="space-y-3 rounded-xl border border-emerald-300/60 bg-emerald-50 p-4 text-emerald-900">
+          <p className="inline-flex items-center gap-2 text-sm font-bold">
+            <CheckCircle2 className="h-4 w-4" />
+            {bn ? 'পাসওয়ার্ড রিসেট সফল হয়েছে।' : 'Password reset successful.'}
+          </p>
+          <p className="text-xs">
+            {bn
+              ? 'আপনার নতুন পাসওয়ার্ড দিয়ে লগইন করুন।'
+              : 'Use your new password to log in.'}
+          </p>
+        </div>
+      ) : null}
+
+      {/* Invisible reCAPTCHA container. Firebase mounts its widget
+          inside this div; we keep size: invisible in the verifier
+          config so the player never sees a challenge. */}
+      <div id="pasha9-recaptcha" aria-hidden className="hidden" />
+    </div>
+  );
+}
+
+// =============================================================
+// Legacy admin-assisted flow (kept for back-compat / fallback)
+// =============================================================
+
+function LegacyFlow({ bn }: { bn: boolean }) {
   const [identifier, setIdentifier] = useState('');
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -41,9 +437,6 @@ export default function ForgotPasswordPage() {
         setError(bn ? 'অনেক বেশি চেষ্টা। এক ঘন্টা পরে আবার চেষ্টা করুন।' : 'Too many attempts. Please try again in an hour.');
         return;
       }
-      // Privacy-safe: the endpoint always returns 200 + a generic
-      // message. We surface the success card regardless of whether the
-      // account existed so we never leak that information.
       setSubmitted(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Network error.');
@@ -52,94 +445,57 @@ export default function ForgotPasswordPage() {
     }
   };
 
-  return (
-    <div className="mx-auto w-full max-w-md py-8">
-      <div className="rounded-2xl border border-brand-divider bg-brand-paper p-6 shadow-sm">
-        <Link href="/" className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-brand-inkMute hover:text-brand-ink">
-          <ArrowLeft className="h-3.5 w-3.5" /> {bn ? 'হোম' : 'Home'}
-        </Link>
-
-        <h1 className="mt-3 inline-flex items-center gap-2 text-2xl font-extrabold text-brand-ink">
-          <KeyRound className="h-5 w-5 text-brand-yellow-700" />
-          {bn ? 'পাসওয়ার্ড ভুলে গেছেন?' : 'Forgot password?'}
-        </h1>
-        <p className="mt-1 text-sm text-brand-inkSoft">
-          {bn
-            ? 'আপনার অ্যাকাউন্ট খুঁজে পাওয়ার জন্য আপনার ইউজারনেম, ফোন নম্বর বা ইমেইল লিখুন।'
-            : 'Enter your username, phone number or email so we can find your account.'}
+  if (submitted) {
+    return (
+      <div className="mt-5 space-y-3 rounded-xl border border-emerald-300/60 bg-emerald-50 p-4 text-emerald-900">
+        <p className="inline-flex items-center gap-2 text-sm font-bold">
+          <CheckCircle2 className="h-4 w-4" />
+          {bn ? 'রিকোয়েস্ট জমা হয়েছে।' : 'Request submitted.'}
         </p>
-
-        {submitted ? (
-          <div className="mt-5 space-y-3 rounded-xl border border-emerald-300/60 bg-emerald-50 p-4 text-emerald-900">
-            <p className="inline-flex items-center gap-2 text-sm font-bold">
-              <CheckCircle2 className="h-4 w-4" />
-              {bn ? 'রিকোয়েস্ট জমা হয়েছে।' : 'Request submitted.'}
-            </p>
-            <p className="text-xs">
-              {bn
-                ? 'অ্যাকাউন্ট পাওয়া গেলে একটি পাসওয়ার্ড রিসেট রিকোয়েস্ট তৈরি করা হয়েছে। অ্যাডমিন এটি যাচাই করার পর আপনাকে একটি ওয়ান-টাইম রিসেট কোড দেবেন। অনুগ্রহ করে লাইভ সাপোর্টে যোগাযোগ করুন।'
-                : 'If the account exists, a reset request has been created. The operator will verify and share a one-time reset code with you. Please contact live support to receive your code.'}
-            </p>
-            <div className="flex flex-wrap gap-2 pt-1">
-              <Link
-                href="/support"
-                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-emerald-400/40 bg-white px-3 text-xs font-bold uppercase tracking-wider text-emerald-700 hover:bg-emerald-50"
-              >
-                <MessageCircle className="h-3.5 w-3.5" />
-                {bn ? 'লাইভ সাপোর্ট' : 'Contact support'}
-              </Link>
-              <Link
-                href="/reset-password"
-                className="inline-flex h-9 items-center rounded-lg bg-gradient-to-b from-amber-300 to-amber-500 px-3 text-xs font-extrabold uppercase tracking-wider text-[#3A1F00]"
-              >
-                {bn ? 'রিসেট কোড আছে?' : 'I have a reset code'}
-              </Link>
-            </div>
-          </div>
-        ) : (
-          <form onSubmit={onSubmit} className="mt-5 space-y-3">
-            <label className="block">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-brand-inkMute">
-                {bn ? 'ইউজারনেম, ফোন বা ইমেইল' : 'Username, phone or email'}
-              </span>
-              <input
-                value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
-                autoComplete="username"
-                placeholder="01XXXXXXXXX or username"
-                className="mt-1 h-11 w-full rounded-lg border border-brand-divider bg-brand-paper px-3 text-sm text-brand-ink placeholder:text-brand-inkMute focus:outline-none focus:ring-2 focus:ring-brand-yellow-500/40"
-              />
-            </label>
-
-            {error ? (
-              <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>
-            ) : null}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-gradient-to-b from-amber-300 to-amber-500 text-sm font-extrabold uppercase tracking-wider text-[#3A1F00] disabled:opacity-70"
-            >
-              {loading ? (bn ? 'জমা হচ্ছে...' : 'Submitting...') : (bn ? 'রিসেট রিকোয়েস্ট জমা দিন' : 'Submit reset request')}
-            </button>
-
-            <p className="text-[11px] text-brand-inkMute">
-              {bn
-                ? 'নিরাপত্তার কারণে আমরা প্রকাশ করি না যে অ্যাকাউন্ট আছে কিনা। অ্যাডমিন আপনার অনুরোধ যাচাই করবেন।'
-                : 'For security reasons we never confirm whether an account exists. The operator will verify your request.'}
-            </p>
-          </form>
-        )}
-
-        <div className="mt-6 border-t border-brand-divider pt-4 text-xs text-brand-inkMute">
-          <p>
-            {bn ? 'মনে আছে?' : 'Remembered it?'}{' '}
-            <Link href="/?login=1" className="font-semibold text-brand-blue-600 hover:text-brand-blue-700">
-              {bn ? 'লগইন' : 'Log in'}
-            </Link>
-          </p>
+        <p className="text-xs">
+          {bn
+            ? 'অ্যাকাউন্ট পাওয়া গেলে একটি পাসওয়ার্ড রিসেট রিকোয়েস্ট তৈরি করা হয়েছে। অ্যাডমিন এটি যাচাই করার পর আপনাকে একটি ওয়ান-টাইম রিসেট কোড দেবেন। অনুগ্রহ করে লাইভ সাপোর্টে যোগাযোগ করুন।'
+            : 'If the account exists, a reset request has been created. The operator will verify and share a one-time reset code with you. Please contact live support to receive your code.'}
+        </p>
+        <div className="flex flex-wrap gap-2 pt-1">
+          <Link href="/support" className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-emerald-400/40 bg-white px-3 text-xs font-bold uppercase tracking-wider text-emerald-700 hover:bg-emerald-50">
+            <MessageCircle className="h-3.5 w-3.5" />
+            {bn ? 'লাইভ সাপোর্ট' : 'Contact support'}
+          </Link>
+          <Link href="/reset-password" className="inline-flex h-9 items-center rounded-lg bg-gradient-to-b from-amber-300 to-amber-500 px-3 text-xs font-extrabold uppercase tracking-wider text-[#3A1F00]">
+            {bn ? 'রিসেট কোড আছে?' : 'I have a reset code'}
+          </Link>
         </div>
       </div>
-    </div>
+    );
+  }
+
+  return (
+    <form onSubmit={onSubmit} className="mt-5 space-y-3">
+      <label className="block">
+        <span className="text-[11px] font-bold uppercase tracking-wider text-brand-inkMute">
+          {bn ? 'ইউজারনেম, ফোন বা ইমেইল' : 'Username, phone or email'}
+        </span>
+        <input
+          value={identifier}
+          onChange={(e) => setIdentifier(e.target.value)}
+          autoComplete="username"
+          placeholder="01XXXXXXXXX or username"
+          className="mt-1 h-11 w-full rounded-lg border border-brand-divider bg-brand-paper px-3 text-sm text-brand-ink placeholder:text-brand-inkMute focus:outline-none focus:ring-2 focus:ring-brand-yellow-500/40"
+        />
+      </label>
+
+      {error ? <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p> : null}
+
+      <button type="submit" disabled={loading} className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-gradient-to-b from-amber-300 to-amber-500 text-sm font-extrabold uppercase tracking-wider text-[#3A1F00] disabled:opacity-70">
+        {loading ? (bn ? 'জমা হচ্ছে...' : 'Submitting...') : (bn ? 'রিসেট রিকোয়েস্ট জমা দিন' : 'Submit reset request')}
+      </button>
+
+      <p className="text-[11px] text-brand-inkMute">
+        {bn
+          ? 'নিরাপত্তার কারণে আমরা প্রকাশ করি না যে অ্যাকাউন্ট আছে কিনা। অ্যাডমিন আপনার অনুরোধ যাচাই করবেন।'
+          : 'For security reasons we never confirm whether an account exists. The operator will verify your request.'}
+      </p>
+    </form>
   );
 }

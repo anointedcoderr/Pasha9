@@ -284,11 +284,23 @@ model PasswordResetToken {
   // approves (status='approved') which issues a one-time token that
   // the user redeems via /api/auth/reset-password. status='rejected'
   // closes the request without issuing a token.
-  status        String  @default("pending") // pending | approved | rejected | consumed
-  identifier    String?
-  adminNote     String?
-  approvedById  String?
-  approvedAt    DateTime?
+  //
+  // Firebase Phone Auth reset workflow. When the player completes the
+  // Firebase Phone Auth challenge, /api/auth/forgot/phone/verify
+  // creates a row with status='approved' (no admin step) and
+  // verifiedVia='firebase_phone'. The same /api/auth/reset-password
+  // endpoint redeems it.
+  status         String  @default("pending") // pending | approved | rejected | consumed
+  identifier     String?
+  adminNote      String?
+  approvedById   String?
+  approvedAt     DateTime?
+  // Provenance of the approval. 'admin' = legacy admin-approval flow;
+  // 'firebase_phone' = self-service Forgot Password via Firebase Phone
+  // Auth. Null on pending rows that have not yet been approved.
+  verifiedVia    String?
+  verifiedPhoneE164 String?
+  firebaseUid    String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
