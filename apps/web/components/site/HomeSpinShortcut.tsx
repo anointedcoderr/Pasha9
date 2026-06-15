@@ -7,24 +7,34 @@
 //
 // Positioned fixed to the viewport, right edge, above the existing
 // FloatingContact chat bubble (which sits at bottom-[120px+safe-area]
-// on mobile / bottom-6 on desktop with z-50). We render at z-40 so
-// the chat opens cleanly on top when both are present.
+// on mobile / bottom-6 on desktop with z-50). We render at z-50 so
+// the tap lands on this shortcut even when another fixed surface
+// happens to share the same coordinates - the previous z-40 lost to
+// any sibling at the same level rendered later in the DOM.
 //
 // Hidden on routes under /rewards because the player is already on
 // the spin page; otherwise visible on every layout that mounts this
 // component (currently just the public homepage at (site)/page.tsx).
+//
+// Click is handled by an explicit onClick + router.push so a webview
+// that swallows the touchstart-to-click path on an anchor tag (some
+// older Android WebView + iOS Safari builds report this) still
+// navigates correctly. The Next.js Link wrapper was failing
+// intermittently for the operator's test device, so we drop it.
 
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useLang } from '@/lib/i18n/context';
+
+const TARGET_HREF = '/rewards?tab=spin';
 
 export function HomeSpinShortcut() {
   const { lang } = useLang();
   const bn = lang === 'bn';
   const pathname = usePathname();
+  const router = useRouter();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
@@ -34,23 +44,35 @@ export function HomeSpinShortcut() {
   if (pathname?.startsWith('/rewards')) return null;
   if (!mounted) return null;
 
+  const handleActivate = (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    router.push(TARGET_HREF);
+  };
+
   return (
-    <Link
-      href="/rewards?tab=spin"
+    <button
+      type="button"
+      onClick={handleActivate}
+      // Belt + braces: some Android webview builds fire onTouchEnd but
+      // not the synthesised click. Catch the touch directly so the
+      // navigation runs either way.
+      onTouchEnd={handleActivate}
       aria-label={bn ? 'স্পিন হুইল' : 'Spin Wheel'}
-      className="group fixed bottom-[calc(180px+env(safe-area-inset-bottom))] right-2 z-40 flex flex-col items-center gap-1 lg:bottom-[calc(88px+env(safe-area-inset-bottom))] lg:right-5"
+      style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'rgba(245,180,0,0.25)' }}
+      className="group fixed bottom-[calc(180px+env(safe-area-inset-bottom))] right-2 z-50 flex flex-col items-center gap-1 rounded-full border-0 bg-transparent p-2 outline-none focus-visible:ring-2 focus-visible:ring-amber-300 active:scale-95 lg:bottom-[calc(88px+env(safe-area-inset-bottom))] lg:right-5"
     >
       <span
         aria-hidden
-        className="pointer-events-none absolute -top-3 left-1/2 inline-flex h-5 -translate-x-1/2 items-center rounded-full bg-rose-500 px-1.5 text-[9px] font-extrabold uppercase tracking-wider text-white shadow-[0_6px_14px_-4px_rgba(244,63,94,0.6)]"
+        className="pointer-events-none absolute -top-1 left-1/2 inline-flex h-5 -translate-x-1/2 items-center rounded-full bg-rose-500 px-1.5 text-[9px] font-extrabold uppercase tracking-wider text-white shadow-[0_6px_14px_-4px_rgba(244,63,94,0.6)]"
       >
         {bn ? 'নতুন' : 'NEW'}
       </span>
-      <span className="relative inline-flex h-16 w-16 items-center justify-center drop-shadow-[0_6px_22px_rgba(245,180,0,0.45)]">
+      <span className="pointer-events-none relative inline-flex h-16 w-16 items-center justify-center drop-shadow-[0_6px_22px_rgba(245,180,0,0.45)]">
         {/* Continuously rotating wheel. pointer-events-none so taps
-            land on the parent Link instead of the rotating SVG - some
-            mobile webviews (iOS Safari + WebView reports observed)
-            otherwise swallow the tap when the transform is mid-frame. */}
+            land on the parent button instead of the rotating SVG -
+            some mobile webviews otherwise swallow the tap when the
+            transform is mid-frame. */}
         <svg
           viewBox="0 0 100 100"
           aria-hidden
@@ -104,7 +126,7 @@ export function HomeSpinShortcut() {
           <path d="M 50 6 L 56 18 L 44 18 Z" fill="#c4304d" stroke="#5a3a1d" strokeWidth="1" />
         </svg>
       </span>
-      <span className="rounded-full bg-brand-ink/85 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-amber-300 backdrop-blur">
+      <span className="pointer-events-none rounded-full bg-brand-ink/85 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-amber-300 backdrop-blur">
         {bn ? 'স্পিন' : 'SPIN'}
       </span>
 
@@ -115,6 +137,6 @@ export function HomeSpinShortcut() {
           to { transform: rotate(360deg); }
         }
       `}</style>
-    </Link>
+    </button>
   );
 }
