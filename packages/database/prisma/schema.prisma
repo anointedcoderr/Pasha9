@@ -241,6 +241,7 @@ model User {
   rewardClaims        RewardClaim[]
   dailyCheckIns       DailyCheckInLog[]
   spinResults         SpinResult[]
+  wheelSpins          WheelSpin[]
   bettingPassProgress UserBettingPassProgress?
   bettingPassEvents   BettingPassEvent[]
   bettingPassClaims   BettingPassClaim[]
@@ -1336,8 +1337,9 @@ model SpinWheelTier {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  segments SpinSegment[]
-  results  SpinResult[]
+  segments   SpinSegment[]
+  results    SpinResult[]
+  wheelSpins WheelSpin[]
 
   @@index([isActive, position])
 }
@@ -1413,12 +1415,52 @@ model SpinResult {
   tierId       String?
   createdAt    DateTime @default(now())
 
-  user    User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  segment SpinSegment    @relation(fields: [segmentId], references: [id])
-  tier    SpinWheelTier? @relation(fields: [tierId], references: [id], onDelete: SetNull)
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  segment   SpinSegment    @relation(fields: [segmentId], references: [id])
+  tier      SpinWheelTier? @relation(fields: [tierId], references: [id], onDelete: SetNull)
+  wheelSpin WheelSpin?
 
   @@index([userId, createdAt])
   @@index([tierId, createdAt])
+}
+
+// One row per engine invocation of the spin wheel. Mirrors SpinResult
+// but adds the provenance the compliance brief requires: a snapshot of
+// the EXACT eligible pool (winnable wedges + weights) that the engine
+// considered for THIS spin, the tier's configVersion at that moment,
+// the crypto.randomBytes-derived nonce and pick value, and the
+// fallback flag set when the pool was empty and the engine had to
+// refund the player.
+//
+// SpinResult stays the user-facing history row; WheelSpin is the
+// internal audit-grade record. The two are linked via resultId.
+model WheelSpin {
+  id              String   @id @default(cuid())
+  userId          String
+  tierId          String?
+  configVersion   Int?
+  serverNonceHex  String   // hex of crypto.randomBytes(4) used for the pick
+  eligiblePool    Json     // [{ segmentId, label, weight }] snapshot at spin time
+  totalWeight     Int
+  pickValue       Int      // randomBytes -> uint32 mod totalWeight
+  chosenSegmentId String?
+  chosenLabel     String?
+  payoutType      String?
+  payoutAmount    Int?
+  cost            Int      @default(0)
+  source          String   @default("manual") // manual | free_daily | login
+  fallbackUsed    Boolean  @default(false)
+  fallbackReason  String?
+  resultId        String?  @unique
+  createdAt       DateTime @default(now())
+
+  user   User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tier   SpinWheelTier? @relation(fields: [tierId], references: [id], onDelete: SetNull)
+  result SpinResult?    @relation(fields: [resultId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([tierId, createdAt])
+  @@index([fallbackUsed, createdAt])
 }
 
 // ---------- Audit and system ----------

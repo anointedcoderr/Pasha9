@@ -88,6 +88,17 @@ export function SpinStage({ coins, freeSpinsRemaining, costPerSpin, tierLabel, t
         <div className="mt-7 flex flex-col items-center gap-4">
           {children}
         </div>
+
+        {/* Fair-play disclosure. Required wording per compliance
+            engineering brief - the operator is allowed to mark wedges
+            as display-only and players must be told this can happen.
+            The line stays small and unobtrusive at the bottom of the
+            stage so the cabinet still reads premium. */}
+        <p className="mt-6 text-center text-[10px] leading-relaxed text-amber-200/55">
+          {bn
+            ? 'বিজয়ের সম্ভাবনা ওয়েট-ভিত্তিক। কিছু পুরস্কার সময়ে সময়ে অপারেটর কর্তৃক ডিসপ্লে-অনলি হিসেবে চিহ্নিত হতে পারে।'
+            : 'Prize odds are weight-based. Some prizes may be marked as display-only by the operator from time to time.'}
+        </p>
       </div>
     </motion.section>
   );

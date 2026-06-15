@@ -232,6 +232,12 @@ export default function RewardsPage() {
         const code = j?.code as string | undefined;
         if (code === 'NO_SEGMENTS' || code === 'SPIN_DISABLED' || code === 'TIER_NOT_FOUND') {
           setError(bn ? 'স্পিন এখনও কনফিগার করা হয়নি। অনুগ্রহ করে কিছুক্ষণ পরে আবার চেষ্টা করুন।' : 'Spin is not configured yet. Please try again later.');
+        } else if (code === 'SPIN_FALLBACK_REFUND') {
+          // HARD_FALLBACK_REFUND from the engine: every wedge on this
+          // tier was marked display-only. Operator misconfiguration.
+          // Nothing was deducted; player can retry once the operator
+          // restores a winnable wedge.
+          setError(bn ? 'এই মুহূর্তে কোনো পুরস্কার নেই। অনুগ্রহ করে কিছুক্ষণ পরে আবার চেষ্টা করুন।' : 'No prize is available right now. Please try again later.');
         } else if (code === 'INSUFFICIENT_COINS') {
           const need = Number(j?.coinsNeeded ?? 0);
           const have = Number(j?.coinsHave ?? 0);

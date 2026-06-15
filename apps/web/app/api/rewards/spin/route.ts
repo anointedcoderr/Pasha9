@@ -14,11 +14,13 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
+import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db/client';
 import { withAuth, ensureUser, recordActivity } from '@/lib/auth/guard';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 import { loadSpinConfig } from '@/lib/rewards/config';
 import { rateLimit } from '@/lib/auth/rate-limit';
+import { pickSpinSegment } from '@/lib/spin/engine';
 
 const bodySchema = z.object({
   tierKey: z.string().trim().min(1).max(40).optional(),
@@ -81,16 +83,66 @@ export async function POST(req: NextRequest) {
       return jsonError(400, 'INSUFFICIENT_COINS', `Need ${cost} coins to spin, you have ${coinsPreview}.`, { coinsHave: coinsPreview, coinsNeeded: cost });
     }
 
-    // Weighted pick. Operator-configurable house raffle - no
-    // provability guarantees ship here.
-    const total = segments.reduce((s, x) => s + Math.max(1, x.weight), 0);
-    let pick = Math.floor((Math.random() * total)) + 1;
-    let chosen = segments[0];
-    let chosenIndex = 0;
-    for (let i = 0; i < segments.length; i += 1) {
-      pick -= Math.max(1, segments[i].weight);
-      if (pick <= 0) { chosen = segments[i]; chosenIndex = i; break; }
+    // Server-authoritative pick. crypto.randomBytes-derived weighted
+    // selection over the EXCLUDE-FILTERED pool. The eligible pool is
+    // the subset of active segments where excludeFromWins=false; the
+    // flag is server-only and is never returned by the public spin-
+    // wheel endpoint, so the visual wheel still renders every wedge.
+    //
+    // When the eligible pool is empty the engine returns a fallback
+    // outcome and we trigger HARD_FALLBACK_REFUND: refund the cost,
+    // write a WheelSpin row with fallbackUsed=true, and tell the
+    // player the spin did not run. We never invent a winner.
+    const tierConfigVersion = tier
+      ? (await db.spinWheelTier.findUnique({ where: { id: tier.id }, select: { configVersion: true } }))?.configVersion ?? null
+      : null;
+
+    const pick = pickSpinSegment(segments.map((s) => ({
+      id: s.id,
+      label: s.label,
+      weight: s.weight,
+      excludeFromWins: s.excludeFromWins,
+    })));
+
+    if (pick.kind === 'fallback') {
+      // Hard fallback refund. No wallet movement, no SpinResult row,
+      // just a WheelSpin audit entry so compliance can see the
+      // operator configured the wheel into a degenerate state.
+      await db.wheelSpin.create({
+        data: {
+          userId,
+          tierId: tier?.id ?? null,
+          configVersion: tierConfigVersion,
+          serverNonceHex: pick.serverNonceHex,
+          eligiblePool: pick.eligiblePool as Prisma.InputJsonValue,
+          totalWeight: 0,
+          pickValue: 0,
+          chosenSegmentId: null,
+          chosenLabel: null,
+          payoutType: null,
+          payoutAmount: null,
+          cost: 0,
+          source: 'manual',
+          fallbackUsed: true,
+          fallbackReason: pick.reason,
+          resultId: null,
+        },
+      });
+      await recordActivity({
+        actorId: userId,
+        actorRole: session.role,
+        action: 'SPIN_FALLBACK_REFUND',
+        target: tier?.id ?? undefined,
+        detail: pick.reason,
+        meta: { tierKey: tier?.key ?? null, configVersion: tierConfigVersion },
+      });
+      return jsonError(503, 'SPIN_FALLBACK_REFUND', 'No prize is available right now. Please try again later.');
     }
+
+    const chosenIndex = pick.chosenIndex;
+    // Resolve back to the full SpinSegment row from the original list
+    // so downstream code can read turnoverX + payoutType + ...
+    const chosen = segments[chosenIndex];
 
     const payoutCoins = chosen.payoutType === 'coins' ? chosen.payoutAmount : 0;
     const payoutBonus = chosen.payoutType === 'bonus' ? chosen.payoutAmount : 0;
@@ -310,6 +362,37 @@ export async function POST(req: NextRequest) {
       throw e;
     }
 
+    // Audit-grade WheelSpin row. Captures the EXACT eligible pool
+    // + total weight + pick value + nonce so compliance can replay
+    // any spin and confirm the engine picked from the visible-and-
+    // winnable subset of wedges. The write is best-effort - the
+    // wallet has already settled, so an audit failure must not 500
+    // the player. We log loudly so support can investigate later.
+    try {
+      await db.wheelSpin.create({
+        data: {
+          userId,
+          tierId: tier?.id ?? null,
+          configVersion: tierConfigVersion,
+          serverNonceHex: pick.serverNonceHex,
+          eligiblePool: pick.eligiblePool as Prisma.InputJsonValue,
+          totalWeight: pick.totalWeight,
+          pickValue: pick.pickValue,
+          chosenSegmentId: chosen.id,
+          chosenLabel: chosen.label,
+          payoutType: chosen.payoutType,
+          payoutAmount: chosen.payoutAmount,
+          cost,
+          source,
+          fallbackUsed: false,
+          fallbackReason: null,
+          resultId: result.spinRow.id,
+        },
+      });
+    } catch (auditErr) {
+      console.error('[spin] WheelSpin audit write failed', auditErr);
+    }
+
     await recordActivity({
       actorId: userId,
       actorRole: session.role,
@@ -323,6 +406,8 @@ export async function POST(req: NextRequest) {
         cost,
         source,
         bonusGrantId: result.bonusGrantId ?? null,
+        configVersion: tierConfigVersion,
+        serverNonceHex: pick.serverNonceHex,
       },
     });
 
