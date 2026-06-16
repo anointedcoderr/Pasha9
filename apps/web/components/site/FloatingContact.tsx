@@ -69,9 +69,17 @@ export function FloatingContact() {
   };
 
   return (
+    // pointer-events-none on the outer wrapper so the closed dropdown
+    // menu (which is opacity-0 but still occupies layout space and
+    // therefore extends the wrapper's bounding box well above the chat
+    // button) does NOT swallow taps on neighbouring fixed widgets
+    // (HomeSpinShortcut at bottom-180px sits visually above the chat
+    // button but inside this wrapper's box). The menu re-enables
+    // pointer-events-auto when open; the chat button is always
+    // tappable via its own className.
     <div
       ref={panelRef}
-      className="fixed bottom-[calc(120px+env(safe-area-inset-bottom))] right-3 z-50 flex flex-col items-end gap-3 lg:bottom-6 lg:right-6"
+      className="pointer-events-none fixed bottom-[calc(120px+env(safe-area-inset-bottom))] right-3 z-50 flex flex-col items-end gap-3 lg:bottom-6 lg:right-6"
     >
       <div
         role="menu"
@@ -79,7 +87,7 @@ export function FloatingContact() {
         aria-hidden={!open}
         className={cn(
           'w-[228px] origin-bottom-right overflow-hidden rounded-2xl border border-brand-yellow-500/30 bg-brand-paper p-2 shadow-[0_22px_44px_-18px_rgba(15,17,21,0.4),0_0_0_1px_rgba(255,204,0,0.05)] transition-all duration-200',
-          open ? 'translate-y-0 scale-100 opacity-100' : 'pointer-events-none translate-y-2 scale-95 opacity-0',
+          open ? 'pointer-events-auto translate-y-0 scale-100 opacity-100' : 'pointer-events-none translate-y-2 scale-95 opacity-0',
         )}
       >
         <div className="flex items-center justify-between border-b border-brand-divider px-2 pb-2 pt-1">
@@ -145,7 +153,9 @@ export function FloatingContact() {
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          'inline-flex h-12 w-12 items-center justify-center rounded-full text-brand-ink shadow-[0_10px_24px_-10px_rgba(245,180,0,0.85)] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue-500/40',
+          // pointer-events-auto so the wrapper's pointer-events-none
+          // does not suppress the chat button itself.
+          'pointer-events-auto inline-flex h-12 w-12 items-center justify-center rounded-full text-brand-ink shadow-[0_10px_24px_-10px_rgba(245,180,0,0.85)] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue-500/40',
           'bg-[linear-gradient(135deg,#FFE066_0%,#FFCC00_55%,#F5B400_100%)] hover:brightness-105',
         )}
       >
