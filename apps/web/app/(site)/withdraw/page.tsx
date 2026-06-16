@@ -244,6 +244,20 @@ export default function WithdrawPage() {
       return;
     }
 
+    // Live amount check using the admin-configured limits the page
+    // already loaded into effectiveMin / effectiveMax. The Zod schema
+    // intentionally allows any positive amount so this check is the
+    // single source of truth on the client.
+    const amt = Number(values.amount);
+    if (amt < effectiveMin) {
+      setServerError(`Minimum withdrawal is ${effectiveMin.toLocaleString()} BDT.`);
+      return;
+    }
+    if (amt > effectiveMax) {
+      setServerError(`Maximum withdrawal is ${effectiveMax.toLocaleString()} BDT per request.`);
+      return;
+    }
+
     setLoading(true);
     try {
       const res = await fetch('/api/withdrawals', {

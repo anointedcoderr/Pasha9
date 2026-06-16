@@ -119,31 +119,66 @@ export default function RewardsPage() {
     if (r.ok) setMe(await r.json());
   }, []);
 
+  // Pull-everything wrapper so we can re-fetch the spin-wheel data on
+  // visibility change + on spin-tab open. The operator complained that
+  // after editing a segment label in /admin/spin-segments the /rewards
+  // tab kept showing the old label until a hard refresh - that was
+  // because the original useEffect only ran once on mount.
+  const fetchSpinWheel = useCallback(async () => {
+    try {
+      // ts query bust intermediate proxy / mobile webview cache so a
+      // segment label edit in /admin/spin-segments is reflected on the
+      // device immediately. The server also sets no-store on this
+      // route; this is defence in depth.
+      const r = await fetch(`/api/content/spin-wheel?ts=${Date.now()}`, { cache: 'no-store' });
+      if (!r.ok) return;
+      const j = await r.json();
+      const loadedTiers = Array.isArray(j?.tiers) ? (j.tiers as PublicSpinTier[]) : [];
+      setTiers(loadedTiers);
+      setLegacySegments(Array.isArray(j?.legacySegments) ? (j.legacySegments as SpinWheelSegment[]) : []);
+      if (loadedTiers.length > 0 && !selectedTierKey) {
+        setSelectedTierKey(loadedTiers[0].key);
+      }
+    } catch {
+      // Silent; page renders with the previous snapshot.
+    }
+    // selectedTierKey intentionally omitted: we only want to default
+    // the selection on first non-empty load, not reset every refetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     let alive = true;
     fetch('/api/content/rewards', { cache: 'no-store' })
       .then((r) => r.json())
       .then((j) => { if (alive) setItems((j?.items ?? []) as PublicRewardItem[]); })
       .catch(() => {});
-    // ts query bust intermediate proxy / mobile webview cache so a
-    // segment label edit in /admin/spin-segments is reflected on the
-    // device immediately. The server already sets no-store on this
-    // route; this is defence in depth.
-    fetch(`/api/content/spin-wheel?ts=${Date.now()}`, { cache: 'no-store' })
-      .then((r) => r.json())
-      .then((j) => {
-        if (!alive) return;
-        const loadedTiers = Array.isArray(j?.tiers) ? (j.tiers as PublicSpinTier[]) : [];
-        setTiers(loadedTiers);
-        setLegacySegments(Array.isArray(j?.legacySegments) ? (j.legacySegments as SpinWheelSegment[]) : []);
-        if (loadedTiers.length > 0 && !selectedTierKey) {
-          setSelectedTierKey(loadedTiers[0].key);
-        }
-      })
-      .catch(() => {});
+    fetchSpinWheel();
     loadMe();
     return () => { alive = false; };
-  }, [loadMe]);
+  }, [loadMe, fetchSpinWheel]);
+
+  // Re-fetch the spin wheel when the tab returns to the foreground.
+  // Operators frequently flip between /admin/spin-segments and the
+  // public /rewards tab; without this the rewards tab keeps showing
+  // the snapshot it loaded the first time it was opened.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void fetchSpinWheel();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [fetchSpinWheel]);
+
+  // Re-fetch on every switch INTO the spin tab so a freshly-edited
+  // segment label shows up the moment the player taps the tab.
+  useEffect(() => {
+    if (tab === 'spin') {
+      void fetchSpinWheel();
+    }
+  }, [tab, fetchSpinWheel]);
 
   const coins = me?.coins ?? 0;
   const checkInCfg = me?.checkIn.config;

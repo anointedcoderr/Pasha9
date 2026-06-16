@@ -37,8 +37,19 @@ export const depositSchema = z.object({
   note: z.string().max(200).optional(),
 });
 
+// Amount enforcement is intentionally LOOSE here. The form-level
+// effectiveMin/effectiveMax constants in apps/web/app/(site)/withdraw/
+// page.tsx compute the live limit from /api/content/withdrawal-limits
+// (driven by SystemSetting 'withdrawal_min_amount' /
+// 'withdrawal_max_amount' the operator configures in /admin/withdrawal-
+// limits) AND from the selected PaymentMethod row. The server-side
+// /api/withdrawals POST handler re-validates against the SAME live
+// limits and rejects out-of-range submissions with BELOW_MIN /
+// ABOVE_MAX. Hardcoding a 500/200000 floor here previously forced the
+// operator's "Minimum 100 BDT" admin setting to be silently overridden
+// at the form layer.
 export const withdrawalSchema = z.object({
-  amount: z.coerce.number().min(500, 'Minimum 500 BDT').max(200000, 'Maximum 200000 BDT'),
+  amount: z.coerce.number().positive('Enter a positive amount'),
   method: z.string().min(1, 'Select a method'),
   account: z.string().min(6, 'Account number required').max(40),
   // Per the Babu88-style redesign the public form no longer asks for the

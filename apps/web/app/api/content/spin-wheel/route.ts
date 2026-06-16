@@ -32,6 +32,15 @@ const NO_CACHE_HEADERS = {
   'Pragma': 'no-cache',
   'Expires': '0',
   'Vary': '*',
+  // Cloudflare-specific headers. Without these, the platform-tier
+  // edge cache may still serve a stale payload despite the standard
+  // Cache-Control header above because the default Cloudflare cache
+  // rules ignore standard cache headers for HTML/JSON unless told to
+  // honour them. CDN-Cache-Control is the generic version, the
+  // Cloudflare-CDN-Cache-Control wins on Cloudflare specifically.
+  'CDN-Cache-Control': 'no-store',
+  'Cloudflare-CDN-Cache-Control': 'no-store',
+  'Surrogate-Control': 'no-store',
 };
 
 function noCacheJson(payload: unknown, status = 200) {
