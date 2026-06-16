@@ -6,7 +6,7 @@ import { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db/client';
 import { verifyPassword } from '@/lib/auth/password';
-import { setAuthCookies, getClientIp, getUserAgent, revokePriorSessionsForUser, revokeRefreshFromCurrentCookie } from '@/lib/auth/session';
+import { setAuthCookies, getClientIp, getUserAgent, revokeRefreshFromCurrentCookie, revokePriorSessionsForUser } from '@/lib/auth/session';
 import { loadEffectivePermissions } from '@/lib/auth/rbac';
 import { rateLimit } from '@/lib/auth/rate-limit';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
@@ -93,12 +93,21 @@ export async function POST(req: NextRequest) {
     data: { lastLoginAt: new Date(), lastLoginIp: ip },
   });
 
-  // Kill any prior sessions for this user (other devices and this
-  // device's previous account) AND specifically revoke whatever session
-  // row the existing pasha9_refresh cookie points to before issuing
-  // fresh cookies. Prevents cross-account state leakage in the same
-  // browser.
-  await revokePriorSessionsForUser(user.id);
+  // Revoke ONLY the session row that the current pasha9_refresh
+  // cookie points to (the previous account on THIS device, if any).
+  // Prevents cross-account state leakage in the same browser.
+  //
+  // Previously this also called revokePriorSessionsForUser(user.id)
+  // which killed every active session for the logging-in user across
+  // every device they owned - if a player logged in on the website
+  // from a new browser, their phone was kicked out at the same
+  // moment. Operators reported this as "accounts get logged out
+  // automatically on refresh" because their test phones lost the
+  // session whenever the same account was re-touched anywhere else.
+  // Multi-device sessions for the same user are now preserved; the
+  // /admin/users force-logout button still has access to the bulk
+  // revoke via revokePriorSessionsForUser for the explicit security
+  // case (password compromise, account block).
   await revokeRefreshFromCurrentCookie();
 
   const perms = await loadEffectivePermissions(user.id);

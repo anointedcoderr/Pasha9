@@ -12,7 +12,7 @@ import { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db/client';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
-import { setAuthCookies, getClientIp, getUserAgent, revokePriorSessionsForUser } from '@/lib/auth/session';
+import { setAuthCookies, getClientIp, getUserAgent } from '@/lib/auth/session';
 import { loadEffectivePermissions } from '@/lib/auth/rbac';
 import { verifyTotp, consumeRecoveryCode } from '@/lib/security/totp';
 import { recordLoginAttempt } from '@/lib/security/login-attempts';
@@ -83,15 +83,16 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // Mirror the regular login flow: stamp last login + nuke previous
-  // sessions + issue cookies.
+  // Mirror the regular login flow: stamp last login + issue cookies.
+  // Multi-device sessions for the same user are preserved (see the
+  // login route for the rationale); explicit security flows
+  // (admin block / staff role change / password reset) still call
+  // revokePriorSessionsForUser as needed. Staff 2FA completions on
+  // the admin surface are also untouched here.
   await db.user.update({
     where: { id: user.id },
     data: { lastLoginAt: new Date(), lastLoginIp: ip },
   });
-  if (claims.surface === 'user') {
-    await revokePriorSessionsForUser(user.id);
-  }
 
   const perms = await loadEffectivePermissions(user.id);
   await setAuthCookies(user.id, user.role.key, perms, { ip, userAgent: ua });
