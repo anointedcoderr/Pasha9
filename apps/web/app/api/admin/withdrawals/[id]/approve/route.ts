@@ -4,8 +4,17 @@
 //   1. flips the Withdrawal row to status="approved"
 //   2. deducts the amount from the user's main wallet balance
 //   3. writes a Transaction (withdraw / completed)
-// No payout gateway side-effect - the operator pays the user out of
-// band per M1 design.
+// processingState stays NULL so /admin/withdrawals shows both the
+// manual "Mark Paid" button AND the "Send via ChaopaoPay" button.
+//
+// When SystemSetting payment_chaopaopay_auto_payout_on_approve='1'
+// AND the withdrawal method is a ChaopaoPay-supported channel
+// (bKash/Nagad) AND ChaopaoPay credentials are configured, the
+// approve endpoint also fires the ChaopaoPay /payout/create.php call
+// in a best-effort post-commit step. Success flips processingState
+// to 'payout_initiated' and records the providerTxId. Failure leaves
+// the withdrawal in 'approved' state with a payout_attempt_failed
+// audit event so the operator can retry via the manual button.
 //
 // Idempotent + safety-checked: rejects if wallet would go negative or
 // row is already resolved.
@@ -15,14 +24,133 @@ export const dynamic = 'force-dynamic';
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
+import { randomBytes } from 'crypto';
 import { db } from '@/lib/db/client';
 import { withAuth, ensurePermission, recordActivity } from '@/lib/auth/guard';
 import { jsonOk, jsonError } from '@/lib/auth/errors';
 import { sendSms } from '@/lib/sms/service';
 import { fireEvent } from '@/lib/tracking/dispatcher';
 import { computeDepositTurnover } from '@/lib/turnover/deposit-gate';
+import { createChaopaoPayOut, type ChaopaoPayMethod } from '@/lib/payments/chaopaopay-client';
 
 const schema = z.object({ adminNote: z.string().max(500).optional() });
+
+function resolveChaopaopayMethod(methodName: string): ChaopaoPayMethod | null {
+  const m = methodName.toLowerCase();
+  if (m === 'bkash' || m === 'chaopaopay_bkash') return 'bkash';
+  if (m === 'nagad' || m === 'chaopaopay_nagad') return 'nagad';
+  return null;
+}
+
+function generatePayoutTrx(): string {
+  return `WIT-${randomBytes(8).toString('hex').toUpperCase()}`;
+}
+
+function originFromRequest(req: NextRequest): string {
+  const cfg = process.env.PUBLIC_BASE_URL?.trim();
+  if (cfg) return cfg.replace(/\/+$/, '');
+  const proto = req.headers.get('x-forwarded-proto') ?? 'https';
+  const host = req.headers.get('host') ?? '';
+  return host ? `${proto}://${host}` : '';
+}
+
+// Inline ChaopaoPay payout dispatch shared with the manual Send via
+// ChaopaoPay route (apps/web/app/api/admin/payments/chaopaopay/
+// send-payout/[withdrawalId]/route.ts). Failure path logs a
+// payout_attempt_failed WithdrawalEvent and returns without throwing
+// so the approve response still succeeds.
+async function runAutoPayout(
+  req: NextRequest,
+  actorId: string,
+  actorRole: string,
+  w: { id: string; amount: Prisma.Decimal | number | string; method: string; accountNumber: string; accountName: string },
+  method: ChaopaoPayMethod,
+): Promise<void> {
+  const trxId = generatePayoutTrx();
+  const origin = originFromRequest(req);
+  const notifyUrl = `${origin}/api/payouts/webhook/chaopaopay`;
+  let result;
+  try {
+    result = await createChaopaoPayOut({
+      trxId,
+      amount: Number(w.amount),
+      method,
+      accountNumber: w.accountNumber,
+      accountName: w.accountName,
+      notifyUrl,
+      description: `Pasha 9 auto-payout ${w.id}`,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[approve/auto-payout] gateway error', err);
+    try {
+      await db.withdrawalEvent.create({
+        data: {
+          withdrawalId: w.id,
+          kind: 'payout_attempt_failed',
+          actorId,
+          actorRole,
+          note: msg.slice(0, 480),
+          meta: { trxId, auto: true },
+        },
+      });
+    } catch { /* swallow audit failure */ }
+    return;
+  }
+  try {
+    await db.$transaction(async (tx) => {
+      const r = await tx.withdrawal.updateMany({
+        where: {
+          id: w.id,
+          status: 'approved',
+          processingState: { notIn: ['paid', 'payout_initiated'] },
+        },
+        data: {
+          processingState: 'payout_initiated',
+          providerKey: 'chaopaopay',
+          providerRef: result!.transactionId,
+        },
+      });
+      if (r.count === 0) return;
+      await tx.withdrawalEvent.create({
+        data: {
+          withdrawalId: w.id,
+          kind: 'payout_initiated',
+          actorId,
+          actorRole,
+          note: `ChaopaoPay auto-payout initiated. trx_id=${trxId}, providerTxId=${result!.transactionId}, fee=${result!.fee}, net=${result!.netAmount}.`,
+          meta: {
+            providerKey: 'chaopaopay',
+            providerRef: result!.transactionId,
+            trxId,
+            fee: result!.fee,
+            netAmount: result!.netAmount,
+            method,
+            gatewayStatus: result!.status,
+            auto: true,
+          },
+        },
+      });
+    });
+  } catch (err) {
+    console.error('[approve/auto-payout] state update failed', err);
+  }
+  await recordActivity({
+    actorId,
+    actorRole,
+    action: 'WITHDRAWAL_CHAOPAOPAY_AUTO_INITIATED',
+    target: w.id,
+    meta: {
+      trxId,
+      providerTxId: result.transactionId,
+      amount: Number(w.amount),
+      method,
+      fee: result.fee,
+      netAmount: result.netAmount,
+      gatewayStatus: result.status,
+    },
+  });
+}
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   return withAuth(async () => {
@@ -76,11 +204,18 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       if (liveAvailable < Number(amount)) {
         throw new Error('INSUFFICIENT_FUNDS_RACE');
       }
+      // Approve flips status -> approved + debits the wallet, but
+      // leaves processingState null. processingState='payout_initiated'
+      // is reserved for the moment a real payout API call leaves the
+      // server (ChaopaoPay /payout/create.php). The earlier version
+      // pre-flipped to 'payout_initiated' here which made the
+      // /admin/withdrawals page hide the "Send via ChaopaoPay" button
+      // because canSendViaChaopaoPay short-circuits on that state.
       const w = await tx.withdrawal.update({
         where: { id: withdrawal.id },
         data: {
           status: 'approved',
-          processingState: 'payout_initiated',
+          processingState: null,
           reviewerId: session.sub,
           reviewedAt: new Date(),
           adminNote: parsed.data.adminNote ?? withdrawal.adminNote,
@@ -129,6 +264,32 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       target: withdrawal.id,
       meta: { userId: withdrawal.userId, amount: Number(amount) },
     });
+
+    // Optional auto-payout via ChaopaoPay. Only fires when the
+    // operator has set payment_chaopaopay_auto_payout_on_approve='1'
+    // in /admin/payments AND the method is bKash/Nagad. Failures are
+    // logged and surface as a payout_attempt_failed event so the
+    // operator can retry via the manual Send via ChaopaoPay button -
+    // the withdrawal still ends in 'approved' (not paid) so no
+    // money is at risk if the gateway call fails.
+    try {
+      const flagRow = await db.systemSetting.findUnique({
+        where: { key: 'payment_chaopaopay_auto_payout_on_approve' },
+        select: { value: true },
+      });
+      if ((flagRow?.value ?? '0').trim() === '1') {
+        const method = resolveChaopaopayMethod(withdrawal.method);
+        if (method) {
+          await runAutoPayout(req, session.sub, session.role, updated, method);
+          // Reload the row in case the auto-payout flipped state so
+          // the response carries the latest snapshot.
+          const refreshed = await db.withdrawal.findUnique({ where: { id: updated.id } });
+          if (refreshed) updated = refreshed;
+        }
+      }
+    } catch (err) {
+      console.error('[withdrawal-approve] auto-payout dispatch failed', err);
+    }
 
     // M2I notify + track (never blocks the response).
     try {

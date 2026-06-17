@@ -204,6 +204,7 @@ export const chaopaopaySettings: ProviderSettingsSchema = {
     { key: 'payment_chaopaopay_api_key', label: 'API Key (pk_...)', kind: 'text', hint: 'From the API Credentials section of the merchant panel.' },
     { key: 'payment_chaopaopay_secret_key', label: 'Secret Key (sk_...)', kind: 'secret', hint: 'Used to verify webhook signatures. Never exposed publicly.' },
     { key: 'payment_chaopaopay_withdraw_password', label: 'Withdraw Password', kind: 'secret', hint: 'Required for payouts only. Set when withdrawal automation is enabled.' },
+    { key: 'payment_chaopaopay_auto_payout_on_approve', label: 'Auto-payout on approval', kind: 'toggle', hint: 'When ON, approving a bKash/Nagad withdrawal in /admin/withdrawals also fires the ChaopaoPay payout immediately. When OFF, the operator uses the two-click "Send via ChaopaoPay" button. Defaults OFF for safety.' },
     { key: 'payment_chaopaopay_bkash_icon', label: 'bKash tile icon', kind: 'image', hint: 'Square PNG/JPG/WebP/SVG shown on the deposit tile grid. Leave empty to use the built-in bK badge.' },
     { key: 'payment_chaopaopay_nagad_icon', label: 'Nagad tile icon', kind: 'image', hint: 'Square PNG/JPG/WebP/SVG shown on the deposit tile grid. Leave empty to use the built-in N badge.' },
   ],
