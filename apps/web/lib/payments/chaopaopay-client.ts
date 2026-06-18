@@ -26,6 +26,18 @@ interface ChaopaoPaySettings {
   withdrawPassword: string | null;
   bkashIcon: string | null;
   nagadIcon: string | null;
+  payinPath: string;
+  payoutPath: string;
+  statusPath: string;
+}
+
+// Normalise a configured path to a leading-slash form. Operator can
+// paste either "/payout/create.php" or "payout/create.php" and both
+// resolve to the same final URL.
+function normPath(value: string | undefined, fallback: string): string {
+  const raw = (value ?? '').trim();
+  if (!raw) return fallback;
+  return raw.startsWith('/') ? raw : `/${raw}`;
 }
 
 async function readSettings(): Promise<ChaopaoPaySettings> {
@@ -41,6 +53,9 @@ async function readSettings(): Promise<ChaopaoPaySettings> {
           'payment_chaopaopay_withdraw_password',
           'payment_chaopaopay_bkash_icon',
           'payment_chaopaopay_nagad_icon',
+          'payment_chaopaopay_payin_path',
+          'payment_chaopaopay_payout_path',
+          'payment_chaopaopay_status_path',
         ],
       },
     },
@@ -56,6 +71,9 @@ async function readSettings(): Promise<ChaopaoPaySettings> {
     withdrawPassword: m.get('payment_chaopaopay_withdraw_password') ?? null,
     bkashIcon: m.get('payment_chaopaopay_bkash_icon') ?? null,
     nagadIcon: m.get('payment_chaopaopay_nagad_icon') ?? null,
+    payinPath: normPath(m.get('payment_chaopaopay_payin_path'), '/payin/create.php'),
+    payoutPath: normPath(m.get('payment_chaopaopay_payout_path'), '/payout/create.php'),
+    statusPath: normPath(m.get('payment_chaopaopay_status_path'), '/transaction/status.php'),
   };
 }
 
@@ -123,7 +141,7 @@ export async function createChaopaoPayIn(input: CreatePayInInput): Promise<Creat
     ...(input.description ? { description: input.description.slice(0, 200) } : {}),
   };
 
-  const url = `${settings.baseUrl}/payin/create.php`;
+  const url = `${settings.baseUrl}${settings.payinPath}`;
   const res = await fetch(url, {
     method: 'POST',
     headers,
@@ -192,7 +210,7 @@ export async function checkChaopaoPayStatus(input: CheckStatusInput): Promise<Ch
   if (input.transactionId) body.transaction_id = input.transactionId;
   else if (input.trxId) body.trx_id = input.trxId;
 
-  const res = await fetch(`${settings.baseUrl}/transaction/status.php`, {
+  const res = await fetch(`${settings.baseUrl}${settings.statusPath}`, {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
@@ -299,16 +317,24 @@ export async function createChaopaoPayOut(input: CreatePayOutInput): Promise<Cre
     ...(input.description ? { description: input.description.slice(0, 200) } : {}),
   };
 
-  const url = `${settings.baseUrl}/payout/create.php`;
+  const url = `${settings.baseUrl}${settings.payoutPath}`;
   const res = await fetch(url, {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(15_000),
   });
-  const json = await res.json().catch(() => null) as { success?: boolean; message?: string; data?: Record<string, unknown> } | null;
+  // Pull the raw response text first so we can log it on failure for
+  // diagnostics - operators reported "Gateway responded 404" with no
+  // body context, which made it impossible to tell whether the path
+  // was wrong, the merchant was suspended, or the gateway was down.
+  const rawText = await res.text().catch(() => '');
+  let json: { success?: boolean; message?: string; data?: Record<string, unknown> } | null = null;
+  try { json = rawText ? JSON.parse(rawText) : null; } catch { json = null; }
   if (!res.ok || !json || json.success !== true || !json.data) {
-    const msg = json?.message ?? `Gateway responded ${res.status}`;
+    const bodyHint = rawText.length > 0 ? rawText.slice(0, 240) : '(empty body)';
+    const msg = json?.message ?? `Gateway responded ${res.status}. Endpoint=${url}. Body=${bodyHint}`;
+    console.error('[chaopaopay] payout failed', { url, status: res.status, body: rawText });
     throw new Error(`CHAOPAOPAY_PAYOUT_FAILED:${msg}`);
   }
   const data = json.data;

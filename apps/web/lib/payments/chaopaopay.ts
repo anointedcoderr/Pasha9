@@ -50,6 +50,9 @@ async function readSettings() {
           'payment_chaopaopay_withdraw_password',
           'payment_chaopaopay_bkash_icon',
           'payment_chaopaopay_nagad_icon',
+          'payment_chaopaopay_payin_path',
+          'payment_chaopaopay_payout_path',
+          'payment_chaopaopay_status_path',
         ],
       },
     },
@@ -65,6 +68,9 @@ async function readSettings() {
     withdrawPassword: m.get('payment_chaopaopay_withdraw_password') ?? null,
     bkashIcon: m.get('payment_chaopaopay_bkash_icon') ?? null,
     nagadIcon: m.get('payment_chaopaopay_nagad_icon') ?? null,
+    payinPath: m.get('payment_chaopaopay_payin_path') ?? '/payin/create.php',
+    payoutPath: m.get('payment_chaopaopay_payout_path') ?? '/payout/create.php',
+    statusPath: m.get('payment_chaopaopay_status_path') ?? '/transaction/status.php',
   };
 }
 
@@ -205,6 +211,9 @@ export const chaopaopaySettings: ProviderSettingsSchema = {
     { key: 'payment_chaopaopay_secret_key', label: 'Secret Key (sk_...)', kind: 'secret', hint: 'Used to verify webhook signatures. Never exposed publicly.' },
     { key: 'payment_chaopaopay_withdraw_password', label: 'Withdraw Password', kind: 'secret', hint: 'Required for payouts only. Set when withdrawal automation is enabled.' },
     { key: 'payment_chaopaopay_auto_payout_on_approve', label: 'Auto-payout on approval', kind: 'toggle', hint: 'When ON, approving a bKash/Nagad withdrawal in /admin/withdrawals also fires the ChaopaoPay payout immediately. When OFF, the operator uses the two-click "Send via ChaopaoPay" button. Defaults OFF for safety.' },
+    { key: 'payment_chaopaopay_payin_path', label: 'Deposit endpoint path', kind: 'text', hint: 'Override only if ChaopaoPay support tells you the deposit path is different. Defaults to /payin/create.php.' },
+    { key: 'payment_chaopaopay_payout_path', label: 'Payout endpoint path', kind: 'text', hint: 'Override only if ChaopaoPay support tells you the payout path is different. Defaults to /payout/create.php. A 404 response usually means this path needs adjusting.' },
+    { key: 'payment_chaopaopay_status_path', label: 'Status check endpoint path', kind: 'text', hint: 'Override only if ChaopaoPay support tells you the status path is different. Defaults to /transaction/status.php.' },
     { key: 'payment_chaopaopay_bkash_icon', label: 'bKash tile icon', kind: 'image', hint: 'Square PNG/JPG/WebP/SVG shown on the deposit tile grid. Leave empty to use the built-in bK badge.' },
     { key: 'payment_chaopaopay_nagad_icon', label: 'Nagad tile icon', kind: 'image', hint: 'Square PNG/JPG/WebP/SVG shown on the deposit tile grid. Leave empty to use the built-in N badge.' },
   ],

@@ -591,6 +591,16 @@ export async function addTurnover(opts: AddTurnoverOpts): Promise<{
       });
     }
 
+    // After every wager, settle out any active grants if the player
+    // has wagered their entire balance down to zero. Operators
+    // reported the legacy carry-forward behaviour as a serious UX
+    // bug.
+    try {
+      await settleLostBonusesIfBust(tx, opts.userId);
+    } catch (err) {
+      console.error('[addTurnover] settleLostBonusesIfBust failed', err);
+    }
+
     return { applied, unallocated: Number(remaining) };
   }).then(async (result) => {
     // Betting Pass bet-points accrual runs outside the bonus
@@ -607,6 +617,68 @@ export async function addTurnover(opts: AddTurnoverOpts): Promise<{
     }
     return result;
   });
+}
+
+// ---------- Loss reset ----------
+//
+// When a player has wagered down to a zero balance across every
+// wallet column, any active UserBonus turnover requirement is moot -
+// they have no money left to wager. Operators reported the legacy
+// behaviour (carry forward the unmet turnover requirement onto the
+// next deposit) as a serious UX problem: a player who lost the full
+// bonus + their own balance would then deposit again and immediately
+// be told "you still owe 8,500 BDT turnover from the previous round."
+//
+// This helper closes every active UserBonus row for the user with
+// status='expired_lost' (a new dedicated value, distinct from
+// status='expired' which represents time-based expiry) and stamps
+// turnoverProgress = turnoverRequired so the deposit-gate aggregation
+// shows the turnover as satisfied. Idempotent: a user whose wallet is
+// zero and who has no active grants is a no-op.
+export async function settleLostBonusesIfBust(
+  tx: Prisma.TransactionClient,
+  userId: string,
+): Promise<{ closed: number }> {
+  const wallet = await tx.wallet.findUnique({
+    where: { userId },
+    select: { balance: true, bonusBalance: true, lockedBalance: true },
+  });
+  if (!wallet) return { closed: 0 };
+  const total = new Prisma.Decimal(wallet.balance)
+    .add(new Prisma.Decimal(wallet.bonusBalance))
+    .add(new Prisma.Decimal(wallet.lockedBalance));
+  // Use < 1 BDT as the threshold so a sub-paisa rounding remnant does
+  // not keep the turnover lock alive forever.
+  if (total.gte(new Prisma.Decimal(1))) return { closed: 0 };
+
+  const active = await tx.userBonus.findMany({
+    where: { userId, status: 'active' },
+    select: { id: true, turnoverRequired: true, turnoverProgress: true, amount: true, sourceType: true },
+  });
+  if (active.length === 0) return { closed: 0 };
+
+  const now = new Date();
+  for (const g of active) {
+    await tx.userBonus.update({
+      where: { id: g.id },
+      data: {
+        status: 'expired_lost',
+        turnoverProgress: g.turnoverRequired,
+        releasedAt: now,
+        note: 'Auto-closed: player wagered the entire bonus + balance to zero.',
+      },
+    });
+    await tx.turnoverEvent.create({
+      data: {
+        userId,
+        bonusGrantId: g.id,
+        amount: new Prisma.Decimal(g.turnoverRequired).sub(new Prisma.Decimal(g.turnoverProgress)),
+        kind: 'auto_loss_reset',
+        meta: { sourceType: g.sourceType ?? null, grantAmount: Number(g.amount) } as Prisma.InputJsonValue,
+      },
+    });
+  }
+  return { closed: active.length };
 }
 
 // ---------- Cancel ----------
