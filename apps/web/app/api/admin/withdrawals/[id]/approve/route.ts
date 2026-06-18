@@ -32,6 +32,7 @@ import { sendSms } from '@/lib/sms/service';
 import { fireEvent } from '@/lib/tracking/dispatcher';
 import { computeDepositTurnover } from '@/lib/turnover/deposit-gate';
 import { createChaopaoPayOut, type ChaopaoPayMethod } from '@/lib/payments/chaopaopay-client';
+import { notifyWithdrawalApproved } from '@/lib/notifications/notify';
 
 const schema = z.object({ adminNote: z.string().max(500).optional() });
 
@@ -303,6 +304,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           body: `Pasha 9: Your withdrawal of ${Number(amount).toLocaleString()} BDT has been approved. The payout will reach your ${withdrawal.method} account shortly.`,
         });
       }
+      await notifyWithdrawalApproved({
+        userId: withdrawal.userId,
+        amount: Number(amount),
+        method: withdrawal.method,
+        withdrawalId: withdrawal.id,
+      });
       await fireEvent({
         event: 'withdrawal',
         source: 'server',

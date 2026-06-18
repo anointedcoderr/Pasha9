@@ -13,6 +13,7 @@ import { requireActiveUser } from '@/lib/auth/rbac';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 import { rateLimit } from '@/lib/auth/rate-limit';
 import { runPromotionClaim } from '@/lib/promotions/claim';
+import { notifyPromotionClaim } from '@/lib/notifications/notify';
 
 export async function POST(_req: NextRequest, { params }: { params: { id: string } }) {
   return withAuth(async () => {
@@ -46,6 +47,20 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
         meta: { url: result.url },
       });
       return jsonOk(result);
+    }
+
+    // Fire-and-forget player notification. Logged on failure but
+    // never blocks the claim response. Only fires for the credit
+    // branch (the redirect branch is handled above and the rejection
+    // branch already short-circuited).
+    try {
+      await notifyPromotionClaim({
+        userId: session.sub,
+        promotionName: result.ruleName,
+        amount: typeof result.amount === 'number' ? result.amount : null,
+      });
+    } catch (err) {
+      console.error('[promotion-claim] notify failed', err);
     }
 
     return jsonOk({

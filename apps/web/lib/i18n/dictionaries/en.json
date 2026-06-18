@@ -397,6 +397,7 @@
     "marketing": "Marketing Center",
     "payments": "Payment Providers",
     "paymentsReconciliation": "Reconciliation Log",
+    "operations": "Operations (Stuck Tx)",
     "payouts": "Payout Providers",
     "paymentMethods": "Payment Methods",
     "withdrawalLimits": "Withdrawal Limits",

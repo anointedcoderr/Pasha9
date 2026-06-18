@@ -31,6 +31,7 @@ import { accrueCommissionsOnDeposit, type AccrualResult as CommissionAccrualResu
 import { accrueBettingPassOnDeposit } from '@/lib/betting-pass/engine';
 import { sendSms } from '@/lib/sms/service';
 import { fireEvent } from '@/lib/tracking/dispatcher';
+import { notifyDepositApproved } from '@/lib/notifications/notify';
 import { applySelectedDepositPromotion } from '@/lib/promotions/deposit';
 import { pickBestTier, resolveActiveTierRule } from '@/lib/bonuses/deposit-tiers';
 
@@ -330,6 +331,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           body: `Pasha 9: Your deposit of ${Number(amount).toLocaleString()} BDT has been approved and credited to your wallet.`,
         });
       }
+      await notifyDepositApproved({
+        userId: deposit.userId,
+        amount: Number(amount),
+        method: deposit.method,
+        depositId: deposit.id,
+      });
       await fireEvent({
         event: 'deposit',
         source: 'server',

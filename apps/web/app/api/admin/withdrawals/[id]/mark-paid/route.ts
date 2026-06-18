@@ -12,6 +12,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db/client';
 import { withAuth, ensurePermission, recordActivity } from '@/lib/auth/guard';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
+import { notifyWithdrawalPaid } from '@/lib/notifications/notify';
 
 const schema = z.object({
   providerKey: z.string().trim().max(60).optional().nullable(),
@@ -86,6 +87,20 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       target: w.id,
       meta: { providerKey: parsed.data.providerKey ?? 'manual', providerRef: parsed.data.providerRef ?? null },
     });
+
+    // Best-effort player notification. Never blocks the admin's
+    // mark-paid response.
+    try {
+      await notifyWithdrawalPaid({
+        userId: updated.userId,
+        amount: Number(updated.amount),
+        method: updated.method,
+        withdrawalId: updated.id,
+        providerRef: parsed.data.providerRef ?? null,
+      });
+    } catch (err) {
+      console.error('[withdrawal-mark-paid] notify failed', err);
+    }
 
     return jsonOk({ withdrawal: updated });
   });

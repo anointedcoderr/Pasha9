@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db/client';
 import { withAuth, ensurePermission, recordActivity } from '@/lib/auth/guard';
 import { jsonOk, jsonError } from '@/lib/auth/errors';
+import { notifyWithdrawalRejected } from '@/lib/notifications/notify';
 
 const schema = z.object({ adminNote: z.string().max(500).optional() });
 
@@ -56,6 +57,17 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       target: withdrawal.id,
       meta: { userId: withdrawal.userId, amount: Number(withdrawal.amount) },
     });
+
+    try {
+      await notifyWithdrawalRejected({
+        userId: withdrawal.userId,
+        amount: Number(withdrawal.amount),
+        reason: parsed.data.adminNote ?? null,
+        withdrawalId: withdrawal.id,
+      });
+    } catch (err) {
+      console.error('[withdrawal-reject] notify failed', err);
+    }
 
     return jsonOk({ withdrawal: updated });
   });

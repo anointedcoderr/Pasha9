@@ -263,6 +263,26 @@ export async function ingestProviderEvent(provider: ProviderKey, event: Provider
     console.error('lottery accrual after auto-credit failed', err);
   }
 
+  // Player-facing notification. Auto-credited deposits skip the admin
+  // approve flow so they otherwise have no in-app announcement. Lookup
+  // the method label from the deposit row since this code path does
+  // not have it in scope.
+  try {
+    const depRow = await db.deposit.findUnique({
+      where: { id: credited.depositId },
+      select: { method: true },
+    });
+    const { notifyDepositApproved } = await import('@/lib/notifications/notify');
+    await notifyDepositApproved({
+      userId: candidate.userId,
+      amount: Number(amount),
+      method: depRow?.method ?? provider,
+      depositId: credited.depositId,
+    });
+  } catch (err) {
+    console.error('auto-credit notify failed', err);
+  }
+
   return {
     status: 'credited',
     gatewayTxId: credited.gatewayTxId,

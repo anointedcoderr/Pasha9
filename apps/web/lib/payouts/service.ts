@@ -36,14 +36,14 @@ async function findWithdrawalForEvent(provider: PayoutProviderKey, event: Payout
   // (Withdrawal.id or a value the admin set on initiation).
   const byProviderRef = await db.withdrawal.findFirst({
     where: { providerKey: provider, providerRef: event.providerTxId, status: 'approved' },
-    select: { id: true, userId: true, amount: true, processingState: true },
+    select: { id: true, userId: true, amount: true, processingState: true, method: true },
   });
   if (byProviderRef) return byProviderRef;
 
   if (event.reference) {
     const byRef = await db.withdrawal.findFirst({
       where: { OR: [{ id: event.reference }, { providerRef: event.reference }], status: 'approved' },
-      select: { id: true, userId: true, amount: true, processingState: true },
+      select: { id: true, userId: true, amount: true, processingState: true, method: true },
     });
     if (byRef) return byRef;
   }
@@ -222,6 +222,21 @@ export async function ingestPayoutEvent(provider: PayoutProviderKey, event: Payo
     });
     return { gatewayTxId: log.id };
   });
+
+  // Player-facing notification fires AFTER the transaction commits so
+  // a notify failure cannot roll back the paid state.
+  try {
+    const { notifyWithdrawalPaid } = await import('@/lib/notifications/notify');
+    await notifyWithdrawalPaid({
+      userId: candidate.userId,
+      amount: Number(candidate.amount),
+      method: candidate.method,
+      withdrawalId: candidate.id,
+      providerRef: event.providerTxId,
+    });
+  } catch (err) {
+    console.error('[payouts/service] webhook notify failed', err);
+  }
 
   return { status: 'paid_recorded', gatewayTxId: result.gatewayTxId, withdrawalId: candidate.id };
 }

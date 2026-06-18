@@ -46,6 +46,7 @@ import {
   TrendingUp,
   PlaySquare,
   Wallet as WalletIcon,
+  AlertTriangle,
 } from 'lucide-react';
 import { Logo } from '@/components/site/Logo';
 import { ROUTES } from '@/lib/constants/routes';
@@ -73,6 +74,7 @@ const GROUPS = [
       { key: 'paymentMethods', href: ROUTES.admin.paymentMethods, icon: CreditCard },
       { key: 'withdrawalLimits', href: ROUTES.admin.withdrawalLimits, icon: SlidersHorizontal },
       { key: 'paymentsReconciliation', href: ROUTES.admin.paymentsReconciliation, icon: FileCheck },
+      { key: 'operations', href: ROUTES.admin.operations, icon: AlertTriangle },
       { key: 'depositNotice', href: ROUTES.admin.depositNotice, icon: Bell },
       { key: 'depositBonusTiers', href: ROUTES.admin.depositBonusTiers, icon: Gift },
     ],
