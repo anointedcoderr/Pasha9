@@ -350,28 +350,50 @@ function ProviderLobbyPageInner() {
               type="button"
               disabled={isBusy}
               onClick={() => onLaunch(g)}
+              // contain:paint isolates this card's compositing layer so a
+              // re-render of one tile cannot force the entire grid to
+              // recomposite. On low-end UNISOC / Mali GPUs (Moto G24
+              // Power and similar) the original "shadow + transition +
+              // backdrop-blur per card" combo overran the GPU compositor
+              // and surfaced as duplicated cards / horizontal lines /
+              // flicker. The lighter shadow + contain hint cap the
+              // damage on those devices without touching the rest of
+              // the site's look-and-feel.
+              style={{ contain: 'layout paint' }}
               className={cn(
-                'group relative overflow-hidden rounded-2xl border border-white/10 bg-brand-ink text-white shadow-[0_8px_24px_-12px_rgba(0,0,0,0.55)] transition active:scale-[0.98]',
+                'group relative overflow-hidden rounded-2xl border border-white/10 bg-brand-ink text-white shadow-[0_4px_12px_-6px_rgba(0,0,0,0.55)] active:scale-[0.98]',
                 isBusy && 'opacity-70',
               )}
             >
               <div className="relative aspect-[4/3] overflow-hidden">
                 {g.imageUrl && !failedImages.has(key) ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={g.imageUrl} alt={g.displayName} onError={() => markImageFailed(key)} className="absolute inset-0 h-full w-full object-cover" />
+                  <img
+                    src={g.imageUrl}
+                    alt={g.displayName}
+                    onError={() => markImageFailed(key)}
+                    loading="lazy"
+                    decoding="async"
+                    className="absolute inset-0 h-full w-full object-cover"
+                  />
                 ) : (
                   <CategoryHeroArt code={artFor(g.category)} className="absolute inset-0 h-full w-full opacity-65" />
                 )}
                 <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-brand-ink/95 via-brand-ink/40 to-transparent" />
                 {/* Brand-first labelling. The aggregator name is only
                     shown when no brand exists, so cards never read as
-                    "iGamingAPIs Aggreg... / JILI" on top of each other. */}
+                    "iGamingAPIs Aggreg... / JILI" on top of each other.
+                    backdrop-blur intentionally NOT used here - on
+                    low-end GPUs a backdrop-blur per card multiplied
+                    across N cards saturated the compositor; the solid
+                    translucent bg gives the same visual weight without
+                    that cost. */}
                 {g.brandName ? (
-                  <span className="absolute left-2 top-2 inline-flex h-5 max-w-[80%] items-center truncate rounded-full border border-yellow-300/60 bg-yellow-300/25 px-1.5 text-[9px] font-extrabold uppercase tracking-wider text-yellow-50 backdrop-blur">
+                  <span className="absolute left-2 top-2 inline-flex h-5 max-w-[80%] items-center truncate rounded-full border border-yellow-300/60 bg-yellow-300/70 px-1.5 text-[9px] font-extrabold uppercase tracking-wider text-yellow-950">
                     {g.brandName}
                   </span>
                 ) : (
-                  <span className="absolute left-2 top-2 inline-flex h-5 max-w-[60%] items-center truncate rounded-full border border-amber-300/60 bg-amber-200/15 px-1.5 text-[9px] font-bold uppercase tracking-wider text-amber-100 backdrop-blur">
+                  <span className="absolute left-2 top-2 inline-flex h-5 max-w-[60%] items-center truncate rounded-full border border-amber-300/60 bg-amber-200/70 px-1.5 text-[9px] font-bold uppercase tracking-wider text-amber-950">
                     {g.providerName}
                   </span>
                 )}

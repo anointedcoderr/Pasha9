@@ -112,11 +112,11 @@ export default function GamesPage() {
                     <div aria-hidden className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-b from-transparent to-brand-ink/95" />
                     <div className="absolute left-2 top-2 flex flex-wrap items-center gap-1">
                       {g.isFeatured ? (
-                        <span className="rounded-full border border-amber-200/60 bg-amber-200/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-100 backdrop-blur">
+                        <span className="rounded-full border border-amber-200/60 bg-amber-200/70 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-950">
                           {lang === 'bn' ? 'হট' : 'Hot'}
                         </span>
                       ) : null}
-                      <span className="rounded-full border border-white/30 bg-white/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white backdrop-blur">
+                      <span className="rounded-full border border-white/30 bg-white/40 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white">
                         {lang === 'bn' ? 'অরিজিনাল' : 'Original'}
                       </span>
                     </div>
