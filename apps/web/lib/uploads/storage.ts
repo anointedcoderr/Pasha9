@@ -95,6 +95,35 @@ const EXT_BY_MIME: Record<string, string> = {
   'audio/webm': '.weba',
 };
 
+// Max output width per category. Anything wider gets downscaled; smaller
+// uploads pass through untouched (withoutEnlargement). Drives the "icons
+// and banners appear broken for a few seconds on first paint" fix — the
+// previous pipeline served a 4MB DSLR JPEG verbatim, which any 3G/4G
+// connection chewed on for seconds. Width here is the visible deployed
+// width at 2x DPR (so 1600 covers a desktop hero on a Retina screen).
+const RESIZE_MAX_WIDTH: Partial<Record<UploadCategory, number>> = {
+  banners: 1600,
+  banners_mobile: 900,
+  games: 800,
+  branding: 1024,
+  categories: 256,
+  jackpot: 1200,
+  promo_desktop: 1400,
+  promo_mobile: 700,
+  promo_thumbnail: 400,
+  promo_background: 1600,
+  ambassadors: 600,
+  sponsors: 400,
+  payment_icons: 256,
+  provider_banners: 1200,
+  avatars: 400,
+  atelier: 1600,
+};
+
+// Raster image MIMEs that Sharp can decode + re-encode to WebP. SVG
+// stays as-is (already vector). PDFs / APKs / audio are not images.
+const RASTER_MIME = new Set(['image/png', 'image/jpeg', 'image/webp']);
+
 function sanitiseStem(name: string): string {
   return name
     .toLowerCase()
@@ -113,18 +142,42 @@ export async function storeFile(category: UploadCategory, file: File): Promise<{
     throw new Error(`File too large. Maximum ${Math.round(MAX_BYTES_BY_CATEGORY[category] / 1024 / 1024)} MB.`);
   }
 
-  const ext = EXT_BY_MIME[mime] ?? extname(file.name) ?? '';
+  let ext = EXT_BY_MIME[mime] ?? extname(file.name) ?? '';
   const stem = sanitiseStem(file.name.replace(/\.[^.]+$/, ''));
-  const filename = `${nanoid(12)}-${stem}${ext}`;
   const dir = join(ROOT, category);
   await mkdir(dir, { recursive: true });
+  const rawBuf = Buffer.from(await file.arrayBuffer());
+
+  // Raster images get resized + re-encoded to WebP at upload time.
+  // Skip if sharp is not installed (graceful fallback so dev / CI
+  // without native deps still works) or if encoding fails for any
+  // reason — the original bytes are written instead. SVG/PDF/APK pass
+  // through untouched.
+  const maxW = RESIZE_MAX_WIDTH[category];
+  let outBuf: Buffer = rawBuf;
+  if (maxW && RASTER_MIME.has(mime)) {
+    try {
+      const sharpMod = await import('sharp');
+      const sharp = (sharpMod as { default?: typeof import('sharp') }).default ?? (sharpMod as unknown as typeof import('sharp'));
+      const processed = await sharp(rawBuf)
+        .rotate()
+        .resize({ width: maxW, withoutEnlargement: true })
+        .webp({ quality: 82, effort: 4 })
+        .toBuffer();
+      outBuf = Buffer.from(processed);
+      ext = '.webp';
+    } catch (err) {
+      console.error(`[uploads] sharp optimization failed for ${category}, saving original:`, err);
+    }
+  }
+
+  const filename = `${nanoid(12)}-${stem}${ext}`;
   const absPath = join(dir, filename);
-  const buf = Buffer.from(await file.arrayBuffer());
-  await writeFile(absPath, buf);
+  await writeFile(absPath, outBuf);
 
   return {
     url: `/uploads/${category}/${filename}`,
     path: absPath,
-    bytes: buf.length,
+    bytes: outBuf.length,
   };
 }

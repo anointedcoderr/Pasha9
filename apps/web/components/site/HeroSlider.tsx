@@ -162,7 +162,24 @@ export function HeroSlider() {
     fetch('/api/content/banners')
       .then((r) => r.json())
       .then((data) => {
-        if (alive) setLive((data.banners ?? []) as LiveBanner[]);
+        if (alive) {
+          const banners = (data.banners ?? []) as LiveBanner[];
+          setLive(banners);
+          // Preload the first banner image in parallel with the rest
+          // of the bundle so it shows up faster on first paint. The
+          // banner endpoint round-trip already happens during page
+          // load, so by the time the slider mounts the first frame
+          // the browser may already have the image in cache.
+          const firstImage = banners.find((b) => (b.mediaType ?? 'image') === 'image' && b.imageUrl)?.imageUrl;
+          if (firstImage) {
+            const link = document.createElement('link');
+            link.rel = 'preload';
+            link.as = 'image';
+            link.href = firstImage;
+            link.setAttribute('fetchpriority', 'high');
+            document.head.appendChild(link);
+          }
+        }
       })
       .catch(() => { if (alive) setLive([]); });
     return () => { alive = false; };
@@ -333,12 +350,18 @@ export function HeroSlider() {
               <img
                 src={slide.imageUrl ?? ''}
                 alt=""
+                width={1600}
+                height={800}
                 className={cn(
                   'absolute inset-0 h-full w-full',
                   isTextless ? 'object-contain object-center' : 'object-cover object-center',
                 )}
-                loading="eager"
+                loading={i === 0 ? 'eager' : 'lazy'}
                 decoding="async"
+                // fetchpriority is a valid HTML attribute; React's
+                // TS types lag behind the spec, so we lowercase it via
+                // a string-keyed object spread.
+                {...({ fetchpriority: i === 0 ? 'high' : 'auto' } as Record<string, string>)}
               />
             ) : null}
             {/* dim overlay so text on image / video stays readable.

@@ -44,11 +44,25 @@ const nextConfig = {
     //
     // global-error.tsx auto-reloads the last-mile case where a
     // user already has a stale chunk in flight.
+    // Hashed static URLs (nanoid filename on uploads, content-hashed
+    // chunks on /_next/static, hashed app-asset names) are immutable —
+    // once the URL exists it never changes content, so we let browsers
+    // and Cloudflare keep them for a year. This is the single biggest
+    // win against the "icons and banners load slowly on first paint"
+    // complaint: repeat visits skip the network entirely, and the CDN
+    // serves first-time visitors from a nearby edge.
+    const IMMUTABLE_YEAR = [
+      { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
+      { key: 'CDN-Cache-Control', value: 'public, max-age=31536000, immutable' },
+      { key: 'Cloudflare-CDN-Cache-Control', value: 'public, max-age=31536000, immutable' },
+    ];
     return [
       {
         source: '/_next/static/:path*',
         headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }],
       },
+      { source: '/uploads/:path*', headers: IMMUTABLE_YEAR },
+      { source: '/app-assets/:path*', headers: IMMUTABLE_YEAR },
       {
         source: '/:path*',
         has: [{ type: 'header', key: 'accept', value: '.*text/html.*' }],

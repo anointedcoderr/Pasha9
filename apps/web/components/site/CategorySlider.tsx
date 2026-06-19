@@ -95,6 +95,10 @@ export function CategorySlider() {
                     src={customImage}
                     alt=""
                     aria-hidden
+                    width={96}
+                    height={110}
+                    loading="lazy"
+                    decoding="async"
                     className="absolute inset-0 h-full w-full object-contain"
                   />
                 </span>

@@ -87,6 +87,10 @@ export function JackpotStrip() {
           src={cfg.backgroundUrl}
           alt=""
           aria-hidden
+          width={1200}
+          height={300}
+          loading="lazy"
+          decoding="async"
           className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-25 mix-blend-luminosity"
         />
       ) : null}
@@ -188,7 +192,15 @@ function Pool({
       >
         {icon ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={icon} alt="" className="h-full w-full object-contain p-1" />
+          <img
+            src={icon}
+            alt=""
+            width={36}
+            height={36}
+            loading="lazy"
+            decoding="async"
+            className="h-full w-full object-contain p-1"
+          />
         ) : (
           fallbackIcon
         )}
