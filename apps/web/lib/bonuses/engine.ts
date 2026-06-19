@@ -655,7 +655,22 @@ export async function settleLostBonusesIfBust(
     where: { userId, status: 'active' },
     select: { id: true, turnoverRequired: true, turnoverProgress: true, amount: true, sourceType: true },
   });
-  if (active.length === 0) return { closed: 0 };
+
+  // Idempotency: skip if we already recorded an auto_loss_reset marker
+  // within the last minute. Without this the bust marker would be
+  // re-stamped on every losing bet the player makes while the wallet
+  // is at zero, polluting the cutoff with a newer timestamp on every
+  // attempt and making the deposit-gate filter unstable.
+  const recentMarker = await tx.turnoverEvent.findFirst({
+    where: {
+      userId,
+      kind: 'auto_loss_reset',
+      bonusGrantId: null,
+      createdAt: { gt: new Date(Date.now() - 60_000) },
+    },
+    select: { id: true },
+  });
+  if (recentMarker && active.length === 0) return { closed: 0 };
 
   const now = new Date();
   for (const g of active) {
@@ -678,6 +693,25 @@ export async function settleLostBonusesIfBust(
       },
     });
   }
+
+  // Always stamp a userId-scoped, grant-less marker too. The deposit-
+  // gate keys its "ignore old deposits + bets" cutoff off the most
+  // recent auto_loss_reset row for the user, and a player who busts
+  // with no active bonus grant would otherwise leave no trace and keep
+  // dragging the lifetime deposit total into every future required-
+  // turnover calculation.
+  if (!recentMarker) {
+    await tx.turnoverEvent.create({
+      data: {
+        userId,
+        bonusGrantId: null,
+        amount: new Prisma.Decimal(0),
+        kind: 'auto_loss_reset',
+        meta: { reason: 'wallet_busted', walletTotal: Number(total) } as Prisma.InputJsonValue,
+      },
+    });
+  }
+
   return { closed: active.length };
 }
 

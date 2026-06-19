@@ -141,16 +141,60 @@ export async function loadDepositTurnoverMultiplier(): Promise<number> {
   }
 }
 
+// Returns the timestamp of the most recent auto_loss_reset TurnoverEvent
+// for this user, or null if there hasn't been a full-balance loss. The
+// helper settleLostBonusesIfBust in lib/bonuses/engine.ts writes one of
+// these rows every time the player wagers their wallet down to under 1
+// BDT, so any row that exists means "the player went bust at this point
+// in time". The deposit-gate uses it as a hard cutoff: deposits approved
+// before this stamp and bets accepted before this stamp do not count
+// toward the current cycle's required turnover or completed turnover.
+//
+// Client UX requirement: a player who loses everything and re-deposits
+// must see only the NEW deposit's turnover, not the cumulative lifetime
+// total. Without this cutoff, depositRequired = SUM(all approved deposits)
+// keeps growing forever and the player can never withdraw a fresh deposit
+// once they have a long wager history.
+async function loadLastBustResetAt(userId: string): Promise<Date | null> {
+  try {
+    const row = await db.turnoverEvent.findFirst({
+      where: { userId, kind: 'auto_loss_reset' },
+      orderBy: { createdAt: 'desc' },
+      select: { createdAt: true },
+    });
+    return row?.createdAt ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function computeDepositTurnover(userId: string): Promise<DepositTurnoverStatus> {
   const multiplier = await loadDepositTurnoverMultiplier();
+  const lastBust = await loadLastBustResetAt(userId);
+
+  // Build the time-bounded WHERE clauses so deposits approved before the
+  // bust and wagers placed before the bust don't keep weighing on the
+  // current cycle. Bonus grants from before the bust are already cleared
+  // by settleLostBonusesIfBust setting status='expired_lost' (excluded
+  // from the bpAgg/referralAgg queries below via status: 'active').
+  const depositSince = lastBust ? { gt: lastBust } : undefined;
+  const betSince = lastBust ? { gt: lastBust } : undefined;
 
   const [depositAgg, betAgg, bpAgg, referralAgg, bdtBalanceLocked, referralBalanceLocked] = await Promise.all([
     db.deposit.aggregate({
-      where: { userId, status: 'approved' },
+      where: {
+        userId,
+        status: 'approved',
+        ...(depositSince ? { approvedAt: depositSince } : {}),
+      },
       _sum: { amount: true },
     }),
     db.providerTransaction.aggregate({
-      where: { userId, status: 'accepted' },
+      where: {
+        userId,
+        status: 'accepted',
+        ...(betSince ? { createdAt: betSince } : {}),
+      },
       _sum: { betAmount: true },
     }),
     db.userBonus.aggregate({
@@ -179,8 +223,21 @@ export async function computeDepositTurnover(userId: string): Promise<DepositTur
   const referralRemaining = Math.max(0, referralRequired - referralCompleted);
 
   const requiredTurnover = depositRequired + bettingPassRequired + referralRequired;
-  const completedTurnover = depositCompleted + bettingPassCompleted + referralCompleted;
-  const remainingTurnover = Math.max(0, requiredTurnover - completedTurnover);
+  // Cap each gate's contribution to its own required value when summing
+  // the aggregate "Completed" headline. The raw depositCompleted is the
+  // lifetime wager total, which can easily exceed depositRequired - if
+  // we let it through unbounded, the headline showed completed=5,905
+  // with required=1,500 (visually nonsense) while a downstream gate
+  // still had 500 outstanding.
+  const completedTurnover =
+    Math.min(depositRequired, depositCompleted) + bettingPassCompleted + referralCompleted;
+  // The aggregate remaining must be the SUM of unmet sub-gates, not the
+  // shortfall on the combined totals. When the deposit gate is overcompleted
+  // the old "requiredTurnover - completedTurnover" math could go negative on
+  // the betting pass gate and clamp to 0, producing the contradictory "you
+  // need 0 more turnover" copy while the betting pass sub-block still
+  // showed 500 remaining.
+  const remainingTurnover = depositRemaining + bettingPassRemaining + referralRemaining;
   // Gate is met only when BOTH gates are individually met. We could
   // also check remainingTurnover <= 0 but the per-source check is
   // more honest when the deposit gate completed > deposit required
