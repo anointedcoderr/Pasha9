@@ -18,6 +18,7 @@ import { db } from '@/lib/db/client';
 import { withAuth, ensureUser, recordActivity } from '@/lib/auth/guard';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 import { loadCheckInConfig } from '@/lib/rewards/config';
+import { notifyCheckInRewardClaimed } from '@/lib/notifications/notify';
 
 function todayKey(): string {
   const d = new Date();
@@ -83,6 +84,12 @@ export async function POST() {
       target: claim.id,
       meta: { day: today, streakDay, coinsAwarded },
     });
+
+    notifyCheckInRewardClaimed({
+      userId,
+      coins: coinsAwarded,
+      streakDay,
+    }).catch((err) => console.error('[check-in] notify failed', err));
 
     return jsonOk({ coinsAwarded, streakDay, isDay7 });
   });

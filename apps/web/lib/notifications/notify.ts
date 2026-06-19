@@ -30,6 +30,16 @@ export type NotificationKind =
   | 'spin_win'
   | 'lotto_win'
   | 'system'
+  // Reward-celebration kinds. The RewardCelebration component listens
+  // to every kind in REWARD_CELEBRATION_KINDS so each one shows a
+  // congratulations popup on the player's next page load, with the
+  // notification's titleEn/titleBn/bodyEn/bodyBn rendered verbatim.
+  | 'deposit_bonus'
+  | 'betting_pass_reward'
+  | 'promo_code_granted'
+  | 'referral_commission'
+  | 'checkin_reward'
+  | 'reward_coin_grant'
   // Admin-targeted kinds. The admin bell at /admin filters its feed
   // to rows whose kind starts with 'admin_' so a staff user who also
   // tests the player flow on the same account does not see player
@@ -213,6 +223,113 @@ export async function notifyPromotionClaim(input: {
     bodyBn: `আপনার "${input.promotionName}" প্রমোশন আপনার অ্যাকাউন্টে যোগ হয়েছে।`,
     linkUrl: '/promotions',
     priority: 'high',
+  });
+}
+
+// ----- Reward-celebration kinds (RewardCelebration popup) -----------
+//
+// These six helpers feed the RewardCelebration popup. Each one writes a
+// Notification + NotificationRecipient with a player-friendly title and
+// body so the popup can render them verbatim. Wallet movements happen
+// elsewhere; these only surface the "you got X" message.
+
+export async function notifyDepositBonusAwarded(input: {
+  userId: string;
+  amount: number;
+  bonusRuleName: string;
+  depositId: string;
+}): Promise<void> {
+  await notifyUser({
+    userId: input.userId,
+    kind: 'deposit_bonus',
+    titleEn: `Deposit bonus awarded: ${fmt(input.amount)} BDT`,
+    titleBn: `ডিপোজিট বোনাস: ${fmt(input.amount)} BDT`,
+    bodyEn: `Your "${input.bonusRuleName}" bonus is now active on your account. Wager it through to release the cash.`,
+    bodyBn: `আপনার "${input.bonusRuleName}" বোনাস সক্রিয় হয়েছে। ক্যাশ রিলিজ করতে টার্নওভার সম্পূর্ণ করুন।`,
+    linkUrl: '/dashboard/wallet',
+    priority: 'high',
+  });
+}
+
+export async function notifyBettingPassRewardClaimed(input: {
+  userId: string;
+  tier: number;
+  rewardLabel: string;
+  amount: number;
+}): Promise<void> {
+  await notifyUser({
+    userId: input.userId,
+    kind: 'betting_pass_reward',
+    titleEn: `Betting Pass Tier ${input.tier} reward claimed: ${input.rewardLabel}`,
+    titleBn: `বেটিং পাস টিয়ার ${input.tier} পুরস্কার: ${input.rewardLabel}`,
+    bodyEn: input.amount > 0
+      ? `${fmt(input.amount)} ${input.rewardLabel} credited to your account.`
+      : `${input.rewardLabel} credited to your account.`,
+    bodyBn: input.amount > 0
+      ? `${fmt(input.amount)} ${input.rewardLabel} আপনার অ্যাকাউন্টে যোগ হয়েছে।`
+      : `${input.rewardLabel} আপনার অ্যাকাউন্টে যোগ হয়েছে।`,
+    linkUrl: '/betting-pass',
+    priority: 'high',
+  });
+}
+
+export async function notifyPromoCodeGranted(input: {
+  userId: string;
+  code: string;
+  rewardLabel: string;
+  amount: number;
+}): Promise<void> {
+  await notifyUser({
+    userId: input.userId,
+    kind: 'promo_code_granted',
+    titleEn: `Promo code redeemed: ${input.rewardLabel}`,
+    titleBn: `প্রমো কোড: ${input.rewardLabel}`,
+    bodyEn: input.amount > 0
+      ? `Code "${input.code}" applied. ${fmt(input.amount)} ${input.rewardLabel} credited.`
+      : `Code "${input.code}" applied: ${input.rewardLabel}.`,
+    bodyBn: input.amount > 0
+      ? `কোড "${input.code}" প্রয়োগ হয়েছে। ${fmt(input.amount)} ${input.rewardLabel} যোগ হয়েছে।`
+      : `কোড "${input.code}" প্রয়োগ হয়েছে: ${input.rewardLabel}.`,
+    linkUrl: '/promotions',
+    priority: 'high',
+  });
+}
+
+export async function notifyReferralCommissionPaid(input: {
+  userId: string;
+  amount: number;
+  claimReference?: string | null;
+}): Promise<void> {
+  await notifyUser({
+    userId: input.userId,
+    kind: 'referral_commission',
+    titleEn: `Referral commission paid: ${fmt(input.amount)} BDT`,
+    titleBn: `রেফারেল কমিশন: ${fmt(input.amount)} BDT`,
+    bodyEn: `Your referral earnings have been credited to your wallet. Keep inviting friends to earn more.`,
+    bodyBn: `আপনার রেফারেল আয় ওয়ালেটে যোগ হয়েছে। আরও আয় করতে বন্ধুদের আমন্ত্রণ জানান।`,
+    linkUrl: '/referral',
+    priority: 'high',
+  });
+}
+
+export async function notifyCheckInRewardClaimed(input: {
+  userId: string;
+  coins: number;
+  streakDay: number;
+}): Promise<void> {
+  await notifyUser({
+    userId: input.userId,
+    kind: 'checkin_reward',
+    titleEn: `Daily check-in: +${fmt(input.coins)} coins`,
+    titleBn: `দৈনিক চেক-ইন: +${fmt(input.coins)} কয়েন`,
+    bodyEn: input.streakDay >= 7
+      ? `7-day streak bonus claimed! Streak resets tomorrow - check back to start a new one.`
+      : `Streak day ${input.streakDay}. Keep checking in to unlock the day-7 bonus.`,
+    bodyBn: input.streakDay >= 7
+      ? `৭ দিনের স্ট্রিক বোনাস! আগামীকাল নতুন স্ট্রিক শুরু হবে।`
+      : `স্ট্রিক দিন ${input.streakDay}. ৭-দিনের বোনাস আনলক করতে চেক-ইন চালিয়ে যান।`,
+    linkUrl: '/rewards?tab=checkin',
+    priority: 'normal',
   });
 }
 

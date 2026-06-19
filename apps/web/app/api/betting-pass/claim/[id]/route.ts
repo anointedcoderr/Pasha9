@@ -23,6 +23,7 @@ import { requireActiveUser } from '@/lib/auth/rbac';
 import { jsonOk, jsonError } from '@/lib/auth/errors';
 import { rateLimit } from '@/lib/auth/rate-limit';
 import { claimBettingPassReward } from '@/lib/betting-pass/engine';
+import { notifyBettingPassRewardClaimed } from '@/lib/notifications/notify';
 
 export async function POST(_req: NextRequest, { params }: { params: { id: string } }) {
   return withAuth(async () => {
@@ -56,6 +57,13 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
         turnoverRequired: result.turnoverRequired,
       },
     });
+
+    notifyBettingPassRewardClaimed({
+      userId: session.sub,
+      tier: Number(result.currentTier ?? 0),
+      rewardLabel: String(result.rewardKind ?? 'reward'),
+      amount: Number(result.rewardAmount ?? 0),
+    }).catch((err) => console.error('[betting-pass-claim] notify failed', err));
 
     return jsonOk({
       ok: true,

@@ -11,6 +11,7 @@ import { requireActiveUser } from '@/lib/auth/rbac';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 import { rateLimit } from '@/lib/auth/rate-limit';
 import { settleMaturedReferralCommissions } from '@/lib/affiliate/settlement';
+import { notifyReferralCommissionPaid } from '@/lib/notifications/notify';
 
 export async function POST() {
   return withAuth(async () => {
@@ -37,6 +38,14 @@ export async function POST() {
       }
       if (result.code === 'auto_disabled') {
         return jsonError(409, 'CLAIM_MODE_DISABLED');
+      }
+
+      if (result.code === 'paid' && Number(result.amount ?? 0) > 0) {
+        notifyReferralCommissionPaid({
+          userId: session.sub,
+          amount: Number(result.amount),
+          claimReference: result.claimId ?? null,
+        }).catch((err) => console.error('[referrals/claim] notify failed', err));
       }
 
       return jsonOk({

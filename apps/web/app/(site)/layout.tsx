@@ -7,6 +7,7 @@ import { Footer } from '@/components/site/Footer';
 import { FloatingContact } from '@/components/site/FloatingContact';
 import { NotificationAutoPrompt } from '@/components/site/NotificationAutoPrompt';
 import { CashbackCelebration } from '@/components/site/CashbackCelebration';
+import { RewardCelebration } from '@/components/site/RewardCelebration';
 import { TooltipProvider } from '@/components/ui/Tooltip';
 
 export default function SiteLayout({ children }: { children: ReactNode }) {
@@ -38,6 +39,7 @@ export default function SiteLayout({ children }: { children: ReactNode }) {
         <FloatingContact />
         <NotificationAutoPrompt />
         <CashbackCelebration />
+        <RewardCelebration />
       </div>
     </TooltipProvider>
   );

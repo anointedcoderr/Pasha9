@@ -212,7 +212,12 @@ export async function processProviderCallback(
           amount: effectiveBet.neg(),
           reference: normalized.gameRound,
           description: `${creds.name} bet`,
-          meta: { providerKey: creds.providerKey, gameUid: normalized.gameUid, gameRound: normalized.gameRound, callbackType: normalized.type } as Prisma.JsonObject,
+          // scope: 'external_provider' lets cashback campaigns with
+          // scopeType='match' and scopeKeys=['external_provider'] catch
+          // provider losses. Native games stamp 'casino' here. Without
+          // this stamp, scope-filtered cashback finds zero provider
+          // bets even when the player clearly lost money.
+          meta: { providerKey: creds.providerKey, gameUid: normalized.gameUid, gameRound: normalized.gameRound, callbackType: normalized.type, scope: 'external_provider' } as Prisma.JsonObject,
         },
       });
       walletTransactionId = t.id;
@@ -227,7 +232,7 @@ export async function processProviderCallback(
           amount: win,
           reference: normalized.gameRound,
           description: `${creds.name} win`,
-          meta: { providerKey: creds.providerKey, gameUid: normalized.gameUid, gameRound: normalized.gameRound, callbackType: normalized.type } as Prisma.JsonObject,
+          meta: { providerKey: creds.providerKey, gameUid: normalized.gameUid, gameRound: normalized.gameRound, callbackType: normalized.type, scope: 'external_provider' } as Prisma.JsonObject,
         },
       });
       walletTransactionId = walletTransactionId ?? t.id;

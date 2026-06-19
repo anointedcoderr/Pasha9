@@ -28,6 +28,12 @@ import { jsonOk, jsonError } from '@/lib/auth/errors';
 import { accrueLotteryTickets } from '@/lib/lotto/tickets';
 import { applyDepositBonuses, type ApplyDepositResult } from '@/lib/bonuses/engine';
 import { accrueCommissionsOnDeposit, type AccrualResult as CommissionAccrualResult } from '@/lib/affiliate/engine';
+import {
+  creditFirstDepositCoinsIfEligible,
+  creditReferralSuccessfulCoins,
+  creditReferredFirstDepositCoins,
+} from '@/lib/rewards/coin-grants';
+import { notifyDepositBonusAwarded } from '@/lib/notifications/notify';
 import { accrueBettingPassOnDeposit } from '@/lib/betting-pass/engine';
 import { sendSms } from '@/lib/sms/service';
 import { fireEvent } from '@/lib/tracking/dispatcher';
@@ -210,6 +216,48 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       const msg = err instanceof Error ? err.message : String(err);
       console.error('[deposit-approve] commission engine threw unexpectedly', err);
       commissionResult.error = `engine_threw: ${msg.slice(0, 300)}`;
+    }
+
+    // Reward coin grants. Three independent triggers - each gated by
+    // its own SystemSetting amount and skipped silently when the
+    // operator left it at 0. All fire-and-forget; a coin-grant failure
+    // never fails the deposit approval response. Idempotency is owned
+    // by the helper (it skips on duplicate Transaction.reference).
+    try {
+      // 1. Depositor's own first-deposit coin grant.
+      await creditFirstDepositCoinsIfEligible(deposit.userId, deposit.id);
+
+      // 2. + 3. Referrer-side grants. Both only fire when this deposit
+      // is also the trigger for the affiliate first-deposit reward.
+      // We look that up by querying AffiliateCommission rows the
+      // engine just wrote with basis='first_deposit_reward' on this
+      // deposit; each one names a level-1 ancestor we should reward.
+      const firstDepositCommissions = await db.affiliateCommission.findMany({
+        where: { depositId: deposit.id, basis: 'first_deposit_reward' },
+        select: { affiliateId: true },
+      });
+      for (const row of firstDepositCommissions) {
+        await creditReferralSuccessfulCoins(row.affiliateId, deposit.userId);
+        await creditReferredFirstDepositCoins(row.affiliateId, deposit.userId, deposit.id);
+      }
+    } catch (err) {
+      console.error('[deposit-approve] reward coin grant failed', err);
+    }
+
+    // One Reward Celebration popup per bonus grant. The bonus engine
+    // creates the UserBonus row + ledger Transaction; this only writes
+    // a Notification so the player sees a popup on next page load.
+    try {
+      for (const g of bonusResult.granted) {
+        await notifyDepositBonusAwarded({
+          userId: deposit.userId,
+          amount: g.amount,
+          bonusRuleName: g.ruleName,
+          depositId: deposit.id,
+        });
+      }
+    } catch (err) {
+      console.error('[deposit-approve] deposit-bonus notify failed', err);
     }
 
     // Betting Pass points accrual. Uses BettingPassEvent.idempotencyKey

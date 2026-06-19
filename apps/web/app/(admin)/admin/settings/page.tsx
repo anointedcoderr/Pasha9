@@ -32,8 +32,20 @@ const REFERRAL_KEYS = [
   'referral_first_deposit_min_bdt',
   'referral_first_deposit_reward_bdt',
 ] as const;
+const REWARD_COIN_KEYS = [
+  // Coins credited to the depositor on their FIRST approved deposit.
+  'reward_coin_first_deposit',
+  // Coins credited to the REFERRER when their friend's referral matures
+  // (the referred user passes the deposit minimum that triggers the
+  // first-deposit reward in lib/affiliate/engine.ts).
+  'reward_coin_referral_successful',
+  // Coins credited to the REFERRER specifically when the referred friend's
+  // first deposit is approved (separate from the BDT first-deposit reward
+  // so operators can run a coin campaign and a BDT campaign in parallel).
+  'reward_coin_referred_first_deposit',
+] as const;
 const SITE_KEYS = ['site_name'] as const;
-const ALL_KEYS = [...SUPPORT_KEYS, ...REFERRAL_KEYS, ...SITE_KEYS] as const;
+const ALL_KEYS = [...SUPPORT_KEYS, ...REFERRAL_KEYS, ...REWARD_COIN_KEYS, ...SITE_KEYS] as const;
 
 type SettingKey = (typeof ALL_KEYS)[number];
 
@@ -45,6 +57,9 @@ function defaultFor(key: SettingKey): string {
   if (key === 'referral_claim_cadence') return 'weekly';
   if (key === 'referral_first_deposit_min_bdt') return '300';
   if (key === 'referral_first_deposit_reward_bdt') return '200';
+  if (key === 'reward_coin_first_deposit') return '0';
+  if (key === 'reward_coin_referral_successful') return '0';
+  if (key === 'reward_coin_referred_first_deposit') return '0';
   if (key === 'site_name') return 'Pasha 9';
   return '';
 }
@@ -183,6 +198,25 @@ export default function AdminSettingsPage() {
               </FormField>
               <FormField label="First deposit fixed reward (BDT)" hint="Global default for the one-time reward credited to the direct upline after cumulative approved deposits reach the configured minimum. Per-tier overrides are set in /admin/affiliate/tiers.">
                 <Input type="number" min={0} max={1000000} value={values.referral_first_deposit_reward_bdt ?? ''} onChange={(e) => update('referral_first_deposit_reward_bdt', e.target.value)} placeholder="200" />
+              </FormField>
+            </div>
+          )}
+        </Card>
+      </div>
+
+      <div className="mt-6">
+        <Card padding="lg">
+          <CardHeader title="Reward Coins" subtitle="Coins are awarded into Wallet.bonusBalance and are visible on /rewards. Set 0 to disable any single grant. Per-event triggers fire from the deposit-approval flow and the affiliate first-deposit reward path." />
+          {loading ? <p className="text-sm text-ink-mid">Loading...</p> : (
+            <div className="grid gap-3 md:grid-cols-3">
+              <FormField label="First deposit coins" hint="Credited to the depositor on their first ever approved deposit. 0 = disabled.">
+                <Input type="number" min={0} max={1_000_000} value={values.reward_coin_first_deposit ?? '0'} onChange={(e) => update('reward_coin_first_deposit', e.target.value)} placeholder="100" />
+              </FormField>
+              <FormField label="Successful referral coins" hint="Credited to the REFERRER each time one of their referrals matures (first-deposit threshold met). 0 = disabled.">
+                <Input type="number" min={0} max={1_000_000} value={values.reward_coin_referral_successful ?? '0'} onChange={(e) => update('reward_coin_referral_successful', e.target.value)} placeholder="50" />
+              </FormField>
+              <FormField label="Referred friend first-deposit coins" hint="Extra coin grant to the REFERRER specifically when the referred friend's first deposit is approved. 0 = disabled.">
+                <Input type="number" min={0} max={1_000_000} value={values.reward_coin_referred_first_deposit ?? '0'} onChange={(e) => update('reward_coin_referred_first_deposit', e.target.value)} placeholder="100" />
               </FormField>
             </div>
           )}
