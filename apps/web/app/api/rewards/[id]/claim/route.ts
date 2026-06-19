@@ -22,6 +22,7 @@ import { withAuth, ensureUser, recordActivity } from '@/lib/auth/guard';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 import { Prisma } from '@prisma/client';
 import { loadCheckInConfig } from '@/lib/rewards/config';
+import { notifyAdminsRewardClaimPending } from '@/lib/notifications/notify';
 
 const rechargeSchema = z.object({
   operator: z.enum(['gp', 'robi', 'bl', 'airtel', 'teletalk']),
@@ -106,6 +107,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       target: claim.id,
       meta: { itemId: item.id, cost: item.cost },
     });
+
+    notifyAdminsRewardClaimPending({
+      claimId: claim.id,
+      itemTitle: item.title,
+      rewardType: item.rewardType,
+      costPaid: item.cost,
+      userId,
+    }).catch((err) => console.error('[reward-claim] admin notify failed', err));
 
     return jsonOk({ claim }, 201);
   });

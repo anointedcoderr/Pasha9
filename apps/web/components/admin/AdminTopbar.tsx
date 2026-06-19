@@ -3,10 +3,11 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Bell, Search, Menu, ShieldCheck, Settings as SettingsIcon, ClipboardList, LogOut } from 'lucide-react';
+import { Search, Menu, ShieldCheck, Settings as SettingsIcon, ClipboardList, LogOut } from 'lucide-react';
 import { LanguageToggle } from '@/components/site/LanguageToggle';
 import { Input } from '@/components/ui/Input';
 import { Dropdown, DropdownContent, DropdownItem, DropdownLabel, DropdownSeparator, DropdownTrigger } from '@/components/ui/Dropdown';
+import { AdminBell } from '@/components/admin/AdminBell';
 
 interface AdminMe {
   username: string;
@@ -58,14 +59,7 @@ export function AdminTopbar({ onMenu }: { onMenu?: () => void }) {
 
       <div className="ml-auto flex items-center gap-2">
         <LanguageToggle compact />
-        <button
-          type="button"
-          aria-label="Notifications"
-          className="relative inline-flex h-9 w-9 items-center justify-center rounded-lg border border-brand-divider text-brand-inkSoft hover:text-brand-ink"
-        >
-          <Bell className="h-4 w-4" />
-          <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-brand-blue-500" />
-        </button>
+        <AdminBell />
         <Dropdown>
           <DropdownTrigger asChild>
             <button

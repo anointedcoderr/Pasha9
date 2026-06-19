@@ -22,6 +22,7 @@ import { withAuth, recordActivity } from '@/lib/auth/guard';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 import { rateLimit } from '@/lib/auth/rate-limit';
 import { computeDepositTurnover } from '@/lib/turnover/deposit-gate';
+import { notifyAdminsWithdrawalPending } from '@/lib/notifications/notify';
 
 const schema = z.object({
   amount: z.coerce.number().min(1).max(10_000_000),
@@ -181,6 +182,13 @@ export async function POST(req: NextRequest) {
         method: parsed.data.method,
       },
     });
+
+    notifyAdminsWithdrawalPending({
+      withdrawalId: withdrawal.id,
+      amount: Number(parsed.data.amount),
+      method: parsed.data.method,
+      userId: session.sub,
+    }).catch((err) => console.error('[withdrawals] admin notify failed', err));
 
     return jsonOk(
       {

@@ -29,7 +29,21 @@ export type NotificationKind =
   | 'reward_claim'
   | 'spin_win'
   | 'lotto_win'
-  | 'system';
+  | 'system'
+  // Admin-targeted kinds. The admin bell at /admin filters its feed
+  // to rows whose kind starts with 'admin_' so a staff user who also
+  // tests the player flow on the same account does not see player
+  // celebration popups in the admin shell.
+  | 'admin_deposit_pending'
+  | 'admin_withdrawal_pending'
+  | 'admin_reward_claim_pending'
+  | 'admin_affiliate_application_pending'
+  | 'admin_promotion_claim_pending';
+
+// Role keys that should receive admin-targeted notifications. Kept in
+// sync with STAFF_ROLES in lib/auth/rbac.ts so the people who can
+// review pending items are exactly the people who get pinged.
+const ADMIN_NOTIFY_ROLES = ['super_admin', 'admin', 'staff'] as const;
 
 export interface NotifyOpts {
   userId: string;
@@ -199,5 +213,165 @@ export async function notifyPromotionClaim(input: {
     bodyBn: `আপনার "${input.promotionName}" প্রমোশন আপনার অ্যাকাউন্টে যোগ হয়েছে।`,
     linkUrl: '/promotions',
     priority: 'high',
+  });
+}
+
+// ----- Admin-targeted notifications (bell at /admin) ----------------
+
+export interface NotifyAdminsOpts {
+  kind: NotificationKind;
+  titleEn: string;
+  titleBn?: string | null;
+  bodyEn?: string | null;
+  bodyBn?: string | null;
+  linkUrl?: string | null;
+  priority?: 'low' | 'normal' | 'high';
+}
+
+// Fans out a single Notification row to every staff user (super_admin,
+// admin, staff) by writing one NotificationRecipient per admin. Fire-
+// and-forget so a transient DB error on the notify path can never fail
+// the player-facing submit that triggered it.
+//
+// If the staff table is empty the call is a no-op. If the
+// NotificationRecipient bulk insert partially fails, the Notification
+// row stays in place and the audit trail still shows the event - just
+// without the bell ping. We log so we can investigate later.
+export async function notifyAdmins(opts: NotifyAdminsOpts): Promise<string | null> {
+  try {
+    const admins = await db.user.findMany({
+      where: { role: { key: { in: [...ADMIN_NOTIFY_ROLES] } } },
+      select: { id: true },
+    });
+    if (admins.length === 0) return null;
+
+    const n = await db.notification.create({
+      data: {
+        titleEn: opts.titleEn,
+        titleBn: opts.titleBn ?? null,
+        bodyEn: opts.bodyEn ?? null,
+        bodyBn: opts.bodyBn ?? null,
+        linkUrl: opts.linkUrl ?? null,
+        priority: opts.priority ?? 'normal',
+        status: 'sent',
+        audience: 'admins',
+        kind: opts.kind,
+      },
+    });
+
+    const now = new Date();
+    const CHUNK = 200;
+    for (let i = 0; i < admins.length; i += CHUNK) {
+      await db.notificationRecipient.createMany({
+        data: admins.slice(i, i + CHUNK).map((a) => ({
+          notificationId: n.id,
+          userId: a.id,
+          deliveredAt: now,
+        })),
+        skipDuplicates: true,
+      });
+    }
+    return n.id;
+  } catch (err) {
+    console.error('[notifyAdmins] failed', opts.kind, err);
+    return null;
+  }
+}
+
+function shortRef(id: string): string {
+  return id.slice(-8);
+}
+
+// Resolves a friendly handle for the player in admin bell text.
+// Falls back to a generic "A player" string so the notification still
+// reads cleanly when the lookup fails or the user has no display name.
+async function resolvePlayerHandle(userId: string): Promise<string> {
+  try {
+    const user = await db.user.findUnique({
+      where: { id: userId },
+      select: { username: true, phone: true },
+    });
+    if (!user) return 'A player';
+    const handle = (user.username ?? user.phone ?? '').trim();
+    return handle.length > 0 ? handle : 'A player';
+  } catch {
+    return 'A player';
+  }
+}
+
+export async function notifyAdminsDepositPending(input: {
+  depositId: string;
+  amount: number;
+  method: string;
+  userId: string;
+}): Promise<void> {
+  const who = await resolvePlayerHandle(input.userId);
+  await notifyAdmins({
+    kind: 'admin_deposit_pending',
+    titleEn: `New deposit: ${fmt(input.amount)} BDT (${input.method})`,
+    titleBn: `নতুন ডিপোজিট: ${fmt(input.amount)} BDT (${input.method})`,
+    bodyEn: `${who} submitted a ${fmt(input.amount)} BDT deposit via ${input.method}. Ref ${shortRef(input.depositId)}. Review at /admin/deposits.`,
+    bodyBn: `${who} ${input.method}-এর মাধ্যমে ${fmt(input.amount)} BDT ডিপোজিট জমা দিয়েছেন। Ref ${shortRef(input.depositId)}.`,
+    linkUrl: '/admin/deposits',
+    priority: 'high',
+  });
+}
+
+export async function notifyAdminsWithdrawalPending(input: {
+  withdrawalId: string;
+  amount: number;
+  method: string;
+  userId: string;
+}): Promise<void> {
+  const who = await resolvePlayerHandle(input.userId);
+  await notifyAdmins({
+    kind: 'admin_withdrawal_pending',
+    titleEn: `New withdrawal: ${fmt(input.amount)} BDT (${input.method})`,
+    titleBn: `নতুন উইথড্র: ${fmt(input.amount)} BDT (${input.method})`,
+    bodyEn: `${who} requested a ${fmt(input.amount)} BDT withdrawal via ${input.method}. Ref ${shortRef(input.withdrawalId)}. Review at /admin/withdrawals.`,
+    bodyBn: `${who} ${input.method}-এর মাধ্যমে ${fmt(input.amount)} BDT উইথড্র অনুরোধ করেছেন। Ref ${shortRef(input.withdrawalId)}.`,
+    linkUrl: '/admin/withdrawals',
+    priority: 'high',
+  });
+}
+
+export async function notifyAdminsRewardClaimPending(input: {
+  claimId: string;
+  itemTitle: string;
+  rewardType: string;
+  costPaid: number;
+  userId: string;
+}): Promise<void> {
+  const who = await resolvePlayerHandle(input.userId);
+  await notifyAdmins({
+    kind: 'admin_reward_claim_pending',
+    titleEn: `Reward claim: ${input.itemTitle}`,
+    titleBn: `রিওয়ার্ড দাবি: ${input.itemTitle}`,
+    bodyEn: `${who} claimed "${input.itemTitle}" (${input.rewardType}, ${fmt(input.costPaid)} coins). Ref ${shortRef(input.claimId)}. Review at /admin/reward-claims.`,
+    bodyBn: `${who} "${input.itemTitle}" দাবি করেছেন (${input.rewardType}, ${fmt(input.costPaid)} কয়েন)। Ref ${shortRef(input.claimId)}.`,
+    linkUrl: '/admin/reward-claims',
+    priority: 'normal',
+  });
+}
+
+export async function notifyAdminsAffiliateApplicationPending(input: {
+  applicationId: string;
+  userId: string;
+  channel?: string | null;
+}): Promise<void> {
+  const who = await resolvePlayerHandle(input.userId);
+  const channel = (input.channel ?? '').trim();
+  await notifyAdmins({
+    kind: 'admin_affiliate_application_pending',
+    titleEn: `Affiliate application from ${who}`,
+    titleBn: `${who}-এর অ্যাফিলিয়েট আবেদন`,
+    bodyEn: channel
+      ? `${who} applied to become an affiliate. Channel: ${channel}. Review at /admin/affiliate.`
+      : `${who} applied to become an affiliate. Review at /admin/affiliate.`,
+    bodyBn: channel
+      ? `${who} অ্যাফিলিয়েট হওয়ার জন্য আবেদন করেছেন। চ্যানেল: ${channel}।`
+      : `${who} অ্যাফিলিয়েট হওয়ার জন্য আবেদন করেছেন।`,
+    linkUrl: '/admin/affiliate',
+    priority: 'normal',
   });
 }

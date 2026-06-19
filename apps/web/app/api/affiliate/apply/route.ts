@@ -9,6 +9,7 @@ import { requireActiveUser } from '@/lib/auth/rbac';
 import { withAuth, recordActivity } from '@/lib/auth/guard';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 import { rateLimit } from '@/lib/auth/rate-limit';
+import { notifyAdminsAffiliateApplicationPending } from '@/lib/notifications/notify';
 
 const schema = z.object({
   channel: z.string().trim().min(2).max(60).optional(),
@@ -59,6 +60,12 @@ export async function POST(req: NextRequest) {
       target: application.id,
       detail: parsed.data.channel ?? undefined,
     });
+
+    notifyAdminsAffiliateApplicationPending({
+      applicationId: application.id,
+      userId: session.sub,
+      channel: parsed.data.channel ?? null,
+    }).catch((err) => console.error('[affiliate-apply] admin notify failed', err));
 
     return jsonOk({ application }, 201);
   });

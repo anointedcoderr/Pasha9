@@ -28,6 +28,7 @@ import { rateLimit } from '@/lib/auth/rate-limit';
 import { pickBestTier, resolveActiveTierRule } from '@/lib/bonuses/deposit-tiers';
 import { previewDepositPromotion } from '@/lib/promotions/deposit';
 import { resolveClaimBehavior } from '@/lib/promotions/config';
+import { notifyAdminsDepositPending } from '@/lib/notifications/notify';
 
 const schema = z.object({
   amount: z.coerce.number().min(100).max(500_000),
@@ -150,6 +151,15 @@ export async function POST(req: NextRequest) {
         promotionCode: resolvedPromotionRule?.code ?? parsed.data.promoCode ?? null,
       },
     });
+
+    // Ping every staff user. Fire-and-forget; a notify failure must
+    // never fail the user-facing deposit submission.
+    notifyAdminsDepositPending({
+      depositId: deposit.id,
+      amount: Number(parsed.data.amount),
+      method: parsed.data.method,
+      userId: session.sub,
+    }).catch((err) => console.error('[deposits] admin notify failed', err));
 
     return jsonOk(
       {
