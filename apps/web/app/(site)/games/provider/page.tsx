@@ -55,7 +55,12 @@ function artFor(cat: string | null | undefined): CategoryCode {
   return CATEGORY_TO_ART[cat.toLowerCase()] ?? 'liveCasino';
 }
 
-const PAGE_SIZE = 60;
+// 60 cards per page made the Moto G24 / UNISOC T606 compositor blow up
+// even after the contain:paint isolation. The pink-banded texture
+// corruption on the Jackpot cards was a sign the GPU was out of texture
+// budget. 24 keeps the initial render under the device's compositor
+// budget; users who want more tap Load More.
+const PAGE_SIZE = 24;
 
 export default function ProviderLobbyPage() {
   return (
@@ -341,40 +346,61 @@ function ProviderLobbyPageInner() {
       {launchError ? <p className="mt-3 rounded-lg border border-rose-300/60 bg-rose-100 px-3 py-2 text-sm text-rose-700">{launchError}</p> : null}
 
       <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-        {games.map((g) => {
+        {games.map((g, idx) => {
           const key = `${g.providerKey}:${g.gameUid}`;
           const isBusy = launching === key;
+          // Eager-decode + eager-load only the first ~6 cards so the
+          // initial above-the-fold paint is correct on low-end GPUs;
+          // anything below the fold stays lazy so the compositor doesn't
+          // touch them until they scroll into view.
+          const eager = idx < 6;
           return (
             <button
               key={key}
               type="button"
               disabled={isBusy}
               onClick={() => onLaunch(g)}
-              // contain:paint isolates this card's compositing layer so a
-              // re-render of one tile cannot force the entire grid to
-              // recomposite. On low-end UNISOC / Mali GPUs (Moto G24
-              // Power and similar) the original "shadow + transition +
-              // backdrop-blur per card" combo overran the GPU compositor
-              // and surfaced as duplicated cards / horizontal lines /
-              // flicker. The lighter shadow + contain hint cap the
-              // damage on those devices without touching the rest of
-              // the site's look-and-feel.
-              style={{ contain: 'layout paint' }}
+              // contain:strict (paint + layout + size + style) isolates
+              // this card's render context completely so the parent grid
+              // never has to recomposite siblings when one card paints.
+              // On UNISOC T606 / Mali G57 (Moto G24 Power) the previous
+              // "shadow + transition + backdrop-blur + nested
+              // overflow-hidden" combo was overrunning the compositor
+              // texture budget, surfacing as pink/magenta vertical
+              // banding on the largest images (Jackpot cards in
+              // particular). contain:strict + a smaller per-page card
+              // count keeps the on-screen texture set under that
+              // device's budget. content-visibility:auto lets the
+              // browser skip painting off-screen cards entirely.
+              style={{ contain: 'strict', contentVisibility: 'auto', containIntrinsicSize: '180px 220px' }}
               className={cn(
                 'group relative overflow-hidden rounded-2xl border border-white/10 bg-brand-ink text-white shadow-[0_4px_12px_-6px_rgba(0,0,0,0.55)] active:scale-[0.98]',
                 isBusy && 'opacity-70',
               )}
             >
-              <div className="relative aspect-[4/3] overflow-hidden">
+              {/* Image container - no nested overflow-hidden because the
+                  outer button already clips, and a second clip mask
+                  forced an extra GPU layer on the Mali compositor. */}
+              <div className="relative aspect-[4/3]">
                 {g.imageUrl && !failedImages.has(key) ? (
+                  // Width/height attrs let the browser allocate a
+                  // texture sized to the source ratio instead of
+                  // guessing at decode time; combined with explicit
+                  // dimensions on the parent (aspect-[4/3]) this kills
+                  // the layout shift that was forcing a re-paint when
+                  // each image's intrinsic size landed.
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={g.imageUrl}
                     alt={g.displayName}
+                    width={400}
+                    height={300}
                     onError={() => markImageFailed(key)}
-                    loading="lazy"
+                    loading={eager ? 'eager' : 'lazy'}
                     decoding="async"
+                    {...({ fetchpriority: eager ? 'high' : 'low' } as Record<string, string>)}
                     className="absolute inset-0 h-full w-full object-cover"
+                    style={{ imageRendering: 'auto' }}
                   />
                 ) : (
                   <CategoryHeroArt code={artFor(g.category)} className="absolute inset-0 h-full w-full opacity-65" />
