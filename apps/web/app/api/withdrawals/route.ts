@@ -59,13 +59,22 @@ export async function POST(req: NextRequest) {
     const parsed = schema.safeParse(body);
     if (!parsed.success) return jsonError(400, 'VALIDATION', undefined, { issues: parsed.error.issues });
 
-    // Global admin-configurable limits live in SystemSetting.
+    // Global admin-configurable limits live in SystemSetting. VIP
+    // tier withdrawalMaxAmount overrides the global cap when set, so
+    // a Gold/Platinum player can pull more per request than a standard
+    // user.
     const { min: globalMin, max: globalMax } = await resolveGlobalLimits();
     if (parsed.data.amount < globalMin) {
       return jsonError(400, 'BELOW_MIN', `Minimum withdrawal is ${globalMin} BDT.`);
     }
-    if (parsed.data.amount > globalMax) {
-      return jsonError(400, 'ABOVE_MAX', `Maximum withdrawal is ${globalMax} BDT per request.`);
+    const vipUser = await db.user.findUnique({
+      where: { id: session.sub },
+      select: { vipTier: { select: { withdrawalMaxAmount: true, name: true } } },
+    });
+    const tierMax = vipUser?.vipTier?.withdrawalMaxAmount;
+    const effectiveMax = tierMax != null ? Math.max(globalMax, Number(tierMax)) : globalMax;
+    if (parsed.data.amount > effectiveMax) {
+      return jsonError(400, 'ABOVE_MAX', `Maximum withdrawal is ${effectiveMax} BDT per request${vipUser?.vipTier ? ` (${vipUser.vipTier.name} tier)` : ''}.`);
     }
 
     // Per-method limits live on PaymentMethod. If the user picked a

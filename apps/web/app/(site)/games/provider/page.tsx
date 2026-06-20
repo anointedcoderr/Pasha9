@@ -55,12 +55,13 @@ function artFor(cat: string | null | undefined): CategoryCode {
   return CATEGORY_TO_ART[cat.toLowerCase()] ?? 'liveCasino';
 }
 
-// 60 cards per page made the Moto G24 / UNISOC T606 compositor blow up
-// even after the contain:paint isolation. The pink-banded texture
-// corruption on the Jackpot cards was a sign the GPU was out of texture
-// budget. 24 keeps the initial render under the device's compositor
-// budget; users who want more tap Load More.
-const PAGE_SIZE = 24;
+// 60 -> 24 (round 1) -> 18 (round 2) as the Mali G57 in the Moto G24
+// keeps overrunning the GPU texture budget on dense live-dealer
+// thumbnails (Evolution Live Blackjack art is 360x270 JPEG vs JILI's
+// ~200x150). Each row of cards is ~2 visible at once on a phone, so
+// 18 covers ~9 rows = 1.5 screens of pre-render. Beyond that the
+// content-visibility:auto kicks in.
+const PAGE_SIZE = 18;
 
 export default function ProviderLobbyPage() {
   return (
@@ -380,8 +381,11 @@ function ProviderLobbyPageInner() {
             >
               {/* Image container - no nested overflow-hidden because the
                   outer button already clips, and a second clip mask
-                  forced an extra GPU layer on the Mali compositor. */}
-              <div className="relative aspect-[4/3]">
+                  forced an extra GPU layer on the Mali compositor. The
+                  inset box-shadow on this same div replaces what used
+                  to be a separate absolute gradient div (one less
+                  compositor layer per card). */}
+              <div className="relative aspect-[4/3] shadow-[inset_0_-60px_60px_-20px_rgba(13,15,20,0.95)]">
                 {g.imageUrl && !failedImages.has(key) ? (
                   // Width/height attrs let the browser allocate a
                   // texture sized to the source ratio instead of
@@ -400,12 +404,16 @@ function ProviderLobbyPageInner() {
                     decoding="async"
                     {...({ fetchpriority: eager ? 'high' : 'low' } as Record<string, string>)}
                     className="absolute inset-0 h-full w-full object-cover"
-                    style={{ imageRendering: 'auto' }}
+                    // optimizeSpeed forces bilinear filtering on the
+                    // GPU instead of trilinear/anisotropic, which is
+                    // cheaper and avoids the texture-paging that was
+                    // surfacing as pink/magenta banding on the larger
+                    // Evolution Live Blackjack art on Mali G57.
+                    style={{ imageRendering: 'optimizeSpeed' as 'auto' }}
                   />
                 ) : (
                   <CategoryHeroArt code={artFor(g.category)} className="absolute inset-0 h-full w-full opacity-65" />
                 )}
-                <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-brand-ink/95 via-brand-ink/40 to-transparent" />
                 {/* Brand-first labelling. The aggregator name is only
                     shown when no brand exists, so cards never read as
                     "iGamingAPIs Aggreg... / JILI" on top of each other.

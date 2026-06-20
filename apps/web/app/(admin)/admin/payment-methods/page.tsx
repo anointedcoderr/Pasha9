@@ -42,6 +42,9 @@ interface MethodRow {
   maxDeposit: number | null;
   minWithdrawal: number | null;
   maxWithdrawal: number | null;
+  badgeLabelEn: string | null;
+  badgeLabelBn: string | null;
+  badgeEnabled: boolean;
 }
 
 const BLANK: MethodRow = {
@@ -63,6 +66,9 @@ const BLANK: MethodRow = {
   maxDeposit: null,
   minWithdrawal: null,
   maxWithdrawal: null,
+  badgeLabelEn: '',
+  badgeLabelBn: '',
+  badgeEnabled: true,
 };
 
 export default function AdminPaymentMethodsPage() {
@@ -113,6 +119,9 @@ export default function AdminPaymentMethodsPage() {
       maxDeposit: editor.maxDeposit,
       minWithdrawal: editor.minWithdrawal,
       maxWithdrawal: editor.maxWithdrawal,
+      badgeLabelEn: editor.badgeLabelEn || undefined,
+      badgeLabelBn: editor.badgeLabelBn || undefined,
+      badgeEnabled: editor.badgeEnabled,
     };
     try {
       const res = editor.id
@@ -180,7 +189,7 @@ export default function AdminPaymentMethodsPage() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <Button size="sm" variant="neon" leftIcon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditor({ ...m, payoutInstruction: m.payoutInstruction ?? '', instructionBn: m.instructionBn ?? '', payoutInstructionBn: m.payoutInstructionBn ?? '', iconUrl: m.iconUrl ?? '', bannerUrl: m.bannerUrl ?? '' })}>Edit</Button>
+                <Button size="sm" variant="neon" leftIcon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditor({ ...m, payoutInstruction: m.payoutInstruction ?? '', instructionBn: m.instructionBn ?? '', payoutInstructionBn: m.payoutInstructionBn ?? '', iconUrl: m.iconUrl ?? '', bannerUrl: m.bannerUrl ?? '', badgeLabelEn: m.badgeLabelEn ?? '', badgeLabelBn: m.badgeLabelBn ?? '' })}>Edit</Button>
                 <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => remove(m.id)}>Delete</Button>
               </div>
             </Card>
@@ -252,6 +261,20 @@ export default function AdminPaymentMethodsPage() {
                   <FormField label="Min (BDT)"><Input type="number" min="0" value={editor.minWithdrawal ?? ''} onChange={(e) => setEditor({ ...editor, minWithdrawal: e.target.value === '' ? null : Number(e.target.value) })} placeholder="500" /></FormField>
                   <FormField label="Max (BDT)"><Input type="number" min="0" value={editor.maxWithdrawal ?? ''} onChange={(e) => setEditor({ ...editor, maxWithdrawal: e.target.value === '' ? null : Number(e.target.value) })} placeholder="200000" /></FormField>
                 </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-neon/10 bg-base-deep/40 p-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-ink-hi">Badge on tile</p>
+                  <p className="text-xs text-ink-mid">Small chip in the top-right of the method tile on /deposit + /withdraw. Empty = default (AUTO for gateway-backed, MANUAL for the rest). Disable to hide.</p>
+                </div>
+                <Switch checked={editor.badgeEnabled} onChange={(v) => setEditor({ ...editor, badgeEnabled: v })} />
+              </div>
+              <div className="mt-3 grid gap-2 md:grid-cols-2">
+                <FormField label="Badge label (EN)" hint="Up to 24 chars. e.g. AUTO, INSTANT, MANUAL"><Input value={editor.badgeLabelEn ?? ''} onChange={(e) => setEditor({ ...editor, badgeLabelEn: e.target.value })} placeholder="AUTO" /></FormField>
+                <FormField label="Badge label (BN)" hint="e.g. অটো, ইনস্ট্যান্ট, ম্যানুয়াল"><Input value={editor.badgeLabelBn ?? ''} onChange={(e) => setEditor({ ...editor, badgeLabelBn: e.target.value })} placeholder="অটো" /></FormField>
               </div>
             </div>
 

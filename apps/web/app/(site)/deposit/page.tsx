@@ -43,6 +43,9 @@ interface PublicMethod {
   bannerUrl: string | null;
   minDeposit: number | null;
   maxDeposit: number | null;
+  badgeLabelEn: string | null;
+  badgeLabelBn: string | null;
+  badgeEnabled: boolean;
 }
 
 interface NoticeRow {
@@ -569,9 +572,20 @@ export default function DepositPage() {
                           gatewayChoice === 'bkash' ? 'border-amber-500 shadow-[0_0_0_3px_rgba(245,180,0,0.18)]' : 'border-transparent hover:border-amber-300/60',
                         )}
                       >
-                        <span className="absolute right-1 top-1 inline-flex items-center rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[8px] font-extrabold uppercase tracking-wider text-emerald-700">
-                          {lang === 'bn' ? 'অটো' : 'AUTO'}
-                        </span>
+                        {(() => {
+                          // Per-method admin override of the badge.
+                          // Look up the matching PaymentMethod row by
+                          // name, fall back to AUTO when absent.
+                          const m = methods.find((x) => x.name.trim().toLowerCase().includes('bkash'));
+                          if (m && !m.badgeEnabled) return null;
+                          const enLabel = (m?.badgeLabelEn ?? '').trim() || 'AUTO';
+                          const bnLabel = (m?.badgeLabelBn ?? '').trim() || 'অটো';
+                          return (
+                            <span className="absolute right-1 top-1 inline-flex items-center rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[8px] font-extrabold uppercase tracking-wider text-emerald-700">
+                              {lang === 'bn' ? bnLabel : enLabel}
+                            </span>
+                          );
+                        })()}
                         {expressIcons.bkash ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
@@ -597,9 +611,17 @@ export default function DepositPage() {
                           gatewayChoice === 'nagad' ? 'border-amber-500 shadow-[0_0_0_3px_rgba(245,180,0,0.18)]' : 'border-transparent hover:border-amber-300/60',
                         )}
                       >
-                        <span className="absolute right-1 top-1 inline-flex items-center rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[8px] font-extrabold uppercase tracking-wider text-emerald-700">
-                          {lang === 'bn' ? 'অটো' : 'AUTO'}
-                        </span>
+                        {(() => {
+                          const m = methods.find((x) => x.name.trim().toLowerCase().includes('nagad'));
+                          if (m && !m.badgeEnabled) return null;
+                          const enLabel = (m?.badgeLabelEn ?? '').trim() || 'AUTO';
+                          const bnLabel = (m?.badgeLabelBn ?? '').trim() || 'অটো';
+                          return (
+                            <span className="absolute right-1 top-1 inline-flex items-center rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[8px] font-extrabold uppercase tracking-wider text-emerald-700">
+                              {lang === 'bn' ? bnLabel : enLabel}
+                            </span>
+                          );
+                        })()}
                         {expressIcons.nagad ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
@@ -647,9 +669,16 @@ export default function DepositPage() {
                               isSelected ? 'border-amber-500 shadow-[0_0_0_3px_rgba(245,180,0,0.18)]' : 'border-transparent hover:border-amber-300/60',
                             )}
                           >
-                            <span className="absolute right-1 top-1 inline-flex items-center rounded-full bg-brand-surface px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-ink-lo">
-                              {lang === 'bn' ? 'ম্যানুয়াল' : 'MANUAL'}
-                            </span>
+                            {(() => {
+                              if (!m.badgeEnabled) return null;
+                              const enLabel = (m.badgeLabelEn ?? '').trim() || 'MANUAL';
+                              const bnLabel = (m.badgeLabelBn ?? '').trim() || 'ম্যানুয়াল';
+                              return (
+                                <span className="absolute right-1 top-1 inline-flex items-center rounded-full bg-brand-surface px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-ink-lo">
+                                  {lang === 'bn' ? bnLabel : enLabel}
+                                </span>
+                              );
+                            })()}
                             {m.iconUrl ? (
                               // eslint-disable-next-line @next/next/no-img-element
                               <img src={m.iconUrl} alt={m.name} className="h-11 w-11 rounded-xl object-contain" />

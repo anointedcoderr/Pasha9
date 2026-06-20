@@ -38,6 +38,7 @@ import {
   CreditCard,
   SlidersHorizontal,
   HeartHandshake,
+  Crown,
   Bell,
   Plug,
   Gamepad2,
@@ -96,6 +97,7 @@ const GROUPS = [
       { key: 'promotionBanners', href: ROUTES.admin.promotionBanners, icon: ImageIcon },
       { key: 'affiliate', href: ROUTES.admin.affiliate, icon: Briefcase },
       { key: 'affiliateTiers', href: ROUTES.admin.affiliateTiers, icon: Trophy },
+      { key: 'vip', href: '/admin/vip', icon: Crown },
     ],
   },
   {

@@ -11,6 +11,7 @@ import { bkashAdapter, bkashSettings } from './bkash';
 import { nagadAdapter, nagadSettings } from './nagad';
 import { rocketAdapter, rocketSettings } from './rocket';
 import { chaopaopayAdapter, chaopaopaySettings } from './chaopaopay';
+import { zinipayAdapter, zinipaySettings } from './zinipay';
 import type { ProviderAdapter, ProviderKey, ProviderSettingsSchema } from './types';
 
 interface Entry {
@@ -49,6 +50,11 @@ const REGISTRY: Record<ProviderKey, Entry> = {
     adapter: chaopaopayAdapter,
     settings: chaopaopaySettings,
     description: 'ChaopaoPay BD aggregator. One merchant account covers both bKash (method_code 101) and Nagad (method_code 102). Webhook signature verification is live; payouts require the withdraw password.',
+  },
+  zinipay: {
+    adapter: zinipayAdapter,
+    settings: zinipaySettings,
+    description: 'ZinIPay hosted-payment-page deposit gateway (player picks bKash/Nagad/Rocket on the gateway screen). No HMAC published, so the webhook handler re-calls /v1/payment/verify before crediting any deposit. No payout endpoint - withdrawals continue via ChaopaoPay or manual.',
   },
 };
 

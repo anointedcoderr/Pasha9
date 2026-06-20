@@ -26,6 +26,9 @@ const createSchema = z.object({
   maxDeposit: z.coerce.number().min(0).max(10_000_000).optional().nullable(),
   minWithdrawal: z.coerce.number().min(0).max(10_000_000).optional().nullable(),
   maxWithdrawal: z.coerce.number().min(0).max(10_000_000).optional().nullable(),
+  badgeLabelEn: z.string().trim().max(24).optional().nullable(),
+  badgeLabelBn: z.string().trim().max(24).optional().nullable(),
+  badgeEnabled: z.boolean().default(true),
 });
 
 export async function GET() {
@@ -73,6 +76,9 @@ function serialize(m: {
   maxDeposit: unknown;
   minWithdrawal: unknown;
   maxWithdrawal: unknown;
+  badgeLabelEn?: string | null;
+  badgeLabelBn?: string | null;
+  badgeEnabled?: boolean;
 }) {
   return {
     id: m.id,
@@ -93,5 +99,8 @@ function serialize(m: {
     maxDeposit: m.maxDeposit == null ? null : Number(m.maxDeposit),
     minWithdrawal: m.minWithdrawal == null ? null : Number(m.minWithdrawal),
     maxWithdrawal: m.maxWithdrawal == null ? null : Number(m.maxWithdrawal),
+    badgeLabelEn: m.badgeLabelEn ?? null,
+    badgeLabelBn: m.badgeLabelBn ?? null,
+    badgeEnabled: m.badgeEnabled ?? true,
   };
 }

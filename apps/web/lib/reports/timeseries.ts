@@ -16,15 +16,18 @@ import { db } from '@/lib/db/client';
 export type Metric =
   | 'deposits'           // approved deposit amount per bucket
   | 'deposits_count'     // approved deposit count
+  | 'first_time_deposits'      // FTD count: first approved deposit per user
+  | 'first_time_deposits_sum'  // FTD amount: sum of those first deposits
   | 'withdrawals'        // approved withdrawal amount
   | 'withdrawals_count'  // approved withdrawal count
   | 'signups'            // User.createdAt count
   | 'active_users'       // unique users with lastLoginAt in bucket
   | 'bonus_payout'       // UserBonus.amount where status=completed
+  | 'cashback_paid'      // CashbackPayout.cashbackAmount that landed in wallet
   | 'commission_paid'    // AffiliateCommission.amount where status=paid
   | 'lotto_payout'       // LotteryWinning.amount where status=credited
   | 'net_cash'           // approved deposits - approved withdrawals
-  | 'operating_result';  // net_cash - bonus_payout - commission_paid - lotto_payout
+  | 'operating_result';  // net_cash - bonus_payout - commission_paid - cashback_paid - lotto_payout
 
 export type Granularity = 'day' | 'week' | 'month';
 
@@ -77,8 +80,31 @@ async function runMetricQuery(metric: Metric, granularity: Granularity, from: Da
     if (metric === 'commission_paid') {
       return `SELECT "createdAt" AS ts, "amount" AS amt FROM "AffiliateCommission" WHERE "status" = 'paid' AND "createdAt" BETWEEN $1 AND $2`;
     }
+    if (metric === 'cashback_paid') {
+      // Only count payouts that actually credited the wallet
+      // (walletTxId IS NOT NULL); skipped/failed rows excluded.
+      return `SELECT "createdAt" AS ts, "cashbackAmount" AS amt FROM "CashbackPayout" WHERE "createdAt" BETWEEN $1 AND $2 AND "walletTxId" IS NOT NULL`;
+    }
     if (metric === 'lotto_payout') {
       return `SELECT "createdAt" AS ts, "amount" AS amt FROM "LotteryWinning" WHERE "status" = 'credited' AND "createdAt" BETWEEN $1 AND $2`;
+    }
+    if (metric === 'first_time_deposits') {
+      // The first approved deposit per user. Window function picks
+      // row number 1 per user ordered by approval/create time.
+      return `SELECT ts, 1::numeric AS amt FROM (
+        SELECT d."createdAt" AS ts,
+               ROW_NUMBER() OVER (PARTITION BY d."userId" ORDER BY d."createdAt" ASC) AS rn
+        FROM "Deposit" d
+        WHERE d."status" = 'approved' AND d."createdAt" BETWEEN $1 AND $2
+      ) ftd WHERE ftd.rn = 1`;
+    }
+    if (metric === 'first_time_deposits_sum') {
+      return `SELECT ts, amt FROM (
+        SELECT d."createdAt" AS ts, d."amount" AS amt,
+               ROW_NUMBER() OVER (PARTITION BY d."userId" ORDER BY d."createdAt" ASC) AS rn
+        FROM "Deposit" d
+        WHERE d."status" = 'approved' AND d."createdAt" BETWEEN $1 AND $2
+      ) ftd WHERE ftd.rn = 1`;
     }
     // net_cash + operating_result are composed in JS from sub-metrics.
     return '';
@@ -106,11 +132,13 @@ async function runMetricQuery(metric: Metric, granularity: Granularity, from: Da
     const withdrawals = await runMetricQuery('withdrawals', granularity, from, to);
     let bonus: TsBucket[] = [];
     let commission: TsBucket[] = [];
+    let cashback: TsBucket[] = [];
     let lotto: TsBucket[] = [];
     if (metric === 'operating_result') {
-      [bonus, commission, lotto] = await Promise.all([
+      [bonus, commission, cashback, lotto] = await Promise.all([
         runMetricQuery('bonus_payout', granularity, from, to),
         runMetricQuery('commission_paid', granularity, from, to),
+        runMetricQuery('cashback_paid', granularity, from, to),
         runMetricQuery('lotto_payout', granularity, from, to),
       ]);
     }
@@ -119,6 +147,7 @@ async function runMetricQuery(metric: Metric, granularity: Granularity, from: Da
     for (const w of withdrawals) buckets.set(w.bucket, (buckets.get(w.bucket) ?? 0) - w.value);
     for (const b of bonus) buckets.set(b.bucket, (buckets.get(b.bucket) ?? 0) - b.value);
     for (const c of commission) buckets.set(c.bucket, (buckets.get(c.bucket) ?? 0) - c.value);
+    for (const cb of cashback) buckets.set(cb.bucket, (buckets.get(cb.bucket) ?? 0) - cb.value);
     for (const l of lotto) buckets.set(l.bucket, (buckets.get(l.bucket) ?? 0) - l.value);
     return Array.from(buckets.entries())
       .map(([bucket, value]) => ({ bucket, value: round2(value), count: 0 }))
@@ -227,11 +256,14 @@ export async function getTimeseries(opts: {
 export const ALL_METRICS: Metric[] = [
   'deposits',
   'deposits_count',
+  'first_time_deposits',
+  'first_time_deposits_sum',
   'withdrawals',
   'withdrawals_count',
   'signups',
   'active_users',
   'bonus_payout',
+  'cashback_paid',
   'commission_paid',
   'lotto_payout',
   'net_cash',
@@ -241,13 +273,16 @@ export const ALL_METRICS: Metric[] = [
 export const METRIC_LABELS: Record<Metric, string> = {
   deposits: 'Approved deposits (BDT)',
   deposits_count: 'Approved deposits (count)',
+  first_time_deposits: 'First-time depositors (count)',
+  first_time_deposits_sum: 'First-time deposits (BDT)',
   withdrawals: 'Approved withdrawals (BDT)',
   withdrawals_count: 'Approved withdrawals (count)',
   signups: 'New signups',
   active_users: 'Active users (distinct logins)',
   bonus_payout: 'Bonus released (BDT)',
+  cashback_paid: 'Cashback paid (BDT)',
   commission_paid: 'Affiliate commission paid (BDT)',
   lotto_payout: 'Lotto winnings credited (BDT)',
   net_cash: 'Net cash (deposits - withdrawals)',
-  operating_result: 'Operating result (net cash - bonus - commission - lotto)',
+  operating_result: 'Operating result (net cash - bonus - commission - cashback - lotto)',
 };

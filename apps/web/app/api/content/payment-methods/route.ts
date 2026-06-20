@@ -32,6 +32,9 @@ export async function GET() {
     maxDeposit: m.maxDeposit == null ? null : Number(m.maxDeposit),
     minWithdrawal: m.minWithdrawal == null ? null : Number(m.minWithdrawal),
     maxWithdrawal: m.maxWithdrawal == null ? null : Number(m.maxWithdrawal),
+    badgeLabelEn: m.badgeLabelEn ?? null,
+    badgeLabelBn: m.badgeLabelBn ?? null,
+    badgeEnabled: m.badgeEnabled,
   });
 
   return jsonOk({

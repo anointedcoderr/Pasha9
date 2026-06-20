@@ -202,6 +202,12 @@ model User {
   passwordResetTokens PasswordResetToken[]
   activityLogs        ActivityLog[]        @relation("ActorLogs")
   affiliateApplication AffiliateApplication?
+  // VIP Club. vipTierId is set by an admin via /admin/vip when they
+  // approve an application or promote a user manually. Null = standard
+  // (non-VIP) player.
+  vipTierId           String?
+  vipTier             VipTier?             @relation(fields: [vipTierId], references: [id], onDelete: SetNull)
+  vipApplications     VipApplication[]
   lotteryTickets      LotteryTicket[]
   lotteryWinnings     LotteryWinning[]
   // M2G per-staff permission grants (additive, beyond role baseline).
@@ -1750,6 +1756,13 @@ model PaymentMethod {
   bannerUrl   String?
   instructionBn       String? @db.Text
   payoutInstructionBn String? @db.Text
+  // Operator-editable badge that appears in the corner of the method
+  // tile on /deposit + /withdraw. Empty / null label falls back to the
+  // hard-coded default ("AUTO" for express methods, "MANUAL" for the
+  // rest). badgeEnabled=false hides the badge entirely.
+  badgeLabelEn        String? @db.VarChar(24)
+  badgeLabelBn        String? @db.VarChar(24)
+  badgeEnabled        Boolean @default(true)
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
@@ -2623,4 +2636,69 @@ model SocialLink {
   updatedAt DateTime @updatedAt
 
   @@index([isActive, sortOrder])
+}
+
+// ---------- VIP Club ----------
+//
+// Per-user tier ladder for premium players. Admin defines tiers at
+// /admin/vip with cashback rate + withdrawal limit overrides; players
+// apply via /vip "Apply" button; admin approves/rejects + can promote
+// a user directly without an application.
+//
+// Withdrawal POST checks user.vipTier.withdrawalMaxAmount before the
+// global SystemSetting cap so a VIP can withdraw more per request.
+// Cashback campaigns can later read vipTier.cashbackRatePercent as a
+// per-user override; for the MVP the field is stored but the cashback
+// engine still uses the campaign's flat percentage.
+
+model VipTier {
+  id                  String        @id @default(cuid())
+  name                String        @unique
+  nameBn              String?
+  position            Int           @default(0)
+  description         String?       @db.Text
+  descriptionBn       String?       @db.Text
+  // Cashback override % (5.00 = 5%). Null = inherit campaign rate.
+  cashbackRatePercent Decimal?      @db.Decimal(5, 2)
+  // Withdrawal limit override (BDT). Null = use global limit.
+  withdrawalMaxAmount Decimal?      @db.Decimal(14, 2)
+  // Withdrawal payout priority: higher number = paid first.
+  payoutPriority      Int           @default(0)
+  // Marketing perks - shown on /vip page as bullet list per tier.
+  perksEn             String?       @db.Text
+  perksBn             String?       @db.Text
+  iconUrl             String?
+  badgeColor          String?       // hex like "#f5b400"
+  status              ContentStatus @default(active)
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  users        User[]
+  applications VipApplication[]
+
+  @@index([status, position])
+}
+
+// One application row per submission. A user can have multiple
+// historical rows (e.g. apply, get rejected, apply again later) but
+// only one open (status='pending') row at a time - enforced at the
+// API layer by checking for an existing pending row before insert.
+model VipApplication {
+  id          String    @id @default(cuid())
+  userId      String
+  tierId      String?   // Tier the user is requesting (null = any)
+  status      String    @default("pending") // pending | approved | rejected | cancelled
+  appliedAt   DateTime  @default(now())
+  notes       String?   @db.Text          // optional player message
+  reviewerId  String?
+  reviewedAt  DateTime?
+  reviewNote  String?   @db.Text          // admin's response on approve/reject
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tier VipTier? @relation(fields: [tierId], references: [id], onDelete: SetNull)
+
+  @@index([userId, status, createdAt])
+  @@index([status, createdAt])
 }

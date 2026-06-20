@@ -26,6 +26,9 @@ const updateSchema = z.object({
   maxDeposit: z.coerce.number().min(0).max(10_000_000).optional().nullable(),
   minWithdrawal: z.coerce.number().min(0).max(10_000_000).optional().nullable(),
   maxWithdrawal: z.coerce.number().min(0).max(10_000_000).optional().nullable(),
+  badgeLabelEn: z.string().trim().max(24).optional().nullable(),
+  badgeLabelBn: z.string().trim().max(24).optional().nullable(),
+  badgeEnabled: z.boolean().optional(),
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
