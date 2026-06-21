@@ -202,6 +202,10 @@ export const ADMIN_MENU_PERMISSIONS: Record<string, string> = {
   // Games
   categories: 'settings.write',
   providers: 'settings.write',
+  // VIP Club - tier ladder + applications. Same perm as the affiliate
+  // tier editor since the concepts are parallel (a tier ladder the
+  // operator curates + an application queue staff approve from).
+  vip: 'settings.write',
   // Reports + marketing
   reports: 'reports.read',
   marketing: 'bonuses.read',

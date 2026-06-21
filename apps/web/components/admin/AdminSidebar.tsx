@@ -97,6 +97,9 @@ const GROUPS = [
       { key: 'promotionBanners', href: ROUTES.admin.promotionBanners, icon: ImageIcon },
       { key: 'affiliate', href: ROUTES.admin.affiliate, icon: Briefcase },
       { key: 'affiliateTiers', href: ROUTES.admin.affiliateTiers, icon: Trophy },
+      // VIP Club. Added after 85cd949 shipped. Permission gate lives
+      // in lib/auth/admin-permission-map.ts ('settings.write'); the
+      // page renders the tier ladder + application queue at /admin/vip.
       { key: 'vip', href: '/admin/vip', icon: Crown },
     ],
   },

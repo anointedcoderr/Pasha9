@@ -361,19 +361,20 @@ function ProviderLobbyPageInner() {
               type="button"
               disabled={isBusy}
               onClick={() => onLaunch(g)}
-              // contain:strict (paint + layout + size + style) isolates
-              // this card's render context completely so the parent grid
-              // never has to recomposite siblings when one card paints.
-              // On UNISOC T606 / Mali G57 (Moto G24 Power) the previous
-              // "shadow + transition + backdrop-blur + nested
-              // overflow-hidden" combo was overrunning the compositor
-              // texture budget, surfacing as pink/magenta vertical
-              // banding on the largest images (Jackpot cards in
-              // particular). contain:strict + a smaller per-page card
+              // contain:layout paint isolates this card's compositing
+              // layer so a re-render of one tile cannot force the
+              // entire grid to recomposite. On UNISOC T606 / Mali G57
+              // (Moto G24 Power) the original "shadow + transition +
+              // backdrop-blur per card" combo overran the GPU
+              // compositor and surfaced as duplicated cards / lines /
+              // flicker. Containment plus the smaller per-page card
               // count keeps the on-screen texture set under that
-              // device's budget. content-visibility:auto lets the
-              // browser skip painting off-screen cards entirely.
-              style={{ contain: 'strict', contentVisibility: 'auto', containIntrinsicSize: '180px 220px' }}
+              // device's budget. (Round 3 tried contain:strict +
+              // content-visibility:auto + containIntrinsicSize; that
+              // collapsed card height on cards whose actual content
+              // exceeded the 220px hint, producing black bands above
+              // and below the image. Reverted to layout-paint only.)
+              style={{ contain: 'layout paint' }}
               className={cn(
                 'group relative overflow-hidden rounded-2xl border border-white/10 bg-brand-ink text-white shadow-[0_4px_12px_-6px_rgba(0,0,0,0.55)] active:scale-[0.98]',
                 isBusy && 'opacity-70',
@@ -381,11 +382,8 @@ function ProviderLobbyPageInner() {
             >
               {/* Image container - no nested overflow-hidden because the
                   outer button already clips, and a second clip mask
-                  forced an extra GPU layer on the Mali compositor. The
-                  inset box-shadow on this same div replaces what used
-                  to be a separate absolute gradient div (one less
-                  compositor layer per card). */}
-              <div className="relative aspect-[4/3] shadow-[inset_0_-60px_60px_-20px_rgba(13,15,20,0.95)]">
+                  forced an extra GPU layer on the Mali compositor. */}
+              <div className="relative aspect-[4/3]">
                 {g.imageUrl && !failedImages.has(key) ? (
                   // Width/height attrs let the browser allocate a
                   // texture sized to the source ratio instead of
@@ -414,6 +412,13 @@ function ProviderLobbyPageInner() {
                 ) : (
                   <CategoryHeroArt code={artFor(g.category)} className="absolute inset-0 h-full w-full opacity-65" />
                 )}
+                {/* Restored absolute gradient div - the inset
+                    box-shadow approach from round 3 was too heavy
+                    (60px blur + 95% opacity) and the client read it
+                    as a black band below the image. The gradient div
+                    is a single compositor layer per card, which we
+                    can afford now that PAGE_SIZE is 18. */}
+                <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-brand-ink/95 via-brand-ink/40 to-transparent" />
                 {/* Brand-first labelling. The aggregator name is only
                     shown when no brand exists, so cards never read as
                     "iGamingAPIs Aggreg... / JILI" on top of each other.
