@@ -45,6 +45,39 @@ interface Overview {
   };
 }
 
+interface BusinessSnapshot {
+  range: { from: string; to: string };
+  totalRegistrations: number;
+  firstTimeDepositors: number;
+  firstTimeDepositSum: number;
+  activeLoggedInUsers: number;
+  activePlayers: number;
+  depositingUsers: number;
+  approvedDepositCount: number;
+  approvedDepositSum: number;
+  pendingDepositCount: number;
+  pendingDepositSum: number;
+  approvedWithdrawalCount: number;
+  approvedWithdrawalSum: number;
+  pendingWithdrawalCount: number;
+  pendingWithdrawalSum: number;
+  totalWagered: number;
+  totalWon: number;
+  grossGamingRevenue: number;
+  betCount: number;
+  bonusGranted: number;
+  cashbackPaid: number;
+  affiliateCommissionPaid: number;
+  netCash: number;
+  operatingResult: number;
+  avgDeposit: number;
+  avgWithdrawal: number;
+  avgRevenuePerActivePlayer: number;
+  walletBalanceLive: number;
+  walletLockedLive: number;
+  bonusBalanceLive: number;
+}
+
 interface TsBucket { bucket: string; value: number; count: number }
 interface TsResponse { metric: string; granularity: string; from: string; to: string; label: string; buckets: TsBucket[]; totals: { value: number; count: number } }
 
@@ -65,16 +98,21 @@ interface BreakdownResponse { kind: string; rows: BreakdownRow[]; total: { count
 
 const METRICS = [
   { key: 'deposits', label: 'Approved deposits (BDT)' },
+  { key: 'deposits_count', label: 'Deposit count' },
+  { key: 'first_time_deposits', label: 'First-time depositors (count)' },
+  { key: 'first_time_deposits_sum', label: 'First-time deposits (BDT)' },
   { key: 'withdrawals', label: 'Approved withdrawals (BDT)' },
-  { key: 'net_cash', label: 'Net cash (dep - wd)' },
-  { key: 'operating_result', label: 'Operating result' },
+  { key: 'withdrawals_count', label: 'Withdrawal count' },
   { key: 'signups', label: 'New signups' },
-  { key: 'active_users', label: 'Active users' },
+  { key: 'active_users', label: 'Active users (logins)' },
+  { key: 'total_wagers', label: 'Total wagers (BDT)' },
+  { key: 'ggr', label: 'GGR (wagers - wins)' },
   { key: 'bonus_payout', label: 'Bonus released' },
+  { key: 'cashback_paid', label: 'Cashback paid' },
   { key: 'commission_paid', label: 'Commission paid' },
   { key: 'lotto_payout', label: 'Lotto winnings credited' },
-  { key: 'deposits_count', label: 'Deposit count' },
-  { key: 'withdrawals_count', label: 'Withdrawal count' },
+  { key: 'net_cash', label: 'Net cash (dep - wd)' },
+  { key: 'operating_result', label: 'Operating result' },
 ];
 
 const BREAKDOWNS = [
@@ -117,6 +155,12 @@ export default function AdminReportsPage() {
 
   // 30-day chart on overview tab (deposits + withdrawals + net)
   const [overviewSeries, setOverviewSeries] = useState<{ bucket: string; deposits: number; withdrawals: number; net: number }[]>([]);
+
+  // Business snapshot - the comprehensive KPI bundle for the picked range
+  const [snapFrom, setSnapFrom] = useState<string>(defaultFrom(30));
+  const [snapTo, setSnapTo] = useState<string>(defaultTo());
+  const [snap, setSnap] = useState<BusinessSnapshot | null>(null);
+  const [snapBusy, setSnapBusy] = useState(false);
 
   // Time-series tab
   const [tsMetric, setTsMetric] = useState<string>('deposits');
@@ -221,7 +265,20 @@ export default function AdminReportsPage() {
     } finally { setBdBusy(false); }
   }, [bdKind, bdFrom, bdTo]);
 
+  const loadSnap = useCallback(async () => {
+    setSnapBusy(true);
+    try {
+      const params = new URLSearchParams({
+        from: new Date(snapFrom).toISOString(),
+        to: new Date(snapTo).toISOString(),
+      });
+      const res = await fetch(`/api/admin/reports/business-snapshot?${params.toString()}`, { cache: 'no-store' });
+      if (res.ok) setSnap(await res.json() as BusinessSnapshot);
+    } finally { setSnapBusy(false); }
+  }, [snapFrom, snapTo]);
+
   useEffect(() => { loadOverview(); }, [loadOverview]);
+  useEffect(() => { if (tab === 'overview') loadSnap(); }, [tab, loadSnap]);
   useEffect(() => { if (tab === 'timeseries') loadTs(); }, [tab, loadTs]);
   useEffect(() => { if (tab === 'cohorts') loadCohorts(); }, [tab, loadCohorts]);
   useEffect(() => { if (tab === 'breakdowns') loadBreakdown(); }, [tab, loadBreakdown]);
@@ -276,6 +333,61 @@ export default function AdminReportsPage() {
         </TabsList>
 
         <TabsContent value="overview">
+          {/* Business snapshot - range-aware KPI grid. The lifetime
+              cards below stay all-time. */}
+          <Card padding="md" className="mb-4">
+            <div className="flex flex-wrap items-end gap-3">
+              <FormField label="From">
+                <Input type="datetime-local" value={snapFrom} onChange={(e) => setSnapFrom(e.target.value)} />
+              </FormField>
+              <FormField label="To">
+                <Input type="datetime-local" value={snapTo} onChange={(e) => setSnapTo(e.target.value)} />
+              </FormField>
+              <Button onClick={() => loadSnap()} loading={snapBusy} leftIcon={<Calendar className="h-3.5 w-3.5" />}>Apply</Button>
+              <Button variant="ghost" onClick={() => { setSnapFrom(defaultFrom(1)); setSnapTo(defaultTo()); setTimeout(loadSnap, 0); }}>Today</Button>
+              <Button variant="ghost" onClick={() => { setSnapFrom(defaultFrom(7)); setSnapTo(defaultTo()); setTimeout(loadSnap, 0); }}>7 days</Button>
+              <Button variant="ghost" onClick={() => { setSnapFrom(defaultFrom(30)); setSnapTo(defaultTo()); setTimeout(loadSnap, 0); }}>30 days</Button>
+              <Button variant="ghost" onClick={() => { setSnapFrom(defaultFrom(90)); setSnapTo(defaultTo()); setTimeout(loadSnap, 0); }}>90 days</Button>
+            </div>
+          </Card>
+
+          {snap ? (
+            <>
+              <h2 className="mb-2 text-xs font-bold uppercase tracking-wider text-ink-mid">Acquisition</h2>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <StatTile label="Total Registrations" value={snap.totalRegistrations.toLocaleString()} icon={<Users className="h-5 w-5 text-neon" />} />
+                <StatTile label="First-time Depositors" value={snap.firstTimeDepositors.toLocaleString()} icon={<Users className="h-5 w-5 text-neon" />} hint={formatBDT(snap.firstTimeDepositSum, { compact: true })} />
+                <StatTile label="Depositing Users" value={snap.depositingUsers.toLocaleString()} icon={<Users className="h-5 w-5 text-neon" />} hint="distinct in range" />
+                <StatTile label="Active Players" value={snap.activePlayers.toLocaleString()} icon={<Activity className="h-5 w-5 text-neon" />} hint="placed a bet" />
+              </div>
+
+              <h2 className="mb-2 mt-5 text-xs font-bold uppercase tracking-wider text-ink-mid">Money in / out</h2>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <StatTile label="Approved Deposits" value={formatBDT(snap.approvedDepositSum, { compact: true })} icon={<TrendingUp className="h-5 w-5 text-gold-300" />} hint={`${snap.approvedDepositCount} txns . avg ${formatBDT(snap.avgDeposit, { compact: true })}`} />
+                <StatTile label="Approved Withdrawals" value={formatBDT(snap.approvedWithdrawalSum, { compact: true })} icon={<TrendingUp className="h-5 w-5 text-signal-danger" />} hint={`${snap.approvedWithdrawalCount} txns . avg ${formatBDT(snap.avgWithdrawal, { compact: true })}`} />
+                <StatTile label="Net Cash (dep - wd)" value={formatBDT(snap.netCash, { compact: true })} icon={<Wallet className="h-5 w-5 text-neon" />} accent="mixed" />
+                <StatTile label="Pending Queue" value={`${snap.pendingDepositCount}d / ${snap.pendingWithdrawalCount}w`} icon={<RefreshCw className="h-5 w-5 text-neon" />} hint={`${formatBDT(snap.pendingDepositSum, { compact: true })} / ${formatBDT(snap.pendingWithdrawalSum, { compact: true })}`} />
+              </div>
+
+              <h2 className="mb-2 mt-5 text-xs font-bold uppercase tracking-wider text-ink-mid">Gaming</h2>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <StatTile label="Total Wagered" value={formatBDT(snap.totalWagered, { compact: true })} icon={<Activity className="h-5 w-5 text-neon" />} hint={`${snap.betCount.toLocaleString()} bets`} />
+                <StatTile label="Total Won (players)" value={formatBDT(snap.totalWon, { compact: true })} icon={<Activity className="h-5 w-5 text-signal-danger" />} />
+                <StatTile label="Gross Gaming Revenue" value={formatBDT(snap.grossGamingRevenue, { compact: true })} icon={<TrendingUp className="h-5 w-5 text-gold-300" />} hint="wagers - wins" accent="mixed" />
+                <StatTile label="Revenue / Active Player" value={formatBDT(snap.avgRevenuePerActivePlayer, { compact: true })} icon={<Wallet className="h-5 w-5 text-neon" />} />
+              </div>
+
+              <h2 className="mb-2 mt-5 text-xs font-bold uppercase tracking-wider text-ink-mid">Costs &amp; net result</h2>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <StatTile label="Bonus Granted" value={formatBDT(snap.bonusGranted, { compact: true })} icon={<Wallet className="h-5 w-5 text-signal-danger" />} />
+                <StatTile label="Cashback Paid" value={formatBDT(snap.cashbackPaid, { compact: true })} icon={<Wallet className="h-5 w-5 text-signal-danger" />} />
+                <StatTile label="Affiliate Commission" value={formatBDT(snap.affiliateCommissionPaid, { compact: true })} icon={<Wallet className="h-5 w-5 text-signal-danger" />} />
+                <StatTile label="Operating Result" value={formatBDT(snap.operatingResult, { compact: true })} icon={<TrendingUp className="h-5 w-5 text-gold-300" />} hint="net - bonus - cashback - commission" accent="mixed" />
+              </div>
+            </>
+          ) : <p className="text-sm text-ink-mid">Loading business snapshot...</p>}
+
+          <h2 className="mb-2 mt-6 text-xs font-bold uppercase tracking-wider text-ink-mid">Lifetime totals</h2>
           {!k ? <p className="text-sm text-ink-mid">Loading...</p> : (
             <>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

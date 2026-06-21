@@ -26,6 +26,8 @@ export type Metric =
   | 'cashback_paid'      // CashbackPayout.cashbackAmount that landed in wallet
   | 'commission_paid'    // AffiliateCommission.amount where status=paid
   | 'lotto_payout'       // LotteryWinning.amount where status=credited
+  | 'total_wagers'       // SUM(ABS(ProviderTransaction.betAmount)) accepted
+  | 'ggr'                // total_wagers - SUM(ProviderTransaction.winAmount) accepted
   | 'net_cash'           // approved deposits - approved withdrawals
   | 'operating_result';  // net_cash - bonus_payout - commission_paid - cashback_paid - lotto_payout
 
@@ -88,6 +90,9 @@ async function runMetricQuery(metric: Metric, granularity: Granularity, from: Da
     if (metric === 'lotto_payout') {
       return `SELECT "createdAt" AS ts, "amount" AS amt FROM "LotteryWinning" WHERE "status" = 'credited' AND "createdAt" BETWEEN $1 AND $2`;
     }
+    if (metric === 'total_wagers') {
+      return `SELECT "createdAt" AS ts, ABS("betAmount") AS amt FROM "ProviderTransaction" WHERE "status" = 'accepted' AND "createdAt" BETWEEN $1 AND $2`;
+    }
     if (metric === 'first_time_deposits') {
       // The first approved deposit per user. Window function picks
       // row number 1 per user ordered by approval/create time.
@@ -125,6 +130,26 @@ async function runMetricQuery(metric: Metric, granularity: Granularity, from: Da
       value: Number(r.count),
       count: Number(r.count),
     }));
+  }
+
+  if (metric === 'ggr') {
+    // GGR = total wagers - total wins. Composed in JS from sub-queries
+    // so the bucket math stays Decimal-safe.
+    const wagers = await runMetricQuery('total_wagers', granularity, from, to);
+    const winsRows = await db.$queryRawUnsafe<RawRow[]>(
+      `SELECT ${trunc} AS bucket, COALESCE(SUM("winAmount"), 0) AS value, COUNT(*)::bigint AS count
+       FROM (SELECT "createdAt" AS ts, "winAmount" FROM "ProviderTransaction" WHERE "status" = 'accepted' AND "createdAt" BETWEEN $1 AND $2) t
+       GROUP BY bucket ORDER BY bucket ASC`,
+      from,
+      to,
+    );
+    const winsBuckets = winsRows.map((r) => ({ bucket: r.bucket.toISOString(), value: round2(Number(r.value)), count: Number(r.count ?? 0) }));
+    const map = new Map<string, number>();
+    for (const w of wagers) map.set(w.bucket, (map.get(w.bucket) ?? 0) + w.value);
+    for (const w of winsBuckets) map.set(w.bucket, (map.get(w.bucket) ?? 0) - w.value);
+    return Array.from(map.entries())
+      .map(([bucket, value]) => ({ bucket, value: round2(value), count: 0 }))
+      .sort((a, b) => a.bucket.localeCompare(b.bucket));
   }
 
   if (metric === 'net_cash' || metric === 'operating_result') {
@@ -266,6 +291,8 @@ export const ALL_METRICS: Metric[] = [
   'cashback_paid',
   'commission_paid',
   'lotto_payout',
+  'total_wagers',
+  'ggr',
   'net_cash',
   'operating_result',
 ];
@@ -283,6 +310,8 @@ export const METRIC_LABELS: Record<Metric, string> = {
   cashback_paid: 'Cashback paid (BDT)',
   commission_paid: 'Affiliate commission paid (BDT)',
   lotto_payout: 'Lotto winnings credited (BDT)',
+  total_wagers: 'Total wagers (BDT)',
+  ggr: 'Gross Gaming Revenue (wagers - wins)',
   net_cash: 'Net cash (deposits - withdrawals)',
   operating_result: 'Operating result (net cash - bonus - commission - cashback - lotto)',
 };
