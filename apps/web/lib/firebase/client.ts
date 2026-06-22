@@ -62,4 +62,18 @@ export function getFirebaseClientAuth(): Auth | null {
   return cachedAuth;
 }
 
+// Returns the cached Firebase web app (initializing it from the same
+// NEXT_PUBLIC_* config), or null when the web config is missing. Used by
+// lib/push/fcm-client.ts to obtain a Messaging instance for the admin
+// "Enable phone alerts" flow.
+export function getFirebaseClientApp(): FirebaseApp | null {
+  const cfg = readConfig();
+  if (!cfg) return null;
+  if (!cachedApp) {
+    const existing = getApps()[0];
+    cachedApp = existing ?? initializeApp(cfg);
+  }
+  return cachedApp;
+}
+
 export type { ConfirmationResult };
