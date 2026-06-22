@@ -17,6 +17,7 @@
 // transient DB issue cannot fail a deposit/withdrawal approval.
 
 import { db } from '@/lib/db/client';
+import { dispatchFcmToUsers } from '@/lib/push/fcm';
 
 export type NotificationKind =
   | 'cashback'
@@ -48,7 +49,8 @@ export type NotificationKind =
   | 'admin_withdrawal_pending'
   | 'admin_reward_claim_pending'
   | 'admin_affiliate_application_pending'
-  | 'admin_promotion_claim_pending';
+  | 'admin_promotion_claim_pending'
+  | 'admin_vip_application_pending';
 
 // Role keys that should receive admin-targeted notifications. Kept in
 // sync with STAFF_ROLES in lib/auth/rbac.ts so the people who can
@@ -388,6 +390,21 @@ export async function notifyAdmins(opts: NotifyAdminsOpts): Promise<string | nul
         skipDuplicates: true,
       });
     }
+
+    // Best-effort phone push to every opted-in admin device. Not
+    // awaited so it never adds latency to the player-facing submit that
+    // triggered this notification; this runs on the persistent PM2 node
+    // process so the floating promise completes. Errors are swallowed —
+    // the in-app bell row above is the guaranteed channel.
+    void dispatchFcmToUsers(admins.map((a) => a.id), {
+      title: opts.titleEn,
+      body: opts.bodyEn ?? null,
+      linkUrl: opts.linkUrl ?? null,
+      kind: opts.kind,
+      priority: opts.priority ?? 'normal',
+      notificationId: n.id,
+    }).catch((err) => console.error('[notifyAdmins] fcm dispatch failed', opts.kind, err));
+
     return n.id;
   } catch (err) {
     console.error('[notifyAdmins] failed', opts.kind, err);
@@ -489,6 +506,23 @@ export async function notifyAdminsAffiliateApplicationPending(input: {
       ? `${who} অ্যাফিলিয়েট হওয়ার জন্য আবেদন করেছেন। চ্যানেল: ${channel}।`
       : `${who} অ্যাফিলিয়েট হওয়ার জন্য আবেদন করেছেন।`,
     linkUrl: '/admin/affiliate',
+    priority: 'normal',
+  });
+}
+
+export async function notifyAdminsVipApplicationPending(input: {
+  applicationId: string;
+  userId: string;
+  tierName: string;
+}): Promise<void> {
+  const who = await resolvePlayerHandle(input.userId);
+  await notifyAdmins({
+    kind: 'admin_vip_application_pending',
+    titleEn: `New VIP application: ${input.tierName}`,
+    titleBn: `নতুন ভিআইপি আবেদন: ${input.tierName}`,
+    bodyEn: `${who} applied for the VIP Club (${input.tierName}). Ref ${shortRef(input.applicationId)}. Review at /admin/vip.`,
+    bodyBn: `${who} ভিআইপি ক্লাবে আবেদন করেছেন (${input.tierName})। Ref ${shortRef(input.applicationId)}.`,
+    linkUrl: '/admin/vip',
     priority: 'normal',
   });
 }

@@ -16,7 +16,7 @@ import { withAuth, recordActivity } from '@/lib/auth/guard';
 import { requireActiveUser } from '@/lib/auth/rbac';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 import { rateLimit } from '@/lib/auth/rate-limit';
-import { notifyAdmins } from '@/lib/notifications/notify';
+import { notifyAdminsVipApplicationPending } from '@/lib/notifications/notify';
 
 const schema = z.object({
   tierId: z.string().trim().min(1).max(60).optional().nullable(),
@@ -63,15 +63,11 @@ export async function POST(req: NextRequest) {
       detail: tierName,
     });
 
-    // Bell ping for staff
-    notifyAdmins({
-      kind: 'admin_affiliate_application_pending', // closest existing kind; bell shows it under /admin
-      titleEn: `New VIP application: ${tierName}`,
-      titleBn: `নতুন ভিআইপি আবেদন: ${tierName}`,
-      bodyEn: `A player has applied for the VIP Club (${tierName}). Review at /admin/vip.`,
-      bodyBn: `একজন প্লেয়ার ভিআইপি ক্লাবে আবেদন করেছেন (${tierName})।`,
-      linkUrl: '/admin/vip',
-      priority: 'normal',
+    // Bell ping + phone push for staff
+    notifyAdminsVipApplicationPending({
+      applicationId: application.id,
+      userId: session.sub,
+      tierName,
     }).catch(() => {});
 
     return jsonOk({ application: { id: application.id, status: application.status, appliedAt: application.appliedAt } }, 201);
