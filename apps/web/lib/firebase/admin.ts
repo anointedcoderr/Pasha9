@@ -20,9 +20,11 @@ import {
   type App,
 } from 'firebase-admin/app';
 import { getAuth, type Auth } from 'firebase-admin/auth';
+import { getMessaging, type Messaging } from 'firebase-admin/messaging';
 
 let cachedApp: App | null = null;
 let cachedAuth: Auth | null = null;
+let cachedMessaging: Messaging | null = null;
 
 function readPrivateKey(): string {
   const raw = process.env.FIREBASE_PRIVATE_KEY ?? '';
@@ -40,23 +42,36 @@ export function isFirebaseConfigured(): boolean {
   );
 }
 
-export function getFirebaseAdminAuth(): Auth {
-  if (cachedAuth) return cachedAuth;
+function getAdminApp(): App {
+  if (cachedApp) return cachedApp;
   if (!isFirebaseConfigured()) {
     throw new Error('FIREBASE_ADMIN_NOT_CONFIGURED');
   }
-  if (!cachedApp) {
-    const existing = getApps()[0];
-    cachedApp = existing ?? initializeApp({
-      credential: cert({
-        projectId: process.env.FIREBASE_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        privateKey: readPrivateKey(),
-      }),
-    });
-  }
-  cachedAuth = getAuth(cachedApp);
+  const existing = getApps()[0];
+  cachedApp = existing ?? initializeApp({
+    credential: cert({
+      projectId: process.env.FIREBASE_PROJECT_ID,
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      privateKey: readPrivateKey(),
+    }),
+  });
+  return cachedApp;
+}
+
+export function getFirebaseAdminAuth(): Auth {
+  if (cachedAuth) return cachedAuth;
+  cachedAuth = getAuth(getAdminApp());
   return cachedAuth;
+}
+
+// Server-side FCM messaging handle. Reuses the same credentials and
+// cached app as Phone Auth. Used by lib/push/fcm.ts to send admin
+// phone push. Throws FIREBASE_ADMIN_NOT_CONFIGURED when the service
+// account env vars are missing.
+export function getFirebaseAdminMessaging(): Messaging {
+  if (cachedMessaging) return cachedMessaging;
+  cachedMessaging = getMessaging(getAdminApp());
+  return cachedMessaging;
 }
 
 export interface VerifiedPhoneIdToken {
