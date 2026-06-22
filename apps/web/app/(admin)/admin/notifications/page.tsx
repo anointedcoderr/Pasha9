@@ -8,6 +8,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { PageHeader } from '@/components/site/PageHeader';
+import { AdminPushToggle } from '@/components/admin/AdminPushToggle';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
@@ -217,6 +218,10 @@ export default function AdminNotificationsPage() {
           </div>
         }
       />
+
+      <div className="mb-4">
+        <AdminPushToggle />
+      </div>
 
       {toast ? <Card padding="md" className="mb-4"><p className="text-sm text-signal-ok">{toast}</p></Card> : null}
       {error ? <Card padding="md" className="mb-4"><p className="text-sm text-signal-danger">{error}</p></Card> : null}

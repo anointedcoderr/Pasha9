@@ -8,6 +8,7 @@ import { ShieldAlert } from 'lucide-react';
 import { AdminSidebar } from '@/components/admin/AdminSidebar';
 import { AdminMobileDrawer } from '@/components/admin/AdminMobileDrawer';
 import { AdminTopbar } from '@/components/admin/AdminTopbar';
+import { AdminPushPrompt } from '@/components/admin/AdminPushPrompt';
 import { TooltipProvider } from '@/components/ui/Tooltip';
 import { useAdminPermissions } from '@/lib/auth/use-admin-permissions';
 import { canAccessAdminPath } from '@/lib/auth/admin-permission-map';
@@ -57,6 +58,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         <AdminMobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <AdminTopbar onMenu={() => setDrawerOpen(true)} />
+          <AdminPushPrompt />
           <main className="flex-1 overflow-y-auto overscroll-contain px-4 py-6 md:px-8">
             {accessible ? children : <AdminForbidden />}
           </main>
