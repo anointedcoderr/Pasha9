@@ -16,7 +16,7 @@ export async function POST() {
   return withAuth(async () => {
     const session = await requireStaff();
     const push = await dispatchFcmToUsers([session.sub], {
-      title: 'Pasha 9 — test alert',
+      title: 'Pasha 9 test alert',
       body: 'Phone alerts are working. You will be notified of new deposits, withdrawals and VIP applications.',
       linkUrl: '/admin',
       kind: 'admin_test',

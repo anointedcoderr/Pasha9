@@ -394,8 +394,8 @@ export async function notifyAdmins(opts: NotifyAdminsOpts): Promise<string | nul
     // Best-effort phone push to every opted-in admin device. Not
     // awaited so it never adds latency to the player-facing submit that
     // triggered this notification; this runs on the persistent PM2 node
-    // process so the floating promise completes. Errors are swallowed —
-    // the in-app bell row above is the guaranteed channel.
+    // process so the floating promise completes. Errors are swallowed
+    // because the in-app bell row above is the guaranteed channel.
     void dispatchFcmToUsers(admins.map((a) => a.id), {
       title: opts.titleEn,
       body: opts.bodyEn ?? null,

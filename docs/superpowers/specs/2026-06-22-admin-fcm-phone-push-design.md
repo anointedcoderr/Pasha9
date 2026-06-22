@@ -1,7 +1,7 @@
-# Admin FCM Phone Push Notifications — Design
+# Admin FCM Phone Push Notifications - Design
 
 **Date:** 2026-06-22
-**Author:** Anointed Coder (with Claude)
+**Author:** Anointed Coder
 **Status:** Approved (pending spec review)
 **Branch:** `m1-production`
 
@@ -59,14 +59,14 @@ Google FCM → admin phone → public/firebase-messaging-sw.js
 
 The admin registers each phone once via an **"Enable phone alerts"** control in the admin
 panel. The token is stored against their `userId`. Every staff member
-(`super_admin` / `admin` / `staff`) who opts in receives the push — matching the existing
+(`super_admin` / `admin` / `staff`) who opts in receives the push - matching the existing
 bell fan-out (`ADMIN_NOTIFY_ROLES`).
 
 ## Components
 
 ### Data model (new)
 
-`AdminPushDevice` — one row per (admin user, device token). Kept **separate** from the
+`AdminPushDevice` - one row per (admin user, device token). Kept **separate** from the
 player `PushSubscription` table so the admin phone-alert flow and the player web-push flow
 never interfere.
 
@@ -95,9 +95,9 @@ Prisma migration.
 
 ### Server
 
-- **`lib/firebase/admin.ts`** — add `getFirebaseAdminMessaging(): Messaging` reusing the
+- **`lib/firebase/admin.ts`** - add `getFirebaseAdminMessaging(): Messaging` reusing the
   existing lazy/idempotent app init. No new credentials.
-- **`lib/push/fcm.ts`** — `dispatchFcmToUsers(userIds: string[], payload): Promise<FcmDispatchResult>`:
+- **`lib/push/fcm.ts`** - `dispatchFcmToUsers(userIds: string[], payload): Promise<FcmDispatchResult>`:
   - returns `provider_setup_required` when `isFirebaseConfigured()` is false;
   - loads active tokens for `userIds`;
   - sends via `getMessaging().sendEachForMulticast(...)`;
@@ -114,26 +114,26 @@ Prisma migration.
 
 ### API routes (all `requireStaff`)
 
-- `POST   /api/admin/push-devices` — upsert FCM token by `token`, bind to `session.sub`,
+- `POST   /api/admin/push-devices` - upsert FCM token by `token`, bind to `session.sub`,
   set `isActive=true`, record an activity log entry.
-- `DELETE /api/admin/push-devices` — deactivate by `token` (scoped to caller).
-- `POST   /api/admin/push-devices/test` — send a test push to the caller's own active
+- `DELETE /api/admin/push-devices` - deactivate by `token` (scoped to caller).
+- `POST   /api/admin/push-devices/test` - send a test push to the caller's own active
   tokens so the admin can confirm delivery on their phone.
-- `GET    /api/admin/push-config` — returns `{ configured, vapidKey }` (public key only) so
+- `GET    /api/admin/push-config` - returns `{ configured, vapidKey }` (public key only) so
   the enable UI can decide whether to offer the button or show "ask operator to finish
   setup".
 
 ### Client
 
 - **`lib/push/fcm-client.ts`**:
-  - `enableAdminPush()` — `isSupported()` from `firebase/messaging`; register
+  - `enableAdminPush()` - `isSupported()` from `firebase/messaging`; register
     `/firebase-messaging-sw.js` (firebase config passed via registration query string so
     env remains the single source of truth); `Notification.requestPermission()`;
     `getToken(messaging, { vapidKey, serviceWorkerRegistration })`; `POST` token to
     `/api/admin/push-devices`. Returns a typed result like the player `enableDevicePush()`.
-  - `disableAdminPush()` — `deleteToken()` + `DELETE /api/admin/push-devices`.
-  - `getAdminPushState()` — support + permission + subscribed status for the toggle UI.
-- **`public/firebase-messaging-sw.js`** — `importScripts` firebase compat app + messaging,
+  - `disableAdminPush()` - `deleteToken()` + `DELETE /api/admin/push-devices`.
+  - `getAdminPushState()` - support + permission + subscribed status for the toggle UI.
+- **`public/firebase-messaging-sw.js`** - `importScripts` firebase compat app + messaging,
   `initializeApp(config)`, `onBackgroundMessage` → `showNotification` with:
   - `vibrate: [200,100,200]`,
   - `requireInteraction: true` when `priority === 'high'`,
@@ -141,7 +141,7 @@ Prisma migration.
   - `data.linkUrl` for tap routing;
   - plus a `notificationclick` handler that focuses an existing admin tab or opens the
     target `/admin/...` URL (mirrors the existing [public/sw.js](../../../apps/web/public/sw.js)).
-- **`AdminPushToggle`** component — enable/disable + "send test" button. Surfaced:
+- **`AdminPushToggle`** component - enable/disable + "send test" button. Surfaced:
   1. on the admin notifications settings area, and
   2. as a one-time dismissible prompt banner inside the admin shell, shown when push is
      supported but not yet enabled, so it is discoverable the first time the admin opens
@@ -149,7 +149,7 @@ Prisma migration.
 
 ### Event wiring
 
-- **`lib/notifications/notify.ts`** — inside `notifyAdmins()`, after the DB rows are
+- **`lib/notifications/notify.ts`** - inside `notifyAdmins()`, after the DB rows are
   written, resolve the admin `userId`s already fetched and call
   `dispatchFcmToUsers(adminIds, { title, body, linkUrl, kind, priority })`. Best-effort:
   wrapped so a push failure can never fail the player-facing submit (consistent with the
@@ -185,7 +185,7 @@ Prisma migration.
 | Sound + vibration | ✅ | ✅ |
 
 iPhone requires a one-time **Add to Home Screen** (install the PWA) before background web
-push works — an Apple platform rule, not an FCM limitation, and unavoidable with any web
+push works - an Apple platform rule, not an FCM limitation, and unavoidable with any web
 push provider. Android needs no install. A `manifest.ts` PWA manifest already exists.
 
 ## Error handling
@@ -207,7 +207,7 @@ push provider. Android needs no install. A `manifest.ts` PWA manifest already ex
 - **Unit**: `notifyAdminsVipApplicationPending` writes the correct kind/link.
 - **Integration**: registering a token via `POST /api/admin/push-devices` is scoped to the
   caller; `DELETE` only deactivates the caller's own token.
-- **Manual (device)**: real Android phone + real iPhone (installed PWA) — enable, send test,
+- **Manual (device)**: real Android phone + real iPhone (installed PWA) - enable, send test,
   trigger a real deposit from a player account, confirm delivery with screen locked /
   browser closed / app backgrounded, confirm sound + vibration, confirm tap routing.
 

@@ -24,25 +24,25 @@
 ## File Structure
 
 **New files:**
-- `packages/database/prisma/schema.prisma` — *modify*: add `AdminPushDevice` model + `User.adminPushDevices` back-relation.
-- `apps/web/lib/push/fcm-status.ts` — pure helpers (status mapping, error classification). No app imports. Unit-tested.
-- `apps/web/scripts/test-fcm-status.ts` — `tsx` unit test for `fcm-status.ts`.
-- `apps/web/lib/firebase/admin.ts` — *modify*: add `getFirebaseAdminMessaging()`.
-- `apps/web/lib/push/fcm.ts` — server dispatcher `dispatchFcmToUsers()`.
-- `apps/web/app/api/admin/push-config/route.ts` — `GET` provider status + public VAPID key.
-- `apps/web/app/api/admin/push-devices/route.ts` — `POST`/`DELETE` register/unregister token.
-- `apps/web/app/api/admin/push-devices/test/route.ts` — `POST` self-test push.
-- `apps/web/lib/notifications/notify.ts` — *modify*: add VIP kind + helper, wire FCM into `notifyAdmins()`.
-- `apps/web/app/api/vip/apply/route.ts` — *modify*: use the new VIP helper.
-- `apps/web/public/firebase-messaging-sw.js` — FCM background service worker.
-- `apps/web/lib/firebase/client.ts` — *modify*: export `getFirebaseClientApp()`.
-- `apps/web/lib/push/fcm-client.ts` — client enable/disable/state helpers.
-- `apps/web/components/admin/AdminPushToggle.tsx` — enable/disable + test UI.
-- `apps/web/components/admin/AdminPushPrompt.tsx` — one-time in-shell prompt banner.
-- `apps/web/app/(admin)/admin/notifications/page.tsx` — *modify*: mount `AdminPushToggle`.
-- `apps/web/app/(admin)/admin/layout.tsx` (or the admin shell) — *modify*: mount `AdminPushPrompt`.
-- `.env.example` — *modify*: document `NEXT_PUBLIC_FIREBASE_VAPID_KEY`.
-- `docs/admin-push-deploy.md` — operator deploy guide.
+- `packages/database/prisma/schema.prisma` - *modify*: add `AdminPushDevice` model + `User.adminPushDevices` back-relation.
+- `apps/web/lib/push/fcm-status.ts` - pure helpers (status mapping, error classification). No app imports. Unit-tested.
+- `apps/web/scripts/test-fcm-status.ts` - `tsx` unit test for `fcm-status.ts`.
+- `apps/web/lib/firebase/admin.ts` - *modify*: add `getFirebaseAdminMessaging()`.
+- `apps/web/lib/push/fcm.ts` - server dispatcher `dispatchFcmToUsers()`.
+- `apps/web/app/api/admin/push-config/route.ts` - `GET` provider status + public VAPID key.
+- `apps/web/app/api/admin/push-devices/route.ts` - `POST`/`DELETE` register/unregister token.
+- `apps/web/app/api/admin/push-devices/test/route.ts` - `POST` self-test push.
+- `apps/web/lib/notifications/notify.ts` - *modify*: add VIP kind + helper, wire FCM into `notifyAdmins()`.
+- `apps/web/app/api/vip/apply/route.ts` - *modify*: use the new VIP helper.
+- `apps/web/public/firebase-messaging-sw.js` - FCM background service worker.
+- `apps/web/lib/firebase/client.ts` - *modify*: export `getFirebaseClientApp()`.
+- `apps/web/lib/push/fcm-client.ts` - client enable/disable/state helpers.
+- `apps/web/components/admin/AdminPushToggle.tsx` - enable/disable + test UI.
+- `apps/web/components/admin/AdminPushPrompt.tsx` - one-time in-shell prompt banner.
+- `apps/web/app/(admin)/admin/notifications/page.tsx` - *modify*: mount `AdminPushToggle`.
+- `apps/web/app/(admin)/admin/layout.tsx` (or the admin shell) - *modify*: mount `AdminPushPrompt`.
+- `.env.example` - *modify*: document `NEXT_PUBLIC_FIREBASE_VAPID_KEY`.
+- `docs/admin-push-deploy.md` - operator deploy guide.
 
 ---
 
@@ -141,7 +141,7 @@ git commit -m "feat(db): add AdminPushDevice model for admin FCM tokens"
   - `interface FcmDispatchResult { attempted: number; sent: number; failed: number; status: FcmDispatchStatus; details?: string | null }`
   - `classifyFcmSendError(code: string | undefined | null): 'expired' | 'transient'`
   - `summarizeFcmResult(attempted: number, sent: number, failed: number): FcmDispatchStatus`
-- Consumes: nothing (pure module, no app imports — so the `tsx` test can import it by relative path without `@/` alias resolution).
+- Consumes: nothing (pure module, no app imports - so the `tsx` test can import it by relative path without `@/` alias resolution).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -173,7 +173,7 @@ console.log('fcm-status: all assertions passed');
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `cd apps/web && npx tsx scripts/test-fcm-status.ts`
-Expected: FAIL — `Cannot find module '../lib/push/fcm-status'` (module not created yet).
+Expected: FAIL - `Cannot find module '../lib/push/fcm-status'` (module not created yet).
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -229,7 +229,7 @@ export function summarizeFcmResult(attempted: number, sent: number, failed: numb
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd apps/web && npx tsx scripts/test-fcm-status.ts`
-Expected: PASS — `fcm-status: all assertions passed`
+Expected: PASS - `fcm-status: all assertions passed`
 
 - [ ] **Step 5: Commit**
 
@@ -673,7 +673,7 @@ export async function POST() {
   return withAuth(async () => {
     const session = await requireStaff();
     const push = await dispatchFcmToUsers([session.sub], {
-      title: 'Pasha 9 — test alert',
+      title: 'Pasha 9 - test alert',
       body: 'Phone alerts are working. You will be notified of new deposits, withdrawals and VIP applications.',
       linkUrl: '/admin',
       kind: 'admin_test',
@@ -836,7 +836,7 @@ Insert the FCM dispatch between the closing `}` of the `for` loop and `return n.
     // Best-effort phone push to every opted-in admin device. Not
     // awaited so it never adds latency to the player-facing submit that
     // triggered this notification; this runs on the persistent PM2 node
-    // process so the floating promise completes. Errors are swallowed —
+    // process so the floating promise completes. Errors are swallowed -
     // the in-app bell row above is the guaranteed channel.
     void dispatchFcmToUsers(admins.map((a) => a.id), {
       title: opts.titleEn,
@@ -875,7 +875,7 @@ git commit -m "feat(notify): fan out admin events to FCM phone push"
 - Consumes: firebase config passed via the SW registration query string (Task 10 registers it).
 - Produces: a service worker that renders data messages as notifications (sound + vibration, `requireInteraction` for high priority) and routes taps to `data.linkUrl`.
 
-> The SW imports firebase compat from gstatic. Pin `FB_SDK_VERSION` to the installed `firebase` version (`12.14.0`). If DevTools → Application → Service Workers shows an importScripts 404, bump/lower this constant to a version gstatic hosts (e.g. `10.12.2`) — the SW protocol is version-independent of the app SDK.
+> The SW imports firebase compat from gstatic. Pin `FB_SDK_VERSION` to the installed `firebase` version (`12.14.0`). If DevTools → Application → Service Workers shows an importScripts 404, bump/lower this constant to a version gstatic hosts (e.g. `10.12.2`) - the SW protocol is version-independent of the app SDK.
 
 - [ ] **Step 1: Write the service worker**
 
@@ -1252,7 +1252,7 @@ export function AdminPushToggle() {
     try {
       const res = await fetch('/api/admin/push-devices/test', { method: 'POST', credentials: 'include' });
       const j = await res.json();
-      setMsg(j?.push?.sent > 0 ? 'Test sent — check your phone.' : `No device received it (status: ${j?.push?.status ?? 'unknown'}).`);
+      setMsg(j?.push?.sent > 0 ? 'Test sent - check your phone.' : `No device received it (status: ${j?.push?.status ?? 'unknown'}).`);
     } catch {
       setMsg('Could not send the test.');
     }
@@ -1266,7 +1266,7 @@ export function AdminPushToggle() {
         <h3 className="text-sm font-extrabold text-brand-ink">Phone push alerts</h3>
       </div>
       <p className="mt-1 text-xs text-brand-inkSoft">
-        Get a push notification on this phone for new deposits, withdrawals, VIP applications and other admin actions —
+        Get a push notification on this phone for new deposits, withdrawals, VIP applications and other admin actions -
         even when the screen is locked or the browser is closed. On iPhone, add this site to your Home Screen first.
       </p>
 
@@ -1372,7 +1372,7 @@ export function AdminPushPrompt() {
 
 - [ ] **Step 3: Mount the toggle on the admin notifications page**
 
-Open `apps/web/app/(admin)/admin/notifications/page.tsx` — this is the notifications settings hub and is already a `'use client'` component, so the client toggle drops in directly. Add the import with the other imports at the top:
+Open `apps/web/app/(admin)/admin/notifications/page.tsx` - this is the notifications settings hub and is already a `'use client'` component, so the client toggle drops in directly. Add the import with the other imports at the top:
 
 ```tsx
 import { AdminPushToggle } from '@/components/admin/AdminPushToggle';
@@ -1387,13 +1387,13 @@ Render `<AdminPushToggle />` near the top of the returned JSX, directly under th
 
 - [ ] **Step 4: Mount the prompt in the admin shell**
 
-The admin shell that renders `<AdminTopbar ... />` is `apps/web/app/(admin)/admin/layout.tsx` (confirmed — it is the only layout importing `AdminTopbar`). Open it and add the import:
+The admin shell that renders `<AdminTopbar ... />` is `apps/web/app/(admin)/admin/layout.tsx` (confirmed - it is the only layout importing `AdminTopbar`). Open it and add the import:
 
 ```tsx
 import { AdminPushPrompt } from '@/components/admin/AdminPushPrompt';
 ```
 
-Render `<AdminPushPrompt />` immediately after the `<AdminTopbar ... />` element so the banner spans the content area below the topbar. If `layout.tsx` is a server component, that's fine — `AdminPushPrompt` is a `'use client'` component and can be rendered from a server component without changes.
+Render `<AdminPushPrompt />` immediately after the `<AdminTopbar ... />` element so the banner spans the content area below the topbar. If `layout.tsx` is a server component, that's fine - `AdminPushPrompt` is a `'use client'` component and can be rendered from a server component without changes.
 
 - [ ] **Step 5: Typecheck + build**
 
@@ -1436,7 +1436,7 @@ NEXT_PUBLIC_FIREBASE_VAPID_KEY=
 Create `docs/admin-push-deploy.md`:
 
 ```markdown
-# Admin Phone Push (FCM) — Deploy Guide
+# Admin Phone Push (FCM) - Deploy Guide
 
 Real-time push to admin phones for deposits, withdrawals, VIP applications,
 reward claims and affiliate applications. Reuses the existing Firebase
@@ -1456,7 +1456,7 @@ Edit `/var/www/pasha9/app/.env` and add:
 NEXT_PUBLIC_FIREBASE_VAPID_KEY=<the public key from step 1>
 ```
 
-Confirm these already exist (they were set for Phone Auth — do not change):
+Confirm these already exist (they were set for Phone Auth - do not change):
 `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`,
 `NEXT_PUBLIC_FIREBASE_API_KEY`, `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`,
 `NEXT_PUBLIC_FIREBASE_PROJECT_ID`, `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`,
@@ -1489,7 +1489,7 @@ picked up.
 - **iPhone (Safari):** open the admin panel in Safari → **Share → Add to Home
   Screen** → open the installed app from the Home Screen → log in → **Enable
   phone alerts** → **Send test**. (iOS only delivers background web push to an
-  installed PWA — this step is required by Apple.)
+  installed PWA - this step is required by Apple.)
 
 ## 6. Verify end-to-end
 
@@ -1502,10 +1502,10 @@ picked up.
 ## Troubleshooting
 
 - **Button says "not configured on the server yet":** `NEXT_PUBLIC_FIREBASE_VAPID_KEY`
-  is missing or the build didn't pick it up — re-run step 4 with `--update-env`.
+  is missing or the build didn't pick it up - re-run step 4 with `--update-env`.
 - **Service worker 404 / importScripts error (DevTools → Application → Service
   Workers):** the pinned `FB_SDK_VERSION` in `public/firebase-messaging-sw.js`
-  isn't hosted on gstatic — set it to a version that is (e.g. `10.12.2`),
+  isn't hosted on gstatic - set it to a version that is (e.g. `10.12.2`),
   rebuild, hard-refresh.
 - **Android works, iPhone doesn't:** confirm the admin opened the **Home-Screen
   (installed) app**, not a Safari tab, and that iOS is 16.4+.
@@ -1530,15 +1530,15 @@ git commit -m "docs: admin phone push env var + operator deploy guide"
 
 ## Final verification (after all tasks)
 
-- [ ] `pnpm --filter @pasha9/web typecheck` — no errors.
-- [ ] `pnpm --filter @pasha9/web build` — succeeds, `verify-build` passes.
-- [ ] `cd apps/web && npx tsx scripts/test-fcm-status.ts` — passes.
+- [ ] `pnpm --filter @pasha9/web typecheck` - no errors.
+- [ ] `pnpm --filter @pasha9/web build` - succeeds, `verify-build` passes.
+- [ ] `cd apps/web && npx tsx scripts/test-fcm-status.ts` - passes.
 - [ ] Manual device smoke per `docs/admin-push-deploy.md` §6 on a real Android phone and an installed iPhone PWA.
 
 ---
 
 ## Self-Review Notes (author)
 
-- **Spec coverage:** events (deposit/withdrawal/VIP/reward/affiliate) → Task 8 wires `notifyAdmins`, all five helpers route through it; VIP dedicated kind → Task 7. Data model → Task 1. Server messaging/dispatch → Tasks 3–4. APIs (config/register/test) → Tasks 5–6. SW → Task 9. Client + UI → Tasks 10–11. Deploy/env → Task 12. Delivery guarantees + iOS PWA caveat → Task 12 guide. Error handling (provider-not-configured, dead token, throw isolation) → Tasks 4 + 8.
+- **Spec coverage:** events (deposit/withdrawal/VIP/reward/affiliate) → Task 8 wires `notifyAdmins`, all five helpers route through it; VIP dedicated kind → Task 7. Data model → Task 1. Server messaging/dispatch → Tasks 3-4. APIs (config/register/test) → Tasks 5-6. SW → Task 9. Client + UI → Tasks 10-11. Deploy/env → Task 12. Delivery guarantees + iOS PWA caveat → Task 12 guide. Error handling (provider-not-configured, dead token, throw isolation) → Tasks 4 + 8.
 - **Type consistency:** `FcmDispatchResult`/`FcmDispatchStatus` defined in Task 2, consumed in Tasks 4/6; `FcmPushPayload` defined in Task 4, consumed in Tasks 6/8; `dispatchFcmToUsers` signature stable across Tasks 4/6/8; `getFirebaseAdminMessaging` defined Task 3, used Task 4; `getFirebaseClientApp`/`enableAdminPush`/`disableAdminPush`/`getAdminPushState` defined Task 10, used Task 11; `db.adminPushDevice` from Task 1 used Tasks 4/5.
 - **No placeholders:** every code step contains complete code. The two "locate the file" steps (Task 11 page/layout mount) include the exact `grep` to run and the exact import/JSX to add.

@@ -45,7 +45,7 @@ export function AdminPushToggle() {
     try {
       const res = await fetch('/api/admin/push-devices/test', { method: 'POST', credentials: 'include' });
       const j = await res.json();
-      setMsg(j?.push?.sent > 0 ? 'Test sent — check your phone.' : `No device received it (status: ${j?.push?.status ?? 'unknown'}).`);
+      setMsg(j?.push?.sent > 0 ? 'Test sent. Check your phone.' : `No device received it (status: ${j?.push?.status ?? 'unknown'}).`);
     } catch {
       setMsg('Could not send the test.');
     }
@@ -59,7 +59,7 @@ export function AdminPushToggle() {
         <h3 className="text-sm font-extrabold text-brand-ink">Phone push alerts</h3>
       </div>
       <p className="mt-1 text-xs text-brand-inkSoft">
-        Get a push notification on this phone for new deposits, withdrawals, VIP applications and other admin actions —
+        Get a push notification on this phone for new deposits, withdrawals, VIP applications and other admin actions,
         even when the screen is locked or the browser is closed. On iPhone, add this site to your Home Screen first.
       </p>
 
