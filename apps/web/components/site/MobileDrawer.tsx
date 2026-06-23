@@ -17,6 +17,7 @@ import {
   Star,
   Ticket,
   Briefcase,
+  Crown,
   Cherry,
   Tv2,
   Zap,
@@ -45,6 +46,9 @@ interface Item {
 const MAIN: Item[] = [
   { key: 'promotion', href: '/promotions', icon: Gift },
   { key: 'rewards', href: '/rewards', icon: Trophy },
+  // VIP Club. The desktop CategoryNav (hidden lg:block) carries this link,
+  // so on mobile the drawer is the only place a player can reach /vip.
+  { key: 'vip', href: '/vip', icon: Crown },
   { key: 'referralProgram', href: '/referral', icon: Users },
   { key: 'bettingPass', href: '/betting-pass', icon: Star },
   { key: 'affiliate', href: '/affiliate', icon: Briefcase },
