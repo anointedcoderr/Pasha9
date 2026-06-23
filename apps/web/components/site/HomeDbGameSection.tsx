@@ -230,7 +230,10 @@ export function HomeDbGameSection({ section }: Props) {
                   src={g.imageUrl ?? ''}
                   alt={g.displayName}
                   onError={() => markImageFailed(tileKey)}
-                  className="absolute inset-0 h-full w-full object-cover"
+                  // object-top: if an operator upload is taller than the
+                  // square tile, keep the top (where characters' heads sit)
+                  // rather than centre-cropping the head off.
+                  className="absolute inset-0 h-full w-full object-cover object-top"
                 />
               ) : (
                 // No upload yet: render the category SVG so a fresh

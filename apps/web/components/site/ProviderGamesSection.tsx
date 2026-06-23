@@ -223,22 +223,28 @@ export function ProviderGamesSection({ showAdminLink = false }: Props) {
                       src={g.imageUrl}
                       alt={g.displayName}
                       onError={() => markImageFailed(key)}
-                      className="absolute inset-0 h-full w-full object-cover"
+                      // object-top keeps dealer/character heads (top of the
+                      // art) instead of the default centre crop that sliced
+                      // them off. Matches Babu88.
+                      className="absolute inset-0 h-full w-full object-cover object-top"
                     />
                   ) : (
                     <CategoryHeroArt code={artFor(g.category)} className="absolute inset-0 h-full w-full opacity-65" />
                   )}
-                  <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-brand-ink/95 via-brand-ink/40 to-transparent" />
-                  <span className="absolute left-2 top-2 inline-flex h-5 max-w-[60%] items-center truncate rounded-full border border-amber-300/60 bg-amber-200/15 px-1.5 text-[9px] font-bold uppercase tracking-wider text-amber-100 backdrop-blur">
+                  {/* Babu88-style: no dark overlay on the art; the title
+                      sits on a strip below the image so the thumbnail
+                      stays full-brightness. Badges carry their own opaque
+                      backing now that there is no scrim behind them. */}
+                  <span className="absolute left-2 top-2 inline-flex h-5 max-w-[60%] items-center truncate rounded-full border border-amber-300/60 bg-amber-200/80 px-1.5 text-[9px] font-bold uppercase tracking-wider text-amber-950 backdrop-blur">
                     {g.providerName}
                   </span>
                   {g.brandKey ? (
-                    <span className="absolute right-2 top-2 inline-flex h-5 items-center rounded-full border border-yellow-300/60 bg-yellow-300/25 px-1.5 text-[9px] font-extrabold uppercase tracking-wider text-yellow-50 backdrop-blur">
+                    <span className="absolute right-2 top-2 inline-flex h-5 items-center rounded-full border border-yellow-300/60 bg-yellow-300/80 px-1.5 text-[9px] font-extrabold uppercase tracking-wider text-yellow-950 backdrop-blur">
                       {g.brandName ?? g.brandKey}
                     </span>
                   ) : null}
                 </div>
-                <div className="relative -mt-7 px-3 pb-3 pt-0 text-left">
+                <div className="px-3 pb-3 pt-2 text-left">
                   <h3 className="truncate text-sm font-extrabold leading-tight text-white">{g.displayName}</h3>
                   <p className="mt-1 inline-flex h-7 items-center gap-1 rounded-full bg-gradient-to-b from-amber-300 to-amber-500 px-2.5 text-[10px] font-extrabold uppercase tracking-wider text-[#3A1F00] shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]">
                     <Play className="h-3 w-3" />
@@ -303,13 +309,12 @@ export function ProviderGamesSection({ showAdminLink = false }: Props) {
             )}
           >
             <div className="relative aspect-[4/3] overflow-hidden">
-              <CategoryHeroArt code={p.code} className="absolute inset-0 h-full w-full opacity-65" />
-              <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-brand-ink/95 via-brand-ink/40 to-transparent" />
-              <span className="absolute left-2 top-2 inline-flex h-5 items-center rounded-full border border-amber-300/60 bg-amber-200/15 px-1.5 text-[9px] font-bold uppercase tracking-wider text-amber-100 backdrop-blur">
+              <CategoryHeroArt code={p.code} className="absolute inset-0 h-full w-full opacity-80" />
+              <span className="absolute left-2 top-2 inline-flex h-5 items-center rounded-full border border-amber-300/60 bg-amber-200/80 px-1.5 text-[9px] font-bold uppercase tracking-wider text-amber-950 backdrop-blur">
                 {lang === 'bn' ? 'প্রোভাইডার' : 'Provider'}
               </span>
             </div>
-            <div className="relative -mt-7 px-3 pb-3 pt-0">
+            <div className="px-3 pb-3 pt-2">
               <h3 className="truncate text-sm font-extrabold leading-tight text-white">
                 {lang === 'bn' ? p.labelBn : p.labelEn}
               </h3>

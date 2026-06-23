@@ -401,7 +401,12 @@ function ProviderLobbyPageInner() {
                     loading={eager ? 'eager' : 'lazy'}
                     decoding="async"
                     {...({ fetchpriority: eager ? 'high' : 'low' } as Record<string, string>)}
-                    className="absolute inset-0 h-full w-full object-cover"
+                    // object-top (not the default center): live-dealer art
+                    // is taller than the 4:3 card, so a centre crop sliced
+                    // the dealer's HEAD off the top (the client's complaint,
+                    // vs Babu88). Anchoring to the top keeps faces/heads and
+                    // crops the less-important table felt at the bottom.
+                    className="absolute inset-0 h-full w-full object-cover object-top"
                     // optimizeSpeed forces bilinear filtering on the
                     // GPU instead of trilinear/anisotropic, which is
                     // cheaper and avoids the texture-paging that was
@@ -412,13 +417,13 @@ function ProviderLobbyPageInner() {
                 ) : (
                   <CategoryHeroArt code={artFor(g.category)} className="absolute inset-0 h-full w-full opacity-65" />
                 )}
-                {/* Restored absolute gradient div - the inset
-                    box-shadow approach from round 3 was too heavy
-                    (60px blur + 95% opacity) and the client read it
-                    as a black band below the image. The gradient div
-                    is a single compositor layer per card, which we
-                    can afford now that PAGE_SIZE is 18. */}
-                <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-brand-ink/95 via-brand-ink/40 to-transparent" />
+                {/* Babu88-style: NO dark overlay on the artwork. The
+                    title now lives on a strip BELOW the image (see the
+                    footer div), so the thumbnail stays full-brightness
+                    and fully visible. The previous full-image
+                    from-brand-ink/95 gradient darkened the lower ~60% of
+                    every card and was exactly the "too dark" the client
+                    reported. */}
                 {/* Brand-first labelling. The aggregator name is only
                     shown when no brand exists, so cards never read as
                     "iGamingAPIs Aggreg... / JILI" on top of each other.
@@ -437,9 +442,9 @@ function ProviderLobbyPageInner() {
                   </span>
                 )}
               </div>
-              <div className="relative -mt-7 px-3 pb-3 pt-0 text-left">
+              <div className="px-2.5 pb-2.5 pt-2 text-left">
                 <h3 className="truncate text-sm font-extrabold leading-tight text-white">{g.displayName}</h3>
-                <p className="mt-1 inline-flex h-7 items-center gap-1 rounded-full bg-gradient-to-b from-amber-300 to-amber-500 px-2.5 text-[10px] font-extrabold uppercase tracking-wider text-[#3A1F00] shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]">
+                <p className="mt-1.5 inline-flex h-7 items-center gap-1 rounded-full bg-gradient-to-b from-amber-300 to-amber-500 px-2.5 text-[10px] font-extrabold uppercase tracking-wider text-[#3A1F00] shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]">
                   <Play className="h-3 w-3" />
                   {isBusy ? (lang === 'bn' ? 'লোড...' : 'Loading...') : (lang === 'bn' ? 'খেলুন' : 'Play')}
                 </p>
