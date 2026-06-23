@@ -383,46 +383,30 @@ function ProviderLobbyPageInner() {
               {/* Image container - no nested overflow-hidden because the
                   outer button already clips, and a second clip mask
                   forced an extra GPU layer on the Mali compositor.
-                  SQUARE frame + object-contain: the provider catalog mixes
-                  aspect ratios (square JILI / JDB slots + fishing, 4:3
-                  Evolution live-dealer, etc.), so NO single object-cover
-                  ratio can show them all without cropping something.
-                  object-contain shows the COMPLETE artwork at its true ratio
-                  for every game; a blurred copy behind it fills the frame so
-                  there are no empty bars. Works automatically for all 400+
-                  provider games, no per-game thumbnail tuning. */}
+                  SQUARE card + object-cover = the same edge-to-edge filled
+                  look as the approved homepage game cards. Provider
+                  slot/fishing art is ~1:1 so it fills with no crop; landscape
+                  live-dealer art fills with the sides trimmed (dealer stays
+                  centred and full-height). The earlier cropping came from the
+                  old 4:3 card, not from object-cover. */}
               <div className="relative aspect-square">
                 {g.imageUrl && !failedImages.has(key) ? (
-                  <>
-                    {/* Frosted fill. A STATIC filter:blur on a background
-                        layer (NOT backdrop-blur) - it rasterises once and
-                        does not recomposite on scroll, so it stays within the
-                        low-end Mali / UNISOC GPU budget we target. */}
-                    <div
-                      aria-hidden
-                      className="absolute inset-0 scale-110 bg-cover bg-center blur-md"
-                      style={{ backgroundImage: `url("${g.imageUrl}")` }}
-                    />
-                    <div aria-hidden className="absolute inset-0 bg-brand-ink/25" />
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={g.imageUrl}
-                      alt={g.displayName}
-                      width={400}
-                      height={400}
-                      onError={() => markImageFailed(key)}
-                      loading={eager ? 'eager' : 'lazy'}
-                      decoding="async"
-                      {...({ fetchpriority: eager ? 'high' : 'low' } as Record<string, string>)}
-                      // object-contain = the whole image is always visible at
-                      // its true aspect ratio; nothing is ever cropped.
-                      className="absolute inset-0 h-full w-full object-contain"
-                      // optimizeSpeed forces cheaper bilinear GPU filtering,
-                      // avoiding the texture-paging that surfaced as
-                      // pink/magenta banding on Mali G57.
-                      style={{ imageRendering: 'optimizeSpeed' as 'auto' }}
-                    />
-                  </>
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={g.imageUrl}
+                    alt={g.displayName}
+                    width={400}
+                    height={400}
+                    onError={() => markImageFailed(key)}
+                    loading={eager ? 'eager' : 'lazy'}
+                    decoding="async"
+                    {...({ fetchpriority: eager ? 'high' : 'low' } as Record<string, string>)}
+                    className="absolute inset-0 h-full w-full object-cover"
+                    // optimizeSpeed forces cheaper bilinear GPU filtering,
+                    // avoiding the texture-paging that surfaced as
+                    // pink/magenta banding on Mali G57.
+                    style={{ imageRendering: 'optimizeSpeed' as 'auto' }}
+                  />
                 ) : (
                   <CategoryHeroArt code={artFor(g.category)} className="absolute inset-0 h-full w-full opacity-65" />
                 )}
