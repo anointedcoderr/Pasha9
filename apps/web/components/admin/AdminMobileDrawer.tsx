@@ -55,6 +55,7 @@ import {
   PlaySquare,
   Wallet as WalletIcon,
   MessageCircle,
+  Crown,
 } from 'lucide-react';
 import { Logo } from '@/components/site/Logo';
 import { ROUTES } from '@/lib/constants/routes';
@@ -102,6 +103,10 @@ const GROUPS = [
       { key: 'promotionBanners', href: ROUTES.admin.promotionBanners, icon: ImageIcon },
       { key: 'affiliate', href: ROUTES.admin.affiliate, icon: Briefcase },
       { key: 'affiliateTiers', href: ROUTES.admin.affiliateTiers, icon: Trophy },
+      // VIP Club. This drawer keeps its own copy of the nav groups and
+      // drifted from AdminSidebar when VIP was added, so VIP was missing
+      // on mobile (where this drawer, not the desktop sidebar, renders).
+      { key: 'vip', href: '/admin/vip', icon: Crown },
     ],
   },
   {

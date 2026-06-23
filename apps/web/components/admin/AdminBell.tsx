@@ -49,6 +49,38 @@ function relativeTime(iso: string, lang: 'en' | 'bn'): string {
   return lang === 'bn' ? `${diffD} দিন আগে` : `${diffD}d ago`;
 }
 
+// Short two-tone chime for a new admin notification. Uses the Web Audio
+// API so no audio asset is needed. Best-effort: browsers block audio
+// until the user has interacted with the page, but an admin working in
+// the panel has always interacted, so this plays from the second poll
+// onward. Any failure (autoplay policy, no AudioContext) is swallowed.
+let sharedAudioCtx: AudioContext | null = null;
+function playNotifyChime() {
+  try {
+    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!Ctx) return;
+    sharedAudioCtx = sharedAudioCtx ?? new Ctx();
+    const ctx = sharedAudioCtx;
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+    const now = ctx.currentTime;
+    [880, 1175].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      const t = now + i * 0.16;
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(0.25, t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.15);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.16);
+    });
+  } catch {
+    /* autoplay blocked or unsupported - silent */
+  }
+}
+
 export function AdminBell() {
   const router = useRouter();
   const { lang } = useLang();
@@ -56,12 +88,19 @@ export function AdminBell() {
   const [open, setOpen] = useState(false);
   const popRef = useRef<HTMLDivElement | null>(null);
   const btnRef = useRef<HTMLButtonElement | null>(null);
+  const prevUnreadRef = useRef<number | null>(null);
 
   const load = useCallback(async () => {
     try {
       const r = await fetch('/api/admin/me/notifications', { cache: 'no-store', credentials: 'include' });
       if (!r.ok) return;
       const j = (await r.json()) as FeedResponse;
+      // Ding when the unread count climbs (a new admin event landed),
+      // but never on the very first load.
+      if (prevUnreadRef.current !== null && j.unreadCount > prevUnreadRef.current) {
+        playNotifyChime();
+      }
+      prevUnreadRef.current = j.unreadCount;
       setData(j);
     } catch {
       // network blip - keep prior state
