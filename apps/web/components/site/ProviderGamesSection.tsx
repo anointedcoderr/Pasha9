@@ -218,16 +218,25 @@ export function ProviderGamesSection({ showAdminLink = false }: Props) {
               >
                 <div className="relative aspect-square overflow-hidden">
                   {g.imageUrl && !failedImages.has(key) ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={g.imageUrl}
-                      alt={g.displayName}
-                      onError={() => markImageFailed(key)}
-                      // Square card + square provider art = full image, no
-                      // crop (Babu88-style). object-cover keeps full height
-                      // on any non-square art so heads stay visible.
-                      className="absolute inset-0 h-full w-full object-cover"
-                    />
+                    <>
+                      {/* Frosted fill behind an object-contain image so the
+                          COMPLETE art shows at its true aspect ratio (no crop)
+                          and the frame is filled (no bars), for any provider
+                          image size. Static blur, safe on low-end GPUs. */}
+                      <div
+                        aria-hidden
+                        className="absolute inset-0 scale-110 bg-cover bg-center blur-md"
+                        style={{ backgroundImage: `url("${g.imageUrl}")` }}
+                      />
+                      <div aria-hidden className="absolute inset-0 bg-brand-ink/25" />
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={g.imageUrl}
+                        alt={g.displayName}
+                        onError={() => markImageFailed(key)}
+                        className="absolute inset-0 h-full w-full object-contain"
+                      />
+                    </>
                   ) : (
                     <CategoryHeroArt code={artFor(g.category)} className="absolute inset-0 h-full w-full opacity-65" />
                   )}

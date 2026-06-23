@@ -383,41 +383,46 @@ function ProviderLobbyPageInner() {
               {/* Image container - no nested overflow-hidden because the
                   outer button already clips, and a second clip mask
                   forced an extra GPU layer on the Mali compositor.
-                  SQUARE box: provider game art (JILI / JDB slots + fishing)
-                  is 1:1 square, so a square card shows the WHOLE image
-                  edge to edge with no crop, exactly like Babu88. The old
-                  4:3 box forced object-cover to slice the top/bottom off
-                  that square art (the client's "cropped" complaint). */}
+                  SQUARE frame + object-contain: the provider catalog mixes
+                  aspect ratios (square JILI / JDB slots + fishing, 4:3
+                  Evolution live-dealer, etc.), so NO single object-cover
+                  ratio can show them all without cropping something.
+                  object-contain shows the COMPLETE artwork at its true ratio
+                  for every game; a blurred copy behind it fills the frame so
+                  there are no empty bars. Works automatically for all 400+
+                  provider games, no per-game thumbnail tuning. */}
               <div className="relative aspect-square">
                 {g.imageUrl && !failedImages.has(key) ? (
-                  // Width/height attrs let the browser allocate a
-                  // texture sized to the source ratio instead of
-                  // guessing at decode time; combined with explicit
-                  // dimensions on the parent (aspect-square) this kills
-                  // the layout shift that was forcing a re-paint when
-                  // each image's intrinsic size landed.
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={g.imageUrl}
-                    alt={g.displayName}
-                    width={400}
-                    height={400}
-                    onError={() => markImageFailed(key)}
-                    loading={eager ? 'eager' : 'lazy'}
-                    decoding="async"
-                    {...({ fetchpriority: eager ? 'high' : 'low' } as Record<string, string>)}
-                    // Square card + square art = full image, nothing cropped.
-                    // For the occasional non-square art (landscape live-dealer
-                    // shots) object-cover keeps full height so faces stay
-                    // visible and only side scenery is trimmed.
-                    className="absolute inset-0 h-full w-full object-cover"
-                    // optimizeSpeed forces bilinear filtering on the
-                    // GPU instead of trilinear/anisotropic, which is
-                    // cheaper and avoids the texture-paging that was
-                    // surfacing as pink/magenta banding on the larger
-                    // Evolution Live Blackjack art on Mali G57.
-                    style={{ imageRendering: 'optimizeSpeed' as 'auto' }}
-                  />
+                  <>
+                    {/* Frosted fill. A STATIC filter:blur on a background
+                        layer (NOT backdrop-blur) - it rasterises once and
+                        does not recomposite on scroll, so it stays within the
+                        low-end Mali / UNISOC GPU budget we target. */}
+                    <div
+                      aria-hidden
+                      className="absolute inset-0 scale-110 bg-cover bg-center blur-md"
+                      style={{ backgroundImage: `url("${g.imageUrl}")` }}
+                    />
+                    <div aria-hidden className="absolute inset-0 bg-brand-ink/25" />
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={g.imageUrl}
+                      alt={g.displayName}
+                      width={400}
+                      height={400}
+                      onError={() => markImageFailed(key)}
+                      loading={eager ? 'eager' : 'lazy'}
+                      decoding="async"
+                      {...({ fetchpriority: eager ? 'high' : 'low' } as Record<string, string>)}
+                      // object-contain = the whole image is always visible at
+                      // its true aspect ratio; nothing is ever cropped.
+                      className="absolute inset-0 h-full w-full object-contain"
+                      // optimizeSpeed forces cheaper bilinear GPU filtering,
+                      // avoiding the texture-paging that surfaced as
+                      // pink/magenta banding on Mali G57.
+                      style={{ imageRendering: 'optimizeSpeed' as 'auto' }}
+                    />
+                  </>
                 ) : (
                   <CategoryHeroArt code={artFor(g.category)} className="absolute inset-0 h-full w-full opacity-65" />
                 )}
