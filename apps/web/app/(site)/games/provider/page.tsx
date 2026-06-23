@@ -382,13 +382,18 @@ function ProviderLobbyPageInner() {
             >
               {/* Image container - no nested overflow-hidden because the
                   outer button already clips, and a second clip mask
-                  forced an extra GPU layer on the Mali compositor. */}
-              <div className="relative aspect-[4/3]">
+                  forced an extra GPU layer on the Mali compositor.
+                  SQUARE box: provider game art (JILI / JDB slots + fishing)
+                  is 1:1 square, so a square card shows the WHOLE image
+                  edge to edge with no crop, exactly like Babu88. The old
+                  4:3 box forced object-cover to slice the top/bottom off
+                  that square art (the client's "cropped" complaint). */}
+              <div className="relative aspect-square">
                 {g.imageUrl && !failedImages.has(key) ? (
                   // Width/height attrs let the browser allocate a
                   // texture sized to the source ratio instead of
                   // guessing at decode time; combined with explicit
-                  // dimensions on the parent (aspect-[4/3]) this kills
+                  // dimensions on the parent (aspect-square) this kills
                   // the layout shift that was forcing a re-paint when
                   // each image's intrinsic size landed.
                   // eslint-disable-next-line @next/next/no-img-element
@@ -396,17 +401,16 @@ function ProviderLobbyPageInner() {
                     src={g.imageUrl}
                     alt={g.displayName}
                     width={400}
-                    height={300}
+                    height={400}
                     onError={() => markImageFailed(key)}
                     loading={eager ? 'eager' : 'lazy'}
                     decoding="async"
                     {...({ fetchpriority: eager ? 'high' : 'low' } as Record<string, string>)}
-                    // object-top (not the default center): live-dealer art
-                    // is taller than the 4:3 card, so a centre crop sliced
-                    // the dealer's HEAD off the top (the client's complaint,
-                    // vs Babu88). Anchoring to the top keeps faces/heads and
-                    // crops the less-important table felt at the bottom.
-                    className="absolute inset-0 h-full w-full object-cover object-top"
+                    // Square card + square art = full image, nothing cropped.
+                    // For the occasional non-square art (landscape live-dealer
+                    // shots) object-cover keeps full height so faces stay
+                    // visible and only side scenery is trimmed.
+                    className="absolute inset-0 h-full w-full object-cover"
                     // optimizeSpeed forces bilinear filtering on the
                     // GPU instead of trilinear/anisotropic, which is
                     // cheaper and avoids the texture-paging that was

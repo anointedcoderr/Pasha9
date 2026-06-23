@@ -216,17 +216,17 @@ export function ProviderGamesSection({ showAdminLink = false }: Props) {
                   busy && 'opacity-70',
                 )}
               >
-                <div className="relative aspect-[4/3] overflow-hidden">
+                <div className="relative aspect-square overflow-hidden">
                   {g.imageUrl && !failedImages.has(key) ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={g.imageUrl}
                       alt={g.displayName}
                       onError={() => markImageFailed(key)}
-                      // object-top keeps dealer/character heads (top of the
-                      // art) instead of the default centre crop that sliced
-                      // them off. Matches Babu88.
-                      className="absolute inset-0 h-full w-full object-cover object-top"
+                      // Square card + square provider art = full image, no
+                      // crop (Babu88-style). object-cover keeps full height
+                      // on any non-square art so heads stay visible.
+                      className="absolute inset-0 h-full w-full object-cover"
                     />
                   ) : (
                     <CategoryHeroArt code={artFor(g.category)} className="absolute inset-0 h-full w-full opacity-65" />
@@ -308,7 +308,7 @@ export function ProviderGamesSection({ showAdminLink = false }: Props) {
               'cursor-not-allowed opacity-90',
             )}
           >
-            <div className="relative aspect-[4/3] overflow-hidden">
+            <div className="relative aspect-square overflow-hidden">
               <CategoryHeroArt code={p.code} className="absolute inset-0 h-full w-full opacity-80" />
               <span className="absolute left-2 top-2 inline-flex h-5 items-center rounded-full border border-amber-300/60 bg-amber-200/80 px-1.5 text-[9px] font-bold uppercase tracking-wider text-amber-950 backdrop-blur">
                 {lang === 'bn' ? 'প্রোভাইডার' : 'Provider'}

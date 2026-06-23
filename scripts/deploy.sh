@@ -31,8 +31,13 @@ git reset --hard "origin/$BRANCH"
 echo "==> show what we are about to build (sanity)"
 git --no-pager log --oneline -3
 
-echo "==> install dependencies"
-pnpm install --frozen-lockfile
+echo "==> install dependencies (incl devDependencies)"
+# --prod=false forces devDependencies (prisma CLI, tsx, turbo, typescript)
+# to install even when NODE_ENV=production is exported in the shell.
+# Without it, pnpm prunes them and 'prisma generate' / 'next build' fail
+# with ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL.
+unset NODE_ENV
+pnpm install --frozen-lockfile --prod=false
 
 echo "==> sync database schema (this project uses prisma db push, not"
 echo "    migrations: the lone init migration is a stale baseline, so"
