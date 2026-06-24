@@ -20,15 +20,28 @@ import { jsonOk } from '@/lib/auth/errors';
 // We match by substring on the method name so the operator can name
 // the row "bKash", "bkash Send Money", "Nagad", etc. and still get
 // picked up.
+// Name aliases so an operator who named the PaymentMethod row in Bengali
+// (বিকাশ / নগদ) or with a transliteration still gets matched. Before this
+// the deposit gateway tile kept the built-in bK / N badge whenever the
+// brand row was not named with the exact English word, even though the
+// same icon showed correctly on the withdrawal picker.
+const BRAND_ALIASES: Record<'bkash' | 'nagad', string[]> = {
+  bkash: ['bkash', 'bikash', 'বিকাশ'],
+  nagad: ['nagad', 'nogod', 'নগদ'],
+};
+
 async function findBrandIcon(brand: 'bkash' | 'nagad'): Promise<string | null> {
   try {
-    const needle = brand.toLowerCase();
+    const needles = BRAND_ALIASES[brand];
     const rows = await db.paymentMethod.findMany({
       where: { iconUrl: { not: null }, status: 'active' },
       select: { name: true, iconUrl: true, position: true },
       orderBy: { position: 'asc' },
     });
-    const hit = rows.find((r) => r.name.toLowerCase().includes(needle));
+    const hit = rows.find((r) => {
+      const name = r.name.toLowerCase();
+      return needles.some((n) => name.includes(n));
+    });
     return hit?.iconUrl ?? null;
   } catch {
     return null;
