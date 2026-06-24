@@ -13,10 +13,11 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Plug, ArrowRight, Lock, Play } from 'lucide-react';
+import { Plug, ArrowRight, Lock } from 'lucide-react';
 import { useLang } from '@/lib/i18n/context';
 import { cn } from '@/lib/utils/cn';
 import { CategoryHeroArt, type CategoryCode } from './CategoryHeroArt';
+import { ProviderGameCard } from './ProviderGameCard';
 import { DepositRequiredModal, isInsufficientFundsError } from '@/components/native-games/DepositRequiredModal';
 
 interface SlotItem {
@@ -40,21 +41,6 @@ interface Props {
 
 interface ProviderSummary { providerKey: string; name: string; lastSyncAt: string | null; launchMinBalance?: number }
 interface ProviderGameRow { gameUid: string; displayName: string; category: string | null; imageUrl: string | null; brandKey?: string | null; brandName?: string | null }
-
-// Map normalized provider category to the closest hero-art code so
-// failed images fall back to art that matches the game's nature.
-const CATEGORY_TO_ART: Record<string, CategoryCode> = {
-  slots: 'slots',
-  flash: 'liveCasino',
-  table: 'tableGames',
-  fishing: 'fishing',
-  crash: 'crash',
-};
-
-function artFor(category: string | null | undefined): CategoryCode {
-  if (!category) return 'liveCasino';
-  return CATEGORY_TO_ART[category.toLowerCase()] ?? 'liveCasino';
-}
 
 export function ProviderGamesSection({ showAdminLink = false }: Props) {
   const { lang } = useLang();
@@ -201,7 +187,7 @@ export function ProviderGamesSection({ showAdminLink = false }: Props) {
 
         <DepositRequiredModal open={depositOpen} onOpenChange={setDepositOpen} balance={depositInfo.balance} requiredAmount={depositInfo.required} />
 
-        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-5 md:gap-3">
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5 md:gap-3">
           {games.map((g) => {
             const key = `${g.providerKey}:${g.gameUid}`;
             const busy = launching === key;
@@ -211,44 +197,18 @@ export function ProviderGamesSection({ showAdminLink = false }: Props) {
                 type="button"
                 disabled={busy}
                 onClick={() => onLaunch(g.providerKey, g.gameUid)}
-                className={cn(
-                  'group relative overflow-hidden rounded-2xl border border-white/10 bg-brand-ink text-white shadow-[0_8px_24px_-12px_rgba(0,0,0,0.55)] transition',
-                  busy && 'opacity-70',
-                )}
+                className={cn('group block transition active:translate-y-px', busy && 'opacity-70')}
               >
-                <div className="relative aspect-square overflow-hidden">
-                  {g.imageUrl && !failedImages.has(key) ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    // Square card + object-cover = the homepage filled look.
-                    <img
-                      src={g.imageUrl}
-                      alt={g.displayName}
-                      onError={() => markImageFailed(key)}
-                      className="absolute inset-0 h-full w-full object-cover"
-                    />
-                  ) : (
-                    <CategoryHeroArt code={artFor(g.category)} className="absolute inset-0 h-full w-full opacity-65" />
-                  )}
-                  {/* Babu88-style: no dark overlay on the art; the title
-                      sits on a strip below the image so the thumbnail
-                      stays full-brightness. Badges carry their own opaque
-                      backing now that there is no scrim behind them. */}
-                  <span className="absolute left-2 top-2 inline-flex h-5 max-w-[60%] items-center truncate rounded-full border border-amber-300/60 bg-amber-200/80 px-1.5 text-[9px] font-bold uppercase tracking-wider text-amber-950 backdrop-blur">
-                    {g.providerName}
-                  </span>
-                  {g.brandKey ? (
-                    <span className="absolute right-2 top-2 inline-flex h-5 items-center rounded-full border border-yellow-300/60 bg-yellow-300/80 px-1.5 text-[9px] font-extrabold uppercase tracking-wider text-yellow-950 backdrop-blur">
-                      {g.brandName ?? g.brandKey}
-                    </span>
-                  ) : null}
-                </div>
-                <div className="px-3 pb-3 pt-2 text-left">
-                  <h3 className="truncate text-sm font-extrabold leading-tight text-white">{g.displayName}</h3>
-                  <p className="mt-1 inline-flex h-7 items-center gap-1 rounded-full bg-gradient-to-b from-amber-300 to-amber-500 px-2.5 text-[10px] font-extrabold uppercase tracking-wider text-[#3A1F00] shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]">
-                    <Play className="h-3 w-3" />
-                    {busy ? (lang === 'bn' ? 'লোড...' : 'Loading...') : (lang === 'bn' ? 'খেলুন' : 'Play')}
-                  </p>
-                </div>
+                <ProviderGameCard
+                  imageUrl={g.imageUrl}
+                  displayName={g.displayName}
+                  category={g.category}
+                  badgeLabel={g.brandName ?? g.providerName}
+                  busy={busy}
+                  imageFailed={failedImages.has(key)}
+                  onImageError={() => markImageFailed(key)}
+                  lang={lang}
+                />
               </button>
             );
           })}

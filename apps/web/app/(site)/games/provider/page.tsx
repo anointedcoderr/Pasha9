@@ -16,10 +16,10 @@
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { ArrowLeft, ArrowRight, Plug, Play, Search } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Plug, Search } from 'lucide-react';
 import { useLang } from '@/lib/i18n/context';
 import { cn } from '@/lib/utils/cn';
-import { CategoryHeroArt, type CategoryCode } from '@/components/site/CategoryHeroArt';
+import { ProviderGameCard } from '@/components/site/ProviderGameCard';
 import { DepositRequiredModal, isInsufficientFundsError } from '@/components/native-games/DepositRequiredModal';
 
 interface ProviderRow { providerKey: string; name: string; launchMinBalance: number }
@@ -47,13 +47,6 @@ const CATEGORIES = [
   { key: 'sportsbook', en: 'Sportsbook', bn: 'স্পোর্টসবুক' },
 ];
 
-const CATEGORY_TO_ART: Record<string, CategoryCode> = {
-  slots: 'slots', live_casino: 'liveCasino', flash: 'liveCasino', table: 'tableGames', fishing: 'fishing', crash: 'crash', sportsbook: 'sportsbook',
-};
-function artFor(cat: string | null | undefined): CategoryCode {
-  if (!cat) return 'liveCasino';
-  return CATEGORY_TO_ART[cat.toLowerCase()] ?? 'liveCasino';
-}
 
 // 60 -> 24 (round 1) -> 18 (round 2) as the Mali G57 in the Moto G24
 // keeps overrunning the GPU texture budget on dense live-dealer
@@ -346,7 +339,7 @@ function ProviderLobbyPageInner() {
 
       {launchError ? <p className="mt-3 rounded-lg border border-rose-300/60 bg-rose-100 px-3 py-2 text-sm text-rose-700">{launchError}</p> : null}
 
-      <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+      <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5 md:gap-3">
         {games.map((g, idx) => {
           const key = `${g.providerKey}:${g.gameUid}`;
           const isBusy = launching === key;
@@ -361,87 +354,25 @@ function ProviderLobbyPageInner() {
               type="button"
               disabled={isBusy}
               onClick={() => onLaunch(g)}
-              // contain:layout paint isolates this card's compositing
-              // layer so a re-render of one tile cannot force the
-              // entire grid to recomposite. On UNISOC T606 / Mali G57
-              // (Moto G24 Power) the original "shadow + transition +
-              // backdrop-blur per card" combo overran the GPU
-              // compositor and surfaced as duplicated cards / lines /
-              // flicker. Containment plus the smaller per-page card
-              // count keeps the on-screen texture set under that
-              // device's budget. (Round 3 tried contain:strict +
-              // content-visibility:auto + containIntrinsicSize; that
-              // collapsed card height on cards whose actual content
-              // exceeded the 220px hint, producing black bands above
-              // and below the image. Reverted to layout-paint only.)
+              // contain:layout paint isolates this card's compositing layer so
+              // a re-render of one tile cannot force the whole grid to
+              // recomposite (UNISOC T606 / Mali G57 GPU budget on the 400+
+              // card list). Outer button is purely structural - the inner
+              // aspect-square carries the rounded corners + surface bg.
               style={{ contain: 'layout paint' }}
-              className={cn(
-                'group relative overflow-hidden rounded-2xl border border-white/10 bg-brand-ink text-white shadow-[0_4px_12px_-6px_rgba(0,0,0,0.55)] active:scale-[0.98]',
-                isBusy && 'opacity-70',
-              )}
+              className={cn('group block transition active:translate-y-px', isBusy && 'opacity-70')}
             >
-              {/* Image container - no nested overflow-hidden because the
-                  outer button already clips, and a second clip mask
-                  forced an extra GPU layer on the Mali compositor.
-                  SQUARE card + object-cover = the same edge-to-edge filled
-                  look as the approved homepage game cards. Provider
-                  slot/fishing art is ~1:1 so it fills with no crop; landscape
-                  live-dealer art fills with the sides trimmed (dealer stays
-                  centred and full-height). The earlier cropping came from the
-                  old 4:3 card, not from object-cover. */}
-              <div className="relative aspect-square">
-                {g.imageUrl && !failedImages.has(key) ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={g.imageUrl}
-                    alt={g.displayName}
-                    width={400}
-                    height={400}
-                    onError={() => markImageFailed(key)}
-                    loading={eager ? 'eager' : 'lazy'}
-                    decoding="async"
-                    {...({ fetchpriority: eager ? 'high' : 'low' } as Record<string, string>)}
-                    className="absolute inset-0 h-full w-full object-cover"
-                    // optimizeSpeed forces cheaper bilinear GPU filtering,
-                    // avoiding the texture-paging that surfaced as
-                    // pink/magenta banding on Mali G57.
-                    style={{ imageRendering: 'optimizeSpeed' as 'auto' }}
-                  />
-                ) : (
-                  <CategoryHeroArt code={artFor(g.category)} className="absolute inset-0 h-full w-full opacity-65" />
-                )}
-                {/* Babu88-style: NO dark overlay on the artwork. The
-                    title now lives on a strip BELOW the image (see the
-                    footer div), so the thumbnail stays full-brightness
-                    and fully visible. The previous full-image
-                    from-brand-ink/95 gradient darkened the lower ~60% of
-                    every card and was exactly the "too dark" the client
-                    reported. */}
-                {/* Brand-first labelling. The aggregator name is only
-                    shown when no brand exists, so cards never read as
-                    "iGamingAPIs Aggreg... / JILI" on top of each other.
-                    backdrop-blur intentionally NOT used here - on
-                    low-end GPUs a backdrop-blur per card multiplied
-                    across N cards saturated the compositor; the solid
-                    translucent bg gives the same visual weight without
-                    that cost. */}
-                {g.brandName ? (
-                  <span className="absolute left-2 top-2 inline-flex h-5 max-w-[80%] items-center truncate rounded-full border border-yellow-300/60 bg-yellow-300/70 px-1.5 text-[9px] font-extrabold uppercase tracking-wider text-yellow-950">
-                    {g.brandName}
-                  </span>
-                ) : (
-                  <span className="absolute left-2 top-2 inline-flex h-5 max-w-[60%] items-center truncate rounded-full border border-amber-300/60 bg-amber-200/70 px-1.5 text-[9px] font-bold uppercase tracking-wider text-amber-950">
-                    {g.providerName}
-                  </span>
-                )}
-              </div>
-              <div className="px-2.5 pb-2.5 pt-2 text-left">
-                <h3 className="truncate text-sm font-extrabold leading-tight text-white">{g.displayName}</h3>
-                <p className="mt-1.5 inline-flex h-7 items-center gap-1 rounded-full bg-gradient-to-b from-amber-300 to-amber-500 px-2.5 text-[10px] font-extrabold uppercase tracking-wider text-[#3A1F00] shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]">
-                  <Play className="h-3 w-3" />
-                  {isBusy ? (lang === 'bn' ? 'লোড...' : 'Loading...') : (lang === 'bn' ? 'খেলুন' : 'Play')}
-                </p>
-              </div>
+              <ProviderGameCard
+                imageUrl={g.imageUrl}
+                displayName={g.displayName}
+                category={g.category}
+                badgeLabel={g.brandName ?? g.providerName}
+                busy={isBusy}
+                imageFailed={failedImages.has(key)}
+                onImageError={() => markImageFailed(key)}
+                eager={eager}
+                lang={lang}
+              />
             </button>
           );
         })}
