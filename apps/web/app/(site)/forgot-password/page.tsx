@@ -1,27 +1,20 @@
 // Built by Anointed Coder.
 //
-// Public forgot-password entry. Two parallel flows:
+// Public forgot-password entry. Two flows:
 //
-//  1. SMS reset (Firebase Phone Auth). Three steps: phone -> SMS code
-//     -> new password. Renders only when the operator has flipped
-//     SystemSetting 'forgot_password_enabled' = '1' (admin probes
-//     /api/site/config for the flag). Firebase handles SMS delivery,
-//     invisible reCAPTCHA and per-phone abuse controls; the server
-//     verifies the resulting Firebase ID token and mints a single-
-//     use PasswordResetToken.
+//  1. SMS OTP reset. Three steps: phone -> SMS code -> new password.
+//     Renders only when the operator has flipped SystemSetting
+//     'forgot_password_enabled' = '1'. The code is sent through the
+//     configured SMS provider (set at /admin/notifications) and is
+//     verified server side; no third-party identity provider is used.
 //
-//  2. Admin-assisted reset (legacy). Player submits username/phone/
-//     email; admin reviews from /admin/password-resets and hands
-//     back a one-time code that the player redeems at /reset-password.
-//
-// When the Firebase flow is available the legacy card collapses to a
-// small "Need help? Contact support" footer; otherwise the legacy
-// form is the entire page (back-compat with deploys before the
-// Firebase keys were provisioned).
+//  2. Admin-assisted reset (legacy fallback). Player submits username,
+//     phone or email; admin reviews from /admin/password-resets and
+//     hands back a one-time code redeemed at /reset-password.
 
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useLang } from '@/lib/i18n/context';
@@ -35,8 +28,6 @@ import {
   Eye,
   EyeOff,
 } from 'lucide-react';
-import { getFirebaseClientAuth, isFirebaseClientConfigured } from '@/lib/firebase/client';
-import { bdPhoneVariants } from '@/lib/firebase/phone';
 
 type Step = 'phone' | 'code' | 'password' | 'done';
 
@@ -57,16 +48,13 @@ export default function ForgotPasswordPage() {
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
         if (!alive) return;
-        setConfig({
-          forgotPasswordEnabled: Boolean(j?.forgotPasswordEnabled),
-        });
+        setConfig({ forgotPasswordEnabled: Boolean(j?.forgotPasswordEnabled) });
       })
       .catch(() => { if (alive) setConfig({ forgotPasswordEnabled: false }); });
     return () => { alive = false; };
   }, []);
 
-  const firebaseAvailable = isFirebaseClientConfigured();
-  const smsFlowOn = !!config?.forgotPasswordEnabled && firebaseAvailable;
+  const smsFlowOn = !!config?.forgotPasswordEnabled;
 
   return (
     <div className="mx-auto w-full max-w-md py-8">
@@ -88,7 +76,7 @@ export default function ForgotPasswordPage() {
         {config === null ? (
           <p className="mt-6 text-sm text-brand-inkSoft">{bn ? 'লোড হচ্ছে...' : 'Loading...'}</p>
         ) : smsFlowOn ? (
-          <FirebaseFlow router={router} bn={bn} />
+          <SmsOtpFlow router={router} bn={bn} />
         ) : (
           <LegacyFlow bn={bn} />
         )}
@@ -107,10 +95,10 @@ export default function ForgotPasswordPage() {
 }
 
 // =============================================================
-// Firebase three-step flow
+// SMS OTP three-step flow
 // =============================================================
 
-function FirebaseFlow({ router, bn }: { router: ReturnType<typeof useRouter>; bn: boolean }) {
+function SmsOtpFlow({ router, bn }: { router: ReturnType<typeof useRouter>; bn: boolean }) {
   const [step, setStep] = useState<Step>('phone');
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
@@ -118,128 +106,44 @@ function FirebaseFlow({ router, bn }: { router: ReturnType<typeof useRouter>; bn
   const [showPw, setShowPw] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [resetToken, setResetToken] = useState<string | null>(null);
-
-  // Firebase ConfirmationResult lives across step transitions so the
-  // verify call has the right verifier in scope.
-  const confirmationRef = useRef<import('firebase/auth').ConfirmationResult | null>(null);
-  const recaptchaRef = useRef<import('firebase/auth').RecaptchaVerifier | null>(null);
-
-  // Tear down the invisible reCAPTCHA verifier when the component
-  // unmounts so a back-nav does not leak a hidden iframe.
-  useEffect(() => () => {
-    try { recaptchaRef.current?.clear(); } catch { /* ok */ }
-  }, []);
 
   const sendCode = async () => {
     setBusy(true); setError(null);
     try {
-      const variants = bdPhoneVariants(phone);
-      if (!variants) {
-        setError(bn ? 'সঠিক বাংলাদেশী মোবাইল নম্বর লিখুন।' : 'Enter a valid Bangladesh mobile number (01XXXXXXXXX).');
+      const digits = phone.replace(/\D/g, '');
+      if (digits.length < 11) {
+        setError(bn ? 'সঠিক বাংলাদেশী মোবাইল নম্বর লিখুন (01XXXXXXXXX)।' : 'Enter a valid Bangladesh mobile number (01XXXXXXXXX).');
         return;
       }
-      const auth = getFirebaseClientAuth();
-      if (!auth) {
-        setError(bn ? 'SMS রিসেট এখন উপলব্ধ নয়।' : 'SMS reset is not available right now.');
+      const r = await fetch('/api/auth/forgot/sms/start', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ phone }),
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok) {
+        if (j?.code === 'FORGOT_DISABLED') setError(bn ? 'SMS রিসেট বর্তমানে বন্ধ। সাপোর্টে যোগাযোগ করুন।' : 'SMS reset is turned off right now. Please contact support.');
+        else if (r.status === 429) setError(bn ? 'অনেক বেশি চেষ্টা। কিছুক্ষণ পরে আবার চেষ্টা করুন।' : 'Too many attempts. Please try again shortly.');
+        else setError(bn ? 'কোড পাঠানো যায়নি। আবার চেষ্টা করুন।' : 'Could not send the code. Please try again.');
         return;
       }
-      auth.languageCode = bn ? 'bn' : 'en';
-
-      const { RecaptchaVerifier, signInWithPhoneNumber } = await import('firebase/auth');
-      // Reuse a single invisible verifier across retries. Firebase
-      // throws when the same container hosts two verifiers, so the
-      // ref ensures we instantiate once.
-      if (!recaptchaRef.current) {
-        recaptchaRef.current = new RecaptchaVerifier(auth, 'pasha9-recaptcha', {
-          size: 'invisible',
-        });
-      }
-      const confirmation = await signInWithPhoneNumber(auth, variants.e164, recaptchaRef.current);
-      confirmationRef.current = confirmation;
       setStep('code');
-    } catch (err: unknown) {
-      console.error('[forgot] sendCode failed', err);
-      const code = (err as { code?: string })?.code ?? '';
-      if (code === 'auth/too-many-requests') {
-        setError(bn ? 'অনেক বেশি চেষ্টা। কিছুক্ষণ পরে আবার চেষ্টা করুন।' : 'Too many attempts. Please try again later.');
-      } else if (code === 'auth/invalid-phone-number') {
-        setError(bn ? 'অবৈধ ফোন নম্বর।' : 'Invalid phone number.');
-      } else if (code === 'auth/quota-exceeded') {
-        setError(bn ? 'SMS কোটা শেষ। অপারেটরের সাথে যোগাযোগ করুন।' : 'SMS quota exhausted. Please contact support.');
-      } else if (code === 'auth/unauthorized-domain') {
-        // Surface the actionable cause to the operator browsing the
-        // page during smoke-test - the domain has not yet been added
-        // to Firebase's authorised list.
-        setError(bn
-          ? 'এই ডোমেইনটি Firebase-এ অনুমোদিত নয়। অপারেটরের সাথে যোগাযোগ করুন।'
-          : 'This domain is not authorised in Firebase. Add pasha9.com to Firebase Authentication -> Settings -> Authorised domains.');
-      } else if (code === 'auth/billing-not-enabled') {
-        setError(bn ? 'Firebase বিলিং সক্রিয় নয়।' : 'Firebase Blaze plan is not active.');
-      } else if (code === 'auth/captcha-check-failed') {
-        setError(bn ? 'reCAPTCHA যাচাই ব্যর্থ। পৃষ্ঠা রিফ্রেশ করুন এবং আবার চেষ্টা করুন।' : 'reCAPTCHA verification failed. Refresh the page and try again.');
-      } else {
-        setError(bn ? `SMS পাঠানো যায়নি (${code || 'unknown'})। আবার চেষ্টা করুন।` : `Could not send SMS (${code || 'unknown'}). Please try again.`);
-      }
+    } catch {
+      setError(bn ? 'নেটওয়ার্ক ত্রুটি।' : 'Network error.');
     } finally {
       setBusy(false);
     }
   };
 
-  const verifyCode = async () => {
-    setBusy(true); setError(null);
-    try {
-      if (!confirmationRef.current) {
-        setError(bn ? 'কোডটি মেয়াদোত্তীর্ণ। নতুন SMS রিকোয়েস্ট করুন।' : 'Code expired. Request a new SMS.');
-        setStep('phone');
-        return;
-      }
-      const cred = await confirmationRef.current.confirm(code.trim());
-      const idToken = await cred.user.getIdToken(/* forceRefresh */ true);
-
-      const r = await fetch('/api/auth/forgot/phone/verify', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ idToken }),
-      });
-      const j = await r.json().catch(() => null);
-      if (!r.ok) {
-        if (j?.code === 'FORGOT_DISABLED') {
-          setError(bn ? 'SMS রিসেট বর্তমানে বন্ধ। অপারেটরের সাথে যোগাযোগ করুন।' : 'SMS reset is currently disabled. Please contact support.');
-        } else if (r.status === 429) {
-          setError(bn ? 'অনেক বেশি চেষ্টা।' : 'Too many attempts.');
-        } else {
-          setError(bn ? 'যাচাই ব্যর্থ। নতুন কোড রিকোয়েস্ট করুন।' : 'Verification failed. Request a new code.');
-        }
-        return;
-      }
-      if (!j?.resetToken) {
-        // Enumeration-safe: server verified but the phone is not
-        // registered. We surface a friendly error at this point so
-        // the player knows to contact support.
-        setError(bn
-          ? 'এই ফোন নম্বরে কোনো অ্যাকাউন্ট পাওয়া যায়নি। লাইভ সাপোর্টে যোগাযোগ করুন।'
-          : 'No account is registered to this phone. Please contact support.');
-        return;
-      }
-      setResetToken(j.resetToken);
-      setStep('password');
-      // Sign the temporary Firebase user out so the device does not
-      // hold a residual phone-auth session.
-      try { await cred.user.delete(); } catch { /* ok */ }
-    } catch (err: unknown) {
-      console.error('[forgot] verifyCode failed', err);
-      const code = (err as { code?: string })?.code ?? '';
-      if (code === 'auth/invalid-verification-code') {
-        setError(bn ? 'কোডটি ভুল। আবার চেষ্টা করুন।' : 'Incorrect code. Try again.');
-      } else if (code === 'auth/code-expired') {
-        setError(bn ? 'কোডের মেয়াদ শেষ। নতুন SMS রিকোয়েস্ট করুন।' : 'Code expired. Request a new SMS.');
-      } else {
-        setError(bn ? 'যাচাই ব্যর্থ।' : 'Verification failed.');
-      }
-    } finally {
-      setBusy(false);
+  // The code is verified together with the new password in the final
+  // step, so this just sanity-checks the format and advances.
+  const goToPassword = () => {
+    setError(null);
+    if (code.trim().length !== 6) {
+      setError(bn ? '৬-সংখ্যার কোড লিখুন।' : 'Enter the 6-digit code.');
+      return;
     }
+    setStep('password');
   };
 
   const submitPassword = async () => {
@@ -249,24 +153,23 @@ function FirebaseFlow({ router, bn }: { router: ReturnType<typeof useRouter>; bn
         setError(bn ? 'পাসওয়ার্ড কমপক্ষে ৬ অক্ষর হতে হবে।' : 'Password must be at least 6 characters.');
         return;
       }
-      const r = await fetch('/api/auth/forgot/phone/reset', {
+      const r = await fetch('/api/auth/forgot/sms/complete', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ resetToken, newPassword: newPw }),
+        body: JSON.stringify({ phone, code, newPassword: newPw }),
       });
       const j = await r.json().catch(() => null);
       if (!r.ok) {
-        const code = j?.code as string | undefined;
-        if (code === 'EXPIRED') setError(bn ? 'লিংকের মেয়াদ শেষ।' : 'Link expired.');
-        else if (code === 'ALREADY_USED') setError(bn ? 'লিংকটি ইতিমধ্যে ব্যবহার করা হয়েছে।' : 'Link already used.');
-        else if (code === 'INVALID_TOKEN') setError(bn ? 'লিংকটি অবৈধ।' : 'Link invalid.');
+        const c = j?.code as string | undefined;
+        if (c === 'OTP_MISMATCH') { setError(bn ? 'কোডটি ভুল। আবার চেষ্টা করুন।' : 'The code is incorrect. Try again.'); setStep('code'); }
+        else if (c === 'OTP_TOO_MANY_ATTEMPTS' || c === 'OTP_NOT_FOUND' || c === 'ALREADY_USED') { setError(bn ? 'কোডের মেয়াদ শেষ বা ভুল। নতুন কোড নিন।' : 'The code expired or is invalid. Request a new one.'); setStep('phone'); setCode(''); }
+        else if (c === 'USER_BLOCKED') setError(bn ? 'অ্যাকাউন্ট স্থগিত। সাপোর্টে যোগাযোগ করুন।' : 'This account is suspended. Please contact support.');
         else setError(bn ? 'রিসেট ব্যর্থ।' : 'Reset failed.');
         return;
       }
       setStep('done');
       setTimeout(() => router.push('/?login=1'), 2500);
-    } catch (err) {
-      console.error('[forgot] submitPassword failed', err);
+    } catch {
       setError(bn ? 'নেটওয়ার্ক ত্রুটি।' : 'Network error.');
     } finally {
       setBusy(false);
@@ -331,7 +234,7 @@ function FirebaseFlow({ router, bn }: { router: ReturnType<typeof useRouter>; bn
 
       {/* Step 2 - Code */}
       {step === 'code' ? (
-        <form onSubmit={(e) => { e.preventDefault(); void verifyCode(); }} className="space-y-3">
+        <form onSubmit={(e) => { e.preventDefault(); goToPassword(); }} className="space-y-3">
           <label className="block">
             <span className="text-[11px] font-bold uppercase tracking-wider text-brand-inkMute">
               {bn ? '৬-সংখ্যার কোড' : '6-digit code'}
@@ -349,11 +252,11 @@ function FirebaseFlow({ router, bn }: { router: ReturnType<typeof useRouter>; bn
 
           {error ? <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p> : null}
 
-          <button type="submit" disabled={busy || code.length !== 6} className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-gradient-to-b from-amber-300 to-amber-500 text-sm font-extrabold uppercase tracking-wider text-[#3A1F00] disabled:opacity-70">
-            {busy ? (bn ? 'যাচাই হচ্ছে...' : 'Verifying...') : (bn ? 'কোড যাচাই করুন' : 'Verify code')}
+          <button type="submit" disabled={code.length !== 6} className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-gradient-to-b from-amber-300 to-amber-500 text-sm font-extrabold uppercase tracking-wider text-[#3A1F00] disabled:opacity-70">
+            {bn ? 'পরবর্তী ধাপ' : 'Continue'}
           </button>
 
-          <button type="button" onClick={() => { setStep('phone'); setCode(''); }} className="text-xs font-semibold text-brand-blue-600 hover:text-brand-blue-700">
+          <button type="button" onClick={() => { setStep('phone'); setCode(''); setError(null); }} className="text-xs font-semibold text-brand-blue-600 hover:text-brand-blue-700">
             {bn ? 'অন্য নম্বর দিন' : 'Use a different phone'}
           </button>
         </form>
@@ -404,17 +307,10 @@ function FirebaseFlow({ router, bn }: { router: ReturnType<typeof useRouter>; bn
             {bn ? 'পাসওয়ার্ড রিসেট সফল হয়েছে।' : 'Password reset successful.'}
           </p>
           <p className="text-xs">
-            {bn
-              ? 'আপনার নতুন পাসওয়ার্ড দিয়ে লগইন করুন।'
-              : 'Use your new password to log in.'}
+            {bn ? 'আপনার নতুন পাসওয়ার্ড দিয়ে লগইন করুন।' : 'Use your new password to log in.'}
           </p>
         </div>
       ) : null}
-
-      {/* Invisible reCAPTCHA container. Firebase mounts its widget
-          inside this div; we keep size: invisible in the verifier
-          config so the player never sees a challenge. */}
-      <div id="pasha9-recaptcha" aria-hidden className="hidden" />
     </div>
   );
 }
