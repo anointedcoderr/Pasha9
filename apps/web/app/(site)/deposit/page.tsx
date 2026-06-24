@@ -112,7 +112,14 @@ export default function DepositPage() {
   const [expressIcons, setExpressIcons] = useState<{ bkash: string | null; nagad: string | null }>({ bkash: null, nagad: null });
   const [expressBusy, setExpressBusy] = useState<null | 'bkash' | 'nagad'>(null);
   const [expressError, setExpressError] = useState<string | null>(null);
-  const [gatewayChoice, setGatewayChoice] = useState<null | 'bkash' | 'nagad'>(null);
+  const [gatewayChoice, setGatewayChoice] = useState<null | 'bkash' | 'nagad' | 'zinipay'>(null);
+  // ZinIPay hosted-gateway probe. A tile only renders when the operator
+  // has enabled + keyed ZinIPay in /admin/payments. The player picks the
+  // wallet (bKash / Nagad / Rocket) on the ZinIPay page itself, so there
+  // is no per-method choice on our side.
+  const [zinipayAvailable, setZinipayAvailable] = useState(false);
+  const [zinipayIcon, setZinipayIcon] = useState<string | null>(null);
+  const [zinipayBusy, setZinipayBusy] = useState(false);
   const [notices, setNotices] = useState<NoticeRow[]>([]);
   const [noticeOpen, setNoticeOpen] = useState(false);
   const [preview, setPreview] = useState<PreviewState>({ bonusPercentage: 0, bonusAmount: 0, totalCredit: 0 });
@@ -175,6 +182,18 @@ export default function DepositPage() {
         }
       })
       .catch(() => { /* probe is best-effort; Quick Pay just stays hidden */ });
+
+    // ZinIPay availability probe (independent of ChaopaoPay).
+    fetch('/api/payments/zinipay/availability', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!alive) return;
+        if (j?.available) {
+          setZinipayAvailable(true);
+          setZinipayIcon(typeof j.icon === 'string' && j.icon.trim() ? j.icon : null);
+        }
+      })
+      .catch(() => { /* probe is best-effort */ });
 
     fetch('/api/content/deposit-notice', { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
@@ -432,6 +451,46 @@ export default function DepositPage() {
     }
   }, [auth.kind, watchedAmount, promotionIntent, router, lang]);
 
+  // ZinIPay hosted-gateway click handler. Posts to the ZinIPay
+  // create-deposit route and hands the player off to the hosted page.
+  const onZinipayPay = useCallback(async () => {
+    setExpressError(null);
+    setServerError(null);
+    setServerDetail(null);
+    if (auth.kind !== 'authed') { router.push('/?login=1'); return; }
+    const amount = Number(watchedAmount) || 0;
+    if (amount < 100) {
+      setExpressError(lang === 'bn' ? 'নূন্যতম ডিপোজিট ১০০ টাকা।' : 'Minimum deposit is 100 BDT.');
+      return;
+    }
+    setZinipayBusy(true);
+    try {
+      const res = await fetch('/api/payments/zinipay/create-deposit', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          amount,
+          promotionId: promotionIntent?.promotionId ?? undefined,
+          promoCode: promotionIntent?.promoCode ?? undefined,
+        }),
+      });
+      const data = await res.json().catch(() => null) as { paymentUrl?: string; code?: string; message?: string } | null;
+      if (!res.ok || !data?.paymentUrl) {
+        const msg = data?.message ?? data?.code ?? `Gateway error (${res.status}).`;
+        setExpressError(lang === 'bn'
+          ? `গেটওয়ে ত্রুটি: ${msg}. নিচের ফর্ম ব্যবহার করে ম্যানুয়াল ডিপোজিট করুন।`
+          : `${msg} Please use the manual form below.`);
+        return;
+      }
+      window.location.href = data.paymentUrl;
+    } catch {
+      setExpressError(lang === 'bn' ? 'নেটওয়ার্ক ত্রুটি। আবার চেষ্টা করুন।' : 'Network error. Please try again.');
+    } finally {
+      setZinipayBusy(false);
+    }
+  }, [auth.kind, watchedAmount, promotionIntent, router, lang]);
+
   const newRequest = () => {
     setSubmitted(false);
     setSubmittedDepositId(null);
@@ -639,6 +698,38 @@ export default function DepositPage() {
                       </button>
                     ) : null}
 
+                    {/* ZinIPay hosted gateway tile. Player picks the
+                        wallet on the ZinIPay page, so there is no
+                        per-method branch on our side. */}
+                    {zinipayAvailable ? (
+                      <button
+                        type="button"
+                        onClick={() => { setGatewayChoice('zinipay'); setValue('method', '', { shouldValidate: false }); setExpressError(null); }}
+                        className={cn(
+                          'group relative flex aspect-square flex-col items-center justify-center gap-1.5 overflow-hidden rounded-xl border-2 bg-white p-2 text-center transition active:translate-y-px',
+                          gatewayChoice === 'zinipay' ? 'border-sky-500 shadow-[0_0_0_3px_rgba(14,165,233,0.18)]' : 'border-transparent hover:border-sky-300/60',
+                        )}
+                      >
+                        <span className="absolute right-1 top-1 inline-flex items-center rounded-full bg-sky-500/15 px-1.5 py-0.5 text-[8px] font-extrabold uppercase tracking-wider text-sky-700">
+                          {lang === 'bn' ? 'অটো' : 'AUTO'}
+                        </span>
+                        {zinipayIcon ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={zinipayIcon}
+                            alt="ZinIPay"
+                            className="h-11 w-11 rounded-xl object-contain"
+                            onError={() => setZinipayIcon(null)}
+                          />
+                        ) : (
+                          <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-sky-600 text-base font-extrabold text-white shadow-sm">
+                            Z
+                          </span>
+                        )}
+                        <span className="text-[11px] font-bold text-ink-hi">ZinIPay</span>
+                      </button>
+                    ) : null}
+
                     {/* Manual method tiles - skip brand duplicates of
                         bKash and Nagad when the gateway is enabled so
                         the player is not presented with two icons
@@ -697,7 +788,18 @@ export default function DepositPage() {
                       short "redirects to bKash/Nagad" hint; manual
                       tiles render the operator-configured
                       SelectedMethodCard with payment instructions. */}
-                  {gatewayChoice ? (
+                  {gatewayChoice === 'zinipay' ? (
+                    <div className="mt-4 rounded-xl border border-sky-300/60 bg-sky-50 p-3 text-sm text-sky-900">
+                      <p className="font-semibold">
+                        {lang === 'bn' ? 'জিনিপে হোস্টেড পেমেন্ট পৃষ্ঠা' : 'ZinIPay hosted payment page'}
+                      </p>
+                      <p className="mt-1 text-xs">
+                        {lang === 'bn'
+                          ? 'নিচের "জিনিপেতে পে করুন" বোতাম চাপলে জিনিপে পৃষ্ঠায় চলে যাবেন। সেখানে বিকাশ / নগদ / রকেট বেছে নিয়ে পেমেন্ট করুন। সফল হলে কয়েক সেকেন্ডে ওয়ালেট ক্রেডিট হবে।'
+                          : 'Tap the "Pay with ZinIPay" button below to open the secure hosted page, then choose bKash, Nagad or Rocket there. Wallet credits within seconds of a successful payment.'}
+                      </p>
+                    </div>
+                  ) : gatewayChoice ? (
                     <div className="mt-4 rounded-xl border border-emerald-300/60 bg-emerald-50 p-3 text-sm text-emerald-900">
                       <p className="font-semibold">
                         {lang === 'bn'
@@ -820,7 +922,22 @@ export default function DepositPage() {
                 Hidden entirely when nothing is picked so the page
                 does not show a disabled "Submit Request" button
                 before the player has even chosen a method. */}
-            {gatewayChoice ? (
+            {gatewayChoice === 'zinipay' ? (
+              <button
+                type="button"
+                onClick={onZinipayPay}
+                disabled={!canSubmit || zinipayBusy || (Number(watchedAmount) || 0) < 100}
+                className={cn(
+                  'inline-flex h-12 w-full items-center justify-center rounded-xl bg-sky-600 px-5 text-base font-extrabold text-white shadow transition active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50 md:w-auto',
+                )}
+              >
+                {zinipayBusy
+                  ? (lang === 'bn' ? 'লোড...' : 'Opening...')
+                  : (lang === 'bn'
+                      ? `BDT ${(Number(watchedAmount) || 0).toLocaleString()} জিনিপেতে পে করুন`
+                      : `Pay BDT ${(Number(watchedAmount) || 0).toLocaleString()} with ZinIPay`)}
+              </button>
+            ) : gatewayChoice ? (
               <button
                 type="button"
                 onClick={() => onExpressPay(gatewayChoice)}
