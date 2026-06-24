@@ -185,7 +185,7 @@ export async function computeDepositTurnover(userId: string): Promise<DepositTur
       where: {
         userId,
         status: 'approved',
-        ...(depositSince ? { approvedAt: depositSince } : {}),
+        ...(depositSince ? { reviewedAt: depositSince } : {}),
       },
       _sum: { amount: true },
     }),
