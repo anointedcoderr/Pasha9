@@ -18,6 +18,7 @@
 import type { Prisma } from '@prisma/client';
 import { db } from '@/lib/db/client';
 import { sendSms } from '@/lib/sms/service';
+import { sendEmail } from '@/lib/email/send';
 import { isEmailProviderConfigured } from './email-provider';
 
 interface DispatchResult {
@@ -141,19 +142,49 @@ export async function dispatchCampaign(campaignId: string): Promise<DispatchResu
         providerStatus: 'email_provider_missing',
       };
     }
-    // No real email adapter is wired in this codebase. Keep rows
-    // queued and signal upstream that wiring is still required.
+    // Email dispatch path. The SMTP sender mirrors the SMS service: each
+    // send writes a NotificationLog and never throws.
+    for (const r of recipients) {
+      if (!r.email) {
+        await db.campaignRecipient.update({ where: { id: r.id }, data: { status: 'failed', error: 'NO_EMAIL' } });
+        failed += 1;
+        continue;
+      }
+      const res = await sendEmail({
+        email: r.email,
+        subject: campaign.title,
+        html: campaign.body,
+        template: 'campaign',
+        userId: r.userId,
+        triggerKey: 'campaign',
+        meta: { campaignId: campaign.id } as Prisma.JsonObject,
+      });
+      if (res.ok) {
+        sent += 1;
+        await db.campaignRecipient.update({ where: { id: r.id }, data: { status: 'sent', providerMessageId: res.ref ?? null, sentAt: new Date(), error: null } });
+      } else {
+        failed += 1;
+        await db.campaignRecipient.update({ where: { id: r.id }, data: { status: 'failed', error: res.errorCode ?? 'SEND_FAILED' } });
+      }
+    }
+
+    const emailCounts = await db.campaignRecipient.groupBy({ by: ['status'], where: { campaignId }, _count: { _all: true } });
+    const ec = Object.fromEntries(emailCounts.map((c) => [c.status, c._count._all]));
+    const emailSent = ec.sent ?? 0;
+    const emailFailed = ec.failed ?? 0;
+    const emailTotal = Object.values(ec).reduce((acc, n) => acc + n, 0);
+    const emailStatus: DispatchResult['status'] = emailFailed === 0 ? 'sent' : emailSent === 0 ? 'failed' : 'partial';
     await db.campaign.update({
       where: { id: campaignId },
-      data: { status: 'provider_setup_required', providerStatus: 'email_adapter_missing' },
+      data: { status: emailStatus, providerStatus: null, sentCount: emailSent, failedCount: emailFailed, recipientCount: emailTotal, sentAt: new Date() },
     });
     return {
       campaignId,
-      status: 'provider_setup_required',
-      recipientCount: existingCount,
-      sentCount: 0,
-      failedCount: 0,
-      providerStatus: 'email_adapter_missing',
+      status: emailStatus,
+      recipientCount: emailTotal,
+      sentCount: emailSent,
+      failedCount: emailFailed,
+      providerStatus: null,
     };
   }
 
