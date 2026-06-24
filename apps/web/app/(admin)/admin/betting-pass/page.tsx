@@ -205,7 +205,8 @@ export default function AdminBettingPassPage() {
             <Input type="number" step="0.1" value={String(config.pointsPerBdtDeposit)} onChange={(e) => setConfig({ ...config, pointsPerBdtDeposit: Number(e.target.value) || 0 })} />
           </FormField>
           <FormField label="Points per 1 BDT bet">
-            <Input type="number" step="0.1" value={String(config.pointsPerBdtBet)} onChange={(e) => setConfig({ ...config, pointsPerBdtBet: Number(e.target.value) || 0 })} />
+            <Input type="number" step="0.01" min="0" max="1000" value={String(config.pointsPerBdtBet)} onChange={(e) => setConfig({ ...config, pointsPerBdtBet: Number(e.target.value) || 0 })} />
+            <p className="mt-1 text-[11px] text-brand-inkMute">A 100 BDT bet earns this value x 100 points. Use 0.01 for 1 point per 100 BDT, 0.1 for 10, 1 for 100, 10 for 1000. Set to 0 to turn bet points off (deposits still earn).</p>
           </FormField>
           <FormField label="Season key">
             <Input value={config.seasonKey} onChange={(e) => setConfig({ ...config, seasonKey: e.target.value })} placeholder="season_1" />
