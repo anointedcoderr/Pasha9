@@ -219,7 +219,14 @@ export async function runCashbackCampaign(input: CashbackRunInput): Promise<Cash
   const alreadyPaid = await loadPaidUserIds(campaign.id, periodKey);
 
   for (const [userId, totals] of userTotals.entries()) {
-    const base = campaign.source === 'wager_amount' ? totals.bet : totals.bet.sub(totals.win);
+    // Bet amounts are stored negative and wins positive (see
+    // native-games/service.ts + providers/wallet.ts), so a losing
+    // player's signed ledger is negative. Net loss and total wagered
+    // are the negated forms. Without this negation base came out <= 0
+    // for every loss, so cashback was always skipped and never paid.
+    const base = campaign.source === 'wager_amount'
+      ? totals.bet.neg()
+      : totals.bet.add(totals.win).neg();
     if (base.lte(0)) {
       lines.push({ userId, baseAmount: Number(base), cashbackAmount: 0, status: 'skipped_zero' });
       continue;
