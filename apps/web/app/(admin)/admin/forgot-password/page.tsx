@@ -13,7 +13,6 @@ import Link from 'next/link';
 import { PageHeader } from '@/components/site/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Switch } from '@/components/ui/Switch';
-import { Chip } from '@/components/ui/Chip';
 import { KeyRound, ShieldCheck, AlertTriangle, RefreshCw, ArrowRight } from 'lucide-react';
 
 interface Status {
@@ -99,23 +98,13 @@ export default function AdminForgotPasswordPage() {
                 <ShieldCheck className="h-5 w-5" />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-sm font-bold text-brand-ink">Server-side Firebase Admin SDK</p>
-                  <Chip tone={status.adminSdkConfigured ? 'ok' : 'warn'}>
-                    {status.adminSdkConfigured ? 'configured' : 'missing'}
-                  </Chip>
-                </div>
+                <p className="text-sm font-bold text-brand-ink">Password reset by SMS</p>
                 <p className="mt-1 text-xs text-brand-inkSoft">
-                  Set <code className="font-mono">FIREBASE_PROJECT_ID</code>,
-                  {' '}<code className="font-mono">FIREBASE_CLIENT_EMAIL</code> and
-                  {' '}<code className="font-mono">FIREBASE_PRIVATE_KEY</code> in the production env file. After
-                  editing the env, restart pm2: <code className="font-mono">pm2 restart pasha9-web --update-env</code>.
+                  When ON, players reset their password with a one-time code sent by SMS through your
+                  configured provider. Set the provider and API key first at{' '}
+                  <Link href="/admin/notifications" className="font-semibold text-brand-blue-600 hover:text-brand-blue-700">/admin/notifications <ArrowRight className="inline h-3 w-3" /></Link>{' '}
+                  (SMS tab), then send a test SMS so you know codes are being delivered before turning this on.
                 </p>
-                {!status.adminSdkConfigured ? (
-                  <p className="mt-2 text-xs text-amber-300">
-                    Flipping the toggle below while the Admin SDK env is missing will fail with FORGOT_DISABLED on every verify call.
-                  </p>
-                ) : null}
               </div>
             </div>
           </Card>
@@ -138,10 +127,9 @@ export default function AdminForgotPasswordPage() {
 
           <Card padding="md" className="bg-brand-surface/40">
             <p className="text-xs text-brand-inkSoft">
-              <strong>Recommended rollout:</strong> verify Firebase is wired by signing in to a test account, opening
-              <code className="font-mono"> /forgot-password</code> in an incognito window with the flag OFF for everyone
-              else, manually setting <code className="font-mono">forgot_password_enabled=1</code> for your own session
-              first, then flipping the toggle on for production once the test phone receives an SMS and resets cleanly.
+              <strong>Recommended rollout:</strong> first set a live SMS provider at /admin/notifications and send a test SMS,
+              then open <code className="font-mono"> /forgot-password</code> in an incognito window and reset a test account
+              end to end, and only then flip this toggle on for everyone.
             </p>
             <p className="mt-2 text-xs text-brand-inkSoft">
               Audit log: <Link href="/admin/security" className="font-semibold text-brand-blue-600 hover:text-brand-blue-700">/admin/security <ArrowRight className="inline h-3 w-3" /></Link>
