@@ -43,7 +43,11 @@ const NAME_BAN_ALLOWLIST = new Set([
 const C = ['C', 'l', 'a', 'u', 'd', 'e'].join('');
 const A = ['A', 'n', 't', 'h', 'r', 'o', 'p', 'i', 'c'].join('');
 const RETIRED = 'sanjid14';
-const banned = [C, A, RETIRED];
+// The AI toolchain names are never allowed anywhere, not even inside the
+// operational docs on the allowlist. Only the retired brand may still
+// appear inside an allowlisted file.
+const ALWAYS_BANNED = [C, A];
+const ALLOWLISTABLE_BANNED = [RETIRED];
 
 // Encoded so the scanner does not match itself.
 const dashes = [String.fromCharCode(0x2014), String.fromCharCode(0x2013)];
@@ -95,10 +99,13 @@ async function scanFile(file) {
   const allowName = NAME_BAN_ALLOWLIST.has(rel);
 
   lines.forEach((line, idx) => {
+    const lower = line.toLowerCase();
+    for (const b of ALWAYS_BANNED) {
+      if (lower.indexOf(b.toLowerCase()) >= 0) fail(`${rel}:${idx + 1} banned reference to ${b}`);
+    }
     if (!allowName) {
-      for (const b of banned) {
-        const i = line.toLowerCase().indexOf(b.toLowerCase());
-        if (i >= 0) fail(`${rel}:${idx + 1} banned reference to ${b}`);
+      for (const b of ALLOWLISTABLE_BANNED) {
+        if (lower.indexOf(b.toLowerCase()) >= 0) fail(`${rel}:${idx + 1} banned reference to ${b}`);
       }
     }
     for (const d of dashes) {

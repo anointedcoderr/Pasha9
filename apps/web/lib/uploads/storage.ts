@@ -97,7 +97,7 @@ const EXT_BY_MIME: Record<string, string> = {
 
 // Max output width per category. Anything wider gets downscaled; smaller
 // uploads pass through untouched (withoutEnlargement). Drives the "icons
-// and banners appear broken for a few seconds on first paint" fix — the
+// and banners appear broken for a few seconds on first paint" fix. The
 // previous pipeline served a 4MB DSLR JPEG verbatim, which any 3G/4G
 // connection chewed on for seconds. Width here is the visible deployed
 // width at 2x DPR (so 1600 covers a desktop hero on a Retina screen).
@@ -151,7 +151,7 @@ export async function storeFile(category: UploadCategory, file: File): Promise<{
   // Raster images get resized + re-encoded to WebP at upload time.
   // Skip if sharp is not installed (graceful fallback so dev / CI
   // without native deps still works) or if encoding fails for any
-  // reason — the original bytes are written instead. SVG/PDF/APK pass
+  // reason, the original bytes are written instead. SVG/PDF/APK pass
   // through untouched.
   const maxW = RESIZE_MAX_WIDTH[category];
   let outBuf: Buffer = rawBuf;

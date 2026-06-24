@@ -23,3 +23,6 @@ coverage
 # Lives at UPLOAD_ROOT in production (/var/www/pasha9/uploads). The
 # dev path falls back to ./uploads at the repo root.
 /uploads/
+
+# Local AI-assistant tool config. Never part of the shipped product.
+.claude/

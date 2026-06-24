@@ -115,7 +115,7 @@ export async function POST(req: NextRequest) {
       return jsonError(400, 'VALIDATION', 'Provide recipientIds or { all: true }.');
     }
 
-    // Scope strictly to the caller — a stolen recipient id from
+    // Scope strictly to the caller. A stolen recipient id from
     // another admin cannot be silently flipped to read.
     const result = await db.notificationRecipient.updateMany({
       where: {

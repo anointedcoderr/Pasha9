@@ -152,7 +152,7 @@ export function AdminBell() {
         body: JSON.stringify({ recipientIds }),
       });
     } catch {
-      // optimistic — refresh anyway
+      // optimistic, refresh anyway
     }
     load();
   };

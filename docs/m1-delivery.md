@@ -155,7 +155,7 @@ Delivered privately, never committed to git:
 - Commission auto-accrual on each deposit + payout pipeline are M2.
 
 ### Branding gate (enforced on every commit)
-- No `Claude`, `Anthropic`, `sanjid14`, em dash or en dash anywhere in source.
+- No developer-toolchain names, no retired `sanjid14` brand, no em dash or en dash anywhere in source.
 - "Built by Anointed Coder" credit present in footer, admin sidebar, admin login, system settings, source handover and README.
 - Developer Telegram link is `https://t.me/anointedcoder`.
 

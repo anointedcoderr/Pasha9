@@ -96,7 +96,7 @@ Live at `https://pasha9.com`. Final M1 includes the Babu-inspired redesign, real
 - DynamicFavicon swaps `<link rel="icon">` at runtime.
 
 **Branding gate**
-- Enforced on every commit. Blocks `Claude`, `Anthropic`, `sanjid14`, em dash and en dash. Asserts "Built by Anointed Coder" credit in footer + admin sidebar + admin login + system settings + source handover + README.
+- Enforced on every commit. Blocks developer-toolchain names, the retired `sanjid14` brand, em dash and en dash. Asserts "Built by Anointed Coder" credit in footer + admin sidebar + admin login + system settings + source handover + README.
 - Developer Telegram link is `https://t.me/anointedcoder`.
 
 ---
