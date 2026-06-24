@@ -280,7 +280,15 @@ export function LottoTicketCardPremium({ number, drawName, drawAt, status, won, 
               {drawAt ? <p className="text-[10px] text-amber-200/60">{new Date(drawAt).toLocaleString()}</p> : null}
             </div>
             <span className="rounded-full border border-amber-400/40 bg-amber-300/15 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.18em] text-amber-200">
-              {status}
+              {status === 'won'
+                ? (bn ? 'জিতেছে' : 'Won')
+                : status === 'lost'
+                  ? (bn ? 'হেরেছে' : 'Lost')
+                  : status === 'void' || status === 'voided'
+                    ? (bn ? 'বাতিল' : 'Voided')
+                    : status === 'used'
+                      ? (bn ? 'ব্যবহৃত' : 'Used')
+                      : (bn ? 'ড্রয়ের অপেক্ষায়' : 'Pending draw')}
             </span>
           </div>
 
