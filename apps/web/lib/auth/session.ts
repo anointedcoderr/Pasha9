@@ -176,23 +176,24 @@ export async function refreshSession(): Promise<AccessClaims | null> {
   // so admin grants take effect on the next refresh, not just the
   // next login.
   const perms = await loadEffectivePermissions(user.id);
-  // Reissue both cookies (rotates the refresh secret so a stolen
-  // refresh token has a smaller usable window). The DB session row
-  // is replaced via setAuthCookies' insert, which is fine for M1
-  // since the existing row's metadata is already in DB.
-  await setAuthCookies(user.id, user.role.key, perms, {
-    userAgent: session.userAgent ?? undefined,
-    ip: session.ip ?? undefined,
+  // Mint a fresh access cookie for the SAME session. We intentionally do
+  // NOT rotate the refresh secret or create a new session row here: a
+  // single page load fires several /api/auth/me probes in parallel, and
+  // rotating on every call made all but the first lose a refresh-token
+  // race and return 401. That surfaced as the mobile bottom nav showing
+  // Login/Register while the wallet strip showed the same user logged in
+  // (and as intermittent "logged out" reports). The refresh cookie stays
+  // valid until logout, an admin block, or its 90-day expiry, each of
+  // which still revokes it explicitly.
+  const access = await signAccessToken({ sub: user.id, role: user.role.key, perms });
+  const { secure } = cookieOpts();
+  cookies().set(ACCESS_COOKIE, access, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure,
+    path: '/',
+    maxAge: ACCESS_MAX_AGE_SECONDS,
   });
-  // Revoke the old session row so it cannot be replayed.
-  try {
-    await db.session.update({
-      where: { id: session.id },
-      data: { revokedAt: new Date() },
-    });
-  } catch {
-    // best-effort
-  }
 
   return { sub: user.id, role: user.role.key, perms } as AccessClaims;
 }
