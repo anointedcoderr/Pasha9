@@ -4,7 +4,7 @@
 // adapter pattern so a new provider can be added by writing one file
 // and adding it to the registry.
 
-export type SmsProviderKey = 'manual' | 'test' | 'sslwireless' | 'twilio';
+export type SmsProviderKey = 'manual' | 'test' | 'sslwireless' | 'twilio' | 'smsnetbd';
 
 export interface SmsSendResult {
   ok: boolean;

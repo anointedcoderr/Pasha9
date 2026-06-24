@@ -5,15 +5,17 @@ import { manualAdapter } from './manual';
 import { testAdapter } from './test';
 import { sslwirelessAdapter } from './sslwireless';
 import { twilioAdapter } from './twilio';
+import { smsnetbdAdapter } from './smsnetbd';
 
 const REGISTRY: Record<SmsProviderKey, SmsAdapter> = {
   manual: manualAdapter,
   test: testAdapter,
   sslwireless: sslwirelessAdapter,
   twilio: twilioAdapter,
+  smsnetbd: smsnetbdAdapter,
 };
 
-export const SMS_PROVIDER_KEYS: SmsProviderKey[] = ['manual', 'test', 'sslwireless', 'twilio'];
+export const SMS_PROVIDER_KEYS: SmsProviderKey[] = ['manual', 'test', 'sslwireless', 'twilio', 'smsnetbd'];
 
 export function getSmsAdapter(key: string | null | undefined): SmsAdapter {
   if (key && (SMS_PROVIDER_KEYS as string[]).includes(key)) {

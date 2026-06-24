@@ -26,6 +26,8 @@ const ALL_SETTING_KEYS = [
   'sms_twilio_account_sid',
   'sms_twilio_auth_token',
   'sms_twilio_from',
+  'sms_smsnetbd_api_key',
+  'sms_smsnetbd_endpoint',
   'otp_expiry_minutes',
 ];
 

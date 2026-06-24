@@ -22,6 +22,8 @@ const ALLOWED_KEYS = new Set([
   'sms_twilio_account_sid',
   'sms_twilio_auth_token',
   'sms_twilio_from',
+  'sms_smsnetbd_api_key',
+  'sms_smsnetbd_endpoint',
   'pixel_facebook',
   'pixel_facebook_capi_token',
   'pixel_facebook_test_event_code',
