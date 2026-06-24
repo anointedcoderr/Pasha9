@@ -18,6 +18,7 @@
 
 import { db } from '@/lib/db/client';
 import { dispatchFcmToUsers } from '@/lib/push/fcm';
+import { dispatchPushToUsers } from '@/lib/push/dispatch';
 
 export type NotificationKind =
   | 'cashback'
@@ -404,6 +405,18 @@ export async function notifyAdmins(opts: NotifyAdminsOpts): Promise<string | nul
       priority: opts.priority ?? 'normal',
       notificationId: n.id,
     }).catch((err) => console.error('[notifyAdmins] fcm dispatch failed', opts.kind, err));
+
+    // Standard Web Push (VAPID) to admin browser / installed-PWA
+    // subscriptions. This is the channel that works inside an installed
+    // iPhone "Pasha9 Admin" home-screen app, where Firebase FCM web
+    // tokens are not available. No-ops cleanly when VAPID is unset or an
+    // admin has no subscription yet.
+    void dispatchPushToUsers(admins.map((a) => a.id), {
+      title: opts.titleEn,
+      body: opts.bodyEn ?? null,
+      linkUrl: opts.linkUrl ?? null,
+      notificationId: n.id,
+    }).catch((err) => console.error('[notifyAdmins] web-push dispatch failed', opts.kind, err));
 
     return n.id;
   } catch (err) {

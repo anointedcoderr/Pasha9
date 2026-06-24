@@ -1,14 +1,17 @@
 // Built by Anointed Coder.
 //
-// Admin "Enable phone alerts" control. Lets a staff user register THIS
-// device for FCM phone push and send a test. Shown on the admin
-// notifications page. Reuses lib/push/fcm-client.ts.
+// Admin "Enable phone alerts" control. Registers THIS device for Web
+// Push (VAPID) and sends a test. Shown on the admin notifications page.
+// Uses the standard Web Push path (lib/push/client.ts) so it works
+// inside the installed iPhone "Pasha9 Admin" home-screen app, where
+// Firebase FCM web tokens are unavailable. The subscription it creates
+// is the one notifyAdmins() pushes deposit / withdrawal / VIP alerts to.
 
 'use client';
 
 import { useEffect, useState } from 'react';
 import { BellRing, BellOff, Send, Loader2 } from 'lucide-react';
-import { enableAdminPush, disableAdminPush, getAdminPushState } from '@/lib/push/fcm-client';
+import { enableDevicePush, disableDevicePush, checkPushSupport, getNotificationPermission } from '@/lib/push/client';
 
 export function AdminPushToggle() {
   const [enabled, setEnabled] = useState(false);
@@ -17,16 +20,24 @@ export function AdminPushToggle() {
   const [msg, setMsg] = useState<string | null>(null);
 
   const refresh = async () => {
-    const s = await getAdminPushState();
-    setSupported(s.supported);
-    setEnabled(s.enabled);
+    const ok = checkPushSupport() === 'supported';
+    setSupported(ok);
+    let on = false;
+    if (ok) {
+      try {
+        const reg = await navigator.serviceWorker.getRegistration('/');
+        const sub = reg ? await reg.pushManager.getSubscription() : null;
+        on = getNotificationPermission() === 'granted' && Boolean(sub);
+      } catch { on = false; }
+    }
+    setEnabled(on);
   };
 
   useEffect(() => { refresh(); }, []);
 
   const onEnable = async () => {
     setBusy(true); setMsg(null);
-    const res = await enableAdminPush();
+    const res = await enableDevicePush();
     setBusy(false);
     if (res.ok) { setMsg('Phone alerts enabled on this device.'); await refresh(); }
     else setMsg(res.message);
@@ -34,7 +45,7 @@ export function AdminPushToggle() {
 
   const onDisable = async () => {
     setBusy(true); setMsg(null);
-    await disableAdminPush();
+    await disableDevicePush();
     setBusy(false);
     setMsg('Phone alerts disabled on this device.');
     await refresh();
@@ -43,9 +54,10 @@ export function AdminPushToggle() {
   const onTest = async () => {
     setBusy(true); setMsg(null);
     try {
-      const res = await fetch('/api/admin/push-devices/test', { method: 'POST', credentials: 'include' });
-      const j = await res.json();
-      setMsg(j?.push?.sent > 0 ? 'Test sent. Check your phone.' : `No device received it (status: ${j?.push?.status ?? 'unknown'}).`);
+      const res = await fetch('/api/me/push-subscriptions/test', { method: 'POST', credentials: 'include' });
+      const j = await res.json().catch(() => null);
+      const sent = Number(j?.sent ?? j?.result?.sent ?? (res.ok ? 1 : 0));
+      setMsg(sent > 0 ? 'Test sent. Check your phone.' : `No device received it (status: ${j?.status ?? j?.result?.status ?? 'unknown'}).`);
     } catch {
       setMsg('Could not send the test.');
     }
@@ -60,12 +72,13 @@ export function AdminPushToggle() {
       </div>
       <p className="mt-1 text-xs text-brand-inkSoft">
         Get a push notification on this phone for new deposits, withdrawals, VIP applications and other admin actions,
-        even when the screen is locked or the browser is closed. On iPhone, add this site to your Home Screen first.
+        even when the screen is locked or the browser is closed. On iPhone, install the Pasha9 Admin app first: open the
+        admin panel in Safari, tap Share, then Add to Home Screen, open that icon, and enable here.
       </p>
 
       {!supported ? (
         <p className="mt-3 text-xs font-semibold text-amber-600">
-          This browser can&rsquo;t receive push here. On iPhone: Share &rarr; Add to Home Screen, open that, then enable.
+          This browser can&rsquo;t receive push here. On iPhone: open the admin panel, Share &rarr; Add to Home Screen, open that app, then enable.
         </p>
       ) : (
         <div className="mt-4 flex flex-wrap items-center gap-2">

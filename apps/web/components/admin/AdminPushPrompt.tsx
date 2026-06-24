@@ -1,15 +1,17 @@
 // Built by Anointed Coder.
 //
-// One-time, dismissible banner shown in the admin shell when phone push
-// is supported but not yet enabled on this device. Makes the feature
-// discoverable the first time an admin opens the panel on their phone.
+// One-time, dismissible banner shown in the admin shell when web push is
+// supported but not yet enabled on this device. It uses the standard Web
+// Push (VAPID) path so it works inside the installed iPhone "Pasha9
+// Admin" home-screen app, where Firebase FCM web tokens are not
+// available. The same subscription is what notifyAdmins() pushes to.
 // Dismissal is remembered per-device via localStorage.
 
 'use client';
 
 import { useEffect, useState } from 'react';
 import { BellRing, X, Loader2 } from 'lucide-react';
-import { enableAdminPush, getAdminPushState } from '@/lib/push/fcm-client';
+import { enableDevicePush, checkPushSupport, getNotificationPermission } from '@/lib/push/client';
 
 const DISMISS_KEY = 'pasha9_admin_push_prompt_dismissed';
 
@@ -22,8 +24,15 @@ export function AdminPushPrompt() {
     (async () => {
       if (typeof window === 'undefined') return;
       if (localStorage.getItem(DISMISS_KEY) === '1') return;
-      const s = await getAdminPushState();
-      if (s.supported && !s.enabled) setShow(true);
+      if (checkPushSupport() !== 'supported') return;
+      // Already enabled = permission granted AND a live subscription.
+      let enabled = false;
+      try {
+        const reg = await navigator.serviceWorker.getRegistration('/');
+        const sub = reg ? await reg.pushManager.getSubscription() : null;
+        enabled = getNotificationPermission() === 'granted' && Boolean(sub);
+      } catch { enabled = false; }
+      if (!enabled) setShow(true);
     })();
   }, []);
 
@@ -36,7 +45,7 @@ export function AdminPushPrompt() {
 
   const onEnable = async () => {
     setBusy(true); setMsg(null);
-    const res = await enableAdminPush();
+    const res = await enableDevicePush();
     setBusy(false);
     if (res.ok) { try { localStorage.setItem(DISMISS_KEY, '1'); } catch { /* ignore */ } setShow(false); }
     else setMsg(res.message);
