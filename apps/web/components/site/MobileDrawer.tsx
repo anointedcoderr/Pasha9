@@ -8,7 +8,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   X,
   Gift,
@@ -83,6 +83,15 @@ export function MobileDrawer({ open, onClose, isLoggedIn, onRequestLogin, onRequ
   const { lang, setLang } = useLang();
   const pathname = usePathname() ?? '';
   const [apkUrl, setApkUrl] = useState<string | null>(null);
+  const drawerRef = useRef<HTMLElement | null>(null);
+  // Remember which element opened the drawer so focus can be restored to
+  // it on close, per dialog semantics.
+  const triggerRef = useRef<HTMLElement | null>(null);
+  // Hold the latest onClose so the dialog effect can depend only on `open`
+  // and never re-run (and steal focus) when the parent passes a new
+  // callback identity.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
 
   useEffect(() => {
     if (!open) return;
@@ -109,6 +118,83 @@ export function MobileDrawer({ open, onClose, isLoggedIn, onRequestLogin, onRequ
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
 
+  // Dialog behaviour: Escape to close, focus trap while open, and focus
+  // restoration to the trigger on close. The drawer stays mounted for the
+  // slide animation, but when closed it is made inert (below) so its links
+  // are not tabbable.
+  useEffect(() => {
+    if (!open) return;
+
+    // Capture the element that had focus when the drawer opened so we can
+    // return focus there on close.
+    triggerRef.current = (document.activeElement as HTMLElement | null) ?? null;
+
+    const drawer = drawerRef.current;
+    const getFocusable = (): HTMLElement[] => {
+      if (!drawer) return [];
+      return Array.from(
+        drawer.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((el) => el.offsetParent !== null || el === document.activeElement);
+    };
+
+    // Move focus into the drawer (first focusable, typically the close
+    // button) once it is open.
+    const focusFirst = window.setTimeout(() => {
+      const focusable = getFocusable();
+      (focusable[0] ?? drawer)?.focus();
+    }, 0);
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const focusable = getFocusable();
+      if (focusable.length === 0) {
+        e.preventDefault();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const activeEl = document.activeElement as HTMLElement | null;
+      if (e.shiftKey) {
+        if (activeEl === first || !drawer?.contains(activeEl)) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else if (activeEl === last || !drawer?.contains(activeEl)) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.clearTimeout(focusFirst);
+      document.removeEventListener('keydown', onKeyDown);
+      // Restore focus to the trigger when the drawer closes.
+      const trigger = triggerRef.current;
+      if (trigger && typeof trigger.focus === 'function') trigger.focus();
+    };
+  }, [open]);
+
+  // Make the off-screen drawer non-interactive when closed so its ~20
+  // links are not tabbable. `inert` is a DOM property; setting it here
+  // keeps the slide animation intact (the element stays mounted).
+  useEffect(() => {
+    const drawer = drawerRef.current;
+    if (!drawer) return;
+    if (open) {
+      drawer.removeAttribute('inert');
+    } else {
+      drawer.setAttribute('inert', '');
+    }
+  }, [open]);
+
   return (
     <>
       <div
@@ -120,18 +206,22 @@ export function MobileDrawer({ open, onClose, isLoggedIn, onRequestLogin, onRequ
         )}
       />
       <aside
+        ref={drawerRef}
+        role="dialog"
+        aria-modal="true"
+        tabIndex={-1}
         className={cn(
-          'fixed inset-y-0 left-0 z-50 w-[300px] max-w-[88vw] bg-brand-paper text-brand-ink shadow-2xl transition-transform duration-200 ease-out lg:hidden',
+          'fixed inset-y-0 left-0 z-50 w-[300px] max-w-[88vw] bg-brand-paper text-brand-ink shadow-2xl transition-transform duration-200 ease-out lg:hidden outline-none',
           'flex flex-col',
           open ? 'translate-x-0' : '-translate-x-full',
         )}
-        aria-label="Site navigation"
+        aria-label={lang === 'bn' ? 'সাইট নেভিগেশন' : 'Site navigation'}
       >
         <div className="flex items-center justify-between border-b border-brand-divider px-4 py-3">
           <Logo tone="dark" size="md" />
           <button
             type="button"
-            aria-label="Close menu"
+            aria-label={lang === 'bn' ? 'মেনু বন্ধ করুন' : 'Close menu'}
             onClick={onClose}
             className="flex h-9 w-9 items-center justify-center rounded-lg text-brand-inkMute hover:bg-brand-surface"
           >

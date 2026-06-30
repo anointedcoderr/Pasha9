@@ -402,6 +402,14 @@ export default function LottoPage() {
     <div className="space-y-5">
       <BackBar title={lang === 'bn' ? 'লটো' : 'Lotto'} />
 
+      {/* Page heading. The Babu layout below starts at h2 ("Winner of
+          the Day"), so this h1 anchors the document outline and gives
+          screen readers a clear page title. Kept sr-only to match the
+          home page so it adds no visible heading or vertical space. */}
+      <h1 className="sr-only">
+        {lang === 'bn' ? 'পাশা৯ লটো' : 'Pasha 9 Lotto'}
+      </h1>
+
       {/* Premium win popup. Opens automatically when a fresh winning
           row lands and the player has not already dismissed it. */}
       <LottoWinCelebration

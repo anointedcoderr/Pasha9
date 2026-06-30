@@ -14,6 +14,7 @@ import { CategoryHero } from '@/components/site/CategoryHero';
 import { BackBar } from '@/components/site/BackBar';
 import { BettingPassBannerSlider, type BannerRow as SliderBannerRow } from '@/components/site/BettingPassBannerSlider';
 import { useT, useLang } from '@/lib/i18n/context';
+import { useAnnounce } from '@/components/ui/LiveRegion';
 import { triggerWalletRefresh } from '@/components/site/WalletStrip';
 import { Crown, Lock, Star, Zap, Gift, CheckCircle2, AlertTriangle, LogIn } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
@@ -69,6 +70,7 @@ function prettyRewardKind(kind: string, lang: 'en' | 'bn'): string {
 export default function BettingPassPage() {
   const t = useT();
   const { lang } = useLang();
+  const announce = useAnnounce();
   const [auth, setAuth] = useState<AuthState>({ kind: 'checking' });
   const [data, setData] = useState<BettingPassData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -160,10 +162,13 @@ export default function BettingPassPage() {
         ? `রিওয়ার্ড দাবি সম্পন্ন। +${Number(j.rewardAmount).toLocaleString()} ${kindLabel}. পয়েন্ট: ${pointsAfter.toLocaleString()} (খরচ ${spent.toLocaleString()})${turnoverNote}.`
         : `Reward claimed. +${Number(j.rewardAmount).toLocaleString()} ${kindLabel}. Points: ${pointsAfter.toLocaleString()} (spent ${spent.toLocaleString()})${turnoverNote}.`;
       setFlash({ kind: 'ok', text: ok });
+      announce(ok);
       triggerWalletRefresh();
       await refresh();
     } catch (e) {
-      setFlash({ kind: 'err', text: e instanceof Error ? e.message : 'Claim failed' });
+      const errText = e instanceof Error ? e.message : 'Claim failed';
+      setFlash({ kind: 'err', text: errText });
+      announce(lang === 'bn' ? 'দাবি ব্যর্থ হয়েছে। আবার চেষ্টা করুন।' : 'Claim failed. Please try again.', { tone: 'assertive' });
     } finally {
       setClaimingId(null);
     }

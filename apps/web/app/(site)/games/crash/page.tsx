@@ -123,6 +123,16 @@ export default function CrashPage() {
       ng={ng}
       rules={<CrashRules lang={lang} />}
     >
+      {/* Screen-reader announcement of the latest round result. Visually
+          hidden; polite so it does not interrupt other speech. */}
+      <div aria-live="polite" className="sr-only">
+        {last
+          ? last.win
+            ? (lang === 'bn' ? `আপনি জিতেছেন ${formatBDT(last.payout)}` : `You won ${formatBDT(last.payout)}`)
+            : (lang === 'bn' ? 'আপনি হেরেছেন' : 'You lost')
+          : ''}
+      </div>
+
       {/* Curve + crash point display */}
       <GamePanel className="relative overflow-hidden">
         <div aria-hidden className="pointer-events-none absolute inset-0 opacity-50 bg-[radial-gradient(circle_at_50%_30%,rgba(58,134,255,0.15),transparent_60%)]" />
@@ -242,7 +252,7 @@ export default function CrashPage() {
           <p className="text-[10px] font-bold uppercase tracking-wider text-amber-200/80">{lang === 'bn' ? 'সম্ভাব্য জয়' : 'Potential win'}</p>
           <p className="mt-0.5 text-2xl font-extrabold text-amber-100">{formatBDT(Number.isFinite(projectedPayout) ? projectedPayout : 0)}</p>
         </div>
-        {error ? <p className="mt-2 text-sm text-rose-300">{error}</p> : null}
+        {error ? <p role="alert" className="mt-2 text-sm text-rose-300">{error}</p> : null}
       </GamePanel>
 
       {/* Recent crash points */}

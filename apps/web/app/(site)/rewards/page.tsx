@@ -122,7 +122,40 @@ export default function RewardsPage() {
   const [landingIndex, setLandingIndex] = useState<number | null>(null);
   const [winnersRefreshKey, setWinnersRefreshKey] = useState(0);
   const [celebrationOpen, setCelebrationOpen] = useState(false);
+  // Screen-reader announcement for the spin outcome. The visible win is
+  // a modal that only opens on a prize; a loss / no-prize used to be
+  // completely silent. This inline polite live region announces EVERY
+  // outcome (win amount or no-prize), so assistive tech always hears the
+  // result of the spin.
+  const [spinAnnouncement, setSpinAnnouncement] = useState('');
   const pendingResultRef = useRef<{ label: string; payoutType: string; payoutAmount: number } | null>(null);
+
+  // Build a bilingual screen-reader sentence for any spin outcome.
+  const announceSpinResult = useCallback((settled: { label: string; payoutType: string; payoutAmount: number }) => {
+    let message: string;
+    if (settled.payoutAmount > 0) {
+      if (settled.payoutType === 'bonus') {
+        message = bn
+          ? `অভিনন্দন। আপনি ${settled.label} জিতেছেন। ${settled.payoutAmount} বোনাস যোগ হয়েছে।`
+          : `Congratulations. You won ${settled.label}. ${settled.payoutAmount} bonus added.`;
+      } else if (settled.payoutType === 'coins') {
+        message = bn
+          ? `অভিনন্দন। আপনি ${settled.label} জিতেছেন। ${settled.payoutAmount} কয়েন যোগ হয়েছে।`
+          : `Congratulations. You won ${settled.label}. ${settled.payoutAmount} coins added.`;
+      } else {
+        message = bn
+          ? `অভিনন্দন। আপনি ${settled.label} জিতেছেন। পুরস্কার আপনার অ্যাকাউন্টে জমা হয়েছে।`
+          : `Congratulations. You won ${settled.label}. The prize has been credited to your account.`;
+      }
+    } else {
+      message = bn
+        ? 'এইবার কোনো পুরস্কার নেই। আবার চেষ্টা করুন।'
+        : 'No prize this time. Please try again.';
+    }
+    // Clear first so an identical repeated result is still re-announced.
+    setSpinAnnouncement('');
+    window.setTimeout(() => setSpinAnnouncement(message), 50);
+  }, [bn]);
 
   const loadMe = useCallback(async () => {
     const r = await fetch('/api/rewards/me', { cache: 'no-store', credentials: 'include' });
@@ -311,7 +344,9 @@ export default function RewardsPage() {
       if (idx == null) {
         // Server returned no index (extremely defensive); just resolve
         // immediately so the user is not stuck.
-        setSpinResult({ label: j.segmentLabel, payoutType: j.payoutType, payoutAmount: j.payoutAmount });
+        const immediate = { label: j.segmentLabel, payoutType: j.payoutType, payoutAmount: j.payoutAmount };
+        setSpinResult(immediate);
+        announceSpinResult(immediate);
         setSpinning(false);
         await loadMe();
         triggerWalletRefresh();
@@ -340,6 +375,7 @@ export default function RewardsPage() {
     if (pendingResultRef.current) {
       const settled = pendingResultRef.current;
       setSpinResult(settled);
+      announceSpinResult(settled);
       // Surface the celebration modal only when there was an actual
       // prize. The inline emerald pill (rendered next to the wheel)
       // still covers the no-prize case so the user is not
@@ -351,7 +387,7 @@ export default function RewardsPage() {
     loadMe();
     triggerWalletRefresh();
     setWinnersRefreshKey((k) => k + 1);
-  }, [loadMe]);
+  }, [loadMe, announceSpinResult]);
 
   return (
     <div className="space-y-6 pb-24">
@@ -539,6 +575,19 @@ export default function RewardsPage() {
                 onSpinClick={onSpin}
               />
             </SpinStage>
+
+            {/* Visually hidden live region co-located with the wheel so
+                every spin outcome (win amount or no-prize) is announced
+                to screen readers, including the loss case that never
+                opens the celebration modal. */}
+            <div
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+              className="pointer-events-none absolute h-px w-px overflow-hidden whitespace-nowrap border-0 p-0 [clip:rect(0,0,0,0)]"
+            >
+              {spinAnnouncement}
+            </div>
 
             <SpinWinnersMarquee tierKey={selectedTierKey} refreshKey={winnersRefreshKey} />
 

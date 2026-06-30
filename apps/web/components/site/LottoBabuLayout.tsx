@@ -132,17 +132,34 @@ function Countdown({ drawsAt }: { drawsAt: string | null }) {
     return () => window.clearInterval(id);
   }, [drawsAt]);
 
+  // Spoken duration for screen readers. The bare "07 : 23 : 41" digits
+  // carry no unit context, so we build one label that names hours,
+  // minutes and seconds and hide the individual digit spans from
+  // assistive tech (they stay visible for sighted users).
+  const h = Number(time.hh);
+  const m = Number(time.mm);
+  const s = Number(time.ss);
+  const durationLabel = time.expired
+    ? (bn ? 'ড্র শুরু হচ্ছে' : 'Draw is starting')
+    : bn
+      ? `পরবর্তী ড্র শুরু হতে ${h} ঘণ্টা ${m} মিনিট ${s} সেকেন্ড বাকি`
+      : `${h} hours ${m} minutes ${s} seconds until the next draw`;
+
   return (
     <section className="rounded-xl border border-brand-divider bg-brand-paper px-4 py-5 text-center">
       <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand-inkSoft">
         {bn ? 'পরবর্তী ড্র শুরু হবে' : 'Next Draw Starts In'}
       </p>
-      <p className="mt-2 inline-flex items-baseline gap-2 text-4xl font-extrabold tabular-nums text-brand-ink sm:text-5xl">
-        <span>{time.hh}</span>
-        <span className="text-brand-inkMute">:</span>
-        <span>{time.mm}</span>
-        <span className="text-brand-inkMute">:</span>
-        <span>{time.ss}</span>
+      <p
+        role="timer"
+        aria-label={durationLabel}
+        className="mt-2 inline-flex items-baseline gap-2 text-4xl font-extrabold tabular-nums text-brand-ink sm:text-5xl"
+      >
+        <span aria-hidden="true">{time.hh}</span>
+        <span aria-hidden="true" className="text-brand-inkMute">:</span>
+        <span aria-hidden="true">{time.mm}</span>
+        <span aria-hidden="true" className="text-brand-inkMute">:</span>
+        <span aria-hidden="true">{time.ss}</span>
       </p>
     </section>
   );

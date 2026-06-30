@@ -9,6 +9,7 @@ import { BackBar } from '@/components/site/BackBar';
 import { PromotionBannerSlider, type PromotionBannerRow } from '@/components/site/PromotionBannerSlider';
 import { PromoCodeRedeem } from '@/components/site/PromoCodeRedeem';
 import { useT, useLang } from '@/lib/i18n/context';
+import { useAnnounce } from '@/components/ui/LiveRegion';
 import { Gift, Sparkles, Crown, Repeat, Users, Send, Ticket, Star, BadgePlus, AlertCircle, CheckCircle2, Lock } from 'lucide-react';
 import { formatBDT } from '@/lib/utils/format';
 
@@ -73,6 +74,7 @@ type ClaimToast = { promoId: string; kind: 'ok' | 'err'; message: string };
 export default function PromotionsPage() {
   const t = useT();
   const { lang } = useLang();
+  const announce = useAnnounce();
   const [filter, setFilter] = useState<Filter>('all');
   const [list, setList] = useState<Promo[]>([]);
   const [banners, setBanners] = useState<PromotionBannerRow[]>([]);
@@ -144,23 +146,21 @@ export default function PromotionsPage() {
         return;
       }
       if (!response.ok || data?.action !== 'direct_claim_success') {
-        setToast({
-          promoId: promotion.id,
-          kind: 'err',
-          message: data?.message ?? (lang === 'bn' ? 'এই প্রমোশনটি এখন উপলব্ধ নয়।' : 'This promotion is not available right now.'),
-        });
+        const errMessage = data?.message ?? (lang === 'bn' ? 'এই প্রমোশনটি এখন উপলব্ধ নয়।' : 'This promotion is not available right now.');
+        setToast({ promoId: promotion.id, kind: 'err', message: errMessage });
+        announce(errMessage, { tone: 'assertive' });
         return;
       }
-      setToast({
-        promoId: promotion.id,
-        kind: 'ok',
-        message: lang === 'bn'
-          ? `${formatBDT(Number(data.amount ?? 0))} বোনাস আপনার অ্যাকাউন্টে যোগ হয়েছে।`
-          : `${formatBDT(Number(data.amount ?? 0))} bonus credited to your account.`,
-      });
+      const okMessage = lang === 'bn'
+        ? `${formatBDT(Number(data.amount ?? 0))} বোনাস আপনার অ্যাকাউন্টে যোগ হয়েছে।`
+        : `${formatBDT(Number(data.amount ?? 0))} bonus credited to your account.`;
+      setToast({ promoId: promotion.id, kind: 'ok', message: okMessage });
+      announce(okMessage);
       loadPromotions();
     } catch (cause) {
-      setToast({ promoId: promotion.id, kind: 'err', message: cause instanceof Error ? cause.message : 'Claim failed' });
+      const errMessage = cause instanceof Error ? cause.message : 'Claim failed';
+      setToast({ promoId: promotion.id, kind: 'err', message: errMessage });
+      announce(errMessage, { tone: 'assertive' });
     } finally {
       setClaiming(null);
     }

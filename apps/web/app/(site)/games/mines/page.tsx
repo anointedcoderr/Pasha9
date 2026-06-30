@@ -214,6 +214,16 @@ export default function MinesPage() {
       ng={ng}
       rules={<MinesRules lang={lang} />}
     >
+      {/* Screen-reader announcement of the latest round outcome. Visually
+          hidden; polite so it does not interrupt other speech. */}
+      <div aria-live="polite" className="sr-only">
+        {round?.kind === 'cashout'
+          ? (lang === 'bn' ? `আপনি জিতেছেন ${formatBDT(round.payout)}` : `You won ${formatBDT(round.payout)}`)
+          : round?.kind === 'loss'
+            ? (lang === 'bn' ? 'আপনি হেরেছেন' : 'You lost')
+            : ''}
+      </div>
+
       {/* Multiplier strip */}
       <GamePanel>
         <div className="grid grid-cols-3 gap-3 text-center">
@@ -315,7 +325,7 @@ export default function MinesPage() {
             </button>
           </div>
         ) : null}
-        {error ? <p className="mt-3 text-sm text-rose-300">{error}</p> : null}
+        {error ? <p role="alert" className="mt-3 text-sm text-rose-300">{error}</p> : null}
       </GamePanel>
 
       {/* Bet card with Start / Cashout */}

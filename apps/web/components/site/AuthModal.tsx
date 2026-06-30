@@ -109,7 +109,8 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
       });
       const data = await res.json();
       if (!res.ok) {
-        setApiError({ code: data.code ?? 'ERROR', message: data.message });
+        const err = { code: data.code ?? 'ERROR', message: data.message };
+        setApiError(err);
         return;
       }
       if (data?.challenge === true && typeof data.challengeToken === 'string') {
@@ -120,7 +121,8 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
       }
       completeSuccess();
     } catch {
-      setApiError({ code: 'NETWORK_ERROR', message: 'Could not reach server' });
+      const msg = bn ? 'সার্ভারে পৌঁছানো যায়নি।' : 'Could not reach server.';
+      setApiError({ code: 'NETWORK_ERROR', message: msg });
     } finally {
       setLoading(false);
     }
@@ -140,17 +142,21 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
       const data = await res.json();
       if (!res.ok) {
         if (data?.code === 'CHALLENGE_INVALID') {
-          setApiError({ code: 'CHALLENGE_INVALID', message: 'The verification window expired. Please log in again.' });
+          const msg = bn ? 'যাচাইয়ের সময়সীমা শেষ। অনুগ্রহ করে আবার লগইন করুন।' : 'The verification window expired. Please log in again.';
+          setApiError({ code: 'CHALLENGE_INVALID', message: msg });
           setChallenge(null);
           setCode('');
           return;
         }
-        setApiError({ code: data.code ?? 'ERROR', message: data.message ?? '2FA verification failed.' });
+        const fallback = bn ? 'টু-ফ্যাক্টর যাচাই ব্যর্থ হয়েছে।' : '2FA verification failed.';
+        const err = { code: data.code ?? 'ERROR', message: data.message ?? fallback };
+        setApiError(err);
         return;
       }
       completeSuccess();
     } catch {
-      setApiError({ code: 'NETWORK_ERROR', message: 'Could not reach server' });
+      const msg = bn ? 'সার্ভারে পৌঁছানো যায়নি।' : 'Could not reach server.';
+      setApiError({ code: 'NETWORK_ERROR', message: msg });
     } finally {
       setLoading(false);
     }
@@ -195,7 +201,7 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
           />
         </FormField>
         {apiError ? (
-          <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{apiError.message ?? apiError.code}</p>
+          <p role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{apiError.message ?? apiError.code}</p>
         ) : null}
         <Button full type="submit" size="lg" variant="gold" loading={loading} disabled={!code.trim() || (!useRecovery && code.length !== 6)}>
           {bn ? 'যাচাই করুন এবং লগইন' : 'Verify + sign in'}
@@ -224,7 +230,11 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-      <FormField label={t('auth.phone')} required error={errors.identifier?.message}>
+      <FormField
+        label={t('auth.phone')}
+        required
+        error={errors.identifier ? (bn ? 'ইউজারনেম বা ফোন নম্বর ৩ থেকে ৬৪ অক্ষরের হতে হবে।' : 'Username or phone must be 3 to 64 characters.') : undefined}
+      >
         <Input
           leftIcon={<Phone className="h-4 w-4" />}
           placeholder="01XXXXXXXXX or username"
@@ -247,7 +257,7 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
         <a href="/forgot-password" className="font-semibold text-brand-blue-600 hover:text-brand-blue-700">{t('auth.forgot')}</a>
       </div>
       {apiError ? (
-        <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{apiError.message ?? apiError.code}</p>
+        <p role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{apiError.message ?? apiError.code}</p>
       ) : null}
       <Button full type="submit" size="lg" variant="gold" loading={loading} leftIcon={<KeyRound className="h-4 w-4" />}>
         {t('common.login')}
@@ -258,6 +268,8 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
 
 function SignupForm({ onSuccess, onSwitch }: { onSuccess: () => void; onSwitch: () => void }) {
   const t = useT();
+  const { lang } = useLang();
+  const bn = lang === 'bn';
   const router = useRouter();
   const params = useSearchParams();
   const [loading, setLoading] = useState(false);
@@ -290,7 +302,8 @@ function SignupForm({ onSuccess, onSwitch }: { onSuccess: () => void; onSwitch: 
       });
       const data = await res.json();
       if (!res.ok) {
-        setApiError({ code: data.code ?? 'ERROR', message: data.message });
+        const err = { code: data.code ?? 'ERROR', message: data.message };
+        setApiError(err);
         return;
       }
       onSuccess();
@@ -304,7 +317,8 @@ function SignupForm({ onSuccess, onSwitch }: { onSuccess: () => void; onSwitch: 
         router.refresh();
       }, 0);
     } catch {
-      setApiError({ code: 'NETWORK_ERROR', message: 'Could not reach server' });
+      const msg = bn ? 'সার্ভারে পৌঁছানো যায়নি।' : 'Could not reach server.';
+      setApiError({ code: 'NETWORK_ERROR', message: msg });
     } finally {
       setLoading(false);
     }
@@ -334,7 +348,7 @@ function SignupForm({ onSuccess, onSwitch }: { onSuccess: () => void; onSwitch: 
         <span>{t('auth.agree')}</span>
       </label>
       {errors.agree ? <p className="-mt-2 text-xs text-signal-danger">{t(`auth.${errors.agree.message}`)}</p> : null}
-      {apiError ? <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{apiError.message ?? apiError.code}</p> : null}
+      {apiError ? <p role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{apiError.message ?? apiError.code}</p> : null}
       <Button full type="submit" size="lg" variant="gold" loading={loading} leftIcon={<UserPlus className="h-4 w-4" />}>
         {t('common.signup')}
       </Button>

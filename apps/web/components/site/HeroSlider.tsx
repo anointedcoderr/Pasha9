@@ -14,7 +14,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useT, useLang } from '@/lib/i18n/context';
-import { ChevronLeft, ChevronRight, Sparkles, Gift, Volume2, VolumeX, Gamepad2, ArrowDownToLine, Wallet as WalletIcon } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Sparkles, Gift, Volume2, VolumeX, Gamepad2, ArrowDownToLine, Wallet as WalletIcon, Pause, Play } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils/cn';
 
@@ -248,6 +248,24 @@ export function HeroSlider() {
   const [muted, setMuted] = useState(true);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
+  // Auto-advance controls. `paused` is the player's explicit pause/play
+  // choice plus transient hover/focus pauses; `reducedMotion` mirrors the
+  // OS prefers-reduced-motion setting and hard-stops auto-rotation so the
+  // carousel never moves on its own for motion-sensitive users. Manual
+  // arrows / dots still work in every case.
+  const [paused, setPaused] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const apply = () => setReducedMotion(mq.matches);
+    apply();
+    mq.addEventListener('change', apply);
+    return () => mq.removeEventListener('change', apply);
+  }, []);
+
   useEffect(() => { setI(0); }, [slides.length]);
 
   // Mobile swipe. Touch handlers are wired directly on the section so
@@ -280,11 +298,12 @@ export function HeroSlider() {
   // the visitor can actually watch some of it before we move on.
   useEffect(() => {
     if (slides.length <= 1) return;
+    if (reducedMotion || paused || hovered) return;
     const active = slides[i];
     const dwell = active?.mediaType === 'video' && active.videoUrl ? VIDEO_MAX_DWELL_MS : IMAGE_ROTATE_MS;
     const id = setTimeout(() => setI((p) => (p + 1) % slides.length), dwell);
     return () => clearTimeout(id);
-  }, [slides, i]);
+  }, [slides, i, reducedMotion, paused, hovered]);
 
   // Keep <video> in sync with the mute toggle.
   useEffect(() => {
@@ -306,6 +325,14 @@ export function HeroSlider() {
     <section
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onFocusCapture={() => setHovered(true)}
+      onBlurCapture={(e) => {
+        // Resume only when focus actually leaves the slider, not when it
+        // moves between the slider's own controls.
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setHovered(false);
+      }}
       style={{ touchAction: 'pan-y' }}
       className="relative overflow-hidden rounded-2xl border border-brand-yellow-500/20 bg-brand-ink text-white shadow-[0_22px_56px_-32px_rgba(245,180,0,0.5)] select-none"
     >
@@ -418,7 +445,7 @@ export function HeroSlider() {
                 <Sparkles className="h-3 w-3" /> {t('home.tickerLabel')}
               </div>
               {slide.title?.trim() ? (
-                <h1
+                <h2
                   className="mt-3 text-[26px] font-black leading-[1.05] tracking-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.55)] md:text-[44px]"
                   style={{
                     backgroundImage: 'linear-gradient(180deg,#FFFFFF 0%,#FFE9A8 78%,#F5B400 100%)',
@@ -428,7 +455,7 @@ export function HeroSlider() {
                   }}
                 >
                   {slide.title}
-                </h1>
+                </h2>
               ) : null}
               {slide.subtitle?.trim() ? (
                 <p className="mt-3 max-w-md text-[13px] leading-snug text-white/85 drop-shadow md:text-[15px]">{slide.subtitle}</p>
@@ -484,6 +511,24 @@ export function HeroSlider() {
           />
         ))}
       </div>
+
+      {/* Pause / play control for the auto-rotation. Hidden when reduced
+          motion already stopped rotation or when there is a single slide. */}
+      {slides.length > 1 && !reducedMotion ? (
+        <button
+          type="button"
+          onClick={() => setPaused((p) => !p)}
+          aria-pressed={paused}
+          aria-label={
+            paused
+              ? (lang === 'bn' ? 'স্বয়ংক্রিয় স্লাইড চালু করুন' : 'Play automatic slideshow')
+              : (lang === 'bn' ? 'স্বয়ংক্রিয় স্লাইড থামান' : 'Pause automatic slideshow')
+          }
+          className="absolute bottom-2 right-3 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur transition hover:bg-black/65 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-yellow-500/60"
+        >
+          {paused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
+        </button>
+      ) : null}
 
       <button
         type="button"

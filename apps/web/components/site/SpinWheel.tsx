@@ -118,9 +118,10 @@ export function SpinWheel({ segments, spinning, landingIndex, onLandingComplete,
       className="relative inline-block select-none"
       style={{ width: size, height: size }}
       aria-label={bn ? 'লাকি স্পিন হুইল' : 'Lucky spin wheel'}
+      aria-busy={spinning}
     >
       {/* Outer metallic gold rim */}
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="absolute inset-0">
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="absolute inset-0" aria-hidden>
         <defs>
           <radialGradient id="rim-gradient" cx="50%" cy="50%" r="50%">
             <stop offset="80%" stopColor="#7A4F00" />
@@ -167,7 +168,7 @@ export function SpinWheel({ segments, spinning, landingIndex, onLandingComplete,
           if (spinning && onLandingComplete) onLandingComplete();
         }}
       >
-        <svg width={size - 44} height={size - 44} viewBox={`0 0 ${size - 44} ${size - 44}`}>
+        <svg width={size - 44} height={size - 44} viewBox={`0 0 ${size - 44} ${size - 44}`} aria-hidden>
           {empty ? (
             <circle cx={(size - 44) / 2} cy={(size - 44) / 2} r={(size - 44) / 2 - 4} fill="#1F2937" />
           ) : (

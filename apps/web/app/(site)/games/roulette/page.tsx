@@ -125,6 +125,16 @@ export default function RoulettePage() {
       ng={ng}
       rules={<RouletteRules lang={lang} />}
     >
+      {/* Screen-reader announcement of the latest spin result. Visually
+          hidden; polite so it does not interrupt other speech. */}
+      <div aria-live="polite" className="sr-only">
+        {last
+          ? last.win
+            ? (lang === 'bn' ? `আপনি জিতেছেন ${formatBDT(last.payout)}` : `You won ${formatBDT(last.payout)}`)
+            : (lang === 'bn' ? 'আপনি হেরেছেন' : 'You lost')
+          : ''}
+      </div>
+
       {/* Result + wheel */}
       <GamePanel className="relative overflow-hidden">
         <div aria-hidden className="pointer-events-none absolute inset-0 opacity-50 bg-[radial-gradient(circle_at_50%_40%,rgba(214,40,40,0.20),transparent_60%)]" />
@@ -202,7 +212,7 @@ export default function RoulettePage() {
           <Stat label={lang === 'bn' ? 'পেআউট' : 'Payout'} value={`${projectedMultiplier}x`} />
           <Stat label={lang === 'bn' ? 'সম্ভাব্য জয়' : 'Potential win'} value={formatBDT(Number.isFinite(projectedPayout) ? projectedPayout : 0)} accent />
         </div>
-        {error ? <p className="mt-3 text-sm text-rose-300">{error}</p> : null}
+        {error ? <p role="alert" className="mt-3 text-sm text-rose-300">{error}</p> : null}
       </GamePanel>
 
       <BetCard

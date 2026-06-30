@@ -14,7 +14,7 @@
 
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
@@ -29,6 +29,7 @@ import { Card, CardHeader } from '@/components/ui/Card';
 import { DepositWithdrawTabs } from '@/components/wallet/DepositWithdrawTabs';
 import { cn } from '@/lib/utils/cn';
 import { SelectedMethodCard } from '@/components/wallet/SelectedMethodCard';
+import { useAnnounce } from '@/components/ui/LiveRegion';
 
 const QUICK = [500, 1000, 2000, 5000, 10000, 25000];
 
@@ -82,6 +83,7 @@ export default function DepositPage() {
   const t = useT();
   const { lang } = useLang();
   const router = useRouter();
+  const announce = useAnnounce();
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -338,6 +340,10 @@ export default function DepositPage() {
 
     if (auth.kind !== 'authed') {
       setServerError('Please log in before submitting a deposit.');
+      announce(
+        lang === 'bn' ? 'ডিপোজিট জমা দেওয়ার আগে লগ ইন করুন।' : 'Please log in before submitting a deposit.',
+        { tone: 'assertive' },
+      );
       router.push('/?login=1');
       return;
     }
@@ -362,6 +368,12 @@ export default function DepositPage() {
       if (!res.ok) {
         const code = typeof data?.code === 'string' ? (data.code as string) : null;
         const message = typeof data?.message === 'string' ? (data.message as string) : null;
+        // Announce the failure assertively for screen-reader users. The
+        // specific reason still renders visibly in the serverError node.
+        announce(
+          lang === 'bn' ? 'ডিপোজিট রিকোয়েস্ট ব্যর্থ হয়েছে।' : 'Deposit request failed.',
+          { tone: 'assertive' },
+        );
         if (res.status === 401) {
           setServerError('Your session has expired. Please log in again.');
           setAuth({ kind: 'guest' });
@@ -388,15 +400,27 @@ export default function DepositPage() {
 
       if (!newId) {
         setServerError('Deposit was accepted but no reference id was returned. Please refresh and check /dashboard/transactions.');
+        announce(
+          lang === 'bn' ? 'ডিপোজিট গ্রহণ করা হয়েছে কিন্তু কোনো রেফারেন্স আইডি পাওয়া যায়নি।' : 'Deposit was accepted but no reference id was returned.',
+          { tone: 'assertive' },
+        );
         return;
       }
 
       setSubmittedDepositId(newId);
       setSubmitted(true);
+      announce(
+        lang === 'bn' ? 'ডিপোজিট রিকোয়েস্ট জমা হয়েছে। অনুমোদনের অপেক্ষায়।' : 'Deposit request submitted. Pending admin review.',
+        { tone: 'polite' },
+      );
       triggerWalletRefresh();
     } catch (err) {
       setServerError('Network error. Please check your connection and try again.');
       setServerDetail(err instanceof Error ? err.message : null);
+      announce(
+        lang === 'bn' ? 'নেটওয়ার্ক ত্রুটি। ডিপোজিট জমা হয়নি।' : 'Network error. Deposit was not submitted.',
+        { tone: 'assertive' },
+      );
     } finally {
       setLoading(false);
     }
@@ -976,12 +1000,79 @@ export default function DepositPage() {
 function NoticePopup({ notices, lang, onAcknowledge }: { notices: NoticeRow[]; lang: 'en' | 'bn'; onAcknowledge: () => void }) {
   const cta = notices[0];
   const ctaLabel = lang === 'bn' && cta?.ctaLabelBn ? cta.ctaLabelBn : cta?.ctaLabelEn ?? 'I understand';
+  const titleId = useId();
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+
+  // Hand-rolled dialog keeps the original dark amber bottom-sheet look
+  // (dark bg-[#1a1a1a], amber border + "Important notice" label,
+  // docked to the bottom on mobile, centered on >=sm) while layering on
+  // the accessibility the shared Modal would have given us: an
+  // accessible name via aria-labelledby pointing at the title, an
+  // Escape-to-close handler, a focus trap that moves focus into the
+  // dialog on open and restores it to the trigger on close, and a
+  // backdrop click that dismisses. Any way of closing acknowledges the
+  // notice so it stays dismissed for the rest of the tab session.
+  useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null;
+    const node = dialogRef.current;
+    const focusable = node?.querySelector<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    );
+    (focusable ?? node)?.focus();
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onAcknowledge();
+        return;
+      }
+      if (e.key !== 'Tab' || !node) return;
+      const items = Array.from(
+        node.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((el) => !el.hasAttribute('disabled'));
+      if (items.length === 0) {
+        e.preventDefault();
+        node.focus();
+        return;
+      }
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      if (e.shiftKey && (active === first || !node.contains(active))) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      opener?.focus?.();
+    };
+  }, [onAcknowledge]);
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/60 p-3 sm:items-center sm:p-6" role="dialog" aria-modal="true">
-      <div className="flex max-h-[90dvh] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-amber-400/40 bg-[#1a1a1a] text-white shadow-2xl">
+    <div
+      className="fixed inset-0 z-[80] flex items-end justify-center bg-black/60 p-3 sm:items-center sm:p-6"
+      onClick={onAcknowledge}
+    >
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        onClick={(e) => e.stopPropagation()}
+        className="flex max-h-[90dvh] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-amber-400/40 bg-[#1a1a1a] text-white shadow-2xl outline-none"
+      >
         <div className="flex items-center justify-between gap-2 border-b border-white/10 px-4 py-3">
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-300">{lang === 'bn' ? 'গুরুত্বপূর্ণ নোটিশ' : 'Important notice'}</p>
+          <p id={titleId} className="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-300">
+            {lang === 'bn' ? 'গুরুত্বপূর্ণ নোটিশ' : 'Important notice'}
+          </p>
         </div>
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4 text-sm">
           {notices.map((n) => {
@@ -996,11 +1087,7 @@ function NoticePopup({ notices, lang, onAcknowledge }: { notices: NoticeRow[]; l
           })}
         </div>
         <div className="shrink-0 border-t border-white/10 px-4 py-3">
-          <Button
-            variant="gold"
-            className="w-full"
-            onClick={onAcknowledge}
-          >
+          <Button variant="gold" className="w-full" onClick={onAcknowledge}>
             {ctaLabel}
           </Button>
         </div>

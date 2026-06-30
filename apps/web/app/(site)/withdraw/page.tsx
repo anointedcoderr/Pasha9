@@ -16,6 +16,7 @@ import { formatBDT } from '@/lib/utils/format';
 import { DepositWithdrawTabs } from '@/components/wallet/DepositWithdrawTabs';
 import { PaymentMethodPicker } from '@/components/wallet/PaymentMethodPicker';
 import { SelectedMethodCard } from '@/components/wallet/SelectedMethodCard';
+import { useAnnounce } from '@/components/ui/LiveRegion';
 
 const QUICK = [500, 1000, 2500, 5000, 10000];
 
@@ -90,6 +91,7 @@ export default function WithdrawPage() {
   const t = useT();
   const { lang } = useLang();
   const router = useRouter();
+  const announce = useAnnounce();
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
@@ -240,6 +242,10 @@ export default function WithdrawPage() {
 
     if (auth.kind !== 'authed') {
       setServerError('Please log in before submitting a withdrawal.');
+      announce(
+        lang === 'bn' ? 'উইথড্রয়াল জমা দেওয়ার আগে লগ ইন করুন।' : 'Please log in before submitting a withdrawal.',
+        { tone: 'assertive' },
+      );
       router.push('/?login=1');
       return;
     }
@@ -251,10 +257,22 @@ export default function WithdrawPage() {
     const amt = Number(values.amount);
     if (amt < effectiveMin) {
       setServerError(`Minimum withdrawal is ${effectiveMin.toLocaleString()} BDT.`);
+      announce(
+        lang === 'bn'
+          ? `নূন্যতম উইথড্রয়াল ${effectiveMin.toLocaleString()} টাকা।`
+          : `Minimum withdrawal is ${effectiveMin.toLocaleString()} BDT.`,
+        { tone: 'assertive' },
+      );
       return;
     }
     if (amt > effectiveMax) {
       setServerError(`Maximum withdrawal is ${effectiveMax.toLocaleString()} BDT per request.`);
+      announce(
+        lang === 'bn'
+          ? `প্রতি রিকোয়েস্টে সর্বোচ্চ উইথড্রয়াল ${effectiveMax.toLocaleString()} টাকা।`
+          : `Maximum withdrawal is ${effectiveMax.toLocaleString()} BDT per request.`,
+        { tone: 'assertive' },
+      );
       return;
     }
 
@@ -278,6 +296,12 @@ export default function WithdrawPage() {
       if (!res.ok) {
         const code = typeof data?.code === 'string' ? (data.code as string) : null;
         const message = typeof data?.message === 'string' ? (data.message as string) : null;
+        // Announce the failure assertively for screen-reader users. The
+        // specific reason still renders visibly in the serverError node.
+        announce(
+          lang === 'bn' ? 'উইথড্রয়াল রিকোয়েস্ট ব্যর্থ হয়েছে।' : 'Withdrawal request failed.',
+          { tone: 'assertive' },
+        );
         if (res.status === 401) {
           setServerError('Your session has expired. Please log in again.');
           setAuth({ kind: 'guest' });
@@ -345,14 +369,26 @@ export default function WithdrawPage() {
         : null;
       if (!newId) {
         setServerError('Withdrawal was accepted but no reference id was returned. Please check /dashboard/transactions.');
+        announce(
+          lang === 'bn' ? 'উইথড্রয়াল গ্রহণ করা হয়েছে কিন্তু কোনো রেফারেন্স আইডি পাওয়া যায়নি।' : 'Withdrawal was accepted but no reference id was returned.',
+          { tone: 'assertive' },
+        );
         return;
       }
       setSubmittedId(newId);
       setSubmitted(true);
+      announce(
+        lang === 'bn' ? 'উইথড্রয়াল রিকোয়েস্ট জমা হয়েছে।' : 'Withdrawal request submitted.',
+        { tone: 'polite' },
+      );
       triggerWalletRefresh();
     } catch (err) {
       setServerError('Network error. Please try again.');
       setServerDetail(err instanceof Error ? err.message : null);
+      announce(
+        lang === 'bn' ? 'নেটওয়ার্ক ত্রুটি। উইথড্রয়াল জমা হয়নি।' : 'Network error. Withdrawal was not submitted.',
+        { tone: 'assertive' },
+      );
     } finally {
       setLoading(false);
     }

@@ -20,6 +20,7 @@ import { useT, useLang } from '@/lib/i18n/context';
 import { formatBDT } from '@/lib/utils/format';
 import { triggerWalletRefresh } from '@/components/site/WalletStrip';
 import { LottoCertificateCard } from '@/components/site/LottoPremium';
+import { useAnnounce } from '@/components/ui/LiveRegion';
 
 interface WinningRow {
   id: string;
@@ -47,6 +48,7 @@ interface MyResp {
 export default function LottoMyWinningsPage() {
   const t = useT();
   const { lang } = useLang();
+  const announce = useAnnounce();
   const [data, setData] = useState<MyResp | null>(null);
   const [needsLogin, setNeedsLogin] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -76,18 +78,25 @@ export default function LottoMyWinningsPage() {
       if (r.status === 401) { window.location.href = '/?login=1'; return; }
       if (!r.ok) {
         setToast({ kind: 'err', message: j?.message ?? j?.code ?? 'Claim failed' });
+        announce(
+          lang === 'bn' ? 'দাবি ব্যর্থ হয়েছে। আবার চেষ্টা করুন।' : 'Claim failed. Please try again.',
+          { tone: 'assertive' },
+        );
         return;
       }
-      setToast({
-        kind: 'ok',
-        message: lang === 'bn'
-          ? `${formatBDT(Number(j?.amount ?? 0))} লটো ব্যালেন্সে যোগ হয়েছে।`
-          : `${formatBDT(Number(j?.amount ?? 0))} added to your lotto balance.`,
-      });
+      const okMessage = lang === 'bn'
+        ? `${formatBDT(Number(j?.amount ?? 0))} লটো ব্যালেন্সে যোগ হয়েছে।`
+        : `${formatBDT(Number(j?.amount ?? 0))} added to your lotto balance.`;
+      setToast({ kind: 'ok', message: okMessage });
+      announce(okMessage, { tone: 'polite' });
       triggerWalletRefresh();
       await load();
     } catch (e) {
       setToast({ kind: 'err', message: e instanceof Error ? e.message : 'Claim failed' });
+      announce(
+        lang === 'bn' ? 'দাবি ব্যর্থ হয়েছে। আবার চেষ্টা করুন।' : 'Claim failed. Please try again.',
+        { tone: 'assertive' },
+      );
     } finally {
       setClaimingId(null);
     }

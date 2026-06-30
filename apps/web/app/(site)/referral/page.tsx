@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
 import { Users, Copy, Check, LogIn, Wallet, Clock, AlertCircle, Share2, ArrowRight, RefreshCw, MessageCircle, Send, Facebook, MessageSquare, Mail } from 'lucide-react';
 import { CopyRow } from '@/components/ui/CopyRow';
+import { useAnnounce } from '@/components/ui/LiveRegion';
 import { useT, useLang } from '@/lib/i18n/context';
 import { formatBDT, formatDate, formatDateTime } from '@/lib/utils/format';
 import { triggerWalletRefresh } from '@/components/site/WalletStrip';
@@ -63,6 +64,7 @@ const EMPTY: MeResponse = {
 export default function ReferralPage() {
   const t = useT();
   const { lang } = useLang();
+  const announce = useAnnounce();
   const [copied, setCopied] = useState<string | null>(null);
   const [data, setData] = useState<MeResponse>(EMPTY);
   const [authed, setAuthed] = useState(false);
@@ -105,14 +107,13 @@ export default function ReferralPage() {
   // confirmation when a popup channel cannot be opened (popup blocker,
   // WebView with no app installed, desktop with no SMS handler, etc).
   const showCopiedToast = useCallback(() => {
-    setToast({
-      kind: 'ok',
-      message: lang === 'bn'
-        ? 'রেফারেল লিঙ্ক কপি হয়েছে। বন্ধুদের সাথে শেয়ার করুন।'
-        : 'Referral link copied. Share it with your friends.',
-    });
+    const message = lang === 'bn'
+      ? 'রেফারেল লিঙ্ক কপি হয়েছে। বন্ধুদের সাথে শেয়ার করুন।'
+      : 'Referral link copied. Share it with your friends.';
+    setToast({ kind: 'ok', message });
+    announce(message);
     setTimeout(() => setToast((c) => (c && c.kind === 'ok' ? null : c)), 2400);
-  }, [lang]);
+  }, [lang, announce]);
 
   // Open a URL in a new tab/window. Some popup blockers refuse
   // window.open from an async handler unless it was triggered by the
@@ -211,33 +212,35 @@ export default function ReferralPage() {
       if (!r.ok) {
         const code = j?.code as string | undefined;
         const message = j?.message as string | undefined;
-        setToast({ kind: 'err', message: message ?? code ?? 'Claim failed' });
+        const errMessage = message ?? code ?? 'Claim failed';
+        setToast({ kind: 'err', message: errMessage });
+        announce(errMessage, { tone: 'assertive' });
         return;
       }
       const status = j?.status as string;
       if (status === 'paid') {
-        setToast({
-          kind: 'ok',
-          message: data.settings.turnoverX > 0
-            ? (lang === 'bn'
-                ? `${formatBDT(Number(j?.amount ?? 0))} মেইন ব্যালেন্সে যোগ হয়েছে। উইথড্রয়ালের আগে টার্নওভার সম্পূর্ণ করুন।`
-                : `${formatBDT(Number(j?.amount ?? 0))} moved to your main balance with an active withdrawal turnover lock.`)
-            : (lang === 'bn'
-                ? `${formatBDT(Number(j?.amount ?? 0))} মেইন ব্যালেন্সে যোগ হয়েছে।`
-                : `${formatBDT(Number(j?.amount ?? 0))} moved to your main balance.`),
-        });
+        const okMessage = data.settings.turnoverX > 0
+          ? (lang === 'bn'
+              ? `${formatBDT(Number(j?.amount ?? 0))} মেইন ব্যালেন্সে যোগ হয়েছে। উইথড্রয়ালের আগে টার্নওভার সম্পূর্ণ করুন।`
+              : `${formatBDT(Number(j?.amount ?? 0))} moved to your main balance with an active withdrawal turnover lock.`)
+          : (lang === 'bn'
+              ? `${formatBDT(Number(j?.amount ?? 0))} মেইন ব্যালেন্সে যোগ হয়েছে।`
+              : `${formatBDT(Number(j?.amount ?? 0))} moved to your main balance.`);
+        setToast({ kind: 'ok', message: okMessage });
+        announce(okMessage);
         triggerWalletRefresh();
       } else {
-        setToast({
-          kind: 'ok',
-          message: lang === 'bn'
-            ? 'রিভিউয়ের জন্য পাঠানো হয়েছে। অ্যাডমিন অনুমোদনের পর ব্যালেন্সে যাবে।'
-            : 'Sent for admin review. Funds move to your main balance after approval.',
-        });
+        const okMessage = lang === 'bn'
+          ? 'রিভিউয়ের জন্য পাঠানো হয়েছে। অ্যাডমিন অনুমোদনের পর ব্যালেন্সে যাবে।'
+          : 'Sent for admin review. Funds move to your main balance after approval.';
+        setToast({ kind: 'ok', message: okMessage });
+        announce(okMessage);
       }
       await load();
     } catch (e) {
-      setToast({ kind: 'err', message: e instanceof Error ? e.message : 'Claim failed' });
+      const errMessage = e instanceof Error ? e.message : 'Claim failed';
+      setToast({ kind: 'err', message: errMessage });
+      announce(errMessage, { tone: 'assertive' });
     } finally {
       setClaiming(false);
     }

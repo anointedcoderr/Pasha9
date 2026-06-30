@@ -12,6 +12,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useLang } from '@/lib/i18n/context';
 import { HeroSlider } from '@/components/site/HeroSlider';
 import { AnnouncementPopup } from '@/components/site/AnnouncementPopup';
 import { FirstVisitAuthPopup } from '@/components/site/FirstVisitAuthPopup';
@@ -61,6 +62,7 @@ function blockToSection(b: HomeBlock): HomeSection {
 }
 
 export default function HomePage() {
+  const { lang } = useLang();
   const [sections, setSections] = useState<HomeSection[] | null>(null);
   const [blocks, setBlocks] = useState<HomeBlock[]>([]);
   const [videos, setVideos] = useState<VideoRow[]>([]);
@@ -93,6 +95,17 @@ export default function HomePage() {
 
   return (
     <div className="space-y-5 md:space-y-6">
+      {/* Deterministic single page heading. A media-only hero banner has
+          no visible headline, so we render one visually-hidden h1 here to
+          guarantee the page always exposes exactly one top-level heading
+          to screen readers and document outline tools. The hero headline
+          is an h2 so this stays the sole h1. */}
+      <h1 className="sr-only">
+        {lang === 'bn'
+          ? 'পাশা৯ - প্রিমিয়াম বাংলা ক্যাসিনো'
+          : 'Pasha9 - Premium Bangla Casino'}
+      </h1>
+
       <HeroSlider />
 
       <WalletStrip />

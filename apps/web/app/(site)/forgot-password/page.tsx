@@ -14,7 +14,7 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useLang } from '@/lib/i18n/context';
@@ -107,12 +107,32 @@ function SmsOtpFlow({ router, bn }: { router: ReturnType<typeof useRouter>; bn: 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const phoneRef = useRef<HTMLInputElement>(null);
+  const codeRef = useRef<HTMLInputElement>(null);
+  const newPwRef = useRef<HTMLInputElement>(null);
+  // Bumped every time an error is shown so the focus effect re-runs even
+  // when the same message recurs (for example, the same code rejected twice).
+  const [errorNonce, setErrorNonce] = useState(0);
+
+  // After a failed submit, move focus to the first invalid field of the
+  // current step so keyboard and screen-reader users land on what to fix.
+  useEffect(() => {
+    if (!error) return;
+    const ref = step === 'phone' ? phoneRef : step === 'code' ? codeRef : step === 'password' ? newPwRef : null;
+    ref?.current?.focus();
+  }, [error, step, errorNonce]);
+
+  const showError = (msg: string) => {
+    setError(msg);
+    setErrorNonce((n) => n + 1);
+  };
+
   const sendCode = async () => {
     setBusy(true); setError(null);
     try {
       const digits = phone.replace(/\D/g, '');
       if (digits.length < 11) {
-        setError(bn ? 'সঠিক বাংলাদেশী মোবাইল নম্বর লিখুন (01XXXXXXXXX)।' : 'Enter a valid Bangladesh mobile number (01XXXXXXXXX).');
+        showError(bn ? 'সঠিক বাংলাদেশী মোবাইল নম্বর লিখুন (01XXXXXXXXX)।' : 'Enter a valid Bangladesh mobile number (01XXXXXXXXX).');
         return;
       }
       const r = await fetch('/api/auth/forgot/sms/start', {
@@ -122,14 +142,14 @@ function SmsOtpFlow({ router, bn }: { router: ReturnType<typeof useRouter>; bn: 
       });
       const j = await r.json().catch(() => null);
       if (!r.ok) {
-        if (j?.code === 'FORGOT_DISABLED') setError(bn ? 'SMS রিসেট বর্তমানে বন্ধ। সাপোর্টে যোগাযোগ করুন।' : 'SMS reset is turned off right now. Please contact support.');
-        else if (r.status === 429) setError(bn ? 'অনেক বেশি চেষ্টা। কিছুক্ষণ পরে আবার চেষ্টা করুন।' : 'Too many attempts. Please try again shortly.');
-        else setError(bn ? 'কোড পাঠানো যায়নি। আবার চেষ্টা করুন।' : 'Could not send the code. Please try again.');
+        if (j?.code === 'FORGOT_DISABLED') showError(bn ? 'SMS রিসেট বর্তমানে বন্ধ। সাপোর্টে যোগাযোগ করুন।' : 'SMS reset is turned off right now. Please contact support.');
+        else if (r.status === 429) showError(bn ? 'অনেক বেশি চেষ্টা। কিছুক্ষণ পরে আবার চেষ্টা করুন।' : 'Too many attempts. Please try again shortly.');
+        else showError(bn ? 'কোড পাঠানো যায়নি। আবার চেষ্টা করুন।' : 'Could not send the code. Please try again.');
         return;
       }
       setStep('code');
     } catch {
-      setError(bn ? 'নেটওয়ার্ক ত্রুটি।' : 'Network error.');
+      showError(bn ? 'নেটওয়ার্ক ত্রুটি।' : 'Network error.');
     } finally {
       setBusy(false);
     }
@@ -140,7 +160,7 @@ function SmsOtpFlow({ router, bn }: { router: ReturnType<typeof useRouter>; bn: 
   const goToPassword = () => {
     setError(null);
     if (code.trim().length !== 6) {
-      setError(bn ? '৬-সংখ্যার কোড লিখুন।' : 'Enter the 6-digit code.');
+      showError(bn ? '৬-সংখ্যার কোড লিখুন।' : 'Enter the 6-digit code.');
       return;
     }
     setStep('password');
@@ -150,7 +170,7 @@ function SmsOtpFlow({ router, bn }: { router: ReturnType<typeof useRouter>; bn: 
     setBusy(true); setError(null);
     try {
       if (newPw.length < 6) {
-        setError(bn ? 'পাসওয়ার্ড কমপক্ষে ৬ অক্ষর হতে হবে।' : 'Password must be at least 6 characters.');
+        showError(bn ? 'পাসওয়ার্ড কমপক্ষে ৬ অক্ষর হতে হবে।' : 'Password must be at least 6 characters.');
         return;
       }
       const r = await fetch('/api/auth/forgot/sms/complete', {
@@ -161,16 +181,16 @@ function SmsOtpFlow({ router, bn }: { router: ReturnType<typeof useRouter>; bn: 
       const j = await r.json().catch(() => null);
       if (!r.ok) {
         const c = j?.code as string | undefined;
-        if (c === 'OTP_MISMATCH') { setError(bn ? 'কোডটি ভুল। আবার চেষ্টা করুন।' : 'The code is incorrect. Try again.'); setStep('code'); }
-        else if (c === 'OTP_TOO_MANY_ATTEMPTS' || c === 'OTP_NOT_FOUND' || c === 'ALREADY_USED') { setError(bn ? 'কোডের মেয়াদ শেষ বা ভুল। নতুন কোড নিন।' : 'The code expired or is invalid. Request a new one.'); setStep('phone'); setCode(''); }
-        else if (c === 'USER_BLOCKED') setError(bn ? 'অ্যাকাউন্ট স্থগিত। সাপোর্টে যোগাযোগ করুন।' : 'This account is suspended. Please contact support.');
-        else setError(bn ? 'রিসেট ব্যর্থ।' : 'Reset failed.');
+        if (c === 'OTP_MISMATCH') { setStep('code'); showError(bn ? 'কোডটি ভুল। আবার চেষ্টা করুন।' : 'The code is incorrect. Try again.'); }
+        else if (c === 'OTP_TOO_MANY_ATTEMPTS' || c === 'OTP_NOT_FOUND' || c === 'ALREADY_USED') { setStep('phone'); setCode(''); showError(bn ? 'কোডের মেয়াদ শেষ বা ভুল। নতুন কোড নিন।' : 'The code expired or is invalid. Request a new one.'); }
+        else if (c === 'USER_BLOCKED') showError(bn ? 'অ্যাকাউন্ট স্থগিত। সাপোর্টে যোগাযোগ করুন।' : 'This account is suspended. Please contact support.');
+        else showError(bn ? 'রিসেট ব্যর্থ।' : 'Reset failed.');
         return;
       }
       setStep('done');
       setTimeout(() => router.push('/?login=1'), 2500);
     } catch {
-      setError(bn ? 'নেটওয়ার্ক ত্রুটি।' : 'Network error.');
+      showError(bn ? 'নেটওয়ার্ক ত্রুটি।' : 'Network error.');
     } finally {
       setBusy(false);
     }
@@ -207,6 +227,7 @@ function SmsOtpFlow({ router, bn }: { router: ReturnType<typeof useRouter>; bn: 
             <div className="relative mt-1">
               <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-inkMute" />
               <input
+                ref={phoneRef}
                 type="tel"
                 inputMode="tel"
                 value={phone}
@@ -218,7 +239,7 @@ function SmsOtpFlow({ router, bn }: { router: ReturnType<typeof useRouter>; bn: 
             </div>
           </label>
 
-          {error ? <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p> : null}
+          {error ? <p role="alert" className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p> : null}
 
           <button type="submit" disabled={busy} className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-gradient-to-b from-amber-300 to-amber-500 text-sm font-extrabold uppercase tracking-wider text-[#3A1F00] disabled:opacity-70">
             {busy ? (bn ? 'পাঠানো হচ্ছে...' : 'Sending...') : (bn ? 'SMS কোড পাঠান' : 'Send SMS code')}
@@ -240,6 +261,7 @@ function SmsOtpFlow({ router, bn }: { router: ReturnType<typeof useRouter>; bn: 
               {bn ? '৬-সংখ্যার কোড' : '6-digit code'}
             </span>
             <input
+              ref={codeRef}
               inputMode="numeric"
               autoComplete="one-time-code"
               maxLength={6}
@@ -250,7 +272,7 @@ function SmsOtpFlow({ router, bn }: { router: ReturnType<typeof useRouter>; bn: 
             />
           </label>
 
-          {error ? <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p> : null}
+          {error ? <p role="alert" className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p> : null}
 
           <button type="submit" disabled={code.length !== 6} className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-gradient-to-b from-amber-300 to-amber-500 text-sm font-extrabold uppercase tracking-wider text-[#3A1F00] disabled:opacity-70">
             {bn ? 'পরবর্তী ধাপ' : 'Continue'}
@@ -272,6 +294,7 @@ function SmsOtpFlow({ router, bn }: { router: ReturnType<typeof useRouter>; bn: 
             <div className="relative mt-1">
               <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-inkMute" />
               <input
+                ref={newPwRef}
                 type={showPw ? 'text' : 'password'}
                 autoComplete="new-password"
                 value={newPw}
@@ -285,7 +308,7 @@ function SmsOtpFlow({ router, bn }: { router: ReturnType<typeof useRouter>; bn: 
             </div>
           </label>
 
-          {error ? <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p> : null}
+          {error ? <p role="alert" className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p> : null}
 
           <button type="submit" disabled={busy || newPw.length < 6} className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-gradient-to-b from-amber-300 to-amber-500 text-sm font-extrabold uppercase tracking-wider text-[#3A1F00] disabled:opacity-70">
             {busy ? (bn ? 'রিসেট হচ্ছে...' : 'Resetting...') : (bn ? 'পাসওয়ার্ড রিসেট করুন' : 'Reset password')}
@@ -324,13 +347,26 @@ function LegacyFlow({ bn }: { bn: boolean }) {
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorNonce, setErrorNonce] = useState(0);
+  const identifierRef = useRef<HTMLInputElement>(null);
+
+  const showError = (msg: string) => {
+    setError(msg);
+    setErrorNonce((n) => n + 1);
+  };
+
+  // After a failed submit, move focus to the only field so keyboard and
+  // screen-reader users land on what needs fixing.
+  useEffect(() => {
+    if (error) identifierRef.current?.focus();
+  }, [error, errorNonce]);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     const id = identifier.trim();
     if (id.length < 3) {
-      setError(bn ? 'অনুগ্রহ করে আপনার ইউজারনেম, ফোন নম্বর বা ইমেইল লিখুন।' : 'Please enter your username, phone or email.');
+      showError(bn ? 'অনুগ্রহ করে আপনার ইউজারনেম, ফোন নম্বর বা ইমেইল লিখুন।' : 'Please enter your username, phone or email.');
       return;
     }
     setLoading(true);
@@ -341,12 +377,12 @@ function LegacyFlow({ bn }: { bn: boolean }) {
         body: JSON.stringify({ identifier: id }),
       });
       if (r.status === 429) {
-        setError(bn ? 'অনেক বেশি চেষ্টা। এক ঘন্টা পরে আবার চেষ্টা করুন।' : 'Too many attempts. Please try again in an hour.');
+        showError(bn ? 'অনেক বেশি চেষ্টা। এক ঘন্টা পরে আবার চেষ্টা করুন।' : 'Too many attempts. Please try again in an hour.');
         return;
       }
       setSubmitted(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Network error.');
+      showError(err instanceof Error ? err.message : (bn ? 'নেটওয়ার্ক ত্রুটি।' : 'Network error.'));
     } finally {
       setLoading(false);
     }
@@ -384,6 +420,7 @@ function LegacyFlow({ bn }: { bn: boolean }) {
           {bn ? 'ইউজারনেম, ফোন বা ইমেইল' : 'Username, phone or email'}
         </span>
         <input
+          ref={identifierRef}
           value={identifier}
           onChange={(e) => setIdentifier(e.target.value)}
           autoComplete="username"
@@ -392,7 +429,7 @@ function LegacyFlow({ bn }: { bn: boolean }) {
         />
       </label>
 
-      {error ? <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p> : null}
+      {error ? <p role="alert" className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p> : null}
 
       <button type="submit" disabled={loading} className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-gradient-to-b from-amber-300 to-amber-500 text-sm font-extrabold uppercase tracking-wider text-[#3A1F00] disabled:opacity-70">
         {loading ? (bn ? 'জমা হচ্ছে...' : 'Submitting...') : (bn ? 'রিসেট রিকোয়েস্ট জমা দিন' : 'Submit reset request')}

@@ -145,6 +145,16 @@ export default function KenoPage() {
       ng={ng}
       rules={<KenoRules lang={lang} poolSize={poolSize} drawCount={drawCount} />}
     >
+      {/* Screen-reader announcement of the latest draw result. Visually
+          hidden; polite so it does not interrupt other speech. */}
+      <div aria-live="polite" className="sr-only">
+        {last
+          ? last.win
+            ? (lang === 'bn' ? `আপনি জিতেছেন ${formatBDT(last.payout)}` : `You won ${formatBDT(last.payout)}`)
+            : (lang === 'bn' ? 'আপনি হেরেছেন' : 'You lost')
+          : ''}
+      </div>
+
       {/* Pick summary + top multiplier */}
       <GamePanel>
         <div className="grid grid-cols-3 gap-3 text-center">
@@ -232,7 +242,7 @@ export default function KenoPage() {
         </GamePanel>
       ) : null}
 
-      {error ? <p className="rounded-lg border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{error}</p> : null}
+      {error ? <p role="alert" className="rounded-lg border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{error}</p> : null}
 
       <BetCard
         bet={bet}

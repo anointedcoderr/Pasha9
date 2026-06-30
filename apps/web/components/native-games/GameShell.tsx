@@ -210,7 +210,7 @@ export function GameShell({ code, titleEn, titleBn, taglineEn, taglineBn, ctaLab
       </section>
 
       {ng.loadError ? (
-        <p className="rounded-lg border border-red-400/40 bg-red-500/10 px-4 py-2 text-sm text-red-200">{ng.loadError}</p>
+        <p role="alert" className="rounded-lg border border-red-400/40 bg-red-500/10 px-4 py-2 text-sm text-red-200">{ng.loadError}</p>
       ) : null}
 
       {children}

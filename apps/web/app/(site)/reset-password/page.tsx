@@ -10,7 +10,7 @@
 
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useLang } from '@/lib/i18n/context';
@@ -27,27 +27,51 @@ function ResetPasswordInner() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorNonce, setErrorNonce] = useState(0);
   const [done, setDone] = useState(false);
+
+  const tokenRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
+  const confirmRef = useRef<HTMLInputElement>(null);
+  // Which field to move focus to after a failed submit.
+  const focusTargetRef = useRef<'token' | 'password' | 'confirm'>('token');
 
   useEffect(() => {
     const q = params?.get('token') ?? '';
     if (q) setToken(q);
   }, [params]);
 
+  // After a failed submit, move focus to the first invalid field so
+  // keyboard and screen-reader users land on what needs fixing.
+  useEffect(() => {
+    if (!error) return;
+    const ref =
+      focusTargetRef.current === 'password' ? passwordRef
+      : focusTargetRef.current === 'confirm' ? confirmRef
+      : tokenRef;
+    ref.current?.focus();
+  }, [error, errorNonce]);
+
+  const showError = (msg: string, target: 'token' | 'password' | 'confirm') => {
+    focusTargetRef.current = target;
+    setError(msg);
+    setErrorNonce((n) => n + 1);
+  };
+
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     const t = token.trim();
     if (t.length < 20) {
-      setError(bn ? 'অনুগ্রহ করে আপনার রিসেট কোড লিখুন।' : 'Please enter your reset code.');
+      showError(bn ? 'অনুগ্রহ করে আপনার রিসেট কোড লিখুন।' : 'Please enter your reset code.', 'token');
       return;
     }
     if (password.length < 6) {
-      setError(bn ? 'পাসওয়ার্ড অন্তত ৬ অক্ষরের হতে হবে।' : 'Password must be at least 6 characters.');
+      showError(bn ? 'পাসওয়ার্ড অন্তত ৬ অক্ষরের হতে হবে।' : 'Password must be at least 6 characters.', 'password');
       return;
     }
     if (password !== confirm) {
-      setError(bn ? 'পাসওয়ার্ড মিলছে না।' : 'Passwords do not match.');
+      showError(bn ? 'পাসওয়ার্ড মিলছে না।' : 'Passwords do not match.', 'confirm');
       return;
     }
     setLoading(true);
@@ -61,21 +85,21 @@ function ResetPasswordInner() {
       if (!r.ok) {
         const code = j?.code as string | undefined;
         if (code === 'INVALID_TOKEN') {
-          setError(bn ? 'অবৈধ রিসেট কোড।' : 'Invalid reset code.');
+          showError(bn ? 'অবৈধ রিসেট কোড।' : 'Invalid reset code.', 'token');
         } else if (code === 'ALREADY_USED') {
-          setError(bn ? 'এই কোড ইতিমধ্যে ব্যবহৃত হয়েছে। নতুন রিকোয়েস্ট তৈরি করুন।' : 'This code has already been used. Please create a new request.');
+          showError(bn ? 'এই কোড ইতিমধ্যে ব্যবহৃত হয়েছে। নতুন রিকোয়েস্ট তৈরি করুন।' : 'This code has already been used. Please create a new request.', 'token');
         } else if (code === 'EXPIRED') {
-          setError(bn ? 'এই কোডের মেয়াদ শেষ হয়েছে। নতুন রিকোয়েস্ট তৈরি করুন।' : 'This code has expired. Please create a new request.');
+          showError(bn ? 'এই কোডের মেয়াদ শেষ হয়েছে। নতুন রিকোয়েস্ট তৈরি করুন।' : 'This code has expired. Please create a new request.', 'token');
         } else if (r.status === 429) {
-          setError(bn ? 'অনেক বেশি চেষ্টা। কিছুক্ষণ পরে আবার চেষ্টা করুন।' : 'Too many attempts. Please try again later.');
+          showError(bn ? 'অনেক বেশি চেষ্টা। কিছুক্ষণ পরে আবার চেষ্টা করুন।' : 'Too many attempts. Please try again later.', 'token');
         } else {
-          setError(j?.message ?? code ?? 'Reset failed.');
+          showError(j?.message ?? code ?? (bn ? 'রিসেট ব্যর্থ হয়েছে।' : 'Reset failed.'), 'token');
         }
         return;
       }
       setDone(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Network error.');
+      showError(err instanceof Error ? err.message : (bn ? 'নেটওয়ার্ক ত্রুটি।' : 'Network error.'), 'token');
     } finally {
       setLoading(false);
     }
@@ -122,6 +146,7 @@ function ResetPasswordInner() {
                 {bn ? 'ওয়ান-টাইম রিসেট কোড' : 'One-time reset code'}
               </span>
               <input
+                ref={tokenRef}
                 value={token}
                 onChange={(e) => setToken(e.target.value)}
                 autoComplete="off"
@@ -137,6 +162,7 @@ function ResetPasswordInner() {
               </span>
               <div className="mt-1 flex items-center gap-2 rounded-lg border border-brand-divider bg-brand-paper pr-2">
                 <input
+                  ref={passwordRef}
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -160,6 +186,7 @@ function ResetPasswordInner() {
                 {bn ? 'নতুন পাসওয়ার্ড নিশ্চিত করুন' : 'Confirm new password'}
               </span>
               <input
+                ref={confirmRef}
                 type={showPassword ? 'text' : 'password'}
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}
@@ -170,7 +197,7 @@ function ResetPasswordInner() {
             </label>
 
             {error ? (
-              <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>
+              <p role="alert" className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>
             ) : null}
 
             <button
