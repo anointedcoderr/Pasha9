@@ -15,7 +15,7 @@ export default function ResponsibleGamingPage() {
 
       <Card padding="lg" tone="gold" className="mb-6">
         <h2 className="text-lg font-semibold text-ink-hi">Play within your limits</h2>
-        <p className="mt-2 text-sm text-ink-mid">
+        <p className="mt-2 max-w-[70ch] text-base leading-relaxed text-ink-mid">
           Gaming should be fun, never a source of stress or financial pressure. If you ever feel like play is going beyond a healthy boundary, pause, reach out to support, or use one of the tools below.
         </p>
       </Card>
@@ -34,7 +34,7 @@ export default function ResponsibleGamingPage() {
 
       <Card padding="lg" className="mt-6">
         <CardHeader title="Need to talk to someone" subtitle="Local helplines and counseling support" />
-        <p className="text-sm text-ink-mid">
+        <p className="max-w-[70ch] text-base leading-relaxed text-ink-mid">
           If gambling habits feel out of control, please reach out to a qualified counselor or hotline in your region. Support is available and recovery is possible. You can also pause your account at any time by messaging the team via Telegram or WhatsApp.
         </p>
       </Card>

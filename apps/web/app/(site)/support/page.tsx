@@ -126,7 +126,7 @@ export default function SupportPage() {
             <Card padding="md">
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#229ED9]/15 text-[#229ED9]"><Send className="h-5 w-5" /></span>
               <h3 className="mt-3 text-base font-semibold text-ink-hi">Telegram</h3>
-              <p className="mt-1 text-xs text-ink-mid">Chat with the team in real time on Telegram.</p>
+              <p className="mt-1 text-sm text-ink-mid">Chat with the team in real time on Telegram.</p>
               <a href={contacts.telegram} target="_blank" rel="noreferrer" className="mt-3 inline-block text-sm text-neon hover:text-ink-hi">Open Telegram</a>
             </Card>
           ) : null}
@@ -134,7 +134,7 @@ export default function SupportPage() {
             <Card padding="md">
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#25D366]/15 text-[#25D366]"><MessageCircle className="h-5 w-5" /></span>
               <h3 className="mt-3 text-base font-semibold text-ink-hi">WhatsApp</h3>
-              <p className="mt-1 text-xs text-ink-mid">Fastest channel for urgent issues.</p>
+              <p className="mt-1 text-sm text-ink-mid">Fastest channel for urgent issues.</p>
               <a href={contacts.whatsapp} target="_blank" rel="noreferrer" className="mt-3 inline-block text-sm text-neon hover:text-ink-hi">Open WhatsApp</a>
             </Card>
           ) : null}
@@ -142,7 +142,7 @@ export default function SupportPage() {
             <Card padding="md">
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gold-500/15 text-gold-300"><Mail className="h-5 w-5" /></span>
               <h3 className="mt-3 text-base font-semibold text-ink-hi">Email</h3>
-              <p className="mt-1 text-xs text-ink-mid">Use email for account or KYC matters.</p>
+              <p className="mt-1 text-sm text-ink-mid">Use email for account or KYC matters.</p>
               <a href={`mailto:${contacts.email}`} className="mt-3 inline-block text-sm text-neon hover:text-ink-hi">{contacts.email}</a>
             </Card>
           ) : null}
@@ -150,7 +150,7 @@ export default function SupportPage() {
             <Card padding="md">
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-300"><Phone className="h-5 w-5" /></span>
               <h3 className="mt-3 text-base font-semibold text-ink-hi">Phone</h3>
-              <p className="mt-1 text-xs text-ink-mid">Available during business hours.</p>
+              <p className="mt-1 text-sm text-ink-mid">Available during business hours.</p>
               <a href={`tel:${contacts.phone.replace(/[^+\d]/g, '')}`} className="mt-3 inline-block text-sm text-neon hover:text-ink-hi">{contacts.phone}</a>
             </Card>
           ) : null}
@@ -169,7 +169,7 @@ export default function SupportPage() {
                 <p className="mt-1 text-xs text-signal-ok">
                   Reference: <code className="font-mono">{submittedId}</code>
                 </p>
-                <p className="mt-1 text-xs text-signal-ok">
+                <p className="mt-1 text-sm leading-relaxed text-signal-ok">
                   Our team will respond on the contact you provided. Keep this reference for follow-up.
                 </p>
               </div>

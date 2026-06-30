@@ -290,8 +290,19 @@ export default function DepositPage() {
     return () => { if (previewTimer.current) clearTimeout(previewTimer.current); };
   }, [watchedAmount, promotionIntent?.promotionId]);
 
+  // Map raw schema keys to the visible bilingual field labels so the
+  // error summary reads "Transaction ID" / "ট্রানজেকশন আইডি" instead of
+  // the internal key "txn".
+  const fieldLabel = (field: string): string => {
+    if (field === 'amount') return t('deposit.amount');
+    if (field === 'method') return t('deposit.method');
+    if (field === 'txn') return t('deposit.txn');
+    return field;
+  };
+
   const errorEntries = Object.entries(errors).map(([field, e]) => ({
     field,
+    label: fieldLabel(field),
     message: e?.message ? String(e.message) : 'Invalid value',
   }));
 
@@ -610,21 +621,21 @@ export default function DepositPage() {
                   </p>
                   <div className="mt-2 grid grid-cols-3 gap-2 text-center">
                     <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-white/85">{lang === 'bn' ? 'বোনাস %' : 'Bonus %'}</p>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-white/85">{lang === 'bn' ? 'বোনাস %' : 'Bonus %'}</p>
                       <p className="text-base font-extrabold text-white">{preview.bonusPercentage}%</p>
                     </div>
                     <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-white/85">{lang === 'bn' ? 'বোনাস' : 'Bonus'}</p>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-white/85">{lang === 'bn' ? 'বোনাস' : 'Bonus'}</p>
                       <p className="text-base font-extrabold text-white">+ BDT {preview.bonusAmount.toLocaleString()}</p>
                     </div>
                     <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-white/85">{lang === 'bn' ? 'মোট ক্রেডিট' : 'Total credit'}</p>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-white/85">{lang === 'bn' ? 'মোট ক্রেডিট' : 'Total credit'}</p>
                       <p className="text-base font-extrabold text-white">BDT {preview.totalCredit.toLocaleString()}</p>
                     </div>
                   </div>
                 </div>
               ) : (Number(watchedAmount) || 0) > 0 ? (
-                <p className="mt-2 text-[11px] font-semibold text-ink-mid">
+                <p className="mt-2 text-sm font-semibold text-ink-mid">
                   {lang === 'bn' ? 'এই পরিমাণের জন্য সক্রিয় বোনাস টিয়ার নেই।' : 'No active bonus tier matches this amount.'}
                 </p>
               ) : null}
@@ -853,7 +864,7 @@ export default function DepositPage() {
                     />
                   ) : null}
                   {!gatewayChoice && method?.minDeposit ? (
-                    <p className="mt-2 text-[11px] text-ink-lo">
+                    <p className="mt-2 text-xs text-ink-mid">
                       {lang === 'bn' ? 'এই মাধ্যমের সীমা: ' : 'This method: '} Min BDT {method.minDeposit.toLocaleString()}
                       {method.maxDeposit ? ` . Max BDT ${method.maxDeposit.toLocaleString()}` : ''}
                     </p>
@@ -916,7 +927,7 @@ export default function DepositPage() {
                   </button>
                 </p>
               ) : (
-                <p className="mt-2 text-[11px] text-ink-lo">PNG, JPG, WEBP or PDF, max 8 MB.</p>
+                <p className="mt-2 text-xs text-ink-lo">PNG, JPG, WEBP or PDF, max 8 MB.</p>
               )}
             </Card>
             ) : null}
@@ -928,7 +939,7 @@ export default function DepositPage() {
                 </p>
                 <ul className="mt-1 list-disc pl-6">
                   {errorEntries.map((e) => (
-                    <li key={e.field}><span className="capitalize">{e.field}</span> - {e.message}</li>
+                    <li key={e.field}><span className="font-semibold">{e.label}</span> - {e.message}</li>
                   ))}
                 </ul>
               </div>

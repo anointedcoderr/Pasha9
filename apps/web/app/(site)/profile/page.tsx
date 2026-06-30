@@ -10,16 +10,23 @@
 
 import { PageHeader } from '@/components/site/PageHeader';
 import { Card, CardHeader } from '@/components/ui/Card';
-import { FormField, Input } from '@/components/ui/Input';
+import { FormField, Input, PasswordInput } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { useMe } from '@/lib/hooks/useMe';
+import { useLang } from '@/lib/i18n/context';
 import { User as UserIcon, Phone, AtSign, Save, Upload, Lock } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { triggerWalletRefresh } from '@/components/site/WalletStrip';
 
 export default function ProfilePage() {
   const { me, loading } = useMe();
+  const { lang } = useLang();
   const fileRef = useRef<HTMLInputElement | null>(null);
+
+  // Bilingual show/hide labels for the password reveal toggles so the
+  // screen-reader announcement is not English-only.
+  const pwShowLabel = lang === 'bn' ? 'পাসওয়ার্ড দেখান' : 'Show password';
+  const pwHideLabel = lang === 'bn' ? 'পাসওয়ার্ড লুকান' : 'Hide password';
 
   const [username, setUsername] = useState('');
   const [phone, setPhone] = useState('');
@@ -164,13 +171,34 @@ export default function ProfilePage() {
           <CardHeader title="Change Password" subtitle="Verify your current password to set a new one." />
           <form className="grid gap-4 md:grid-cols-3" onSubmit={onChangePw}>
             <FormField label="Current password">
-              <Input type="password" value={curPw} onChange={(e) => setCurPw(e.target.value)} leftIcon={<Lock className="h-4 w-4" />} />
+              <PasswordInput
+                value={curPw}
+                onChange={(e) => setCurPw(e.target.value)}
+                leftIcon={<Lock className="h-4 w-4" />}
+                autoComplete="current-password"
+                showLabel={pwShowLabel}
+                hideLabel={pwHideLabel}
+              />
             </FormField>
             <FormField label="New password">
-              <Input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} leftIcon={<Lock className="h-4 w-4" />} />
+              <PasswordInput
+                value={newPw}
+                onChange={(e) => setNewPw(e.target.value)}
+                leftIcon={<Lock className="h-4 w-4" />}
+                autoComplete="new-password"
+                showLabel={pwShowLabel}
+                hideLabel={pwHideLabel}
+              />
             </FormField>
             <FormField label="Confirm new password">
-              <Input type="password" value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)} leftIcon={<Lock className="h-4 w-4" />} />
+              <PasswordInput
+                value={confirmPw}
+                onChange={(e) => setConfirmPw(e.target.value)}
+                leftIcon={<Lock className="h-4 w-4" />}
+                autoComplete="new-password"
+                showLabel={pwShowLabel}
+                hideLabel={pwHideLabel}
+              />
             </FormField>
             <div className="md:col-span-3">
               <Button type="submit" loading={pwBusy} leftIcon={<Lock className="h-4 w-4" />}>

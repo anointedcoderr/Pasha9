@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { PageHeader } from '@/components/site/PageHeader';
 import { Card, CardHeader } from '@/components/ui/Card';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { FormField, Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
@@ -269,7 +270,13 @@ export default function SecurityPage() {
           subtitle="Every device with a live session on your account. Sign out any device you do not recognise."
           action={<Button variant="ghost" leftIcon={<RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />} onClick={loadSessions}>Reload</Button>}
         />
-        {loading ? <p className="text-sm text-ink-mid">Loading...</p> : sessions.length === 0 ? (
+        {loading ? (
+          <div className="space-y-3" role="status" aria-label="Loading">
+            <Skeleton className="h-10" />
+            <Skeleton className="h-10" />
+            <Skeleton className="h-10" />
+          </div>
+        ) : sessions.length === 0 ? (
           <p className="text-sm text-ink-mid">No sessions on file.</p>
         ) : (
           <ul className="divide-y divide-neon/10">

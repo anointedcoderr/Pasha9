@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { PageHeader } from '@/components/site/PageHeader';
 import { Card, CardHeader } from '@/components/ui/Card';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
@@ -144,7 +145,20 @@ export default function DashboardAffiliateCenter() {
     return (
       <>
         <PageHeader title="Affiliate Center" icon={<Briefcase className="h-5 w-5" />} />
-        <Card padding="lg">Loading...</Card>
+        <div className="sr-only" role="status">{lang === 'bn' ? 'লোড হচ্ছে' : 'Loading'}</div>
+        <Card padding="lg" className="mb-6">
+          <div className="grid gap-4 md:grid-cols-2">
+            <Skeleton className="h-16" />
+            <Skeleton className="h-16" />
+          </div>
+        </Card>
+        <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Skeleton className="h-28" />
+          <Skeleton className="h-28" />
+          <Skeleton className="h-28" />
+          <Skeleton className="h-28" />
+        </div>
+        <Card padding="lg"><Skeleton className="h-40" /></Card>
       </>
     );
   }
@@ -359,7 +373,12 @@ export default function DashboardAffiliateCenter() {
 
             <TabsContent value={String(level)}>
               {rowsLoading ? (
-                <p className="py-6 text-center text-sm text-ink-lo">Loading...</p>
+                <div className="space-y-2 py-4" role="status" aria-label={lang === 'bn' ? 'লোড হচ্ছে' : 'Loading'}>
+                  <Skeleton className="h-8" />
+                  <Skeleton className="h-8" />
+                  <Skeleton className="h-8" />
+                  <Skeleton className="h-8" />
+                </div>
               ) : rows.length === 0 ? (
                 <EmptyState
                   title={lang === 'bn' ? 'এখনো কোনো ডাউনলাইন নেই' : 'No downline yet'}

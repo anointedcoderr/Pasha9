@@ -8,6 +8,7 @@ import { CategoryHero } from '@/components/site/CategoryHero';
 import { BackBar } from '@/components/site/BackBar';
 import { PromotionBannerSlider, type PromotionBannerRow } from '@/components/site/PromotionBannerSlider';
 import { PromoCodeRedeem } from '@/components/site/PromoCodeRedeem';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { useT, useLang } from '@/lib/i18n/context';
 import { useAnnounce } from '@/components/ui/LiveRegion';
 import { Gift, Sparkles, Crown, Repeat, Users, Send, Ticket, Star, BadgePlus, AlertCircle, CheckCircle2, Lock } from 'lucide-react';
@@ -196,7 +197,22 @@ export default function PromotionsPage() {
       </div>
 
       {loading ? (
-        <p className="text-sm text-brand-inkSoft">Loading promotions...</p>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3" role="status" aria-label={lang === 'bn' ? 'প্রমোশন লোড হচ্ছে' : 'Loading promotions'}>
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="overflow-hidden rounded-2xl border border-brand-divider bg-brand-paper">
+              <Skeleton className="aspect-[16/9] rounded-none" />
+              <div className="space-y-3 px-5 py-4">
+                <Skeleton className="h-5 w-2/3" />
+                <Skeleton className="h-4 w-full" />
+                <div className="grid grid-cols-2 gap-3">
+                  <Skeleton className="h-12" />
+                  <Skeleton className="h-12" />
+                </div>
+                <Skeleton className="h-9 w-28" />
+              </div>
+            </div>
+          ))}
+        </div>
       ) : filtered.length === 0 ? (
         <div className="card-light p-6 text-center text-sm text-brand-inkSoft">
           {lang === 'bn' ? 'এখন কোনো সক্রিয় প্রমোশন নেই। শিগগিরই আবার দেখুন।' : 'No live promotions right now. Check back soon.'}

@@ -565,7 +565,8 @@ body.theme-light input[type="checkbox"].accent-neon { accent-color: #1E73E8; }
     font-size: 10px;
     font-weight: 800;
     letter-spacing: 0.04em;
-    color: #FFFFFF;
+    /* Dark ink on the bright yellow/orange fill for AA contrast (>=4.5:1) */
+    color: #0F1115;
     background: linear-gradient(135deg, #FFCC00 0%, #FF7A1A 60%, #FF4E3A 100%);
     border-radius: 4px;
     line-height: 1;
@@ -579,7 +580,8 @@ body.theme-light input[type="checkbox"].accent-neon { accent-color: #1E73E8; }
     font-size: 10px;
     font-weight: 800;
     letter-spacing: 0.04em;
-    color: #FFFFFF;
+    /* Dark ink on the bright green fill for AA contrast (>=4.5:1) */
+    color: #0F1115;
     background: #23C26B;
     border-radius: 4px;
     line-height: 1;
@@ -651,6 +653,16 @@ body.theme-light input[type="checkbox"].accent-neon { accent-color: #1E73E8; }
 
   body {
     font-family: var(--font-bn), var(--font-en), system-ui, sans-serif;
+    /*
+     * Type scale (keep future text on this ladder):
+     *   12px  micro labels / uppercase markers
+     *   14px  secondary / supporting text
+     *   16-18px  body / readable running text (16px is the floor)
+     *   20px+  headings, scaling up by weight and size
+     * Base body is 16px with a 1.5 line-height for comfortable reading.
+     */
+    font-size: 16px;
+    line-height: 1.5;
     background-image:
       radial-gradient(1200px 600px at 50% -200px, rgba(54, 255, 154, 0.10), transparent 60%),
       radial-gradient(900px 500px at 100% 10%, rgba(201, 149, 43, 0.08), transparent 60%),

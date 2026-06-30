@@ -213,7 +213,7 @@ function Tile({ label, value, accent }: { label: string; value: string; accent?:
   return (
     <div className="rounded-xl border border-neon/10 bg-base-deep/40 p-4">
       <p className="text-[11px] uppercase tracking-wider text-ink-lo">{label}</p>
-      <p className={accent ? 'mt-1 text-lg font-bold text-gradient-gold tabular-nums' : 'mt-1 text-lg font-bold text-ink-hi tabular-nums'}>{value}</p>
+      <p className={accent ? 'mt-1 text-lg font-bold text-gold-300 tabular-nums' : 'mt-1 text-lg font-bold text-ink-hi tabular-nums'}>{value}</p>
     </div>
   );
 }

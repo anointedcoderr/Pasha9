@@ -231,8 +231,20 @@ export default function WithdrawPage() {
     [methods, watch],
   );
 
+  // Map raw schema keys to the visible bilingual field labels so the
+  // error summary reads "Account Number" / "অ্যাকাউন্ট নম্বর" instead of
+  // the internal key "account".
+  const fieldLabel = (field: string): string => {
+    if (field === 'amount') return t('withdraw.amount');
+    if (field === 'method') return t('withdraw.method');
+    if (field === 'account') return t('withdraw.account');
+    if (field === 'holder') return t('withdraw.holder');
+    return field;
+  };
+
   const errorEntries = Object.entries(errors).map(([field, e]) => ({
     field,
+    label: fieldLabel(field),
     message: e?.message ? String(e.message) : 'Invalid value',
   }));
 
@@ -455,7 +467,7 @@ export default function WithdrawPage() {
                   ? `উইথড্রয়াল রিকোয়েস্ট জমা দেওয়ার আগে আরও ৳ ${turnover.remainingTurnover.toLocaleString(undefined, { maximumFractionDigits: 2 })} টার্নওভার সম্পূর্ণ করুন।`
                   : `You need to complete ৳ ${turnover.remainingTurnover.toLocaleString(undefined, { maximumFractionDigits: 2 })} more turnover before you can submit a withdrawal request.`}
               </p>
-              <div className="mt-2 grid gap-1 text-[11px] text-rose-900 sm:grid-cols-3">
+              <div className="mt-2 grid gap-1 text-xs text-rose-900 sm:grid-cols-3">
                 <div className="rounded-md bg-white/50 px-2 py-1">
                   <span className="block font-bold uppercase tracking-wider text-rose-700">{lang === 'bn' ? 'প্রয়োজনীয়' : 'Required'}</span>
                   ৳ {turnover.requiredTurnover.toLocaleString(undefined, { maximumFractionDigits: 2 })}
@@ -475,7 +487,7 @@ export default function WithdrawPage() {
                   <p className="text-[11px] font-bold uppercase tracking-wider text-rose-700">
                     {lang === 'bn' ? 'বেটিং পাস রিওয়ার্ড টার্নওভার' : 'Betting Pass reward turnover'}
                   </p>
-                  <p className="mt-1 text-[11px] text-rose-900">
+                  <p className="mt-1 text-xs text-rose-900">
                     {lang === 'bn'
                       ? `প্রয়োজন ৳ ${turnover.bettingPassRequired.toLocaleString(undefined, { maximumFractionDigits: 2 })} . সম্পূর্ণ ৳ ${turnover.bettingPassCompleted.toLocaleString(undefined, { maximumFractionDigits: 2 })} . বাকি ৳ ${turnover.bettingPassRemaining.toLocaleString(undefined, { maximumFractionDigits: 2 })}.`
                       : `Required ৳ ${turnover.bettingPassRequired.toLocaleString(undefined, { maximumFractionDigits: 2 })} . Completed ৳ ${turnover.bettingPassCompleted.toLocaleString(undefined, { maximumFractionDigits: 2 })} . Remaining ৳ ${turnover.bettingPassRemaining.toLocaleString(undefined, { maximumFractionDigits: 2 })}.`}
@@ -488,7 +500,7 @@ export default function WithdrawPage() {
                   <p className="text-[11px] font-bold uppercase tracking-wider text-rose-700">
                     {lang === 'bn' ? 'ডিপোজিট টার্নওভার' : 'Deposit turnover'}
                   </p>
-                  <p className="mt-1 text-[11px] text-rose-900">
+                  <p className="mt-1 text-xs text-rose-900">
                     {lang === 'bn'
                       ? `প্রয়োজন ৳ ${turnover.depositRequired.toLocaleString(undefined, { maximumFractionDigits: 2 })} . সম্পূর্ণ ৳ ${turnover.depositCompleted.toLocaleString(undefined, { maximumFractionDigits: 2 })} . বাকি ৳ ${turnover.depositRemaining.toLocaleString(undefined, { maximumFractionDigits: 2 })}.`
                       : `Required ৳ ${turnover.depositRequired.toLocaleString(undefined, { maximumFractionDigits: 2 })} . Completed ৳ ${turnover.depositCompleted.toLocaleString(undefined, { maximumFractionDigits: 2 })} . Remaining ৳ ${turnover.depositRemaining.toLocaleString(undefined, { maximumFractionDigits: 2 })}.`}
@@ -501,7 +513,7 @@ export default function WithdrawPage() {
                   <p className="text-[11px] font-bold uppercase tracking-wider text-rose-700">
                     {lang === 'bn' ? 'রেফারেল রিওয়ার্ড টার্নওভার' : 'Referral reward turnover'}
                   </p>
-                  <p className="mt-1 text-[11px] text-rose-900">
+                  <p className="mt-1 text-xs text-rose-900">
                     {lang === 'bn'
                       ? `প্রয়োজন ৳ ${turnover.referralRequired.toLocaleString(undefined, { maximumFractionDigits: 2 })} . সম্পূর্ণ ৳ ${turnover.referralCompleted.toLocaleString(undefined, { maximumFractionDigits: 2 })} . বাকি ৳ ${turnover.referralRemaining.toLocaleString(undefined, { maximumFractionDigits: 2 })}.`
                       : `Required ৳ ${turnover.referralRequired.toLocaleString(undefined, { maximumFractionDigits: 2 })} . Completed ৳ ${turnover.referralCompleted.toLocaleString(undefined, { maximumFractionDigits: 2 })} . Remaining ৳ ${turnover.referralRemaining.toLocaleString(undefined, { maximumFractionDigits: 2 })}.`}
@@ -603,7 +615,7 @@ export default function WithdrawPage() {
                 </p>
                 <ul className="mt-1 list-disc pl-6">
                   {errorEntries.map((e) => (
-                    <li key={e.field}><span className="capitalize">{e.field}</span> - {e.message}</li>
+                    <li key={e.field}><span className="font-semibold">{e.label}</span> - {e.message}</li>
                   ))}
                 </ul>
               </div>

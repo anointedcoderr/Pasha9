@@ -11,6 +11,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { PageHeader } from '@/components/site/PageHeader';
 import { Card, CardHeader } from '@/components/ui/Card';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { Chip } from '@/components/ui/Chip';
 import { Button } from '@/components/ui/Button';
 import { Gift, Clock, AlertCircle, RefreshCw } from 'lucide-react';
@@ -140,7 +141,10 @@ export default function BonusCenter() {
       <Card padding="lg" className="mb-6">
         <CardHeader title="Active grants" subtitle="Each row is a bonus the engine has issued you. Bet to clear the turnover requirement and release the funds." />
         {loading ? (
-          <p className="text-sm text-ink-mid">Loading...</p>
+          <div className="grid gap-3" role="status" aria-label="Loading">
+            <Skeleton className="h-24" />
+            <Skeleton className="h-24" />
+          </div>
         ) : active.length === 0 ? (
           <div className="flex flex-col items-start gap-3 rounded-xl border border-neon/10 bg-base-deep/40 p-5">
             <p className="text-sm text-ink-mid">No active grants right now. Make a qualifying deposit or claim a promo to start wagering one.</p>

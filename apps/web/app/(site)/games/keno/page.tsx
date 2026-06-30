@@ -14,7 +14,7 @@ import { BetCard } from '@/components/native-games/BetCard';
 import { DepositRequiredModal, isInsufficientFundsError } from '@/components/native-games/DepositRequiredModal';
 import { formatBDT } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
-import { Shuffle, Trophy, X } from 'lucide-react';
+import { Shuffle, Trophy, X, Check } from 'lucide-react';
 import { safeArray, safeNumber, safeToFixed } from '@/lib/native-games/safe';
 
 interface KenoResult {
@@ -191,15 +191,31 @@ export default function KenoPage() {
                 type="button"
                 onClick={() => togglePick(n)}
                 aria-pressed={isPicked}
+                aria-label={
+                  match
+                    ? (lang === 'bn' ? `নম্বর ${n}, মিলেছে` : `Number ${n}, matched`)
+                    : drawn
+                      ? (lang === 'bn' ? `নম্বর ${n}, ড্র হয়েছে` : `Number ${n}, drawn`)
+                      : isPicked
+                        ? (lang === 'bn' ? `নম্বর ${n}, বাছাই করা` : `Number ${n}, selected`)
+                        : (lang === 'bn' ? `নম্বর ${n}` : `Number ${n}`)
+                }
                 className={cn(
-                  'aspect-square rounded-lg border text-xs font-extrabold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/60',
+                  'relative aspect-square rounded-lg border text-xs font-extrabold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/60',
                   !isPicked && !drawn && 'border-white/10 bg-white/5 text-white/75 hover:border-emerald-300/40 hover:bg-emerald-300/10',
-                  isPicked && !drawn && 'border-amber-400/60 bg-gradient-to-b from-amber-300 to-amber-500 text-[#3A1F00] shadow-[inset_0_1px_0_rgba(255,255,255,0.5)] png-glow',
-                  drawn && !match && 'border-sky-400/40 bg-sky-400/15 text-sky-100',
-                  match && 'border-emerald-300 bg-gradient-to-b from-emerald-300 to-emerald-600 text-white png-win',
+                  isPicked && !drawn && 'border-2 border-amber-400 bg-gradient-to-b from-amber-300 to-amber-500 text-[#3A1F00] shadow-[inset_0_1px_0_rgba(255,255,255,0.5)] png-glow',
+                  drawn && !match && 'border-dashed border-sky-400/70 bg-sky-400/15 text-sky-100',
+                  match && 'border-2 border-emerald-200 bg-gradient-to-b from-emerald-300 to-emerald-600 text-white png-win',
                 )}
               >
                 {n}
+                {match ? (
+                  <Check aria-hidden className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full bg-emerald-900/80 p-px text-emerald-100" strokeWidth={3} />
+                ) : isPicked && !drawn ? (
+                  <span aria-hidden className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-[#3A1F00]" />
+                ) : drawn ? (
+                  <span aria-hidden className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full border border-sky-100" />
+                ) : null}
               </button>
             );
           })}
