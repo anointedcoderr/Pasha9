@@ -11,6 +11,7 @@
 
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { PageHeader } from '@/components/site/PageHeader';
 import { Card, CardHeader } from '@/components/ui/Card';
@@ -21,7 +22,7 @@ import { Switch } from '@/components/ui/Switch';
 import { Modal } from '@/components/ui/Modal';
 import { Chip } from '@/components/ui/Chip';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/Tabs';
-import { Gift, Plus, Pencil, Trash2, RefreshCw, AlertCircle, Settings2, BadgePlus, Ban, ListChecks, Filter, Stethoscope, CheckCircle2, XCircle } from 'lucide-react';
+import { Gift, Plus, Pencil, Trash2, RefreshCw, AlertCircle, Settings2, BadgePlus, Ban, ListChecks, Filter, Stethoscope, CheckCircle2, XCircle, Layers } from 'lucide-react';
 import { formatBDT } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import { ImageUpload } from '@/components/admin/ImageUpload';
@@ -47,6 +48,11 @@ interface RuleRow {
   startsAt: string | null;
   endsAt: string | null;
   meta: unknown;
+  // Per-user claim limit + free spins (unified bonus redesign).
+  claimPeriod: string;
+  claimLimit: number;
+  freeSpinCount: number;
+  freeSpinTierKey: string | null;
   configWarning?: string | null;
   // M4 Phase D presentation assets + terms.
   bannerDesktopUrl: string | null;
@@ -89,6 +95,29 @@ const PROMOTION_TYPES = [
 ] as const;
 const GRANT_STATUSES = ['', 'active', 'completed', 'expired', 'cancelled'] as const;
 
+// Claim-limit windows. Mirrors BonusRule.claimPeriod allowed values.
+const CLAIM_PERIODS = [
+  { value: 'unlimited', label: 'Unlimited' },
+  { value: 'account', label: 'Once per account' },
+  { value: 'day', label: 'Once per day' },
+  { value: 'week', label: 'Once per week' },
+  { value: 'month', label: 'Once per month' },
+] as const;
+
+interface SpinTierOption {
+  key: string;
+  label: string;
+}
+
+// Fallback wheel tiers used when the spin-tiers admin API is not
+// reachable (e.g. the operator lacks rewards.write). Keeps the free
+// spins dropdown usable in every case.
+const FALLBACK_SPIN_TIERS: SpinTierOption[] = [
+  { key: 'lucky', label: 'Lucky' },
+  { key: 'grand', label: 'Grand' },
+  { key: 'supreme', label: 'Supreme' },
+];
+
 const EMPTY_RULE: Omit<RuleRow, 'id'> & { id: string } = {
   id: 'new',
   name: '',
@@ -109,6 +138,10 @@ const EMPTY_RULE: Omit<RuleRow, 'id'> & { id: string } = {
   startsAt: null,
   endsAt: null,
   meta: null,
+  claimPeriod: 'unlimited',
+  claimLimit: 0,
+  freeSpinCount: 0,
+  freeSpinTierKey: null,
   bannerDesktopUrl: null,
   bannerMobileUrl: null,
   thumbnailUrl: null,
@@ -116,6 +149,13 @@ const EMPTY_RULE: Omit<RuleRow, 'id'> & { id: string } = {
   termsEn: '',
   termsBn: '',
 };
+
+// Tier-managed rules (meta.managedBy === 'deposit_bonus_tier') are
+// edited from /admin/deposit-bonus-tiers. Hide them here so a tier
+// never double-shows as a stray advanced rule.
+function isTierManaged(meta: unknown): boolean {
+  return Boolean(meta && typeof meta === 'object' && !Array.isArray(meta) && (meta as Record<string, unknown>).managedBy === 'deposit_bonus_tier');
+}
 
 function ruleStatusTone(s: string): 'ok' | 'warn' | 'neutral' {
   if (s === 'active') return 'ok';
@@ -140,6 +180,7 @@ export default function AdminBonusesPage() {
   const [editor, setEditor] = useState<(Omit<RuleRow, 'id'> & { id: string }) | null>(null);
   const [savingRule, setSavingRule] = useState(false);
   const [ruleError, setRuleError] = useState<string | null>(null);
+  const [spinTiers, setSpinTiers] = useState<SpinTierOption[]>(FALLBACK_SPIN_TIERS);
 
   // Grants state
   const [grants, setGrants] = useState<GrantRow[]>([]);
@@ -182,7 +223,25 @@ export default function AdminBonusesPage() {
     }
   }, [statusFilter, grantQuery]);
 
+  // Populate the free-spins wheel dropdown from the spin-tiers admin
+  // API. Falls back to the hardcoded tiers if the call fails so the
+  // editor still works for operators without rewards.write.
+  const loadSpinTiers = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/spin-tiers', { cache: 'no-store' });
+      if (!res.ok) return;
+      const data = await res.json();
+      const tiers = (data?.tiers ?? []) as Array<{ key: string; nameEn?: string | null }>;
+      if (Array.isArray(tiers) && tiers.length > 0) {
+        setSpinTiers(tiers.map((t) => ({ key: t.key, label: t.nameEn?.trim() || t.key })));
+      }
+    } catch {
+      // Keep the fallback tiers.
+    }
+  }, []);
+
   useEffect(() => { loadRules(); }, [loadRules]);
+  useEffect(() => { loadSpinTiers(); }, [loadSpinTiers]);
   useEffect(() => { if (tab === 'grants') loadGrants(); }, [tab, loadGrants]);
 
   // ----- Rule save / delete -----
@@ -213,6 +272,11 @@ export default function AdminBonusesPage() {
         startsAt: form.startsAt ?? null,
         endsAt: form.endsAt ?? null,
         meta: form.meta,
+        // Unified bonus redesign: claim limit + free spins.
+        claimPeriod: form.claimPeriod || 'unlimited',
+        claimLimit: Number(form.claimLimit) || 0,
+        freeSpinCount: Number(form.freeSpinCount) || 0,
+        freeSpinTierKey: form.freeSpinTierKey || null,
         // M4 Phase D presentation assets.
         bannerDesktopUrl: form.bannerDesktopUrl,
         bannerMobileUrl: form.bannerMobileUrl,
@@ -311,14 +375,22 @@ export default function AdminBonusesPage() {
     }
   };
 
+  // Hide deposit-tier managed rules from the advanced list. They are
+  // owned by /admin/deposit-bonus-tiers and would otherwise appear here
+  // as duplicate rows.
+  const visibleRules = useMemo(() => rules.filter((r) => !isTierManaged(r.meta)), [rules]);
+
   return (
     <>
       <PageHeader
-        title="Promotions and Bonus Engine"
-        subtitle="Configure promotion categories, claim actions, payouts, eligibility, and audit issued grants."
+        title="Bonus Management"
+        subtitle="Advanced mode: full rule control over payouts, eligibility, claim limits, and free spins. For the simple deposit ladder use Deposit Bonus Tiers."
         icon={<Gift className="h-5 w-5" />}
         action={
           <div className="flex gap-2">
+            <Link href="/admin/deposit-bonus-tiers">
+              <Button variant="ghost" leftIcon={<Layers className="h-3.5 w-3.5" />}>Deposit tiers</Button>
+            </Link>
             <Button variant="ghost" leftIcon={<RefreshCw className={cn('h-3.5 w-3.5', (rulesLoading || grantsLoading) && 'animate-spin')} />} onClick={() => (tab === 'rules' ? loadRules() : loadGrants())}>
               Reload
             </Button>
@@ -351,11 +423,11 @@ export default function AdminBonusesPage() {
         <TabsContent value="rules">
           {rulesLoading ? (
             <p className="text-sm text-ink-mid">Loading rules...</p>
-          ) : rules.length === 0 ? (
-            <Card padding="lg"><p className="text-sm text-ink-mid">No bonus rules yet. Click &quot;New Rule&quot; to create the first one.</p></Card>
+          ) : visibleRules.length === 0 ? (
+            <Card padding="lg"><p className="text-sm text-ink-mid">No bonus rules yet. Click &quot;New Rule&quot; to create the first one. Deposit ladder tiers are managed on the Deposit Bonus Tiers page.</p></Card>
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
-              {rules.map((r) => (
+              {visibleRules.map((r) => (
                 <Card key={r.id} padding="lg">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -492,6 +564,7 @@ export default function AdminBonusesPage() {
             onSave={() => saveRule(editor)}
             saving={savingRule}
             onCancel={() => setEditor(null)}
+            spinTiers={spinTiers}
           />
         ) : null}
       </Modal>
@@ -530,12 +603,14 @@ function RuleEditor({
   onSave,
   saving,
   onCancel,
+  spinTiers,
 }: {
   value: Omit<RuleRow, 'id'> & { id: string };
   onChange: (v: Omit<RuleRow, 'id'> & { id: string }) => void;
   onSave: () => void;
   saving: boolean;
   onCancel: () => void;
+  spinTiers: SpinTierOption[];
 }) {
   const set = <K extends keyof typeof value>(k: K, v: typeof value[K]) => onChange({ ...value, [k]: v });
   const promotion = getPromotionConfig(value.meta);
@@ -634,6 +709,44 @@ function RuleEditor({
             Daily bonus requires deposit
           </label>
         </div>
+      </div>
+
+      <div className="space-y-4 rounded-xl border border-brand-divider bg-brand-surface p-3">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">Claim limit</p>
+        <p className="text-xs text-ink-mid">How often a single user can claim this rule. The engine counts grants inside the rolling window and skips the rule once the limit is reached.</p>
+        <div className="grid gap-3 md:grid-cols-2">
+          <FormField label="Claim period">
+            <Select value={value.claimPeriod || 'unlimited'} onChange={(e) => set('claimPeriod', e.target.value)}>
+              {CLAIM_PERIODS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+            </Select>
+          </FormField>
+          <FormField label="Max grants per period" hint="Max grants per period, blank or 0 = 1.">
+            <Input type="number" min={0} value={value.claimLimit} onChange={(e) => set('claimLimit', Number(e.target.value))} disabled={(value.claimPeriod || 'unlimited') === 'unlimited'} />
+          </FormField>
+        </div>
+      </div>
+
+      <div className="space-y-4 rounded-xl border border-brand-divider bg-brand-surface p-3">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">Free spins</p>
+        <p className="text-xs text-ink-mid">Award wheel spins alongside this bonus. Set the count above 0 and pick the wheel the spins apply to.</p>
+        <div className="grid gap-3 md:grid-cols-2">
+          <FormField label="Free spin count" hint="0 = no free spins.">
+            <Input type="number" min={0} value={value.freeSpinCount} onChange={(e) => set('freeSpinCount', Number(e.target.value))} />
+          </FormField>
+          <FormField label="Wheel" hint="Which spin wheel the free spins belong to.">
+            <Select
+              value={value.freeSpinTierKey ?? ''}
+              onChange={(e) => set('freeSpinTierKey', e.target.value || null)}
+              disabled={Number(value.freeSpinCount) <= 0}
+            >
+              <option value="">Select a wheel</option>
+              {spinTiers.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
+            </Select>
+          </FormField>
+        </div>
+        {Number(value.freeSpinCount) > 0 && !value.freeSpinTierKey ? (
+          <p className="text-xs text-signal-warn">Pick a wheel, otherwise the free spins will not be saved.</p>
+        ) : null}
       </div>
 
       <div className="grid gap-3 md:grid-cols-2">

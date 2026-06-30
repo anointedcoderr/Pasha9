@@ -72,7 +72,17 @@ interface PublicSpinTier extends SpinTierDef {
 interface RewardsMe {
   coins: number;
   checkIn: { config: CheckInConfig; claimedToday: boolean; streakDay: number };
-  spin: { config: SpinConfig; freeSpinsRemaining: number; lastSpinAt: string | null };
+  spin: {
+    config: SpinConfig;
+    freeSpinsRemaining: number;
+    // Daily allowance only (granted spins excluded), plus the per-tier
+    // map of granted (deposit-bonus) free spins so each tier counter
+    // can fold them in.
+    dailyFreeSpinsRemaining?: number;
+    grantedFreeSpinsByTier?: Record<string, number>;
+    grantedFreeSpinsTotal?: number;
+    lastSpinAt: string | null;
+  };
 }
 
 const OPERATORS: Array<{ key: Operator; en: string; bn: string }> = [
@@ -203,10 +213,14 @@ export default function RewardsPage() {
   useEffect(() => {
     if (!me) return;
     if (tiers.length === 0) return;
+    const granted = me.spin.grantedFreeSpinsByTier ?? {};
     setFreeRemainingByTier((prev) => {
       const next = { ...prev };
       for (const t of tiers) {
-        if (next[t.key] == null) next[t.key] = t.freeSpinsPerDay;
+        // Seed each tier once with its daily allowance plus any granted
+        // (deposit-bonus) free spins for that tier. After the first spin
+        // the POST response's freeSpinsRemaining keeps this in sync.
+        if (next[t.key] == null) next[t.key] = t.freeSpinsPerDay + (granted[t.key] ?? 0);
       }
       return next;
     });

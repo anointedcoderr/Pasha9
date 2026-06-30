@@ -67,11 +67,44 @@ export async function POST(req: NextRequest) {
       where: { userId, source: 'free_daily', createdAt: { gte: dayWindow }, tierId: tier?.id ?? null },
     });
     const freeCap = tier ? tier.freeSpinsPerDay : (config.freeSpinsPerDay ?? 0);
-    const freeAvailable = Math.max(0, freeCap - freeUsed);
+    const dailyFreeAvailable = Math.max(0, freeCap - freeUsed);
+
+    // Granted free spins from the unified bonus engine (deposit-bonus
+    // rules etc) are stored as FreeSpinGrant rows keyed to a wheel
+    // tier. A grant is available while spinsUsed < spinsGranted and it
+    // has not expired. They only apply to a named tier - the legacy
+    // untiered wheel (tier === null) has no key to match, so granted
+    // spins never leak into it.
+    const now = new Date();
+    const availableGrants = tier
+      ? await db.freeSpinGrant.findMany({
+          where: {
+            userId,
+            tierKey: tier.key,
+            spinsUsed: { lt: db.freeSpinGrant.fields.spinsGranted },
+            OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+          },
+          orderBy: { createdAt: 'asc' },
+          select: { id: true, spinsGranted: true, spinsUsed: true },
+        })
+      : [];
+    const grantedAvailable = availableGrants.reduce(
+      (sum, g) => sum + Math.max(0, g.spinsGranted - g.spinsUsed),
+      0,
+    );
 
     let cost = tier ? tier.costPerSpin : config.costPerSpinCoins;
-    let source: 'free_daily' | 'manual' = 'manual';
-    if (freeAvailable > 0) { cost = 0; source = 'free_daily'; }
+    let source: 'free_daily' | 'free_grant' | 'manual' = 'manual';
+    // Spend the daily allowance first, then fall back to granted spins,
+    // then to paid coins. The grant to debit is resolved inside the
+    // transaction so a concurrent spin cannot over-draw it.
+    if (dailyFreeAvailable > 0) {
+      cost = 0;
+      source = 'free_daily';
+    } else if (grantedAvailable > 0) {
+      cost = 0;
+      source = 'free_grant';
+    }
 
     // Pre-check balance for a user-friendly error before we run the
     // weighted pick + transaction. The authoritative balance check
@@ -192,6 +225,39 @@ export async function POST(req: NextRequest) {
     let result: { spinRow: { id: string }; bonusGrantId: string | null };
     try {
       result = await db.$transaction(async (tx) => {
+      // Granted free-spin consumption. When this spin is paid by a
+      // FreeSpinGrant we debit exactly one spin from the oldest
+      // available grant for this tier. The decrement is guarded by a
+      // where clause that pins the current spinsUsed value, so two
+      // concurrent spins racing on the same grant cannot both succeed:
+      // the second update matches zero rows and we re-resolve / fail
+      // back to a paid spin or a clear error rather than over-drawing.
+      if (source === 'free_grant') {
+        let consumed = false;
+        // availableGrants was read pre-transaction (oldest first). Walk
+        // it in order and take the first grant we can still claim a
+        // spin from under a conditional updateMany guard.
+        for (const g of availableGrants) {
+          const debited = await tx.freeSpinGrant.updateMany({
+            where: {
+              id: g.id,
+              spinsUsed: g.spinsUsed,
+              spinsGranted: { gt: g.spinsUsed },
+              OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+            },
+            data: { spinsUsed: { increment: 1 } },
+          });
+          if (debited.count === 1) { consumed = true; break; }
+        }
+        if (!consumed) {
+          // Every candidate grant was drained or expired between the
+          // pre-read and now (concurrent spin). Bail so the player
+          // retries; we never silently charge coins they did not agree
+          // to inside the same request.
+          throw new Error('FREE_GRANT_RACE');
+        }
+      }
+
       // Authoritative balance re-check INSIDE the transaction.
       // Without this, two concurrent spins that both passed the
       // pre-check above could both pass the cost check and the
@@ -359,6 +425,9 @@ export async function POST(req: NextRequest) {
       if (e instanceof Error && e.message === 'INSUFFICIENT_COINS_RACE') {
         return jsonError(409, 'INSUFFICIENT_COINS', 'Another spin used the same coins. Try again.');
       }
+      if (e instanceof Error && e.message === 'FREE_GRANT_RACE') {
+        return jsonError(409, 'FREE_GRANT_RACE', 'Another spin used your free spin. Try again.');
+      }
       throw e;
     }
 
@@ -421,7 +490,14 @@ export async function POST(req: NextRequest) {
       cost,
       source,
       bonusGrantId: result.bonusGrantId ?? null,
-      freeSpinsRemaining: Math.max(0, freeAvailable - (source === 'free_daily' ? 1 : 0)),
+      // Total free spins still available on this tier after this spin:
+      // the remaining daily allowance plus any granted spins left. We
+      // subtract whichever bucket paid for this spin.
+      freeSpinsRemaining: Math.max(
+        0,
+        (dailyFreeAvailable - (source === 'free_daily' ? 1 : 0)) +
+          (grantedAvailable - (source === 'free_grant' ? 1 : 0)),
+      ),
     });
   });
 }

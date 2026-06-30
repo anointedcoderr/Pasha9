@@ -18,7 +18,8 @@ export async function GET() {
     const session = await ensureUser();
     const userId = session.sub;
 
-    const [wallet, lastClaim, lastSpin, todayCheckIns, recentSpins] = await Promise.all([
+    const now = new Date();
+    const [wallet, lastClaim, lastSpin, todayCheckIns, recentSpins, grants] = await Promise.all([
       db.wallet.findUnique({ where: { userId }, select: { bonusBalance: true } }),
       db.dailyCheckInLog.findFirst({ where: { userId }, orderBy: { createdAt: 'desc' } }),
       db.spinResult.findFirst({ where: { userId }, orderBy: { createdAt: 'desc' } }),
@@ -30,11 +31,31 @@ export async function GET() {
           source: { in: ['free_daily', 'login'] },
         },
       }),
+      // Available granted free spins (deposit-bonus etc), grouped per
+      // wheel tier so the UI can fold them into each tier's counter.
+      db.freeSpinGrant.findMany({
+        where: {
+          userId,
+          spinsUsed: { lt: db.freeSpinGrant.fields.spinsGranted },
+          OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+        },
+        select: { tierKey: true, spinsGranted: true, spinsUsed: true },
+      }),
     ]);
 
     const checkInConfig = await loadCheckInConfig();
     const spinConfig = await loadSpinConfig();
     const freeSpinsToday = Math.max(0, (spinConfig.freeSpinsPerDay ?? 0) - recentSpins);
+
+    // Sum available granted spins per tier key.
+    const grantedFreeSpinsByTier: Record<string, number> = {};
+    let grantedFreeSpinsTotal = 0;
+    for (const g of grants) {
+      const left = Math.max(0, g.spinsGranted - g.spinsUsed);
+      if (left <= 0) continue;
+      grantedFreeSpinsByTier[g.tierKey] = (grantedFreeSpinsByTier[g.tierKey] ?? 0) + left;
+      grantedFreeSpinsTotal += left;
+    }
 
     return jsonOk({
       coins: wallet ? Math.floor(Number(wallet.bonusBalance)) : 0,
@@ -45,7 +66,12 @@ export async function GET() {
       },
       spin: {
         config: spinConfig,
-        freeSpinsRemaining: freeSpinsToday,
+        // Daily allowance plus granted spins so the headline count the
+        // player sees includes their deposit-bonus free spins.
+        freeSpinsRemaining: freeSpinsToday + grantedFreeSpinsTotal,
+        dailyFreeSpinsRemaining: freeSpinsToday,
+        grantedFreeSpinsByTier,
+        grantedFreeSpinsTotal,
         lastSpinAt: lastSpin?.createdAt ?? null,
       },
     });

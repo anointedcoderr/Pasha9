@@ -10,11 +10,12 @@
 
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { PageHeader } from '@/components/site/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Layers, Plus, Save, Trash2, Eye, EyeOff, RefreshCcw } from 'lucide-react';
+import { Layers, Plus, Save, Trash2, Eye, EyeOff, RefreshCcw, Gift } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { AdminMediaUpload } from '@/components/admin/AdminMediaUpload';
 
@@ -23,6 +24,8 @@ interface TierRow {
   minDeposit: number;
   percentage: number;
   turnoverX: number;
+  claimPeriod: string;
+  claimLimit: number;
   isActive: boolean;
   position: number;
   titleEn: string | null;
@@ -34,6 +37,16 @@ interface TierRow {
 }
 
 const inputCls = 'w-full rounded-lg border border-brand-divider bg-brand-paper px-3 py-2 text-sm text-brand-ink placeholder:text-brand-inkMute focus:outline-none focus:ring-2 focus:ring-brand-blue-500';
+
+// Claim-limit windows. Mirrors DepositBonusTier.claimPeriod. "account"
+// gives the classic first-deposit-only behaviour.
+const CLAIM_PERIODS = [
+  { value: 'unlimited', label: 'Unlimited' },
+  { value: 'account', label: 'First deposit only (once per account)' },
+  { value: 'day', label: 'Once per day' },
+  { value: 'week', label: 'Once per week' },
+  { value: 'month', label: 'Once per month' },
+] as const;
 
 export default function AdminDepositBonusTiersPage() {
   const [rows, setRows] = useState<TierRow[]>([]);
@@ -61,7 +74,7 @@ export default function AdminDepositBonusTiersPage() {
     try {
       const r = await fetch('/api/admin/deposit-bonus-tiers', {
         method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ minDeposit: 1000, percentage: 3, turnoverX: 0, isActive: true }),
+        body: JSON.stringify({ minDeposit: 1000, percentage: 3, turnoverX: 0, claimPeriod: 'unlimited', claimLimit: 0, isActive: true }),
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j?.message ?? j?.code ?? 'Create failed');
@@ -110,8 +123,13 @@ export default function AdminDepositBonusTiersPage() {
     <div className="space-y-6">
       <PageHeader
         icon={<Layers className="h-5 w-5" />}
-        title="Deposit bonus tiers"
-        subtitle="Tier table the deposit form previews from. Each tier syncs to a BonusRule the engine grants on approval."
+        title="Deposit Bonus Tiers"
+        subtitle="Simple mode of Bonus Management: the deposit ladder. Each tier syncs to a managed bonus rule the engine grants on approval. For full rule control use Bonus Management."
+        action={
+          <Link href="/admin/bonuses">
+            <Button variant="ghost" leftIcon={<Gift className="h-3.5 w-3.5" />}>Bonus Management</Button>
+          </Link>
+        }
       />
 
       {error ? <Card padding="sm" className="border-l-4 border-rose-400/60"><p className="text-sm text-rose-300">{error}</p></Card> : null}
@@ -146,6 +164,8 @@ function TierEditor({ row, saving, onPatch, onDelete }: { row: TierRow; saving: 
   const [minDeposit, setMinDeposit] = useState(String(row.minDeposit));
   const [percentage, setPercentage] = useState(String(row.percentage));
   const [turnoverX, setTurnoverX] = useState(String(row.turnoverX ?? 0));
+  const [claimPeriod, setClaimPeriod] = useState(row.claimPeriod ?? 'unlimited');
+  const [claimLimit, setClaimLimit] = useState(String(row.claimLimit ?? 0));
   const [position, setPosition] = useState(String(row.position));
   const [titleEn, setTitleEn] = useState(row.titleEn ?? '');
   const [titleBn, setTitleBn] = useState(row.titleBn ?? '');
@@ -157,18 +177,22 @@ function TierEditor({ row, saving, onPatch, onDelete }: { row: TierRow; saving: 
     setMinDeposit(String(row.minDeposit));
     setPercentage(String(row.percentage));
     setTurnoverX(String(row.turnoverX ?? 0));
+    setClaimPeriod(row.claimPeriod ?? 'unlimited');
+    setClaimLimit(String(row.claimLimit ?? 0));
     setPosition(String(row.position));
     setTitleEn(row.titleEn ?? '');
     setTitleBn(row.titleBn ?? '');
     setDescriptionEn(row.descriptionEn ?? '');
     setDescriptionBn(row.descriptionBn ?? '');
     setBannerUrl(row.bannerUrl ?? '');
-  }, [row.id, row.minDeposit, row.percentage, row.turnoverX, row.position, row.titleEn, row.titleBn, row.descriptionEn, row.descriptionBn, row.bannerUrl]);
+  }, [row.id, row.minDeposit, row.percentage, row.turnoverX, row.claimPeriod, row.claimLimit, row.position, row.titleEn, row.titleBn, row.descriptionEn, row.descriptionBn, row.bannerUrl]);
 
   const dirty = (
     Number(minDeposit) !== row.minDeposit ||
     Number(percentage) !== row.percentage ||
     Number(turnoverX) !== (row.turnoverX ?? 0) ||
+    claimPeriod !== (row.claimPeriod ?? 'unlimited') ||
+    Number(claimLimit) !== (row.claimLimit ?? 0) ||
     Number(position) !== row.position ||
     titleEn !== (row.titleEn ?? '') ||
     titleBn !== (row.titleBn ?? '') ||
@@ -197,6 +221,20 @@ function TierEditor({ row, saving, onPatch, onDelete }: { row: TierRow; saving: 
         <label className="block w-20">
           <span className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">Position</span>
           <input type="number" value={position} onChange={(e) => setPosition(e.target.value)} className={inputCls} />
+        </label>
+        <label className="block w-56">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute" title="How often a user can claim this tier. First deposit only = once per account.">
+            Claim limit
+          </span>
+          <select value={claimPeriod} onChange={(e) => setClaimPeriod(e.target.value)} className={inputCls}>
+            {CLAIM_PERIODS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+          </select>
+        </label>
+        <label className="block w-24">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute" title="Max grants per period. Blank or 0 = 1.">
+            Per period
+          </span>
+          <input type="number" min="0" value={claimLimit} onChange={(e) => setClaimLimit(e.target.value)} disabled={claimPeriod === 'unlimited'} className={inputCls} />
         </label>
         <button
           type="button"
@@ -247,6 +285,8 @@ function TierEditor({ row, saving, onPatch, onDelete }: { row: TierRow; saving: 
             minDeposit: Number(minDeposit),
             percentage: Number(percentage),
             turnoverX: Math.max(0, Number(turnoverX) || 0),
+            claimPeriod,
+            claimLimit: Math.max(0, Number(claimLimit) || 0),
             position: Number(position),
             titleEn: titleEn || null,
             titleBn: titleBn || null,

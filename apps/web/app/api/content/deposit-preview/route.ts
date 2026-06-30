@@ -11,7 +11,9 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { pickBestTier } from '@/lib/bonuses/deposit-tiers';
+import { previewBestEligibleBonus } from '@/lib/bonuses/engine';
 import { previewDepositPromotion } from '@/lib/promotions/deposit';
+import { getOrRefreshSessionClaims } from '@/lib/auth/session';
 
 export async function GET(req: NextRequest) {
   try {
@@ -23,6 +25,38 @@ export async function GET(req: NextRequest) {
     }
     const promotionId = url.searchParams.get('promotionId');
     const selected = promotionId ? await previewDepositPromotion(promotionId, amount) : null;
+
+    // When the player is logged in (and no explicit promotion is
+    // selected) preview the bonus the engine would actually grant THIS
+    // user: previewBestEligibleBonus runs the same first-deposit,
+    // claim-limit and rolling-window checks, so a user who already
+    // claimed their welcome / weekly reload sees the real (possibly
+    // zero) bonus instead of the optimistic public tier figure. Guests
+    // keep the public pickBestTier preview. Best-effort: any failure
+    // reading the session falls back to the public preview.
+    let claims = null;
+    if (!selected) {
+      try {
+        claims = await getOrRefreshSessionClaims();
+      } catch {
+        claims = null;
+      }
+    }
+
+    if (claims?.sub && !selected) {
+      const userPreview = await previewBestEligibleBonus(claims.sub, amount);
+      return NextResponse.json({
+        ok: true,
+        amount,
+        tier: null,
+        bonusPercentage: userPreview.bonusPercentage,
+        bonusAmount: userPreview.bonusAmount,
+        totalCredit: userPreview.totalCredit,
+        promotionId: null,
+        promotionName: null,
+      });
+    }
+
     const tierPreview = selected ? null : await pickBestTier(amount);
     const preview = selected ?? tierPreview;
     if (!preview) throw new Error('No preview result');

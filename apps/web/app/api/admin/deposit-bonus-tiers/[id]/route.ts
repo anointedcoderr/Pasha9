@@ -22,6 +22,9 @@ const patchSchema = z.object({
   percentage: z.coerce.number().int().min(0).max(100).optional(),
   // Per-grant wager multiplier (see DepositBonusTier model comment).
   turnoverX: z.coerce.number().min(0).max(50).optional(),
+  // Per-user claim limit mirrored into the managed BonusRule.
+  claimPeriod: z.enum(['unlimited', 'account', 'day', 'week', 'month']).optional(),
+  claimLimit: z.coerce.number().int().min(0).max(1000).optional(),
   isActive: z.boolean().optional(),
   position: z.number().int().min(0).max(9999).optional(),
   titleEn: z.string().trim().max(120).optional().nullable(),

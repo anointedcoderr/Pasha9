@@ -88,6 +88,12 @@ export async function syncTierToBonusRule(tier: {
   // Optional - tiers created before turnoverX shipped read as
   // undefined. Default to 0 (no per-grant wager lock) for those.
   turnoverX?: Prisma.Decimal | number | null;
+  // Per-user claim limit mirrored into the managed BonusRule so the
+  // engine enforces "once per account / day / week / month". Tiers
+  // saved before these fields shipped read as undefined and default to
+  // unlimited / 0 (no cap), preserving the existing behaviour.
+  claimPeriod?: string | null;
+  claimLimit?: number | null;
   titleEn?: string | null;
   titleBn?: string | null;
   descriptionEn?: string | null;
@@ -117,6 +123,13 @@ export async function syncTierToBonusRule(tier: {
   const safeTurnover = Number.isFinite(rawTurnover) && rawTurnover > 0 ? rawTurnover : 0;
   const turnoverX = new Prisma.Decimal(safeTurnover);
 
+  // Mirror the per-user claim limit onto the managed rule. The engine
+  // reads BonusRule.claimPeriod / claimLimit, so passing them through
+  // here keeps the operator's "once every N days" intent in sync.
+  const claimPeriod = tier.claimPeriod ?? 'unlimited';
+  const rawClaimLimit = Number(tier.claimLimit ?? 0);
+  const claimLimit = Number.isFinite(rawClaimLimit) && rawClaimLimit > 0 ? Math.floor(rawClaimLimit) : 0;
+
   const data = {
     name,
     type: 'reload' as const,
@@ -131,6 +144,8 @@ export async function syncTierToBonusRule(tier: {
     turnoverX,
     validityDays: 30,
     priority,
+    claimPeriod,
+    claimLimit,
     meta: { managedBy: 'deposit_bonus_tier', tierId: tier.id } as Prisma.JsonObject,
   };
 
@@ -170,6 +185,8 @@ export async function resolveActiveTierRule(tier: {
   isActive: boolean;
   position: number;
   turnoverX?: Prisma.Decimal | number | null;
+  claimPeriod?: string | null;
+  claimLimit?: number | null;
   titleEn?: string | null;
   titleBn?: string | null;
   descriptionEn?: string | null;

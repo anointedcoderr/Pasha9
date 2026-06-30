@@ -6,7 +6,7 @@
 
 import { Prisma, type BonusRule } from '@prisma/client';
 import { db } from '@/lib/db/client';
-import { grantBonusInTx, type ApplyDepositResult } from '@/lib/bonuses/engine';
+import { grantBonusInTx, reachedClaimLimit, emitFreeSpinGrant, type ApplyDepositResult } from '@/lib/bonuses/engine';
 import { bucketForPromotionType } from '@/lib/promotions/claim';
 import {
   getPromotionConfig,
@@ -104,6 +104,13 @@ export async function applySelectedDepositPromotion(input: {
     }
   }
 
+  // Per-user claim limit (once per account / day / week / month). The
+  // tier ladder mirrors claimPeriod/claimLimit onto the managed rule, so
+  // a deposit that matches a capped tier is blocked here exactly as the
+  // auto engine and the eligibility preview would block it. Without this
+  // the limit was honoured in the preview but never on the grant.
+  if (await reachedClaimLimit(input.userId, rule, input.depositId)) return skip('claim_limit_reached');
+
   const payout = computeDepositPayout(rule, input.depositAmount);
   if (payout.lte(0)) return skip('computed_payout_zero');
   const dayBucket = bucketForPromotionType(rule.type, now);
@@ -158,6 +165,9 @@ export async function applySelectedDepositPromotion(input: {
       amount: Number(granted.amount),
       turnoverRequired: Number(payout.mul(new Prisma.Decimal(rule.turnoverX))),
     });
+    // Free spins ride on the same rule; emit after the cash grant
+    // commits. Best-effort, so it never fails the deposit promotion.
+    await emitFreeSpinGrant(input.userId, rule, input.depositId);
     return result;
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {

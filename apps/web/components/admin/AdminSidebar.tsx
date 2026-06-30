@@ -77,7 +77,6 @@ const GROUPS = [
       { key: 'paymentsReconciliation', href: ROUTES.admin.paymentsReconciliation, icon: FileCheck },
       { key: 'operations', href: ROUTES.admin.operations, icon: AlertTriangle },
       { key: 'depositNotice', href: ROUTES.admin.depositNotice, icon: Bell },
-      { key: 'depositBonusTiers', href: ROUTES.admin.depositBonusTiers, icon: Gift },
     ],
   },
   {
@@ -93,7 +92,11 @@ const GROUPS = [
   {
     labelKey: 'groupBonusAndAffiliate',
     items: [
+      // Bonus Management is the one place for the bonus engine. The
+      // deposit tier ladder sits directly under it as the simple mode;
+      // the advanced rule list lives inside Bonus Management itself.
       { key: 'bonuses', href: ROUTES.admin.bonuses, icon: Gift },
+      { key: 'depositBonusTiers', href: ROUTES.admin.depositBonusTiers, icon: Layers },
       { key: 'promotionBanners', href: ROUTES.admin.promotionBanners, icon: ImageIcon },
       { key: 'affiliate', href: ROUTES.admin.affiliate, icon: Briefcase },
       { key: 'affiliateTiers', href: ROUTES.admin.affiliateTiers, icon: Trophy },

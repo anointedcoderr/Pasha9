@@ -256,6 +256,64 @@ export interface ApplyDepositResult {
   isFirstDeposit: boolean;
 }
 
+// Start of the rolling window for a claim period. 'account' returns
+// null (lifetime, no time bound). day/week/month are rolling windows
+// that match the operator's "once every N days" intent.
+function claimPeriodStart(period: string, at: Date): Date | null {
+  const ms = at.getTime();
+  if (period === 'day') return new Date(ms - 24 * 60 * 60 * 1000);
+  if (period === 'week') return new Date(ms - 7 * 24 * 60 * 60 * 1000);
+  if (period === 'month') return new Date(ms - 30 * 24 * 60 * 60 * 1000);
+  return null; // 'account' or unknown: no time bound
+}
+
+// Has this user already reached a rule's per-user claim limit within its
+// rolling window? Shared by the auto engine (evaluateDepositCandidates)
+// AND the selected-promotion grant path (lib/promotions/deposit.ts) so
+// the preview, the auto grant, and the tier/promotion grant all enforce
+// the SAME limit. 'unlimited' (the default) never caps.
+export async function reachedClaimLimit(userId: string, rule: BonusRule, excludeDepositId: string | null): Promise<boolean> {
+  const period = (rule.claimPeriod ?? 'unlimited').trim();
+  if (!period || period === 'unlimited') return false;
+  const limit = rule.claimLimit > 0 ? rule.claimLimit : 1;
+  const since = claimPeriodStart(period, new Date());
+  const priorClaims = await db.userBonus.count({
+    where: {
+      userId,
+      bonusRuleId: rule.id,
+      ...(excludeDepositId ? { NOT: { sourceId: excludeDepositId } } : {}),
+      ...(since ? { claimedAt: { gte: since } } : {}),
+    },
+  });
+  return priorClaims >= limit;
+}
+
+// Best-effort free-spin grant. When the rule carries meta.freeSpins
+// ({ count, tierKey }), records a FreeSpinGrant the player draws down on
+// the wheel. Shared by both deposit-bonus grant paths. Never throws: a
+// failure (including a unique-constraint hit on a concurrent re-grant)
+// must not affect the cash bonus that already committed.
+export async function emitFreeSpinGrant(userId: string, rule: BonusRule, sourceDepositId: string | null): Promise<void> {
+  try {
+    const fsMeta = (rule.meta ?? null) as { freeSpins?: { count?: unknown; tierKey?: unknown } } | null;
+    const fs = fsMeta?.freeSpins ?? null;
+    const fsCount = typeof fs?.count === 'number' ? Math.floor(fs.count) : 0;
+    const fsTierKey = typeof fs?.tierKey === 'string' ? fs.tierKey.trim() : '';
+    if (fsCount > 0 && fsTierKey) {
+      // Composite source key (deposit + rule) so the FreeSpinGrant unique
+      // dedupes a concurrent re-grant of THIS rule, while a different
+      // rule can still grant free spins for the same deposit.
+      const sourceId = sourceDepositId ? `${sourceDepositId}:${rule.id}` : null;
+      await db.freeSpinGrant.create({
+        data: { userId, tierKey: fsTierKey, spinsGranted: fsCount, sourceType: 'deposit_bonus', sourceId },
+      });
+      console.info('[bonus] free-spin grant', { ruleId: rule.id, userId, tierKey: fsTierKey, count: fsCount });
+    }
+  } catch (err) {
+    console.error('[bonus] free-spin grant failed', { ruleId: rule.id, userId }, err);
+  }
+}
+
 // Pure evaluation: returns the per-rule decision for a given deposit
 // without actually granting. Shared by applyDepositBonuses and the
 // /diagnose endpoint.
@@ -263,17 +321,22 @@ async function evaluateDepositCandidates(
   userId: string,
   depositId: string | null,
   depositAmount: Prisma.Decimal,
+  opts: { previewMode?: boolean } = {},
 ): Promise<{ rule: BonusRule; payout: Prisma.Decimal; eligible: boolean; reason: string | null; isFirstDeposit: boolean; candidateCount: number }[]> {
   const at = new Date();
 
-  // approvedCount counts deposits the user has had approved INCLUDING
-  // the current one, since the approve route updates the deposit row
-  // before calling the engine (engine runs after the deposit
-  // transaction commits in the hotfixed flow).
+  // approvedCount counts the user's approved deposits. On the GRANT path
+  // the approve route has already flipped the current deposit to
+  // 'approved' before the engine runs, so it is included and "first
+  // deposit" means approvedCount <= 1. On the PREVIEW path
+  // (deposit-preview) there is no pending row yet, so the count is one
+  // lower and "first deposit" means approvedCount === 0. Using the grant
+  // basis in preview made the form promise a welcome bonus that approval
+  // would then refuse, so preview gets its own basis.
   const approvedCount = await db.deposit.count({
     where: { userId, status: 'approved' },
   });
-  const isFirstDeposit = approvedCount <= 1;
+  const isFirstDeposit = opts.previewMode ? approvedCount === 0 : approvedCount <= 1;
 
   // Pull every potentially-relevant rule in one go and decide in JS.
   // Keeps the SQL simple and the diagnostics easy to surface.
@@ -309,9 +372,17 @@ async function evaluateDepositCandidates(
       if (!meta || meta.trigger !== 'deposit') reasons.push('promo_not_deposit_triggered');
     }
     if (rule.type === 'reload' && rule.startsAt == null && rule.endsAt == null) {
-      // Reload rules without a window apply every deposit - this is
-      // intentional, no extra check needed.
+      // Reload rules without a window apply every deposit unless an
+      // explicit claim limit below caps them.
     }
+
+    // Generalised per-user claim limit (once per account / day / week /
+    // month, with an optional custom count). Independent of the inherent
+    // first-deposit one-time guard above. Shared with the
+    // selected-promotion grant path via reachedClaimLimit so the preview,
+    // the auto grant, and the tier/promotion grant all agree. 'unlimited'
+    // (the default) keeps the legacy "no cap" behaviour.
+    if (await reachedClaimLimit(userId, rule, depositId)) reasons.push('claim_limit_reached');
 
     const payout = computeDepositPayout(rule, depositAmount);
     if (payout.lte(0)) reasons.push('computed_payout_zero');
@@ -389,6 +460,12 @@ export async function applyDepositBonuses(
       });
 
       if (grant) {
+        // Free-spin emit (shared with the selected-promotion path).
+        // Records a FreeSpinGrant when the rule carries meta.freeSpins.
+        // Best-effort: a free-spin failure never rolls back the cash
+        // bonus already committed above.
+        await emitFreeSpinGrant(userId, ev.rule, depositId);
+
         const turnoverRequired = ev.payout.mul(new Prisma.Decimal(ev.rule.turnoverX ?? 0));
         result.granted.push({
           ruleId: ev.rule.id,
@@ -430,6 +507,49 @@ export async function applyDepositBonuses(
   }
 
   return result;
+}
+
+// User-aware deposit preview. Reuses the pure eligibility evaluator so
+// the previewed bonus respects the SAME first-deposit, claim-limit and
+// rolling-window checks the engine applies on approval. Picks the
+// eligible rule with the highest payout and returns a flat summary the
+// deposit form can render. Returns a zero object when nothing is
+// eligible for this user at this amount.
+export interface EligibleBonusPreview {
+  ruleId: string | null;
+  name: string | null;
+  bonusPercentage: number;
+  bonusAmount: number;
+  totalCredit: number;
+}
+
+export async function previewBestEligibleBonus(userId: string, amount: number): Promise<EligibleBonusPreview> {
+  const safeAmount = Number.isFinite(amount) && amount > 0 ? amount : 0;
+  const zero: EligibleBonusPreview = {
+    ruleId: null,
+    name: null,
+    bonusPercentage: 0,
+    bonusAmount: 0,
+    totalCredit: safeAmount,
+  };
+  if (safeAmount <= 0) return zero;
+
+  const evaluated = await evaluateDepositCandidates(userId, null, new Prisma.Decimal(safeAmount), { previewMode: true });
+  let best: (typeof evaluated)[number] | null = null;
+  for (const ev of evaluated) {
+    if (!ev.eligible) continue;
+    if (!best || ev.payout.gt(best.payout)) best = ev;
+  }
+  if (!best) return zero;
+
+  const bonusAmount = Number(best.payout);
+  return {
+    ruleId: best.rule.id,
+    name: best.rule.name,
+    bonusPercentage: Number(best.rule.percentage ?? 0),
+    bonusAmount,
+    totalCredit: safeAmount + bonusAmount,
+  };
 }
 
 // Dry-run for the diagnose endpoint. Returns the same shape as

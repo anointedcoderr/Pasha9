@@ -83,7 +83,6 @@ const GROUPS = [
       { key: 'withdrawalLimits', href: ROUTES.admin.withdrawalLimits, icon: SlidersHorizontal },
       { key: 'paymentsReconciliation', href: ROUTES.admin.paymentsReconciliation, icon: FileCheck },
       { key: 'depositNotice', href: ROUTES.admin.depositNotice, icon: Bell },
-      { key: 'depositBonusTiers', href: ROUTES.admin.depositBonusTiers, icon: Gift },
     ],
   },
   {
@@ -99,7 +98,10 @@ const GROUPS = [
   {
     labelKey: 'groupBonusAndAffiliate',
     items: [
+      // Bonus Management with the deposit tier ladder directly beneath
+      // it as the simple mode. Kept in lockstep with AdminSidebar.
       { key: 'bonuses', href: ROUTES.admin.bonuses, icon: Gift },
+      { key: 'depositBonusTiers', href: ROUTES.admin.depositBonusTiers, icon: Layers },
       { key: 'promotionBanners', href: ROUTES.admin.promotionBanners, icon: ImageIcon },
       { key: 'affiliate', href: ROUTES.admin.affiliate, icon: Briefcase },
       { key: 'affiliateTiers', href: ROUTES.admin.affiliateTiers, icon: Trophy },

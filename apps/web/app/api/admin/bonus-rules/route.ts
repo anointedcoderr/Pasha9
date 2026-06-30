@@ -59,6 +59,14 @@ const createSchema = z.object({
   startsAt: z.string().datetime().optional().nullable(),
   endsAt: z.string().datetime().optional().nullable(),
   meta: z.record(z.unknown()).optional().nullable(),
+  // Per-user claim limit. claimPeriod scopes the rolling window the
+  // engine counts grants in; claimLimit is the max grants per window
+  // (0 means 1 grant per window).
+  claimPeriod: z.enum(['unlimited', 'account', 'day', 'week', 'month']).default('unlimited'),
+  claimLimit: z.coerce.number().int().min(0).max(1000).default(0),
+  // Free spins ride along in meta.freeSpins. count 0 = no free spins.
+  freeSpinCount: z.coerce.number().int().min(0).max(1000).default(0),
+  freeSpinTierKey: z.string().trim().max(40).optional().nullable(),
   bannerDesktopUrl: optionalUrl,
   bannerMobileUrl: optionalUrl,
   thumbnailUrl: optionalUrl,
@@ -67,7 +75,43 @@ const createSchema = z.object({
   termsBn: z.string().max(5000).nullable().optional().transform((v) => (v ? v : null)),
 });
 
+// Merge the free-spin block into the existing meta object. count 0 (or
+// a missing tier key) removes the block while preserving other meta
+// keys, so toggling free spins off never wipes promotion config.
+function mergeFreeSpins(
+  meta: unknown,
+  freeSpinCount: number,
+  freeSpinTierKey: string | null | undefined,
+): Prisma.JsonObject {
+  const base: Record<string, unknown> =
+    meta && typeof meta === 'object' && !Array.isArray(meta) ? { ...(meta as Record<string, unknown>) } : {};
+  const tierKey = freeSpinTierKey?.trim();
+  if (freeSpinCount > 0 && tierKey) {
+    base.freeSpins = { count: freeSpinCount, tierKey };
+  } else {
+    delete base.freeSpins;
+  }
+  return base as Prisma.JsonObject;
+}
+
+// Pull the stored free-spin block back out of meta for the editor.
+function readFreeSpins(meta: unknown): { count: number; tierKey: string | null } {
+  if (meta && typeof meta === 'object' && !Array.isArray(meta)) {
+    const fs = (meta as Record<string, unknown>).freeSpins;
+    if (fs && typeof fs === 'object' && !Array.isArray(fs)) {
+      const count = Number((fs as Record<string, unknown>).count);
+      const tierKey = (fs as Record<string, unknown>).tierKey;
+      return {
+        count: Number.isFinite(count) && count > 0 ? Math.floor(count) : 0,
+        tierKey: typeof tierKey === 'string' ? tierKey : null,
+      };
+    }
+  }
+  return { count: 0, tierKey: null };
+}
+
 function serialize(r: Awaited<ReturnType<typeof db.bonusRule.findMany>>[number]) {
+  const freeSpins = readFreeSpins(r.meta);
   return {
     id: r.id,
     name: r.name,
@@ -89,6 +133,10 @@ function serialize(r: Awaited<ReturnType<typeof db.bonusRule.findMany>>[number])
     startsAt: r.startsAt,
     endsAt: r.endsAt,
     meta: r.meta,
+    claimPeriod: r.claimPeriod ?? 'unlimited',
+    claimLimit: r.claimLimit,
+    freeSpinCount: freeSpins.count,
+    freeSpinTierKey: freeSpins.tierKey,
     bannerDesktopUrl: r.bannerDesktopUrl,
     bannerMobileUrl: r.bannerMobileUrl,
     thumbnailUrl: r.thumbnailUrl,
@@ -183,7 +231,9 @@ export async function POST(req: NextRequest) {
         bannerUrl: data.bannerUrl ?? null,
         startsAt: data.startsAt ? new Date(data.startsAt) : null,
         endsAt: data.endsAt ? new Date(data.endsAt) : null,
-        meta: (data.meta ?? null) as Prisma.InputJsonValue,
+        meta: mergeFreeSpins(data.meta, data.freeSpinCount, data.freeSpinTierKey) as Prisma.InputJsonValue,
+        claimPeriod: data.claimPeriod,
+        claimLimit: data.claimLimit,
         bannerDesktopUrl: data.bannerDesktopUrl,
         bannerMobileUrl: data.bannerMobileUrl,
         thumbnailUrl: data.thumbnailUrl,

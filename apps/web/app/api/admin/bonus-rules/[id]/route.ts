@@ -52,6 +52,10 @@ const patchSchema = z.object({
   startsAt: z.string().datetime().nullable().optional(),
   endsAt: z.string().datetime().nullable().optional(),
   meta: z.record(z.unknown()).nullable().optional(),
+  claimPeriod: z.enum(['unlimited', 'account', 'day', 'week', 'month']).optional(),
+  claimLimit: z.coerce.number().int().min(0).max(1000).optional(),
+  freeSpinCount: z.coerce.number().int().min(0).max(1000).optional(),
+  freeSpinTierKey: z.string().trim().max(40).nullable().optional(),
   bannerDesktopUrl: optionalUrl,
   bannerMobileUrl: optionalUrl,
   thumbnailUrl: optionalUrl,
@@ -59,6 +63,34 @@ const patchSchema = z.object({
   termsEn: z.string().max(5000).nullable().optional(),
   termsBn: z.string().max(5000).nullable().optional(),
 });
+
+// Apply the free-spin edit to a meta object. Returns the meta with the
+// freeSpins block set (count > 0 + a tier key) or removed, preserving
+// every other meta key.
+function applyFreeSpins(
+  meta: unknown,
+  freeSpinCount: number | undefined,
+  freeSpinTierKey: string | null | undefined,
+): Prisma.JsonObject {
+  const base: Record<string, unknown> =
+    meta && typeof meta === 'object' && !Array.isArray(meta) ? { ...(meta as Record<string, unknown>) } : {};
+  const existing = base.freeSpins && typeof base.freeSpins === 'object' && !Array.isArray(base.freeSpins)
+    ? (base.freeSpins as Record<string, unknown>)
+    : null;
+  const count = freeSpinCount !== undefined
+    ? freeSpinCount
+    : existing && Number.isFinite(Number(existing.count)) ? Number(existing.count) : 0;
+  const tierKeyRaw = freeSpinTierKey !== undefined
+    ? freeSpinTierKey
+    : existing && typeof existing.tierKey === 'string' ? (existing.tierKey as string) : null;
+  const tierKey = tierKeyRaw?.trim();
+  if (count > 0 && tierKey) {
+    base.freeSpins = { count: Math.floor(count), tierKey };
+  } else {
+    delete base.freeSpins;
+  }
+  return base as Prisma.JsonObject;
+}
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   return withAuth(async () => {
@@ -71,6 +103,17 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (!parsed.success) return jsonError(400, 'VALIDATION', undefined, { issues: parsed.error.issues });
     const data = parsed.data;
     const engineType = data.promotionType ? TYPE_BY_PROMOTION[data.promotionType] : (data.type ?? existing.type);
+
+    // Free spins live inside meta. Start from the incoming meta override
+    // when present, otherwise the existing meta, then apply the
+    // free-spin edit. Only touch the meta column when something changed.
+    const metaBase = data.meta !== undefined ? data.meta : existing.meta;
+    const freeSpinTouched = data.freeSpinCount !== undefined || data.freeSpinTierKey !== undefined;
+    const effectiveMeta = (data.meta !== undefined || freeSpinTouched)
+      ? applyFreeSpins(metaBase, data.freeSpinCount, data.freeSpinTierKey)
+      : undefined;
+    const metaForUpdate = data.meta !== undefined || freeSpinTouched ? effectiveMeta : undefined;
+
     const next = {
       id: existing.id,
       type: engineType,
@@ -79,7 +122,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       percentage: data.percentage ?? existing.percentage,
       minDeposit: data.minDeposit ?? existing.minDeposit,
       maxBonus: data.maxBonus ?? existing.maxBonus,
-      meta: data.meta !== undefined ? data.meta : existing.meta,
+      meta: metaForUpdate !== undefined ? metaForUpdate : existing.meta,
     };
     const configWarning = promotionActivationError(next);
     if ((data.status ?? existing.status) === 'active' && configWarning) {
@@ -114,7 +157,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         ...(data.bannerUrl !== undefined ? { bannerUrl: data.bannerUrl } : {}),
         ...(data.startsAt !== undefined ? { startsAt: data.startsAt ? new Date(data.startsAt) : null } : {}),
         ...(data.endsAt !== undefined ? { endsAt: data.endsAt ? new Date(data.endsAt) : null } : {}),
-        ...(data.meta !== undefined ? { meta: (data.meta ?? null) as Prisma.InputJsonValue } : {}),
+        ...(metaForUpdate !== undefined ? { meta: metaForUpdate as Prisma.InputJsonValue } : {}),
+        ...(data.claimPeriod !== undefined ? { claimPeriod: data.claimPeriod } : {}),
+        ...(data.claimLimit !== undefined ? { claimLimit: data.claimLimit } : {}),
         ...(data.bannerDesktopUrl !== undefined ? { bannerDesktopUrl: data.bannerDesktopUrl } : {}),
         ...(data.bannerMobileUrl !== undefined ? { bannerMobileUrl: data.bannerMobileUrl } : {}),
         ...(data.thumbnailUrl !== undefined ? { thumbnailUrl: data.thumbnailUrl } : {}),
