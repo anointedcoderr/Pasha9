@@ -259,7 +259,7 @@ export function Footer() {
                 ? 'বাংলাদেশের প্রিমিয়াম গেমিং এবং বেটিং প্ল্যাটফর্ম। নিরাপদ লেনদেন, দ্রুত পেআউট, ২৪ ঘণ্টা সাপোর্ট।'
                 : 'Premium gaming and betting platform built for Bangladesh. Secure transactions, fast payouts, round the clock support.'}
             </p>
-            <p className="mt-3 text-xs text-white/45">
+            <p className="mt-3 text-xs text-white/60">
               © {new Date().getFullYear()} {contacts?.siteName ?? BRAND.display}. {lang === 'bn' ? 'সর্বস্বত্ব সংরক্ষিত।' : 'All rights reserved.'}
             </p>
 
@@ -267,7 +267,7 @@ export function Footer() {
               <Link href={ROUTES.terms}>{lang === 'bn' ? 'শর্তাবলী' : 'Terms'}</Link>
               <Link href={ROUTES.responsible}>{lang === 'bn' ? 'দায়িত্বশীল গেমিং' : 'Responsible Gaming'}</Link>
               <Link href={ROUTES.support}>{lang === 'bn' ? 'সাপোর্ট' : 'Support'}</Link>
-              <a href="#privacy">{lang === 'bn' ? 'প্রাইভেসি' : 'Privacy'}</a>
+              <Link href={ROUTES.terms}>{lang === 'bn' ? 'প্রাইভেসি' : 'Privacy'}</Link>
             </nav>
           </div>
 
@@ -321,7 +321,7 @@ export function Footer() {
         </div>
 
         <div className="mt-10 border-t border-white/10 pt-5">
-          <p className="inline-flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-white/45">
+          <p className="inline-flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-white/60">
             <span>
               Built by{' '}
               <a

@@ -183,6 +183,7 @@ export default function RoulettePage() {
               step={1}
               value={straight}
               onChange={(e) => { setBetType('straight'); setStraight(Math.max(0, Math.min(36, Number(e.target.value)))); }}
+              aria-label={lang === 'bn' ? 'সরাসরি নম্বর' : 'Straight number'}
               className="h-10 w-24 rounded-lg border border-white/15 bg-white/5 px-3 text-base font-extrabold text-white outline-none focus:border-amber-400/60"
             />
             <span

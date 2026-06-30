@@ -1,5 +1,6 @@
 {
   "common": {
+    "skipToContent": "মূল কন্টেন্টে যান",
     "login": "লগইন",
     "signup": "রেজিস্টার",
     "logout": "লগআউট",

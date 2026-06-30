@@ -143,7 +143,6 @@ export function DataTable<T>({
                             }
                           : undefined
                       }
-                      role={interactive ? 'button' : undefined}
                       tabIndex={interactive ? 0 : undefined}
                       className={cn('table-row transition', interactive && 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue-500/40', rowClassName?.(row.original))}
                     >

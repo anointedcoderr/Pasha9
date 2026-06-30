@@ -96,7 +96,7 @@ export default function DashboardOverview() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className={`text-sm font-semibold tabular-nums ${tx.amount > 0 ? 'text-emerald-500' : tx.amount < 0 ? 'text-rose-500' : 'text-ink-lo'}`}>{tx.amount === 0 ? '-' : formatBDT(tx.amount, { sign: true })}</p>
+                  <p className={`text-sm font-semibold tabular-nums ${tx.amount > 0 ? 'text-signal-ok' : tx.amount < 0 ? 'text-signal-danger' : 'text-ink-lo'}`}>{tx.amount === 0 ? '-' : formatBDT(tx.amount, { sign: true })}</p>
                   <Chip tone={tx.status === 'completed' ? 'ok' : tx.status === 'pending' ? 'warn' : 'danger'} className="mt-1">{tx.status}</Chip>
                 </div>
               </li>

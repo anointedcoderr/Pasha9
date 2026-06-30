@@ -182,6 +182,7 @@ export default function DicePage() {
               step={1}
               value={target}
               onChange={(e) => setTarget(Number(e.target.value))}
+              aria-label={lang === 'bn' ? 'লক্ষ্য নম্বর' : 'Target number'}
               className="w-full accent-amber-400"
             />
             <div className="mt-1 grid grid-cols-3 text-[10px] text-white/45">

@@ -130,7 +130,7 @@ export function SelectedMethodCard({ method, mode, showCopy = true, className }:
         {method.number ? (
           <div>
             <p className="text-[11px] font-bold uppercase tracking-wider text-brand-inkMute">
-              {numberLabel} <span className="text-rose-500">*</span>
+              {numberLabel} <span className="text-signal-danger">*</span>
             </p>
             <div className="mt-1 flex items-center gap-2 rounded-xl border border-brand-divider bg-brand-surface px-3 py-2.5">
               <span className="grow break-all font-mono text-base font-extrabold text-brand-ink">{method.number}</span>

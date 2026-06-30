@@ -9,8 +9,13 @@ import { NotificationAutoPrompt } from '@/components/site/NotificationAutoPrompt
 import { CashbackCelebration } from '@/components/site/CashbackCelebration';
 import { RewardCelebration } from '@/components/site/RewardCelebration';
 import { TooltipProvider } from '@/components/ui/Tooltip';
+import { useT } from '@/lib/i18n/context';
+
+const SKIP_LINK_CLASS =
+  'sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-pill focus:bg-brand-blue-500 focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-brand-blue-500';
 
 export default function SiteLayout({ children }: { children: ReactNode }) {
+  const t = useT();
   // Apply the light theme to the body for every public-site route. The
   // legacy dark tokens remain available for the dashboard and admin until
   // they migrate.
@@ -31,8 +36,11 @@ export default function SiteLayout({ children }: { children: ReactNode }) {
   return (
     <TooltipProvider>
       <div className="flex min-h-dvh w-full flex-col overflow-x-hidden pb-[calc(116px+env(safe-area-inset-bottom))] lg:pb-0">
+        <a href="#main-content" className={SKIP_LINK_CLASS}>
+          {t('common.skipToContent')}
+        </a>
         <Header />
-        <main className="mx-auto w-full max-w-page grow px-3 py-4 md:px-6">
+        <main id="main-content" tabIndex={-1} className="mx-auto w-full max-w-page grow px-3 py-4 md:px-6">
           {children}
         </main>
         <Footer />

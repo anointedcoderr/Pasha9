@@ -81,7 +81,7 @@ export function CountUp({
   }, [to, from, durationMs]);
 
   return (
-    <span className={className} aria-live="polite">
+    <span className={className}>
       {prefix}{format(value, decimals, group)}{suffix}
     </span>
   );

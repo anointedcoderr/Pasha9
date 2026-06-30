@@ -1,5 +1,6 @@
 {
   "common": {
+    "skipToContent": "Skip to content",
     "login": "Login",
     "signup": "Register",
     "logout": "Logout",

@@ -154,7 +154,7 @@ export default function DashboardWalletPage() {
               {txs.map((tx) => (
                 <tr key={tx.id} className="table-row">
                   <td className="px-6 py-3 capitalize text-ink-hi">{tx.type}</td>
-                  <td className={`px-6 py-3 tabular-nums ${tx.amount > 0 ? 'text-emerald-500 font-semibold' : tx.amount < 0 ? 'text-rose-500 font-semibold' : 'text-ink-lo'}`}>{tx.amount === 0 ? '-' : formatBDT(tx.amount, { sign: true })}</td>
+                  <td className={`px-6 py-3 tabular-nums ${tx.amount > 0 ? 'text-signal-ok font-semibold' : tx.amount < 0 ? 'text-signal-danger font-semibold' : 'text-ink-lo'}`}>{tx.amount === 0 ? '-' : formatBDT(tx.amount, { sign: true })}</td>
                   <td className="px-6 py-3 font-mono text-xs text-ink-lo">{tx.reference ?? '-'}</td>
                   <td className="px-6 py-3 text-ink-lo">{formatDateTime(tx.createdAt, lang)}</td>
                   <td className="px-6 py-3"><Chip tone={tx.status === 'completed' ? 'ok' : tx.status === 'pending' ? 'warn' : 'danger'}>{tx.status}</Chip></td>

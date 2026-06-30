@@ -1,4 +1,14 @@
-import { forwardRef, useState, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from 'react';
+import {
+  cloneElement,
+  forwardRef,
+  isValidElement,
+  useId,
+  useState,
+  type InputHTMLAttributes,
+  type ReactElement,
+  type ReactNode,
+  type TextareaHTMLAttributes,
+} from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 
@@ -92,6 +102,31 @@ export function FormField({
   required?: boolean;
   children: ReactNode;
 }) {
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
+  const hintId = `${reactId}-hint`;
+  const hasError = Boolean(error);
+
+  // Associate the control with its error/hint text so screen readers announce
+  // the validation message and expose the invalid state.
+  let control = children;
+  if (isValidElement(children)) {
+    const child = children as ReactElement<{
+      id?: string;
+      invalid?: boolean;
+      'aria-invalid'?: boolean | 'true' | 'false';
+      'aria-describedby'?: string;
+    }>;
+    const controlId = child.props.id ?? reactId;
+    const describedBy = hasError ? errorId : hint ? hintId : undefined;
+    control = cloneElement(child, {
+      id: controlId,
+      invalid: hasError || child.props.invalid,
+      'aria-invalid': hasError ? true : child.props['aria-invalid'],
+      'aria-describedby': child.props['aria-describedby'] ?? describedBy,
+    });
+  }
+
   return (
     <label className="block w-full">
       {label ? (
@@ -100,8 +135,16 @@ export function FormField({
           {required ? <span className="text-gold-300">*</span> : null}
         </span>
       ) : null}
-      {children}
-      {error ? <span className="mt-1.5 block text-xs text-signal-danger">{error}</span> : hint ? <span className="mt-1.5 block text-xs text-ink-lo">{hint}</span> : null}
+      {control}
+      {error ? (
+        <span id={errorId} role="alert" className="mt-1.5 block text-xs text-signal-danger">
+          {error}
+        </span>
+      ) : hint ? (
+        <span id={hintId} className="mt-1.5 block text-xs text-ink-lo">
+          {hint}
+        </span>
+      ) : null}
     </label>
   );
 }

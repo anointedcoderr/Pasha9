@@ -163,13 +163,13 @@ export default function SupportPage() {
           {submittedId ? (
             <div className="space-y-3">
               <div className="rounded-xl border border-emerald-300/40 bg-emerald-500/10 p-4">
-                <p className="inline-flex items-center gap-2 text-sm font-bold text-emerald-200">
+                <p className="inline-flex items-center gap-2 text-sm font-bold text-signal-ok">
                   <CheckCircle2 className="h-4 w-4" /> Ticket submitted
                 </p>
-                <p className="mt-1 text-xs text-emerald-100/80">
+                <p className="mt-1 text-xs text-signal-ok">
                   Reference: <code className="font-mono">{submittedId}</code>
                 </p>
-                <p className="mt-1 text-xs text-emerald-100/80">
+                <p className="mt-1 text-xs text-signal-ok">
                   Our team will respond on the contact you provided. Keep this reference for follow-up.
                 </p>
               </div>
@@ -212,13 +212,15 @@ export default function SupportPage() {
                 key={item.q}
                 type="button"
                 onClick={() => setOpenIdx((c) => (c === idx ? null : idx))}
+                aria-expanded={openIdx === idx}
+                aria-controls={`support-faq-panel-${idx}`}
                 className="w-full rounded-xl border border-neon/10 bg-base-deep/40 px-4 py-3 text-left transition hover:border-neon/30"
               >
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-sm font-medium text-ink-hi">{item.q}</span>
                   <ChevronDown className={`h-4 w-4 text-ink-lo transition ${openIdx === idx ? 'rotate-180 text-neon' : ''}`} />
                 </div>
-                {openIdx === idx ? <p className="mt-2 text-sm text-ink-mid">{item.a}</p> : null}
+                {openIdx === idx ? <p id={`support-faq-panel-${idx}`} className="mt-2 text-sm text-ink-mid">{item.a}</p> : null}
               </button>
             ))}
           </div>

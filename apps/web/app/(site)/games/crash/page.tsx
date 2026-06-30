@@ -214,6 +214,7 @@ export default function CrashPage() {
               step="0.01"
               value={target}
               onChange={(e) => setTarget(e.target.value)}
+              aria-label={lang === 'bn' ? 'অটো ক্যাশআউট লক্ষ্য' : 'Auto-cashout target'}
               className="h-11 w-full rounded-lg border border-white/15 bg-white/5 px-3 text-base font-extrabold text-white outline-none focus:border-amber-400/60"
             />
             <span className="text-sm font-bold text-white/55">x</span>

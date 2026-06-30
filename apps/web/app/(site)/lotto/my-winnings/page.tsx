@@ -142,7 +142,7 @@ export default function LottoMyWinningsPage() {
 
       {toast ? (
         <Card padding="sm" className={toast.kind === 'ok' ? 'border-l-4 border-emerald-400/60' : 'border-l-4 border-rose-400/60'}>
-          <p className={`text-sm ${toast.kind === 'ok' ? 'text-emerald-300' : 'text-rose-300'}`}>{toast.message}</p>
+          <p className={`text-sm ${toast.kind === 'ok' ? 'text-signal-ok' : 'text-signal-danger'}`}>{toast.message}</p>
         </Card>
       ) : null}
 

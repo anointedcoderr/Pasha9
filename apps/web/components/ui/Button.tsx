@@ -56,7 +56,7 @@ export const Button = forwardRef<HTMLButtonElement, Props>(function Button(
         <span aria-hidden className="pointer-events-none absolute inset-y-0 -left-1/2 w-1/2 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-sheen" />
       )}
       {loading ? (
-        <span className="inline-block h-4 w-4 rounded-full border-2 border-current border-r-transparent animate-spin" />
+        <span className="inline-block h-4 w-4 rounded-full border-2 border-current border-r-transparent animate-spin motion-keep" />
       ) : (
         leftIcon
       )}

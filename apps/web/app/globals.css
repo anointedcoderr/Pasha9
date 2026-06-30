@@ -328,11 +328,37 @@ body.theme-light input[type="checkbox"].accent-neon { accent-color: #1E73E8; }
   }
   .btn-outline-ink:hover { border-color: #0F1115; background: #F6F7F9; }
 
-  /* Light card surfaces */
+  /* Subtle transparent button. The betting-pass page uses .btn-ghost for its
+   * disabled "Claimed" / "Locked" states, but the class was never defined, so
+   * those buttons rendered unstyled. Match the quiet .btn-outline-ink look
+   * with a transparent fill, plus an explicit muted disabled appearance. */
+  .btn-ghost {
+    background: transparent;
+    color: #3B4252;
+    font-weight: 600;
+    border: 1px solid #E7EAEE;
+    border-radius: 12px;
+    transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+  }
+  .btn-ghost:hover { border-color: #CBD0D7; background: #F6F7F9; color: #0F1115; }
+  .btn-ghost:disabled,
+  .btn-ghost[disabled] {
+    color: #6B7280;
+    background: #F6F7F9;
+    border-color: #E7EAEE;
+    cursor: not-allowed;
+  }
+
+  /* Light card surfaces.
+   * S7 radius convergence: cards used to sit at both 16px (.card-light) and
+   * 18px (the `card` token), which read as a wobble. Converge on the 18px
+   * card token so every surface card shares one radius.
+   * Intended 3-step scale: control 12, surface 18 (card token), pill 999.
+   * The chip stays at its deliberate 10px and is not part of this scale. */
   .card-light {
     background: #FFFFFF;
     border: 1px solid #E7EAEE;
-    border-radius: 16px;
+    border-radius: 18px;
     box-shadow: 0 1px 0 rgba(15, 17, 21, 0.02), 0 8px 22px -16px rgba(15, 17, 21, 0.12);
   }
   .card-light-flat {
@@ -779,6 +805,15 @@ body.theme-light input[type="checkbox"].accent-neon { accent-color: #1E73E8; }
   .input-base::placeholder {
     color: var(--text-lo);
   }
+  /* S6 iOS focus-zoom floor: utility classes (text-sm / text-xs) on inputs
+   * drop the font below 16px, which makes mobile Safari zoom on focus. Force
+   * a 16px floor under 640px even when a utility tries to shrink it. Desktop
+   * keeps its current 14px look (set by the text utilities) unchanged. */
+  @media (max-width: 639px) {
+    .input-base {
+      font-size: 16px !important;
+    }
+  }
 
   .table-row {
     border-bottom: 1px solid rgba(54, 255, 154, 0.06);
@@ -918,6 +953,35 @@ body.theme-light input[type="checkbox"].accent-neon { accent-color: #1E73E8; }
   .png-glow,
   .png-fade-up {
     animation: none !important;
+  }
+}
+
+/* Catch-all reduced-motion guard for the app's real (non png-/pa-) motion.
+ * The blocks above only neutralise the decorative png- and pa- classes, so the
+ * looping brand animations kept running for users who asked for less motion.
+ * Disable every infinite/decorative animation here: the gold Button sheen,
+ * shimmer placeholders, floaty hovers, pulse glows, marquees, plus Tailwind's
+ * animate-pulse / animate-spin and the .skeleton shimmer. Where a transform
+ * loops we also pin transform so nothing is left mid-slide.
+ *
+ * Allowlist: a genuinely indeterminate loader (a spinner that only appears
+ * while a request is in flight) may keep a slow spin. Mark such a spinner with
+ * the .motion-keep class to opt it back in; everything else stays off. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-sheen,
+  .animate-shimmer,
+  .animate-floaty,
+  .animate-pulseGlow,
+  .animate-marquee,
+  .animate-pulse,
+  .animate-spin,
+  .skeleton {
+    animation: none !important;
+    transform: none !important;
+  }
+  /* Indeterminate request spinners may keep a calm, slow rotation. */
+  .animate-spin.motion-keep {
+    animation: spin 1.5s linear infinite !important;
   }
 }
 

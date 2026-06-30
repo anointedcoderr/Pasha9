@@ -116,8 +116,8 @@ export default function TransactionsPage() {
           {lang === 'bn' ? 'রিফ্রেশ' : 'Refresh'}
         </Button>
         <div className="ml-auto flex flex-wrap items-center gap-3 text-xs text-ink-mid">
-          <span><span className="text-ink-lo">{lang === 'bn' ? 'মোট ইন' : 'Total in'}:</span> <span className="font-semibold text-emerald-500">+{formatBDT(totalIn)}</span></span>
-          <span><span className="text-ink-lo">{lang === 'bn' ? 'মোট আউট' : 'Total out'}:</span> <span className="font-semibold text-rose-500">{formatBDT(totalOut)}</span></span>
+          <span><span className="text-ink-lo">{lang === 'bn' ? 'মোট ইন' : 'Total in'}:</span> <span className="font-semibold text-signal-ok">+{formatBDT(totalIn)}</span></span>
+          <span><span className="text-ink-lo">{lang === 'bn' ? 'মোট আউট' : 'Total out'}:</span> <span className="font-semibold text-signal-danger">{formatBDT(totalOut)}</span></span>
         </div>
       </div>
 
@@ -157,7 +157,7 @@ export default function TransactionsPage() {
                   <tr key={tx.id} className="table-row">
                     <td className="px-6 py-3 capitalize text-ink-hi">{typeLabel(tx.type, lang)}</td>
                     <td className="px-6 py-3 text-ink-mid">{tx.description ?? '-'}</td>
-                    <td className={`px-6 py-3 tabular-nums ${tx.amount > 0 ? 'text-emerald-500' : tx.amount < 0 ? 'text-rose-500' : 'text-ink-lo'}`}>
+                    <td className={`px-6 py-3 tabular-nums ${tx.amount > 0 ? 'text-signal-ok' : tx.amount < 0 ? 'text-signal-danger' : 'text-ink-lo'}`}>
                       {tx.amount === 0 ? '-' : formatBDT(tx.amount, { sign: true })}
                     </td>
                     <td className="px-6 py-3 font-mono text-xs text-ink-lo">{tx.reference ?? '-'}</td>

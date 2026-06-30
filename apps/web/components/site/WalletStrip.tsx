@@ -192,7 +192,7 @@ export function WalletStrip() {
                 title={lang === 'bn' ? 'ব্যালেন্স রিফ্রেশ' : 'Refresh balance'}
                 className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-white/70 transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-yellow-500/60"
               >
-                <RefreshCw className={cn('h-3.5 w-3.5', refreshing && 'animate-spin')} />
+                <RefreshCw className={cn('h-3.5 w-3.5', refreshing && 'animate-spin motion-keep')} />
               </button>
             </div>
             <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.18em] text-white/55">

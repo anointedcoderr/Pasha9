@@ -308,7 +308,7 @@ export default function ReferralPage() {
           <Card padding="md" className="border-l-4 border-emerald-400/60">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-300">{lang === 'bn' ? 'দাবি করুন' : 'Claim referral balance'}</p>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-signal-ok">{lang === 'bn' ? 'দাবি করুন' : 'Claim referral balance'}</p>
                 <p className="mt-1 text-xl font-extrabold text-ink-hi tabular-nums">{formatBDT(data.balance.claimableAmount)}</p>
                 <p className="mt-1 text-[11px] text-ink-mid">
                   {lang === 'bn'
@@ -328,7 +328,7 @@ export default function ReferralPage() {
             </div>
             {claimReason ? <p className="mt-2 text-[11px] text-ink-mid"><AlertCircle className="mr-1 inline h-3 w-3" />{claimReason}</p> : null}
             {toast ? (
-              <p className={`mt-2 text-[12px] ${toast.kind === 'ok' ? 'text-emerald-300' : 'text-rose-300'}`}>{toast.message}</p>
+              <p className={`mt-2 text-[12px] ${toast.kind === 'ok' ? 'text-signal-ok' : 'text-signal-danger'}`}>{toast.message}</p>
             ) : null}
           </Card>
 

@@ -59,11 +59,12 @@ export function BetCard({ bet, setBet, minBet, maxBet, balance, playLabel, onPla
     >
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
         <div className="flex flex-1 items-center gap-2">
-          <label className="text-[10px] font-bold uppercase tracking-wider text-white/55 sm:inline">
+          <label htmlFor="png-bet-input" className="text-[10px] font-bold uppercase tracking-wider text-white/55 sm:inline">
             {lang === 'bn' ? 'বেট' : 'Bet'}
           </label>
           <div className="flex flex-1 items-center gap-1 rounded-lg border border-white/15 bg-white/5 px-2">
             <input
+              id="png-bet-input"
               type="number"
               inputMode="decimal"
               min={minBet}
@@ -71,6 +72,7 @@ export function BetCard({ bet, setBet, minBet, maxBet, balance, playLabel, onPla
               step="1"
               value={bet}
               onChange={(e) => setBet(e.target.value)}
+              aria-label={lang === 'bn' ? 'বেটের পরিমাণ' : 'Bet amount'}
               className="h-11 w-full bg-transparent text-base font-extrabold text-white outline-none placeholder:text-white/30"
               placeholder={String(minBet)}
             />
@@ -141,7 +143,7 @@ function QuickBtn({ children, onClick }: { children: React.ReactNode; onClick: (
 
 function Spinner() {
   return (
-    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+    <svg className="h-4 w-4 animate-spin motion-keep" viewBox="0 0 24 24" fill="none">
       <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="3" opacity="0.25" />
       <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
     </svg>

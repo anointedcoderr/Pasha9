@@ -555,7 +555,7 @@ export default function WithdrawPage() {
               ) : null}
               <div className="mt-4">
                 <FormField label={t('withdraw.account')} required error={errors.account?.message}>
-                  <Input placeholder="01XXXXXXXXX" {...register('account')} invalid={!!errors.account} />
+                  <Input placeholder="01XXXXXXXXX" inputMode="numeric" autoComplete="tel" {...register('account')} invalid={!!errors.account} />
                 </FormField>
               </div>
             </Card>

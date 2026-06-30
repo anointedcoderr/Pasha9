@@ -17,7 +17,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   Bell,
-  Lock,
+  LogOut,
   Menu as MenuIcon,
   Plus,
   User as UserIcon,
@@ -273,7 +273,7 @@ export function Header() {
                   aria-label="Logout"
                   className="hidden h-10 w-10 items-center justify-center rounded-xl border border-brand-divider bg-brand-paper text-brand-inkMute transition hover:border-brand-yellow-500 hover:text-brand-ink md:inline-flex"
                 >
-                  <Lock className="h-4 w-4" />
+                  <LogOut className="h-4 w-4" />
                 </button>
               </>
             ) : (
