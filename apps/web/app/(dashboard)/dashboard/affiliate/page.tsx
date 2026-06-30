@@ -300,7 +300,7 @@ export default function DashboardAffiliateCenter() {
                 <div className="absolute inset-0 flex items-center justify-center text-white">
                   <ImageIcon className="h-6 w-6 opacity-80" />
                 </div>
-                <p className="absolute bottom-1.5 left-2 text-[10px] font-bold uppercase text-white/85">Pack {i}</p>
+                <p className="absolute bottom-1.5 left-2 text-[10px] font-bold uppercase text-ink-hi">Pack {i}</p>
               </div>
             ))}
           </div>

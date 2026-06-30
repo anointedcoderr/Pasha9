@@ -615,21 +615,21 @@ export default function DepositPage() {
               </FormField>
 
               {preview.bonusAmount > 0 ? (
-                <div className="mt-3 rounded-xl border border-emerald-500/60 bg-gradient-to-br from-emerald-500/25 to-emerald-700/35 p-3 text-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+                <div className="mt-3 rounded-xl border border-emerald-800 bg-gradient-to-br from-emerald-700 to-emerald-800 p-3 text-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
                   <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-emerald-50">
                     {lang === 'bn' ? 'বোনাস প্রিভিউ' : 'Bonus preview'}
                   </p>
                   <div className="mt-2 grid grid-cols-3 gap-2 text-center">
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-white/85">{lang === 'bn' ? 'বোনাস %' : 'Bonus %'}</p>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-emerald-50">{lang === 'bn' ? 'বোনাস %' : 'Bonus %'}</p>
                       <p className="text-base font-extrabold text-white">{preview.bonusPercentage}%</p>
                     </div>
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-white/85">{lang === 'bn' ? 'বোনাস' : 'Bonus'}</p>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-emerald-50">{lang === 'bn' ? 'বোনাস' : 'Bonus'}</p>
                       <p className="text-base font-extrabold text-white">+ BDT {preview.bonusAmount.toLocaleString()}</p>
                     </div>
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-white/85">{lang === 'bn' ? 'মোট ক্রেডিট' : 'Total credit'}</p>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-emerald-50">{lang === 'bn' ? 'মোট ক্রেডিট' : 'Total credit'}</p>
                       <p className="text-base font-extrabold text-white">BDT {preview.totalCredit.toLocaleString()}</p>
                     </div>
                   </div>

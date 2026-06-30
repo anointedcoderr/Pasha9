@@ -38,14 +38,18 @@ interface Props {
   className?: string;
 }
 
+// Deep enough that white text passes WCAG AA (>=4.5:1) on the
+// solid fill. Brand hue is preserved; the lighter brand tints
+// (Nagad red, Upay teal, Binance gold, USDT green) are darkened
+// to a readable shade rather than swapping the colour family.
 function fallbackColour(name: string): string {
   const n = name.toLowerCase();
   if (n.includes('bkash')) return '#E2136E';
-  if (n.includes('nagad')) return '#EE2A24';
+  if (n.includes('nagad')) return '#C81E16';
   if (n.includes('rocket')) return '#8B3793';
-  if (n.includes('upay')) return '#13C2C2';
-  if (n.includes('binance')) return '#F3BA2F';
-  if (n.includes('usdt') || n.includes('tether')) return '#26A17B';
+  if (n.includes('upay')) return '#0E7C7C';
+  if (n.includes('binance')) return '#8A6400';
+  if (n.includes('usdt') || n.includes('tether')) return '#1B7E5F';
   return '#1F2937';
 }
 

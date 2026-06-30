@@ -285,8 +285,8 @@ export default function BettingPassPage() {
             <div className={cn(
               'relative aspect-[4/3] overflow-hidden text-white',
               row.unlocked
-                ? 'bg-gradient-to-br from-amber-400 to-amber-700'
-                : 'bg-gradient-to-br from-brand-blue-500 to-brand-blue-700',
+                ? 'bg-gradient-to-br from-amber-700 to-amber-900'
+                : 'bg-gradient-to-br from-brand-blue-600 to-brand-blue-700',
             )}>
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.25),transparent_55%)]" />
               {row.iconUrl ? (
@@ -295,7 +295,7 @@ export default function BettingPassPage() {
               ) : null}
               <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
                 {row.unlocked ? <CheckCircle2 className="h-7 w-7 text-white" /> : <Crown className="h-7 w-7 text-brand-yellow-300" />}
-                <p className="mt-2 text-[10px] font-bold uppercase tracking-wider text-white/80">
+                <p className="mt-2 text-[10px] font-bold uppercase tracking-wider text-white">
                   {lang === 'bn' ? `স্তর ${row.tier}` : `Tier ${row.tier}`}
                 </p>
                 <p className="text-xl font-extrabold">{lang === 'bn' && row.nameBn ? row.nameBn : row.nameEn}</p>

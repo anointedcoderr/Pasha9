@@ -302,7 +302,7 @@ function PromoCard({
           </picture>
         ) : null}
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.25),transparent_55%)]" />
-        <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-3 px-4 py-3 text-white">
+        <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-3 bg-gradient-to-t from-black/60 via-black/40 to-transparent px-4 pb-3 pt-6 text-white">
           <span className="text-[10px] font-bold uppercase tracking-wider drop-shadow">{tagLabel}</span>
           <span className="rounded-full bg-black/35 px-2.5 py-1 text-[11px] font-semibold backdrop-blur">{headline}</span>
         </div>
