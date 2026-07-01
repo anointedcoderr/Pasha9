@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/lotto-rollover",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/cashback",
+      "schedule": "5 0 * * *"
     }
   ]
 }

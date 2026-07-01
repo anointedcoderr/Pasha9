@@ -83,6 +83,11 @@ a Bearer header). Replace `https://<host>` with the public origin.
 
 # Account-recovery sweep - twice daily.
 13 5,17 * * * curl -s -X POST -H "Authorization: Bearer $CRON_SECRET" https://<host>/api/cron/recovery-sweep > /dev/null
+
+# Cashback maturity - daily just after midnight UTC. Idempotent per UTC
+# day via CashbackPayout.idempotencyKey, so weekly/monthly campaigns are
+# safe under the same daily cron; only campaigns whose period matures pay.
+5 0 * * * curl -sf -X POST -H "Authorization: Bearer $CRON_SECRET" https://<host>/api/cron/cashback >> /var/log/cashback-cron.log 2>&1
 ```
 
 `CRON_SECRET` MUST be set on the VPS env before any of these run. If

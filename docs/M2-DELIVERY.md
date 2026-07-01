@@ -186,6 +186,10 @@ pm2 restart pasha9-web --update-env
 
 # Every 5 minutes: release expired recovery locks + materialise auto-create rules
 */5 * * * * curl -sf -X POST -H "Authorization: Bearer $CRON_SECRET" https://<host>/api/cron/recovery-sweep >> /var/log/recovery-cron.log 2>&1
+
+# Daily just after midnight UTC: mature cashback campaigns. Idempotent per
+# UTC day, so weekly/monthly campaigns are safe under the same daily cron.
+5 0 * * * curl -sf -X POST -H "Authorization: Bearer $CRON_SECRET" https://<host>/api/cron/cashback >> /var/log/cashback-cron.log 2>&1
 ```
 
 `$CRON_SECRET` should be the literal value (root crontab doesn't expand env

@@ -85,10 +85,20 @@ export function periodKeyFor(cadence: string, end: Date): string {
 }
 
 function defaultPeriodWindow(cadence: string, now: Date): { start: Date; end: Date } {
+  if (cadence === 'daily') {
+    // Floor to UTC calendar midnight so 'daily' means the whole of
+    // yesterday: yesterday 00:00 UTC .. today 00:00 UTC. This matches
+    // the cron comment and captures every loss booked on the prior day
+    // regardless of the run time, removing the eligible=1/paid=0 edge
+    // the old rolling now-24h window could hit near a day boundary.
+    const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+    const start = new Date(end);
+    start.setUTCDate(end.getUTCDate() - 1);
+    return { start, end };
+  }
   const end = new Date(now);
   const start = new Date(now);
-  if (cadence === 'daily') start.setUTCDate(end.getUTCDate() - 1);
-  else if (cadence === 'monthly') start.setUTCMonth(end.getUTCMonth() - 1);
+  if (cadence === 'monthly') start.setUTCMonth(end.getUTCMonth() - 1);
   else start.setUTCDate(end.getUTCDate() - 7);
   return { start, end };
 }
