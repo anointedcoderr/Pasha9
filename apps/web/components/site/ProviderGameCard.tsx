@@ -94,16 +94,14 @@ export function ProviderGameCard({
         ) : (
           <CategoryHeroArt code={artFor(category)} className="absolute inset-0 h-full w-full object-cover opacity-90" />
         )}
-        {badgeLabel ? (
-          <span className="absolute left-2 top-2 inline-flex h-5 max-w-[80%] items-center truncate rounded-full border border-amber-300/70 bg-amber-200/90 px-1.5 text-[9px] font-bold uppercase tracking-wider text-amber-950">
-            {badgeLabel}
-          </span>
-        ) : null}
       </div>
       {/* Caption strip BELOW the image, on the theme surface so it never
           overlaps the artwork. */}
       <div className="px-2.5 pb-2.5 pt-2 text-left">
         <h3 className="truncate text-sm font-extrabold leading-tight text-brand-ink">{displayName}</h3>
+        {badgeLabel ? (
+          <p className="truncate text-[10px] font-semibold uppercase tracking-wider text-brand-inkMute">{badgeLabel}</p>
+        ) : null}
         <p className="mt-1.5 inline-flex h-7 items-center gap-1 rounded-full bg-gradient-to-b from-amber-300 to-amber-500 px-2.5 text-[10px] font-extrabold uppercase tracking-wider text-[#3A1F00] shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]">
           <Play className="h-3 w-3" />
           {busy ? (lang === 'bn' ? 'লোড...' : 'Loading...') : (lang === 'bn' ? 'খেলুন' : 'Play')}
