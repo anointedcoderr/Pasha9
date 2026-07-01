@@ -1259,6 +1259,11 @@ model LotteryWinning {
   status       String    @default("credited") // pending_credit | credited | cancelled
   createdAt    DateTime  @default(now())
   creditedAt   DateTime?
+  // Set the first time the player closes the win celebration popup
+  // (or when the win is already acknowledged). Server-side flag so
+  // the popup stays suppressed across devices/sessions even if the
+  // browser loses its localStorage marker. Never affects crediting.
+  celebrationSeenAt DateTime?
 
   user   User              @relation(fields: [userId], references: [id])
   result LotteryDrawResult @relation(fields: [resultId], references: [id])

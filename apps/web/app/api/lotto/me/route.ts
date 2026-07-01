@@ -141,6 +141,7 @@ export async function GET() {
         status: w.status,
         createdAt: w.createdAt,
         creditedAt: w.creditedAt,
+        celebrationSeenAt: w.celebrationSeenAt,
         resultId: w.resultId,
         drawId: w.result.drawId,
         winningNumber: w.result.winningNumber,

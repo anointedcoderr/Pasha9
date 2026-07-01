@@ -82,6 +82,7 @@ interface MeResponse {
     status: string;
     createdAt?: string;
     creditedAt?: string | null;
+    celebrationSeenAt?: string | null;
     resultId?: string | null;
     drawId: string | null;
     winningNumber?: string;
@@ -191,6 +192,7 @@ export default function LottoPage() {
     }
     const fresh = me.winnings
       .filter((w) => w.status === 'pending_credit' || w.status === 'credited')
+      .filter((w) => !w.celebrationSeenAt)
       .filter((w) => !seen.has(w.id));
     if (fresh.length === 0) return;
     const headline = fresh[0];
@@ -219,8 +221,15 @@ export default function LottoPage() {
         window.localStorage.setItem('lotto.seenWins', JSON.stringify(next));
       }
     } catch { /* swallow */ }
+    // Persist the acknowledgement server-side so the popup stays
+    // suppressed on every device/session even if this browser later
+    // loses its localStorage marker. Fire-and-forget and tolerant of
+    // failure: localStorage still suppresses the popup this session if
+    // the POST does not land. Never touches crediting.
+    fetch('/api/lotto/winnings/' + winPopup.win.id + '/seen', { method: 'POST', credentials: 'include' })
+      .finally(() => void loadMe());
     setWinPopup(null);
-  }, [winPopup]);
+  }, [winPopup, loadMe]);
 
   // Background polling for /api/lotto/me so a settle that lands while
   // the player is sitting on /lotto surfaces the win popup + the
