@@ -122,7 +122,7 @@ export function PromoCodeRedeem({ authed, authChecked }: { authed: boolean; auth
             {lang === 'bn'
               ? `${formatBDT(success.amount)} ${rewardLabel(success.rewardType, 'bn')} যোগ হয়েছে।`
               : `${formatBDT(success.amount)} credited to your ${rewardLabel(success.rewardType, 'en')}.`}
-            {success.turnoverX > 0
+            {(success.rewardType === 'bonus_grant' || success.rewardType === 'main_balance') && success.turnoverX > 0
               ? ` ${lang === 'bn' ? `উইথড্রয়ালের আগে ${success.turnoverX}x টার্নওভার সম্পূর্ণ করুন।` : `Complete ${success.turnoverX}x turnover before withdrawal.`}`
               : ''}
           </span>

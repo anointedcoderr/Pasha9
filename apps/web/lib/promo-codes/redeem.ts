@@ -144,6 +144,11 @@ export async function redeemPromoCode(input: {
           sourceType: 'promo_code',
           sourceId: redemption.id,
           note: `Promo code ${promo.code}`,
+          // The promo's own turnoverX is authoritative, not the
+          // attached rule's. Without this override a promo advertising
+          // 10x turnover but pointing at a 0x rule would grant a
+          // freely-withdrawable bonus.
+          turnoverRequiredOverride: amount.mul(new Prisma.Decimal(promo.turnoverX)),
         });
         if (!grant) throw new Error('PROMO_GRANT_EMPTY');
         bonusGrantId = grant.grantId;
@@ -169,6 +174,32 @@ export async function redeemPromoCode(input: {
           },
         });
         walletTxId = walletTx.id;
+
+        // main_balance credits land in Wallet.balance directly. When the
+        // promo carries a turnover requirement, attach an active
+        // UserBonus row so the withdrawal gate locks exactly the credited
+        // amount until turnover is met. sourceType 'promo_code' is a
+        // direct-balance source, so release on turnover completion is a
+        // no-op: the money is already in balance and must not be credited
+        // a second time. The bonus_balance / locked_balance paths keep
+        // their existing direct credit and do NOT attach a lock, since
+        // their funds are not in Wallet.balance.
+        if (reward === 'main_balance' && Number(promo.turnoverX) > 0) {
+          const lock = await tx.userBonus.create({
+            data: {
+              userId: input.userId,
+              bonusRuleId: null,
+              amount,
+              status: 'active',
+              turnoverRequired: amount.mul(new Prisma.Decimal(promo.turnoverX)),
+              turnoverProgress: 0,
+              sourceType: 'promo_code',
+              sourceId: redemption.id,
+              note: `Promo code ${promo.code}`,
+            },
+          });
+          bonusGrantId = lock.id;
+        }
       }
 
       await tx.promoCodeRedemption.update({

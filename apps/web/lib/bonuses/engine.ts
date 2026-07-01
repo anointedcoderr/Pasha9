@@ -108,6 +108,13 @@ const DIRECT_BALANCE_LOCK_SOURCES = new Set([
   // routed cashback into bonusBalance + lockedBalance, which is why
   // operators reported "cashback not added to user balance".
   'cashback_campaign',
+  // Promo-code redemptions that land in Wallet.balance (the
+  // 'main_balance' reward, and 'bonus_grant' when the promo rule is a
+  // balance-direct type) attach a UserBonus row so the withdrawal gate
+  // locks the credited amount until turnover is met. Marking the source
+  // direct keeps release/clawback from touching the wallet a second
+  // time (the money is already in balance, not lockedBalance).
+  'promo_code',
 ]);
 
 async function creditBonus(tx: Tx, userId: string, amount: Prisma.Decimal, sourceType: string | null = null): Promise<void> {
@@ -171,13 +178,19 @@ export interface GrantOpts {
   sourceType: string;
   sourceId?: string | null;
   note?: string | null;
+  // When set, this value is used as the grant's turnoverRequired
+  // instead of amount * rule.turnoverX. The promo-code path passes the
+  // promo's own turnoverX so the code (not the attached rule) is the
+  // authoritative turnover source, closing the promo-10x / rule-0x
+  // mismatch. Omitting it preserves every existing caller unchanged.
+  turnoverRequiredOverride?: Prisma.Decimal;
 }
 
 export async function grantBonusInTx(tx: Tx, opts: GrantOpts): Promise<{ grantId: string; amount: Prisma.Decimal } | null> {
   const amount = opts.amount;
   if (amount.lte(0)) return null;
   const turnoverX = new Prisma.Decimal(opts.rule.turnoverX ?? 0);
-  const turnoverRequired = amount.mul(turnoverX);
+  const turnoverRequired = opts.turnoverRequiredOverride ?? amount.mul(turnoverX);
   const expiresAt = nowPlusDays(opts.rule.validityDays ?? 0);
 
   const grant = await tx.userBonus.create({
