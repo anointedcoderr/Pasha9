@@ -34,7 +34,8 @@ export type UploadCategory =
   | 'provider_banners'
   | 'avatars'
   | 'sounds'
-  | 'atelier';
+  | 'atelier'
+  | 'banner_videos';
 
 export interface AdminMediaUploadProps {
   label: string;
@@ -70,6 +71,7 @@ const ACCEPT_BY_CATEGORY: Record<UploadCategory, string> = {
   avatars: 'image/png,image/jpeg,image/webp',
   sounds: 'audio/mpeg,audio/mp4,audio/ogg,audio/wav,audio/webm',
   atelier: 'image/png,image/jpeg,image/webp,image/svg+xml',
+  banner_videos: 'video/mp4,video/webm',
 };
 
 export function AdminMediaUpload({

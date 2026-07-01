@@ -16,6 +16,8 @@ const ALLOWED: UploadCategory[] = [
   // Premium atelier: image assets for Spin + Lotto, and operator-
   // uploaded sound files for the playback hook.
   'atelier', 'sounds',
+  // Banner hero video files (MP4 / WebM), stored as-is.
+  'banner_videos',
 ];
 
 export async function POST(req: NextRequest) {

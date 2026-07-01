@@ -30,11 +30,15 @@ export type UploadCategory =
   | 'avatars'
   // Premium atelier additions.
   | 'sounds'
-  | 'atelier';
+  | 'atelier'
+  // Banner hero video files. Stored as-is (never image-processed) so the
+  // HeroSlider can play an operator-uploaded MP4 / WebM.
+  | 'banner_videos';
 
 const IMG = new Set(['image/png', 'image/jpeg', 'image/webp']);
 const IMG_PLUS_SVG = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml']);
 const AUDIO = new Set(['audio/mpeg', 'audio/mp4', 'audio/ogg', 'audio/wav', 'audio/webm']);
+const VIDEO = new Set(['video/mp4', 'video/webm']);
 
 const MIME_BY_CATEGORY: Record<UploadCategory, Set<string>> = {
   banners: IMG,
@@ -56,6 +60,7 @@ const MIME_BY_CATEGORY: Record<UploadCategory, Set<string>> = {
   avatars: IMG,
   sounds: AUDIO,
   atelier: IMG_PLUS_SVG,
+  banner_videos: VIDEO,
 };
 
 const MAX_BYTES_BY_CATEGORY: Record<UploadCategory, number> = {
@@ -78,6 +83,7 @@ const MAX_BYTES_BY_CATEGORY: Record<UploadCategory, number> = {
   avatars: 2 * 1024 * 1024,
   sounds: 256 * 1024,
   atelier: 4 * 1024 * 1024,
+  banner_videos: 20 * 1024 * 1024,
 };
 
 const EXT_BY_MIME: Record<string, string> = {
@@ -93,6 +99,8 @@ const EXT_BY_MIME: Record<string, string> = {
   'audio/ogg': '.ogg',
   'audio/wav': '.wav',
   'audio/webm': '.weba',
+  'video/mp4': '.mp4',
+  'video/webm': '.webm',
 };
 
 // Max output width per category. Anything wider gets downscaled; smaller

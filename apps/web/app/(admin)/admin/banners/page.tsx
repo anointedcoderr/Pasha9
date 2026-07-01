@@ -239,8 +239,16 @@ export default function AdminBannersPage() {
                 />
               ) : (
                 <>
+                  <AdminMediaUpload
+                    label="Upload video / ভিডিও আপলোড"
+                    hint="Upload an MP4 / WebM file, or paste a URL below."
+                    value={editor.videoUrl}
+                    category="banner_videos"
+                    constraintHint="MP4 / WebM, max 20 MB"
+                    onChange={(url) => setEditor({ ...editor, videoUrl: url ?? '' })}
+                  />
                   <FormField label="Video URL" hint="MP4 / WebM. Autoplay-muted on the public slider. Use absolute or /uploads/... path.">
-                    <Input value={editor.videoUrl ?? ''} onChange={(e) => setEditor({ ...editor, videoUrl: e.target.value })} placeholder="/uploads/banners/promo.mp4" />
+                    <Input value={editor.videoUrl ?? ''} onChange={(e) => setEditor({ ...editor, videoUrl: e.target.value })} placeholder="/uploads/banner_videos/promo.mp4" />
                   </FormField>
                   <AdminMediaUpload
                     label="Video poster"
