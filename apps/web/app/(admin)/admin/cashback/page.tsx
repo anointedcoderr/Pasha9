@@ -11,6 +11,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Switch } from '@/components/ui/Switch';
 import { Chip } from '@/components/ui/Chip';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
 import { TrendingUp, Plus, Pencil, Trash2, Play, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 type ScopeType = 'all' | 'match';
@@ -114,6 +115,11 @@ export default function AdminCashbackPage() {
   // sits behind the open modal, so a failed run looked like nothing
   // happened; this state keeps the failure visible to the operator.
   const [runError, setRunError] = useState<string | null>(null);
+  // Delete confirmation lives in an in-page modal. The native
+  // confirm() this page used before is silently suppressed inside
+  // installed PWAs / in-app webviews, so the Delete button looked
+  // dead: no dialog, no request, no error.
+  const [deleteTarget, setDeleteTarget] = useState<CampaignRow | null>(null);
 
   const refresh = useCallback(async () => {
     setError(null);
@@ -173,12 +179,25 @@ export default function AdminCashbackPage() {
     }
   };
 
+  // Runs after the operator confirms in the ConfirmDialog. The server
+  // hard deletes only when the campaign never paid out; otherwise it
+  // deactivates the campaign and says so, keeping the payout history.
   const remove = async (id: string) => {
-    if (!confirm('Delete this campaign? Only allowed when no payouts exist.')) return;
-    const res = await fetch(`/api/admin/cashback/${id}`, { method: 'DELETE' });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) setError(data?.message ?? 'Delete failed');
-    else refresh();
+    setError(null); setToast(null);
+    try {
+      const res = await fetch(`/api/admin/cashback/${id}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(`${data?.message ?? data?.code ?? 'Delete failed'} (Delete failed. ডিলিট ব্যর্থ হয়েছে।)`);
+        return;
+      }
+      setToast(data?.archived
+        ? (data?.message ?? 'Campaign deactivated because payouts exist. পেআউট থাকায় ক্যাম্পেইনটি নিষ্ক্রিয় করা হয়েছে।')
+        : 'Campaign deleted. ক্যাম্পেইনটি মুছে ফেলা হয়েছে।');
+      refresh();
+    } catch {
+      setError('Delete failed: network error. ডিলিট ব্যর্থ হয়েছে: নেটওয়ার্ক সমস্যা।');
+    }
   };
 
   const toggleActive = async (c: CampaignRow) => {
@@ -282,7 +301,7 @@ export default function AdminCashbackPage() {
                 <Button size="sm" variant="neon" leftIcon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditor(c)}>
                   Edit
                 </Button>
-                <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => remove(c.id)}>
+                <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => setDeleteTarget(c)}>
                   Delete
                 </Button>
               </div>
@@ -529,6 +548,19 @@ export default function AdminCashbackPage() {
           </div>
         ) : null}
       </Modal>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(v) => !v && setDeleteTarget(null)}
+        title="Delete cashback campaign"
+        message={deleteTarget ? `Delete campaign "${deleteTarget.nameEn}"? If payouts were already issued, the campaign will be deactivated instead so the money history stays intact.` : ''}
+        messageBn={deleteTarget ? `"${deleteTarget.nameBn || deleteTarget.nameEn}" ক্যাম্পেইনটি মুছে ফেলবেন? ইতিমধ্যে পেআউট হয়ে থাকলে টাকার হিসাব রক্ষা করতে এটি মুছে না ফেলে নিষ্ক্রিয় করা হবে।` : ''}
+        confirmLabel="Delete"
+        onConfirm={async () => {
+          if (deleteTarget) await remove(deleteTarget.id);
+          setDeleteTarget(null);
+        }}
+      />
     </>
   );
 }

@@ -15,7 +15,14 @@ import { resyncAllTiers } from '@/lib/bonuses/deposit-tiers';
 
 export async function POST() {
   return withAuth(async () => {
-    await ensurePermission('settings.write');
+    // Same dual gate as the other deposit-bonus-tiers routes: the page
+    // is gated by 'bonuses.write' in admin-permission-map.ts, so accept
+    // that permission alongside the original 'settings.write'.
+    try {
+      await ensurePermission('bonuses.write');
+    } catch {
+      await ensurePermission('settings.write');
+    }
     const claims = await getCurrentSession();
     if (!claims) return jsonError(401, 'UNAUTHENTICATED');
     const out = await resyncAllTiers();

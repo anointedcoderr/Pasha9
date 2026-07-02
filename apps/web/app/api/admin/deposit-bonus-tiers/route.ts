@@ -18,6 +18,18 @@ import { jsonError, jsonOk } from '@/lib/auth/errors';
 import { db } from '@/lib/db/client';
 import { syncTierToBonusRule } from '@/lib/bonuses/deposit-tiers';
 
+// The /admin/deposit-bonus-tiers page is gated by 'bonuses.write' in
+// admin-permission-map.ts, but this API used to require only
+// 'settings.write', so an operator with the bonus permission got 403
+// on every call. Accept either permission so the two gates agree.
+async function ensureTierPermission() {
+  try {
+    return await ensurePermission('bonuses.write');
+  } catch {
+    return ensurePermission('settings.write');
+  }
+}
+
 const createSchema = z.object({
   minDeposit: z.coerce.number().min(0).max(10_000_000),
   percentage: z.coerce.number().int().min(0).max(100),
@@ -40,7 +52,7 @@ const createSchema = z.object({
 
 export async function GET() {
   return withAuth(async () => {
-    await ensurePermission('settings.write');
+    await ensureTierPermission();
     const rows = await db.depositBonusTier.findMany({
       orderBy: [{ minDeposit: 'asc' }, { position: 'asc' }],
     });
@@ -67,7 +79,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   return withAuth(async () => {
-    await ensurePermission('settings.write');
+    await ensureTierPermission();
     const claims = await getCurrentSession();
     if (!claims) return jsonError(401, 'UNAUTHENTICATED');
 

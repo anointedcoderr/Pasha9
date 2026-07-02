@@ -186,14 +186,37 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
     const session = await ensurePermission('bonuses.write');
     const existing = await db.bonusRule.findUnique({
       where: { id: params.id },
-      include: { _count: { select: { userBonuses: true } } },
+      include: { _count: { select: { userBonuses: true, promotionClaims: true } } },
     });
     if (!existing) return jsonError(404, 'NOT_FOUND');
 
-    // Soft policy: if grants exist, refuse delete to preserve audit
-    // trail. Admin can flip status to 'hidden' instead.
-    if (existing._count.userBonuses > 0) {
-      return jsonError(409, 'RULE_IN_USE', 'Rule has issued grants. Hide it instead of deleting to preserve audit history.');
+    // Safety policy: once players have history under this rule
+    // (issued grants, claim records, or deposits that captured the
+    // rule as their promotion context), a hard delete would destroy
+    // the audit trail (PromotionClaim rows cascade, UserBonus rows
+    // lose their rule link, Deposit.promotionRuleId dangles). A
+    // claimed promotion creates a PENDING deposit before any grant
+    // exists, so deposits are counted in every status. Archive
+    // instead: flip the rule to 'hidden' so it disappears from
+    // players while every money row stays intact.
+    const depositRefs = await db.deposit.count({ where: { promotionRuleId: params.id } });
+    const historyCount = existing._count.userBonuses + existing._count.promotionClaims + depositRefs;
+    if (historyCount > 0) {
+      if (existing.status !== 'hidden') {
+        await db.bonusRule.update({ where: { id: params.id }, data: { status: 'hidden' } });
+      }
+      await recordActivity({
+        actorId: session.sub,
+        actorRole: session.role,
+        action: 'BONUS_RULE_ARCHIVE',
+        target: params.id,
+        detail: existing.name,
+      });
+      return jsonOk({
+        ok: true,
+        archived: true,
+        message: 'Players already claimed this bonus, so it was archived (hidden) instead of deleted to keep the money history. খেলোয়াড়রা ইতিমধ্যে এই বোনাসটি নিয়েছে, তাই টাকার হিসাব রক্ষা করতে এটি মুছে না ফেলে আর্কাইভ (লুকানো) করা হয়েছে।',
+      });
     }
 
     await db.bonusRule.delete({ where: { id: params.id } });
@@ -206,6 +229,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
       detail: existing.name,
     });
 
-    return jsonOk({ ok: true });
+    return jsonOk({ ok: true, archived: false });
   });
 }

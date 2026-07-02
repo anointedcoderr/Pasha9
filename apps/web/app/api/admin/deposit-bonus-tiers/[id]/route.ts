@@ -5,7 +5,8 @@
 //
 // PATCH re-runs syncTierToBonusRule so the BonusRule row stays in
 // lockstep with the tier. DELETE drops the matching BonusRule via
-// removeTierBonusRule.
+// removeTierBonusRule when no player history exists; otherwise it
+// archives (tier disabled + rule hidden) so grant history survives.
 
 export const dynamic = 'force-dynamic';
 
@@ -16,6 +17,20 @@ import { getCurrentSession } from '@/lib/auth/rbac';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 import { db } from '@/lib/db/client';
 import { syncTierToBonusRule, removeTierBonusRule } from '@/lib/bonuses/deposit-tiers';
+
+// The /admin/deposit-bonus-tiers page is gated by 'bonuses.write' in
+// admin-permission-map.ts, but this API used to require only
+// 'settings.write'. An operator holding bonuses.write could open the
+// page yet every save/delete answered 403 FORBIDDEN, which the old UI
+// swallowed. Accept either permission so the page gate and the API
+// gate agree.
+async function ensureTierPermission() {
+  try {
+    return await ensurePermission('bonuses.write');
+  } catch {
+    return ensurePermission('settings.write');
+  }
+}
 
 const patchSchema = z.object({
   minDeposit: z.coerce.number().min(0).max(10_000_000).optional(),
@@ -36,7 +51,7 @@ const patchSchema = z.object({
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   return withAuth(async () => {
-    await ensurePermission('settings.write');
+    await ensureTierPermission();
     const claims = await getCurrentSession();
     if (!claims) return jsonError(401, 'UNAUTHENTICATED');
 
@@ -68,12 +83,47 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
   return withAuth(async () => {
-    await ensurePermission('settings.write');
+    await ensureTierPermission();
     const claims = await getCurrentSession();
     if (!claims) return jsonError(401, 'UNAUTHENTICATED');
 
     const existing = await db.depositBonusTier.findUnique({ where: { id: params.id } });
     if (!existing) return jsonError(404, 'NOT_FOUND');
+
+    // Each tier materialises into a managed BonusRule. If players
+    // already received grants (or claim records) under that rule, or
+    // any deposit captured the rule as its promotion context (a
+    // claimed promotion creates a PENDING deposit before any grant
+    // exists, so deposits are counted in every status), a hard delete
+    // would orphan that history. Archive instead: deactivate the tier
+    // and hide the managed rule. Money rows are never touched.
+    const managedRule = await db.bonusRule.findUnique({
+      where: { code: `deposit_tier_${params.id}` },
+      include: { _count: { select: { userBonuses: true, promotionClaims: true } } },
+    });
+    const depositRefs = managedRule
+      ? await db.deposit.count({ where: { promotionRuleId: managedRule.id } })
+      : 0;
+    const historyCount = managedRule
+      ? managedRule._count.userBonuses + managedRule._count.promotionClaims + depositRefs
+      : 0;
+
+    if (historyCount > 0) {
+      await db.depositBonusTier.update({ where: { id: params.id }, data: { isActive: false } });
+      await db.bonusRule.update({ where: { id: managedRule!.id }, data: { status: 'hidden' } });
+      await recordActivity({
+        actorId: claims.sub,
+        actorRole: claims.role,
+        action: 'DEPOSIT_TIER_ARCHIVE',
+        target: params.id,
+        meta: { minDeposit: Number(existing.minDeposit), percentage: existing.percentage, grants: historyCount },
+      });
+      return jsonOk({
+        ok: true,
+        archived: true,
+        message: 'Players already received this tier bonus, so it was disabled instead of deleted to keep the money history. খেলোয়াড়রা ইতিমধ্যে এই টিয়ারের বোনাস পেয়েছে, তাই টাকার হিসাব রক্ষা করতে এটি মুছে না ফেলে নিষ্ক্রিয় করা হয়েছে।',
+      });
+    }
 
     await db.depositBonusTier.delete({ where: { id: params.id } });
     try {
@@ -90,6 +140,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
       meta: { minDeposit: Number(existing.minDeposit), percentage: existing.percentage },
     });
 
-    return jsonOk({ ok: true });
+    return jsonOk({ ok: true, archived: false });
   });
 }

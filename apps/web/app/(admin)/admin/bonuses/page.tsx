@@ -26,6 +26,7 @@ import { Gift, Plus, Pencil, Trash2, RefreshCw, AlertCircle, Settings2, BadgePlu
 import { formatBDT } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import { ImageUpload } from '@/components/admin/ImageUpload';
+import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
 import { getPromotionConfig, mergePromotionMeta } from '@/lib/promotions/config';
 
 interface RuleRow {
@@ -191,6 +192,10 @@ export default function AdminBonusesPage() {
   const [diagnoseOpen, setDiagnoseOpen] = useState(false);
   const [sweeping, setSweeping] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  // Delete confirmation runs through an in-page modal instead of the
+  // native confirm(), which installed PWAs / in-app webviews suppress
+  // silently, so the Delete button looked dead.
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
 
   // ----- Loaders -----
 
@@ -303,16 +308,27 @@ export default function AdminBonusesPage() {
     }
   };
 
+  // Called from the ConfirmDialog. Never uses native confirm(): that
+  // dialog is suppressed in installed PWAs / webviews and silently
+  // returns false, which made this button do nothing at all. Every
+  // outcome (deleted, archived because players used it, or an error)
+  // is surfaced as a visible bilingual message.
   const deleteRule = async (id: string, name: string) => {
-    if (!confirm(`Delete rule "${name}"? Grants already issued under this rule will block deletion.`)) return;
-    const res = await fetch(`/api/admin/bonus-rules/${id}`, { method: 'DELETE' });
-    const data = await res.json().catch(() => ({}));
-    if (res.ok) {
-      setToast(`Rule "${name}" deleted.`);
-      setTimeout(() => setToast(null), 4000);
-      loadRules();
-    } else {
-      setRuleError(data?.message ?? data?.code ?? 'Delete failed');
+    setRuleError(null);
+    try {
+      const res = await fetch(`/api/admin/bonus-rules/${id}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setToast(data?.archived
+          ? (data?.message ?? `Rule "${name}" was archived because players already used it. খেলোয়াড়রা ব্যবহার করায় রুলটি আর্কাইভ করা হয়েছে।`)
+          : `Rule "${name}" deleted. রুলটি মুছে ফেলা হয়েছে।`);
+        setTimeout(() => setToast(null), 8000);
+        loadRules();
+      } else {
+        setRuleError(`${data?.message ?? data?.code ?? 'Delete failed'} (Delete failed. ডিলিট ব্যর্থ হয়েছে।)`);
+      }
+    } catch {
+      setRuleError('Delete failed: network error. ডিলিট ব্যর্থ হয়েছে: নেটওয়ার্ক সমস্যা।');
     }
   };
 
@@ -468,7 +484,7 @@ export default function AdminBonusesPage() {
                       termsEn: r.termsEn ?? '',
                       termsBn: r.termsBn ?? '',
                     })}>Edit</Button>
-                    <Button size="sm" variant="ghost" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => deleteRule(r.id, r.name)}>Delete</Button>
+                    <Button size="sm" variant="ghost" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => setDeleteTarget({ id: r.id, name: r.name })}>Delete</Button>
                   </div>
                 </Card>
               ))}
@@ -584,6 +600,19 @@ export default function AdminBonusesPage() {
       <Modal open={diagnoseOpen} onOpenChange={setDiagnoseOpen} title="Bonus Engine Diagnose" size="lg">
         <DiagnoseForm />
       </Modal>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(v) => !v && setDeleteTarget(null)}
+        title="Delete bonus rule"
+        message={deleteTarget ? `Delete rule "${deleteTarget.name}"? If players already claimed it, the rule will be archived instead so their history stays intact.` : ''}
+        messageBn={deleteTarget ? `"${deleteTarget.name}" রুলটি মুছে ফেলবেন? খেলোয়াড়রা ইতিমধ্যে এটি নিয়ে থাকলে ইতিহাস রক্ষা করতে রুলটি মুছে না ফেলে আর্কাইভ করা হবে।` : ''}
+        confirmLabel="Delete"
+        onConfirm={async () => {
+          if (deleteTarget) await deleteRule(deleteTarget.id, deleteTarget.name);
+          setDeleteTarget(null);
+        }}
+      />
     </>
   );
 }

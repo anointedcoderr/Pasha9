@@ -1,7 +1,9 @@
 // Built by Anointed Coder.
 //
 // PATCH  /api/admin/cashback/[id]   edit fields
-// DELETE /api/admin/cashback/[id]   delete (only when no payouts)
+// DELETE /api/admin/cashback/[id]   hard delete when no payouts exist,
+//                                   otherwise archive (deactivate) so
+//                                   payout history is preserved
 
 export const dynamic = 'force-dynamic';
 
@@ -80,15 +82,38 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
   return withAuth(async () => {
     const session = await ensurePermission('bonuses.write');
-    const existing = await db.cashbackCampaign.findUnique({
-      where: { id: params.id },
-      include: { _count: { select: { payouts: true } } },
-    });
+    const existing = await db.cashbackCampaign.findUnique({ where: { id: params.id } });
     if (!existing) return jsonError(404, 'NOT_FOUND');
-    if (existing._count.payouts > 0) {
-      return jsonError(409, 'IN_USE', 'Campaign has issued payouts. Deactivate it instead of deleting to preserve audit history.');
+    // Payout history must never be deleted. When payouts exist the
+    // campaign is archived (deactivated) instead of hard deleted, so
+    // the money trail stays intact and the operator still sees a
+    // clear result from the Delete click.
+    //
+    // The check and the delete must be one statement: the nightly
+    // cashback cron can insert a payout between a count and a delete,
+    // and CashbackPayout rows cascade on campaign delete. deleteMany
+    // with a payouts none filter deletes only when no payout exists
+    // at delete time; count 0 means a payout appeared, so archive.
+    const res = await db.cashbackCampaign.deleteMany({
+      where: { id: params.id, payouts: { none: {} } },
+    });
+    if (res.count === 0) {
+      if (existing.isActive) {
+        await db.cashbackCampaign.update({ where: { id: params.id }, data: { isActive: false } });
+      }
+      await recordActivity({
+        actorId: session.sub,
+        actorRole: session.role,
+        action: 'CASHBACK_CAMPAIGN_ARCHIVE',
+        target: params.id,
+        detail: existing.nameEn,
+      });
+      return jsonOk({
+        ok: true,
+        archived: true,
+        message: 'Players already received payouts from this campaign, so it was deactivated instead of deleted to keep the money history. খেলোয়াড়রা ইতিমধ্যে এই ক্যাম্পেইন থেকে ক্যাশব্যাক পেয়েছে, তাই টাকার হিসাব রক্ষা করতে এটি মুছে না ফেলে নিষ্ক্রিয় করা হয়েছে।',
+      });
     }
-    await db.cashbackCampaign.delete({ where: { id: params.id } });
     await recordActivity({
       actorId: session.sub,
       actorRole: session.role,
@@ -96,6 +121,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
       target: params.id,
       detail: existing.nameEn,
     });
-    return jsonOk({ ok: true });
+    return jsonOk({ ok: true, archived: false });
   });
 }

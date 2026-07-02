@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/Button';
 import { Layers, Plus, Save, Trash2, Eye, EyeOff, RefreshCcw, Gift } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { AdminMediaUpload } from '@/components/admin/AdminMediaUpload';
+import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
 
 interface TierRow {
   id: string;
@@ -55,6 +56,11 @@ export default function AdminDepositBonusTiersPage() {
   const [info, setInfo] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [busyResync, setBusyResync] = useState(false);
+  // Deletion confirms through an in-page modal. The old native
+  // confirm() is silently suppressed in installed PWAs / in-app
+  // webviews (it returns false with no dialog), which made the Delete
+  // button look completely dead.
+  const [deleteTarget, setDeleteTarget] = useState<TierRow | null>(null);
 
   const refresh = useCallback(async () => {
     setError(null);
@@ -96,15 +102,24 @@ export default function AdminDepositBonusTiersPage() {
     finally { setBusyId(null); }
   };
 
+  // Runs after the operator confirms in the ConfirmDialog. The server
+  // hard deletes only when no player ever received this tier bonus;
+  // otherwise it archives (tier disabled, managed rule hidden) and
+  // says so, so money history is never destroyed.
   const remove = async (id: string) => {
-    if (!confirm('Delete this tier and its bonus rule?')) return;
-    setBusyId(id);
+    setBusyId(id); setError(null); setInfo(null);
     try {
       const r = await fetch(`/api/admin/deposit-bonus-tiers/${id}`, { method: 'DELETE' });
       const j = await r.json().catch(() => null);
-      if (!r.ok) throw new Error(j?.message ?? j?.code ?? 'Delete failed');
-      setRows((rs) => rs.filter((t) => t.id !== id));
-    } catch (e) { setError(e instanceof Error ? e.message : 'Delete failed'); }
+      if (!r.ok) throw new Error(`${j?.message ?? j?.code ?? 'Delete failed'} (Delete failed. ডিলিট ব্যর্থ হয়েছে।)`);
+      if (j?.archived) {
+        setInfo(j?.message ?? 'Tier archived because players already used it. খেলোয়াড়রা ব্যবহার করায় টিয়ারটি আর্কাইভ করা হয়েছে।');
+        await refresh();
+      } else {
+        setInfo('Tier deleted. টিয়ারটি মুছে ফেলা হয়েছে।');
+        setRows((rs) => rs.filter((t) => t.id !== id));
+      }
+    } catch (e) { setError(e instanceof Error ? e.message : 'Delete failed. ডিলিট ব্যর্থ হয়েছে।'); }
     finally { setBusyId(null); }
   };
 
@@ -152,10 +167,23 @@ export default function AdminDepositBonusTiersPage() {
             <p className="text-sm text-brand-inkMute">No tiers configured. Add 1000 BDT = 3%, 5000 BDT = 5%, 10000 BDT = 8% to mirror the spec.</p>
           ) : null}
           {rows.map((row) => (
-            <TierEditor key={row.id} row={row} saving={busyId === row.id} onPatch={(b) => patch(row.id, b)} onDelete={() => remove(row.id)} />
+            <TierEditor key={row.id} row={row} saving={busyId === row.id} onPatch={(b) => patch(row.id, b)} onDelete={() => setDeleteTarget(row)} />
           ))}
         </div>
       </Card>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(v) => !v && setDeleteTarget(null)}
+        title="Delete deposit tier"
+        message={deleteTarget ? `Delete the ${deleteTarget.percentage}% tier (min ${deleteTarget.minDeposit.toLocaleString()} BDT) and its bonus rule? If players already received it, the tier will be disabled instead so their history stays intact.` : ''}
+        messageBn={deleteTarget ? `${deleteTarget.percentage}% টিয়ারটি (ন্যূনতম ${deleteTarget.minDeposit.toLocaleString()} টাকা) এবং এর বোনাস রুল মুছে ফেলবেন? খেলোয়াড়রা ইতিমধ্যে এটি পেয়ে থাকলে ইতিহাস রক্ষা করতে টিয়ারটি মুছে না ফেলে নিষ্ক্রিয় করা হবে।` : ''}
+        confirmLabel="Delete"
+        onConfirm={async () => {
+          if (deleteTarget) await remove(deleteTarget.id);
+          setDeleteTarget(null);
+        }}
+      />
     </div>
   );
 }
