@@ -32,6 +32,13 @@
 //
 // CashbackPayout.idempotencyKey blocks a double-payout for the same
 // (campaign, user, period) combination.
+//
+// Dry-run mode (input.dryRun = true): performs the exact same window,
+// scope, base, percentage, cap and already-paid computation, but writes
+// NOTHING. No BonusRule upsert, no db.$transaction is ever opened, no
+// CashbackPayout / Wallet / UserBonus / Transaction / Notification /
+// ActivityLog row is touched. The result carries dryRun: true and the
+// per-user lines show what WOULD be paid.
 
 import { Prisma, TxType } from '@prisma/client';
 import { db } from '@/lib/db/client';
@@ -42,6 +49,9 @@ export interface CashbackRunInput {
   periodEnd?: Date;
   actorId?: string | null;
   actorRole?: string | null;
+  // When true the engine only reads and computes: identical eligibility
+  // scan and per-user math, zero database writes.
+  dryRun?: boolean;
 }
 
 export interface CashbackPayoutLine {
@@ -62,6 +72,9 @@ export interface CashbackRunResult {
   paidUsers: number;
   totalCashback: number;
   lines: CashbackPayoutLine[];
+  // True when this result came from a preview run: nothing was written,
+  // paidUsers/totalCashback describe what WOULD be paid.
+  dryRun: boolean;
 }
 
 const dec = (n: number | string | Prisma.Decimal) => new Prisma.Decimal(n);
@@ -129,6 +142,7 @@ export async function runCashbackCampaign(input: CashbackRunInput): Promise<Cash
   if (!campaign) throw new Error('CAMPAIGN_NOT_FOUND');
   if (!campaign.isActive) throw new Error('CAMPAIGN_INACTIVE');
 
+  const dryRun = input.dryRun === true;
   const now = new Date();
   const window = (() => {
     if (input.periodStart && input.periodEnd) return { start: input.periodStart, end: input.periodEnd };
@@ -138,10 +152,10 @@ export async function runCashbackCampaign(input: CashbackRunInput): Promise<Cash
 
   // Honour campaign window when set.
   if (campaign.startsAt && window.end < campaign.startsAt) {
-    return { campaignId: campaign.id, periodKey, periodStart: window.start, periodEnd: window.end, eligibleUsers: 0, paidUsers: 0, totalCashback: 0, lines: [] };
+    return { campaignId: campaign.id, periodKey, periodStart: window.start, periodEnd: window.end, eligibleUsers: 0, paidUsers: 0, totalCashback: 0, lines: [], dryRun };
   }
   if (campaign.endsAt && window.start > campaign.endsAt) {
-    return { campaignId: campaign.id, periodKey, periodStart: window.start, periodEnd: window.end, eligibleUsers: 0, paidUsers: 0, totalCashback: 0, lines: [] };
+    return { campaignId: campaign.id, periodKey, periodStart: window.start, periodEnd: window.end, eligibleUsers: 0, paidUsers: 0, totalCashback: 0, lines: [], dryRun };
   }
 
   // Stable BonusRule for cashback payouts. Lets the UserBonus row carry
@@ -149,21 +163,26 @@ export async function runCashbackCampaign(input: CashbackRunInput): Promise<Cash
   // BonusRule per campaign (the original implementation required this
   // and silently no-op'd when missing, which was the root cause of the
   // "cashback not credited" bug).
-  const bonusRule = await db.bonusRule.upsert({
-    where: { code: 'cashback_payout' },
-    update: {},
-    create: {
-      code: 'cashback_payout',
-      name: 'Cashback Reward',
-      type: 'manual',
-      status: 'active',
-      amount: 0,
-      turnoverX: 0,
-      validityDays: 30,
-      description: 'Cashback credited by an admin-defined CashbackCampaign. Locked balance until the per-campaign turnover is met.',
-    },
-    select: { id: true },
-  });
+  //
+  // Skipped entirely on a dry run: the upsert can create a row, and the
+  // dry path never reaches the payout transaction that needs the id.
+  const bonusRuleId: string | null = dryRun
+    ? null
+    : (await db.bonusRule.upsert({
+        where: { code: 'cashback_payout' },
+        update: {},
+        create: {
+          code: 'cashback_payout',
+          name: 'Cashback Reward',
+          type: 'manual',
+          status: 'active',
+          amount: 0,
+          turnoverX: 0,
+          validityDays: 30,
+          description: 'Cashback credited by an admin-defined CashbackCampaign. Locked balance until the per-campaign turnover is met.',
+        },
+        select: { id: true },
+      })).id;
 
   // Build scope filter. campaign.scopeType='all' -> no extra where
   // clause; 'match' filters Transaction.meta.scope to the configured
@@ -255,6 +274,26 @@ export async function runCashbackCampaign(input: CashbackRunInput): Promise<Cash
       continue;
     }
 
+    // Dry-run exit. This `continue` is the money-safety guarantee: on a
+    // preview nothing below this line ever executes, so the
+    // db.$transaction block with its create/upsert/update calls is
+    // unreachable. We only record what WOULD be paid.
+    if (dryRun) {
+      paidUsers += 1;
+      totalCashback = totalCashback.add(cashback);
+      lines.push({
+        userId,
+        baseAmount: Number(base),
+        cashbackAmount: Number(cashback),
+        status: 'granted',
+        payoutId: null,
+      });
+      continue;
+    }
+    // Real-payout path only from here on. bonusRuleId is always set when
+    // dryRun is false; this defensive throw also narrows the type.
+    if (bonusRuleId === null) throw new Error('BONUS_RULE_MISSING');
+
     const idempotencyKey = `${campaign.id}:${userId}:${periodKey}`;
     const turnoverRequired = cashback.mul(campaignTurnoverX);
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
@@ -293,7 +332,7 @@ export async function runCashbackCampaign(input: CashbackRunInput): Promise<Cash
         const grant = await tx.userBonus.create({
           data: {
             userId,
-            bonusRuleId: bonusRule.id,
+            bonusRuleId,
             amount: cashback,
             expiresAt,
             status: 'active',
@@ -414,5 +453,6 @@ export async function runCashbackCampaign(input: CashbackRunInput): Promise<Cash
     paidUsers,
     totalCashback: Number(totalCashback),
     lines,
+    dryRun,
   };
 }

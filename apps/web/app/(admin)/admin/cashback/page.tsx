@@ -69,6 +69,9 @@ interface RunResult {
   paidUsers: number;
   totalCashback: number;
   lines: RunLine[];
+  // True when the engine ran in preview mode: nothing was written and
+  // paidUsers/totalCashback describe what WOULD be paid.
+  dryRun?: boolean;
 }
 
 const BLANK: CampaignRow = {
@@ -105,6 +108,12 @@ export default function AdminCashbackPage() {
   const [editor, setEditor] = useState<CampaignRow | null>(null);
   const [busy, setBusy] = useState(false);
   const [runResult, setRunResult] = useState<{ campaign: CampaignRow; result: RunResult } | null>(null);
+  const [runTarget, setRunTarget] = useState<CampaignRow | null>(null);
+  const [runBusy, setRunBusy] = useState(false);
+  // Run failures render INSIDE the run modal. The page-level error card
+  // sits behind the open modal, so a failed run looked like nothing
+  // happened; this state keeps the failure visible to the operator.
+  const [runError, setRunError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setError(null);
@@ -181,19 +190,49 @@ export default function AdminCashbackPage() {
     refresh();
   };
 
-  const runNow = async (c: CampaignRow) => {
-    if (!confirm(`Run cashback for "${c.nameEn}" now? Eligible players will be credited inside a single transaction each. Duplicate runs for the same period are blocked automatically.`)) return;
+  // Two run modes:
+  //   'scheduled' - posts {} exactly like today; the engine picks the
+  //                 campaign default window (daily = the whole of
+  //                 yesterday UTC), same window and period key as the
+  //                 nightly cron. This is the only mode that pays.
+  //   'preview'   - posts periodStart = today 00:00 UTC, periodEnd = now,
+  //                 dryRun: true. The engine runs the identical
+  //                 eligibility scan and per-user math but writes
+  //                 NOTHING: no payout, wallet, bonus, transaction or
+  //                 notification row. It exists so an operator can book a
+  //                 test loss today and immediately SEE it detected,
+  //                 while tonight's scheduled run stays the one and only
+  //                 payer. This replaces the old paying "today so far"
+  //                 mode that double-paid once the nightly cron ran.
+  const executeRun = async (c: CampaignRow, windowMode: 'scheduled' | 'preview') => {
     setError(null);
+    setRunError(null);
     setToast(null);
+    setRunBusy(true);
     try {
-      const res = await fetch(`/api/admin/cashback/${c.id}/run`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({}) });
+      let body: { periodStart?: string; periodEnd?: string; dryRun?: boolean } = {};
+      if (windowMode === 'preview') {
+        const now = new Date();
+        const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+        body = { periodStart: start.toISOString(), periodEnd: now.toISOString(), dryRun: true };
+      }
+      const res = await fetch(`/api/admin/cashback/${c.id}/run`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message ?? data.code ?? 'Run failed');
+      setRunTarget(null);
       setRunResult({ campaign: c, result: data });
-      setToast(`Paid ${data.paidUsers} of ${data.eligibleUsers} eligible users. Total ${Number(data.totalCashback).toLocaleString()} BDT.`);
-      refresh();
+      if (data.dryRun) {
+        setToast(`Preview only: ${data.paidUsers} of ${data.eligibleUsers} eligible users would be paid, total ${Number(data.totalCashback).toLocaleString()} BDT. Nothing was paid. শুধুই প্রিভিউ: কোনো পেমেন্ট হয়নি।`);
+      } else {
+        setToast(`Paid ${data.paidUsers} of ${data.eligibleUsers} eligible users. Total ${Number(data.totalCashback).toLocaleString()} BDT.`);
+        refresh();
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Run failed');
+      // Surface the failure inside the still-open run modal; the page
+      // level error card is hidden behind the modal overlay.
+      setRunError(err instanceof Error ? err.message : 'Run failed');
+    } finally {
+      setRunBusy(false);
     }
   };
 
@@ -237,7 +276,7 @@ export default function AdminCashbackPage() {
               </div>
               <div className="flex items-center gap-2">
                 <Switch checked={c.isActive} onChange={() => toggleActive(c)} />
-                <Button size="sm" variant="ghost" leftIcon={<Play className="h-3.5 w-3.5" />} onClick={() => runNow(c)}>
+                <Button size="sm" variant="ghost" leftIcon={<Play className="h-3.5 w-3.5" />} onClick={() => { setRunError(null); setRunTarget(c); }}>
                   Run now
                 </Button>
                 <Button size="sm" variant="neon" leftIcon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditor(c)}>
@@ -403,12 +442,71 @@ export default function AdminCashbackPage() {
         ) : null}
       </Modal>
 
-      <Modal open={!!runResult} onOpenChange={(v) => !v && setRunResult(null)} title={runResult ? `Run result . ${runResult.campaign.nameEn}` : ''} size="lg">
-        {runResult ? (
+      {/* Run-window picker. 'Scheduled period' sends {} (engine default
+          window, identical to the nightly cron) and PAYS. 'Preview today
+          so far' sends today-00:00-UTC..now with dryRun: true so an
+          operator can verify a loss booked today is detected without
+          paying anyone; tonight's cron stays the only payer. */}
+      <Modal open={!!runTarget} onOpenChange={(v) => { if (!v && !runBusy) { setRunTarget(null); setRunError(null); } }} title={runTarget ? `Run cashback . ${runTarget.nameEn}` : ''} size="md">
+        {runTarget ? (
           <div className="space-y-3">
             <p className="text-xs text-ink-mid">
+              Choose the period window. Each player is paid at most once per period key; duplicates are skipped automatically.
+              {' '}<span className="text-ink-lo">সময়কাল নির্বাচন করুন। প্রতি পিরিয়ড কী-তে একজন খেলোয়াড় সর্বোচ্চ একবার পেমেন্ট পাবেন; ডুপ্লিকেট স্বয়ংক্রিয়ভাবে বাদ যাবে।</span>
+            </p>
+            {runError ? (
+              <div className="rounded-xl border border-signal-danger/50 bg-brand-paper p-3">
+                <p className="text-xs text-signal-danger">
+                  <AlertCircle className="mr-1 inline h-3.5 w-3.5" />
+                  Run failed: {runError} (রান ব্যর্থ হয়েছে: {runError})
+                </p>
+              </div>
+            ) : null}
+            <button
+              type="button"
+              disabled={runBusy}
+              onClick={() => executeRun(runTarget, 'scheduled')}
+              className="w-full rounded-xl border border-brand-divider bg-brand-paper p-3 text-left transition hover:border-brand-yellow-500 disabled:opacity-50"
+            >
+              <p className="text-sm font-semibold text-ink-hi">Scheduled period (নির্ধারিত সময়কাল)</p>
+              <p className="mt-1 text-[11px] text-ink-lo">
+                {runTarget.cadence === 'daily'
+                  ? 'Pays for the whole of YESTERDAY, 00:00 to 00:00 UTC. Same window and period key the nightly cron uses; losses booked today are not included yet. আগের দিনের পুরো সময়ের (UTC) জন্য পেমেন্ট হবে, রাতের স্বয়ংক্রিয় রানের মতোই; আজকের ক্ষতি এখনো অন্তর্ভুক্ত নয়।'
+                  : `Pays for the previous ${runTarget.cadence === 'monthly' ? 'month' : '7 days'} ending now, same as the scheduled run. নির্ধারিত রানের মতো একই সময়কালের জন্য পেমেন্ট হবে।`}
+              </p>
+            </button>
+            <button
+              type="button"
+              disabled={runBusy}
+              onClick={() => executeRun(runTarget, 'preview')}
+              className="w-full rounded-xl border border-sky-500/60 bg-brand-paper p-3 text-left transition hover:border-sky-400 disabled:opacity-50"
+            >
+              <p className="text-sm font-semibold text-ink-hi">Preview today so far, no payment (আজ এখন পর্যন্ত প্রিভিউ, কোনো পেমেন্ট হবে না)</p>
+              <p className="mt-1 text-[11px] text-sky-500">
+                Only SHOWS who would be paid for losses from today 00:00 UTC until now. Nothing is written and no player receives money; the nightly scheduled run makes the real payment. শুধুমাত্র দেখায় আজ ০০:০০ UTC থেকে এখন পর্যন্ত ক্ষতির জন্য কে পেমেন্ট পেতেন। কিছুই লেখা হয় না, কোনো খেলোয়াড় টাকা পান না; আসল পেমেন্ট রাতের নির্ধারিত রানেই হবে।
+              </p>
+            </button>
+            {runBusy ? <p className="text-xs text-ink-lo">Running... চলছে...</p> : null}
+          </div>
+        ) : null}
+      </Modal>
+
+      <Modal open={!!runResult} onOpenChange={(v) => !v && setRunResult(null)} title={runResult ? (runResult.result.dryRun ? `Preview result . ${runResult.campaign.nameEn}` : `Run result . ${runResult.campaign.nameEn}`) : ''} size="lg">
+        {runResult ? (
+          <div className="space-y-3">
+            {runResult.result.dryRun ? (
+              <div className="rounded-xl border border-sky-500/60 bg-sky-500/10 p-3">
+                <p className="text-xs font-semibold text-sky-400">
+                  Preview only, nothing was paid. The nightly scheduled run makes the real payment.
+                  {' '}শুধুই প্রিভিউ, কোনো পেমেন্ট হয়নি। আসল পেমেন্ট রাতের নির্ধারিত রানেই হবে।
+                </p>
+              </div>
+            ) : null}
+            <p className="text-xs text-ink-mid">
               Period: <code>{runResult.result.periodKey}</code> ({new Date(runResult.result.periodStart).toLocaleString()} to {new Date(runResult.result.periodEnd).toLocaleString()}).
-              {' '}Paid {runResult.result.paidUsers}/{runResult.result.eligibleUsers} eligible users. Total {Number(runResult.result.totalCashback).toLocaleString()} BDT.
+              {' '}{runResult.result.dryRun
+                ? <>Would pay {runResult.result.paidUsers}/{runResult.result.eligibleUsers} eligible users, total {Number(runResult.result.totalCashback).toLocaleString()} BDT. পেমেন্ট হলে {runResult.result.paidUsers} জন খেলোয়াড় পেতেন।</>
+                : <>Paid {runResult.result.paidUsers}/{runResult.result.eligibleUsers} eligible users. Total {Number(runResult.result.totalCashback).toLocaleString()} BDT.</>}
             </p>
             <div className="max-h-[50vh] space-y-1 overflow-y-auto">
               {runResult.result.lines.map((line) => (
@@ -416,7 +514,13 @@ export default function AdminCashbackPage() {
                   <code className="font-mono text-ink-lo">{line.userId}</code>
                   <div className="flex items-center gap-2">
                     <span className="text-ink-lo">base {Number(line.baseAmount).toLocaleString()}</span>
-                    <Chip tone={line.status === 'granted' ? 'ok' : line.status === 'failed' ? 'warn' : 'neutral'}>{line.status.replace('_', ' ')}</Chip>
+                    <Chip tone={line.status === 'granted' ? 'ok' : line.status === 'failed' ? 'warn' : 'neutral'}>
+                      {runResult.result.dryRun && line.status === 'granted'
+                        ? 'would pay (পেমেন্ট হতো)'
+                        : runResult.result.dryRun && line.status === 'skipped_duplicate' && runResult.campaign.cadence === 'daily'
+                          ? 'paid earlier today; tonight can still pay (আজ আগে পেমেন্ট হয়েছে; রাতের রানে আবার হতে পারে)'
+                          : line.status.replace('_', ' ')}
+                    </Chip>
                     {line.cashbackAmount > 0 ? <span className="font-bold text-brand-yellow-700">+{Number(line.cashbackAmount).toLocaleString()}</span> : null}
                   </div>
                 </div>
