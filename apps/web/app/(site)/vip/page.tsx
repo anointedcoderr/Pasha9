@@ -112,6 +112,10 @@ export default function VipPage() {
         .then((r2) => r2.ok ? r2.json() : null)
         .then((j2) => { if (j2) setStatus(j2 as StatusResponse); })
         .catch(() => {});
+    } catch {
+      // Network drop or server unreachable; without this catch the
+      // operator saw nothing at all.
+      setSubmitError(bn ? 'নেটওয়ার্ক সমস্যায় আবেদন জমা হয়নি। আবার চেষ্টা করুন।' : 'Could not submit your application because of a network problem. Please try again.');
     } finally {
       setSubmitting(false);
     }

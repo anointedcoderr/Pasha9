@@ -13,6 +13,7 @@ import { Image as ImageIcon, Plus, Pencil, Trash2, ArrowUp, ArrowDown } from 'lu
 import { Chip } from '@/components/ui/Chip';
 import { AdminMediaUpload } from '@/components/admin/AdminMediaUpload';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
 
 type Accent = 'gold' | 'neon' | 'mixed' | 'royal' | 'red';
 type Status = 'active' | 'hidden' | 'paused';
@@ -57,7 +58,17 @@ export default function AdminBannersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editor, setEditor] = useState<BannerRow | null>(null);
+  const [editorError, setEditorError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  // Delete confirmation runs through an in-page dialog instead of the
+  // native confirm(), which installed PWAs suppress silently.
+  const [deleteTarget, setDeleteTarget] = useState<BannerRow | null>(null);
+
+  const notify = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 4000);
+  };
 
   const refresh = useCallback(async () => {
     setError(null);
@@ -78,7 +89,7 @@ export default function AdminBannersPage() {
   const save = async () => {
     if (!editor) return;
     setBusy(true);
-    setError(null);
+    setEditorError(null);
     const isNew = !editor.id;
     const payload = {
       title: editor.title,
@@ -102,36 +113,62 @@ export default function AdminBannersPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message ?? data.code ?? 'Save failed');
       setEditor(null);
+      notify(isNew ? 'Banner created. ব্যানার তৈরি হয়েছে।' : 'Banner updated. ব্যানার আপডেট হয়েছে।');
       await refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed');
+      setEditorError(e instanceof Error ? e.message : 'Save failed. সংরক্ষণ ব্যর্থ হয়েছে।');
     } finally {
       setBusy(false);
     }
   };
 
-  const remove = async (id: string) => {
-    if (!confirm('Delete this banner?')) return;
-    const res = await fetch(`/api/admin/banners/${id}`, { method: 'DELETE' });
-    if (res.ok) refresh();
+  const remove = async (b: BannerRow) => {
+    try {
+      const res = await fetch(`/api/admin/banners/${b.id}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        notify('Banner deleted. ব্যানার মুছে ফেলা হয়েছে।');
+        refresh();
+      } else {
+        setError(`${data?.message ?? data?.code ?? 'Delete failed'} (Delete failed. ডিলিট ব্যর্থ হয়েছে।)`);
+      }
+    } catch {
+      setError('Delete failed: network error. ডিলিট ব্যর্থ হয়েছে: নেটওয়ার্ক সমস্যা।');
+    }
   };
 
   const toggle = async (b: BannerRow) => {
-    await fetch(`/api/admin/banners/${b.id}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ status: b.status === 'active' ? 'hidden' : 'active' }),
-    });
-    refresh();
+    try {
+      const res = await fetch(`/api/admin/banners/${b.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ status: b.status === 'active' ? 'hidden' : 'active' }),
+      });
+      if (!res.ok) {
+        setError('Failed to update status. স্ট্যাটাস আপডেট ব্যর্থ হয়েছে।');
+        return;
+      }
+      refresh();
+    } catch {
+      setError('Failed to update status: network error. স্ট্যাটাস আপডেট ব্যর্থ হয়েছে: নেটওয়ার্ক সমস্যা।');
+    }
   };
 
   const move = async (b: BannerRow, dir: -1 | 1) => {
-    await fetch(`/api/admin/banners/${b.id}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ position: Math.max(0, b.position + dir) }),
-    });
-    refresh();
+    try {
+      const res = await fetch(`/api/admin/banners/${b.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ position: Math.max(0, b.position + dir) }),
+      });
+      if (!res.ok) {
+        setError('Failed to reorder banner. ব্যানারের ক্রম পরিবর্তন ব্যর্থ হয়েছে।');
+        return;
+      }
+      refresh();
+    } catch {
+      setError('Failed to reorder banner: network error. ক্রম পরিবর্তন ব্যর্থ হয়েছে: নেটওয়ার্ক সমস্যা।');
+    }
   };
 
   return (
@@ -147,6 +184,7 @@ export default function AdminBannersPage() {
         }
       />
 
+      {toast ? <Card padding="md" className="mb-4"><p className="text-sm text-signal-ok">{toast}</p></Card> : null}
       {error ? <Card padding="md" className="mb-4"><p className="text-sm text-signal-danger">{error}</p></Card> : null}
 
       <div className="space-y-4">
@@ -180,14 +218,14 @@ export default function AdminBannersPage() {
               <div className="flex items-center gap-2">
                 <Switch checked={b.status === 'active'} onChange={() => toggle(b)} />
                 <Button size="sm" variant="neon" leftIcon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditor(b)}>Edit</Button>
-                <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => remove(b.id)}>Delete</Button>
+                <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => setDeleteTarget(b)}>Delete</Button>
               </div>
             </Card>
           ))
         )}
       </div>
 
-      <Modal open={!!editor} onOpenChange={(v) => !v && setEditor(null)} title={editor?.id ? 'Edit Banner' : 'New Banner'} size="lg">
+      <Modal open={!!editor} onOpenChange={(v) => { if (!v) { setEditor(null); setEditorError(null); } }} title={editor?.id ? 'Edit Banner' : 'New Banner'} size="lg">
         {editor ? (
           <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); void save(); }}>
             <div className="grid gap-3 md:grid-cols-2">
@@ -271,13 +309,25 @@ export default function AdminBannersPage() {
                 </Select>
               </FormField>
             </div>
+            {editorError ? <p className="text-sm text-signal-danger">{editorError}</p> : null}
             <div className="flex justify-end gap-2 pt-2">
-              <Button variant="ghost" type="button" onClick={() => setEditor(null)}>Cancel</Button>
+              <Button variant="ghost" type="button" onClick={() => { setEditor(null); setEditorError(null); }}>Cancel</Button>
               <Button type="submit" loading={busy}>Save</Button>
             </div>
           </form>
         ) : null}
       </Modal>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(v) => !v && setDeleteTarget(null)}
+        title="Delete banner"
+        message={deleteTarget ? `Delete banner "${deleteTarget.title || deleteTarget.titleEn || 'Untitled'}"? This cannot be undone.` : ''}
+        messageBn={deleteTarget ? `"${deleteTarget.title || deleteTarget.titleEn || 'Untitled'}" ব্যানারটি মুছে ফেলবেন? এটি আর ফেরানো যাবে না।` : ''}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        onConfirm={async () => { if (deleteTarget) await remove(deleteTarget); }}
+      />
     </>
   );
 }

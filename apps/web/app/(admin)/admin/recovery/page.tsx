@@ -26,6 +26,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/Tabs';
 import { HeartHandshake, Plus, RefreshCw, Pencil, Trash2, Stethoscope, Sparkles, Lock, Phone, MessageCircle, Mail, BarChart3, AlertCircle, CheckCircle2, XCircle, Ban, ListChecks, Settings2 } from 'lucide-react';
 import { formatBDT } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
+import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
 
 interface RuleRow {
   id: string;
@@ -201,20 +202,35 @@ export default function AdminRecoveryPage() {
 
   // Task actions
   const claim = async (t: TaskRow) => {
-    const res = await fetch(`/api/admin/recovery/tasks/${t.id}/claim`, { method: 'POST' });
-    const data = await res.json();
-    if (res.ok) { flashToast(`Claimed task for ${t.username}.`); loadTasks(); }
-    else if (data?.code === 'LOCKED_BY_OTHER') alert('Another staff is currently working this task.');
-    else alert(data?.message ?? data?.code ?? 'Claim failed');
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/recovery/tasks/${t.id}/claim`, { method: 'POST' });
+      const data = await res.json().catch(() => ({} as { code?: string; message?: string }));
+      if (res.ok) { flashToast(`Claimed task for ${t.username}. টাস্কটি ক্লেইম করা হয়েছে।`); loadTasks(); }
+      else if (data?.code === 'LOCKED_BY_OTHER') setError('Another staff is currently working this task. অন্য একজন স্টাফ এই টাস্কে কাজ করছেন।');
+      else setError(`Claim failed: ${data?.message ?? data?.code ?? `HTTP ${res.status}`}. টাস্ক ক্লেইম ব্যর্থ হয়েছে।`);
+    } catch (e) {
+      setError(`Claim failed: ${e instanceof Error ? e.message : String(e)}. টাস্ক ক্লেইম ব্যর্থ হয়েছে।`);
+    }
   };
 
   const release = async (t: TaskRow) => {
-    const res = await fetch(`/api/admin/recovery/tasks/${t.id}/claim`, { method: 'DELETE' });
-    if (res.ok) { flashToast(`Released ${t.username}.`); loadTasks(); }
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/recovery/tasks/${t.id}/claim`, { method: 'DELETE' });
+      if (res.ok) { flashToast(`Released ${t.username}. টাস্কটি রিলিজ করা হয়েছে।`); loadTasks(); }
+      else {
+        const data = await res.json().catch(() => ({} as { code?: string; message?: string }));
+        setError(`Release failed: ${data?.message ?? data?.code ?? `HTTP ${res.status}`}. টাস্ক রিলিজ ব্যর্থ হয়েছে।`);
+      }
+    } catch (e) {
+      setError(`Release failed: ${e instanceof Error ? e.message : String(e)}. টাস্ক রিলিজ ব্যর্থ হয়েছে।`);
+    }
   };
 
   const runSweep = async () => {
     setSweepBusy(true);
+    setError(null);
     try {
       const res = await fetch('/api/cron/recovery-sweep', { method: 'POST' });
       const data = await res.json();
@@ -222,7 +238,7 @@ export default function AdminRecoveryPage() {
       flashToast(`Sweep: ${data.message}`);
       loadTasks();
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Sweep failed');
+      setError(`Sweep failed: ${e instanceof Error ? e.message : String(e)}. সুইপ ব্যর্থ হয়েছে।`);
     } finally { setSweepBusy(false); }
   };
 
@@ -259,12 +275,19 @@ export default function AdminRecoveryPage() {
     } finally { setSavingRule(false); }
   };
 
+  // In-page confirm (native confirm() is suppressed in the installed PWA)
+  const [deletingRule, setDeletingRule] = useState<RuleRow | null>(null);
+
   const deleteRule = async (r: RuleRow) => {
-    if (!confirm(`Delete rule "${r.name}"? Open tasks for this rule must be closed first.`)) return;
-    const res = await fetch(`/api/admin/recovery/rules/${r.id}`, { method: 'DELETE' });
-    const data = await res.json().catch(() => ({}));
-    if (res.ok) { flashToast(`Rule "${r.name}" deleted.`); loadRules(); }
-    else alert(data?.message ?? data?.code ?? 'Delete failed');
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/recovery/rules/${r.id}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({} as { code?: string; message?: string }));
+      if (res.ok) { flashToast(`Rule "${r.name}" deleted. রুলটি মুছে ফেলা হয়েছে।`); loadRules(); }
+      else setError(`Delete failed: ${data?.message ?? data?.code ?? `HTTP ${res.status}`}. রুল মুছে ফেলা যায়নি।`);
+    } catch (e) {
+      setError(`Delete failed: ${e instanceof Error ? e.message : String(e)}. রুল মুছে ফেলা যায়নি।`);
+    }
   };
 
   const previewRuleSegment = async (r: RuleRow) => {
@@ -279,13 +302,18 @@ export default function AdminRecoveryPage() {
   };
 
   const materializeRule = async (r: RuleRow) => {
-    const res = await fetch(`/api/admin/recovery/rules/${r.id}/preview`, { method: 'POST' });
-    const data = await res.json();
-    if (res.ok) {
-      flashToast(`Materialized: ${data.created} new task(s) (skipped ${data.skippedExisting} existing) from ${data.matched} matches.`);
-      loadTasks();
-    } else {
-      alert(data?.message ?? data?.code ?? 'Materialize failed');
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/recovery/rules/${r.id}/preview`, { method: 'POST' });
+      const data = await res.json().catch(() => ({} as { code?: string; message?: string }));
+      if (res.ok) {
+        flashToast(`Materialized: ${data.created} new task(s) (skipped ${data.skippedExisting} existing) from ${data.matched} matches. ${data.created}টি নতুন টাস্ক তৈরি হয়েছে।`);
+        loadTasks();
+      } else {
+        setError(`Materialize failed: ${data?.message ?? data?.code ?? `HTTP ${res.status}`}. টাস্ক তৈরি ব্যর্থ হয়েছে।`);
+      }
+    } catch (e) {
+      setError(`Materialize failed: ${e instanceof Error ? e.message : String(e)}. টাস্ক তৈরি ব্যর্থ হয়েছে।`);
     }
   };
 
@@ -465,7 +493,7 @@ export default function AdminRecoveryPage() {
                       id: r.id, key: r.key ?? '', name: r.name, kind: r.kind, threshold: r.threshold,
                       segmentLabel: r.segmentLabel ?? '', priority: r.priority, status: r.status, autoCreateTasks: r.autoCreateTasks,
                     })}>Edit</Button>
-                    <Button size="sm" variant="ghost" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => deleteRule(r)}>Delete</Button>
+                    <Button size="sm" variant="ghost" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => setDeletingRule(r)}>Delete</Button>
                   </div>
                 </Card>
               ))}
@@ -627,6 +655,17 @@ export default function AdminRecoveryPage() {
       >
         {attemptTask ? <AttemptForm task={attemptTask} onDone={(msg) => { setAttemptTask(null); flashToast(msg); loadTasks(); }} onClose={() => setAttemptTask(null)} /> : null}
       </Drawer>
+
+      <ConfirmDialog
+        open={!!deletingRule}
+        onOpenChange={(v) => { if (!v) setDeletingRule(null); }}
+        title="Delete this rule?"
+        message={<>Delete rule <span className="font-semibold">{deletingRule?.name}</span>? Open tasks for this rule must be closed first.</>}
+        messageBn={<>{deletingRule?.name} রুলটি মুছে ফেলা হবে? এই রুলের খোলা টাস্কগুলো আগে বন্ধ করতে হবে।</>}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        onConfirm={async () => { if (deletingRule) await deleteRule(deletingRule); }}
+      />
     </>
   );
 }

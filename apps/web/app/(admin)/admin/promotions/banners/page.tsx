@@ -12,6 +12,7 @@ import { Switch } from '@/components/ui/Switch';
 import { Chip } from '@/components/ui/Chip';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { AdminMediaUpload } from '@/components/admin/AdminMediaUpload';
+import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
 import { Gift, Plus, Pencil, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 
 interface BannerRow {
@@ -42,7 +43,17 @@ export default function AdminPromotionBannersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editor, setEditor] = useState<BannerRow | null>(null);
+  const [editorError, setEditorError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  // In-page confirm dialog instead of native confirm(), which
+  // installed PWAs suppress silently.
+  const [deleteTarget, setDeleteTarget] = useState<BannerRow | null>(null);
+
+  const notify = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 4000);
+  };
 
   const refresh = useCallback(async () => {
     setError(null);
@@ -63,7 +74,7 @@ export default function AdminPromotionBannersPage() {
   const save = async () => {
     if (!editor) return;
     setBusy(true);
-    setError(null);
+    setEditorError(null);
     const isNew = !editor.id;
     try {
       const response = await fetch(isNew ? '/api/admin/promotions/banners' : `/api/admin/promotions/banners/${editor.id}`, {
@@ -83,27 +94,45 @@ export default function AdminPromotionBannersPage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.message ?? data.code ?? 'Save failed');
       setEditor(null);
+      notify(isNew ? 'Banner created. ব্যানার তৈরি হয়েছে।' : 'Banner updated. ব্যানার আপডেট হয়েছে।');
       await refresh();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Save failed');
+      setEditorError(cause instanceof Error ? cause.message : 'Save failed. সংরক্ষণ ব্যর্থ হয়েছে।');
     } finally {
       setBusy(false);
     }
   };
 
-  const remove = async (id: string) => {
-    if (!confirm('Delete this promotion banner?')) return;
-    const response = await fetch(`/api/admin/promotions/banners/${id}`, { method: 'DELETE' });
-    if (response.ok) await refresh();
+  const remove = async (banner: BannerRow) => {
+    try {
+      const response = await fetch(`/api/admin/promotions/banners/${banner.id}`, { method: 'DELETE' });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok) {
+        notify('Banner deleted. ব্যানার মুছে ফেলা হয়েছে।');
+        await refresh();
+      } else {
+        setError(`${data?.message ?? data?.code ?? 'Delete failed'} (Delete failed. ডিলিট ব্যর্থ হয়েছে।)`);
+      }
+    } catch {
+      setError('Delete failed: network error. ডিলিট ব্যর্থ হয়েছে: নেটওয়ার্ক সমস্যা।');
+    }
   };
 
   const toggle = async (banner: BannerRow) => {
-    await fetch(`/api/admin/promotions/banners/${banner.id}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ isActive: !banner.isActive }),
-    });
-    await refresh();
+    try {
+      const response = await fetch(`/api/admin/promotions/banners/${banner.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ isActive: !banner.isActive }),
+      });
+      if (!response.ok) {
+        setError('Failed to update status. স্ট্যাটাস আপডেট ব্যর্থ হয়েছে।');
+        return;
+      }
+      await refresh();
+    } catch {
+      setError('Failed to update status: network error. স্ট্যাটাস আপডেট ব্যর্থ হয়েছে: নেটওয়ার্ক সমস্যা।');
+    }
   };
 
   const move = async (banner: BannerRow, direction: -1 | 1) => {
@@ -112,12 +141,20 @@ export default function AdminPromotionBannersPage() {
     if (index < 0 || target < 0 || target >= banners.length) return;
     const ids = banners.map((row) => row.id);
     [ids[index], ids[target]] = [ids[target], ids[index]];
-    await fetch('/api/admin/promotions/banners', {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ ids }),
-    });
-    await refresh();
+    try {
+      const response = await fetch('/api/admin/promotions/banners', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      });
+      if (!response.ok) {
+        setError('Failed to reorder banner. ব্যানারের ক্রম পরিবর্তন ব্যর্থ হয়েছে।');
+        return;
+      }
+      await refresh();
+    } catch {
+      setError('Failed to reorder banner: network error. ক্রম পরিবর্তন ব্যর্থ হয়েছে: নেটওয়ার্ক সমস্যা।');
+    }
   };
 
   return (
@@ -129,6 +166,7 @@ export default function AdminPromotionBannersPage() {
         action={<Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setEditor({ ...NEW_BANNER, sortOrder: (banners.length + 1) * 10 })}>New Banner</Button>}
       />
 
+      {toast ? <Card padding="md" className="mb-4"><p className="text-sm text-signal-ok">{toast}</p></Card> : null}
       {error ? <Card padding="md" className="mb-4"><p className="text-sm text-signal-danger">{error}</p></Card> : null}
 
       <div className="space-y-3">
@@ -163,13 +201,13 @@ export default function AdminPromotionBannersPage() {
             <div className="flex items-center gap-2">
               <Switch checked={banner.isActive} onChange={() => toggle(banner)} />
               <Button size="sm" variant="neon" leftIcon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditor(banner)}>Edit</Button>
-              <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => remove(banner.id)}>Delete</Button>
+              <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => setDeleteTarget(banner)}>Delete</Button>
             </div>
           </Card>
         ))}
       </div>
 
-      <Modal open={!!editor} onOpenChange={(open) => !open && setEditor(null)} title={editor?.id ? 'Edit Promotion Banner' : 'New Promotion Banner'} size="lg">
+      <Modal open={!!editor} onOpenChange={(open) => { if (!open) { setEditor(null); setEditorError(null); } }} title={editor?.id ? 'Edit Promotion Banner' : 'New Promotion Banner'} size="lg">
         {editor ? (
           <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); void save(); }}>
             <div className="grid gap-3 md:grid-cols-2">
@@ -191,13 +229,25 @@ export default function AdminPromotionBannersPage() {
               <Switch checked={editor.isActive} onChange={(active) => setEditor({ ...editor, isActive: Boolean(active) })} />
               Active
             </label>
+            {editorError ? <p className="text-sm text-signal-danger">{editorError}</p> : null}
             <div className="flex justify-end gap-2 pt-2">
-              <Button variant="ghost" type="button" onClick={() => setEditor(null)}>Cancel</Button>
+              <Button variant="ghost" type="button" onClick={() => { setEditor(null); setEditorError(null); }}>Cancel</Button>
               <Button type="submit" loading={busy}>Save</Button>
             </div>
           </form>
         ) : null}
       </Modal>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title="Delete promotion banner"
+        message={deleteTarget ? `Delete banner "${deleteTarget.titleEn || deleteTarget.titleBn || 'Untitled'}"? This cannot be undone.` : ''}
+        messageBn={deleteTarget ? `"${deleteTarget.titleEn || deleteTarget.titleBn || 'Untitled'}" ব্যানারটি মুছে ফেলবেন? এটি আর ফেরানো যাবে না।` : ''}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        onConfirm={async () => { if (deleteTarget) await remove(deleteTarget); }}
+      />
     </>
   );
 }

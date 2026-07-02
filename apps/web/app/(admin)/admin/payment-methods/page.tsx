@@ -19,6 +19,7 @@ import { Switch } from '@/components/ui/Switch';
 import { Banknote, Plus, Pencil, Trash2, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { AdminMediaUpload } from '@/components/admin/AdminMediaUpload';
+import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
 
 type Status = 'active' | 'hidden' | 'paused';
 type MethodType = 'mobile' | 'bank' | 'crypto';
@@ -76,8 +77,16 @@ export default function AdminPaymentMethodsPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const [editor, setEditor] = useState<MethodRow | null>(null);
+  // Save failures render INSIDE the editor modal; the page error card
+  // sits behind the open modal overlay.
+  const [editorError, setEditorError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Delete confirmation runs through an in-page ConfirmDialog. The
+  // native confirm() this page used before is silently suppressed in
+  // installed PWAs / in-app webviews, so Delete looked dead.
+  const [deleteTarget, setDeleteTarget] = useState<MethodRow | null>(null);
 
   const refresh = useCallback(async () => {
     setError(null);
@@ -100,7 +109,7 @@ export default function AdminPaymentMethodsPage() {
   const save = async () => {
     if (!editor) return;
     setBusy(true);
-    setError(null);
+    setEditorError(null);
     const payload = {
       name: editor.name,
       type: editor.type,
@@ -130,18 +139,32 @@ export default function AdminPaymentMethodsPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message ?? data?.code ?? 'Save failed');
       setEditor(null);
+      setToast(`Method "${editor.name}" saved. পেমেন্ট মেথডটি সংরক্ষণ করা হয়েছে।`);
+      setTimeout(() => setToast(null), 4000);
       await refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed');
+      setEditorError(e instanceof Error ? e.message : 'Save failed');
     } finally {
       setBusy(false);
     }
   };
 
-  const remove = async (id: string) => {
-    if (!confirm('Delete this payment method? Pending deposit/withdrawal rows referencing it stay intact.')) return;
-    const res = await fetch(`/api/admin/payment-methods/${id}`, { method: 'DELETE' });
-    if (res.ok) refresh();
+  // Runs after the operator confirms in the ConfirmDialog.
+  const remove = async (m: MethodRow) => {
+    setError(null); setToast(null);
+    try {
+      const res = await fetch(`/api/admin/payment-methods/${m.id}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setError(`${data?.message ?? data?.code ?? 'Delete failed'} (Delete failed. ডিলিট ব্যর্থ হয়েছে।)`);
+        return;
+      }
+      setToast(`Method "${m.name}" deleted. পেমেন্ট মেথডটি মুছে ফেলা হয়েছে।`);
+      setTimeout(() => setToast(null), 4000);
+      await refresh();
+    } catch {
+      setError('Delete failed: network error. ডিলিট ব্যর্থ হয়েছে: নেটওয়ার্ক সমস্যা।');
+    }
   };
 
   return (
@@ -162,6 +185,7 @@ export default function AdminPaymentMethodsPage() {
         }
       />
 
+      {toast ? <Card padding="md" className="mb-4"><p className="text-sm text-signal-ok">{toast}</p></Card> : null}
       {error ? <Card padding="md" className="mb-4"><p className="text-sm text-signal-danger">{error}</p></Card> : null}
 
       {loading ? (
@@ -190,14 +214,14 @@ export default function AdminPaymentMethodsPage() {
               </div>
               <div className="flex items-center gap-2">
                 <Button size="sm" variant="neon" leftIcon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditor({ ...m, payoutInstruction: m.payoutInstruction ?? '', instructionBn: m.instructionBn ?? '', payoutInstructionBn: m.payoutInstructionBn ?? '', iconUrl: m.iconUrl ?? '', bannerUrl: m.bannerUrl ?? '', badgeLabelEn: m.badgeLabelEn ?? '', badgeLabelBn: m.badgeLabelBn ?? '' })}>Edit</Button>
-                <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => remove(m.id)}>Delete</Button>
+                <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => setDeleteTarget(m)}>Delete</Button>
               </div>
             </Card>
           ))}
         </div>
       )}
 
-      <Modal open={!!editor} onOpenChange={(v) => !v && setEditor(null)} title={editor?.id ? 'Edit Payment Method' : 'New Payment Method'} size="lg">
+      <Modal open={!!editor} onOpenChange={(v) => { if (!v) { setEditor(null); setEditorError(null); } }} title={editor?.id ? 'Edit Payment Method' : 'New Payment Method'} size="lg">
         {editor ? (
           <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); void save(); }}>
             <div className="grid gap-3 md:grid-cols-2">
@@ -280,13 +304,30 @@ export default function AdminPaymentMethodsPage() {
 
             <FormField label="Position"><Input type="number" min="0" value={String(editor.position)} onChange={(e) => setEditor({ ...editor, position: Number(e.target.value) || 0 })} /></FormField>
 
+            {editorError ? (
+              <p className="text-sm text-signal-danger">Save failed: {editorError} (সংরক্ষণ ব্যর্থ হয়েছে: {editorError})</p>
+            ) : null}
+
             <div className="flex justify-end gap-2 pt-2">
-              <Button variant="ghost" type="button" onClick={() => setEditor(null)}>Cancel</Button>
+              <Button variant="ghost" type="button" onClick={() => { setEditor(null); setEditorError(null); }}>Cancel</Button>
               <Button type="submit" loading={busy}>Save</Button>
             </div>
           </form>
         ) : null}
       </Modal>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(v) => !v && setDeleteTarget(null)}
+        title="Delete payment method"
+        message={deleteTarget ? `Delete "${deleteTarget.name}"? Pending deposit and withdrawal rows referencing it stay intact, but players can no longer pick it.` : ''}
+        messageBn={deleteTarget ? `"${deleteTarget.name}" মুছে ফেলবেন? এর সাথে যুক্ত পেন্ডিং ডিপোজিট ও উইথড্র অক্ষত থাকবে, তবে খেলোয়াড়রা এটি আর বেছে নিতে পারবে না।` : ''}
+        confirmLabel="Delete"
+        onConfirm={async () => {
+          if (deleteTarget) await remove(deleteTarget);
+          setDeleteTarget(null);
+        }}
+      />
     </>
   );
 }

@@ -14,6 +14,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Switch } from '@/components/ui/Switch';
 import { AdminSoundUpload } from '@/components/admin/AdminSoundUpload';
+import { Chip } from '@/components/ui/Chip';
 import { Volume2 } from 'lucide-react';
 import { SOUND_SLOTS, type SoundSlot } from '@/lib/sounds/slots';
 
@@ -41,6 +42,9 @@ export default function AdminSiteSoundsPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  // Per-slot autosave failures. A visible "Not saved" chip renders on
+  // the affected slot instead of the failure being swallowed silently.
+  const [slotErrors, setSlotErrors] = useState<Record<string, boolean>>({});
 
   const refresh = useCallback(async () => {
     setError(null);
@@ -76,7 +80,8 @@ export default function AdminSiteSoundsPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message ?? data.code ?? 'Save failed');
-      setToast('Saved. New sounds reach players within 30 seconds.');
+      setSlotErrors({});
+      setToast('Saved. New sounds reach players within 30 seconds. সংরক্ষণ হয়েছে।');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Save failed');
     } finally {
@@ -90,16 +95,20 @@ export default function AdminSiteSoundsPage() {
 
   // Auto-save whenever an upload completes (better UX than a save
   // button for a page mostly about uploads). The Save bar at the
-  // bottom remains for the enable / volume controls.
+  // bottom remains for the enable / volume controls. Failures mark
+  // the slot with a visible "Not saved" chip; the user can hit Save.
   const setSlotAndSave = async (slotId: string, value: string | null) => {
     setSlot(slotId, value);
     try {
-      await fetch('/api/admin/site-sounds', {
+      const res = await fetch('/api/admin/site-sounds', {
         method: 'PUT',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ sounds: { [slotId]: value ?? null } }),
       });
-    } catch { /* silent; the user can hit Save All */ }
+      setSlotErrors((prev) => ({ ...prev, [slotId]: !res.ok }));
+    } catch {
+      setSlotErrors((prev) => ({ ...prev, [slotId]: true }));
+    }
   };
 
   return (
@@ -163,13 +172,17 @@ export default function AdminSiteSoundsPage() {
                 </h3>
                 <div className="grid gap-3 md:grid-cols-2">
                   {slots.map((slot) => (
-                    <AdminSoundUpload
-                      key={slot.id}
-                      label={slot.labelEn}
-                      description={slot.descriptionEn}
-                      value={form.sounds[slot.id] || null}
-                      onChange={(v) => { void setSlotAndSave(slot.id, v); }}
-                    />
+                    <div key={slot.id} className="space-y-1">
+                      <AdminSoundUpload
+                        label={slot.labelEn}
+                        description={slot.descriptionEn}
+                        value={form.sounds[slot.id] || null}
+                        onChange={(v) => { void setSlotAndSave(slot.id, v); }}
+                      />
+                      {slotErrors[slot.id] ? (
+                        <Chip tone="warn">Not saved, tap Save to retry. সংরক্ষণ হয়নি, আবার Save চাপুন।</Chip>
+                      ) : null}
+                    </div>
                   ))}
                 </div>
               </section>

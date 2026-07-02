@@ -3,15 +3,20 @@
 // Admin user details drawer. Reads the rich /api/admin/users/[id]
 // payload (profile, role, wallet, referredBy snapshot, lifetime
 // deposit / withdrawal aggregates, lottery counts, session count)
-// and exposes the existing Adjust Balance + Reset Password actions
-// alongside an account status toggle.
+// and exposes the existing Adjust Balance action alongside an
+// account status toggle. The block-reason question runs through an
+// in-page modal: the native window.prompt() this drawer used before
+// is silently suppressed in installed PWAs / in-app webviews, so
+// flipping the switch looked completely dead.
 
 'use client';
 
-import { Drawer } from '@/components/ui/Modal';
+import { useState } from 'react';
+import { Drawer, Modal } from '@/components/ui/Modal';
 import { Chip } from '@/components/ui/Chip';
 import { Button } from '@/components/ui/Button';
 import { Switch } from '@/components/ui/Switch';
+import { FormField, Textarea } from '@/components/ui/Input';
 import { formatBDT, formatDate, formatDateTime } from '@/lib/utils/format';
 import { useLang } from '@/lib/i18n/context';
 import { Lock, Unlock, AlertCircle } from 'lucide-react';
@@ -79,6 +84,10 @@ interface Props {
 export function UserDetailDrawer({ open, onOpenChange, detail, loading, error, onAdjustBalance, onStatusChange }: Props) {
   const { lang } = useLang();
 
+  // In-page block-reason dialog. Replaces the suppressed window.prompt().
+  const [blockOpen, setBlockOpen] = useState(false);
+  const [blockReason, setBlockReason] = useState('');
+
   const title = detail?.username ?? (loading ? 'Loading...' : 'User');
   const description = detail?.phone ?? '';
 
@@ -137,14 +146,10 @@ export function UserDetailDrawer({ open, onOpenChange, detail, loading, error, o
                   if (next) {
                     onStatusChange('active');
                   } else {
-                    // Lightweight prompt for the block reason. Empty
-                    // value still blocks; admin can leave it blank.
-                    const reason = window.prompt(
-                      'Reason for blocking this account (shown to the user):',
-                      detail.blockedReason ?? '',
-                    );
-                    if (reason === null) return; // cancelled
-                    onStatusChange('blocked', reason.trim());
+                    // Ask for the block reason in an in-page modal.
+                    // Empty value still blocks; admin can leave it blank.
+                    setBlockReason(detail.blockedReason ?? '');
+                    setBlockOpen(true);
                   }
                 }}
                 label={detail.status === 'active' ? 'Block account' : 'Unblock account'}
@@ -269,15 +274,46 @@ export function UserDetailDrawer({ open, onOpenChange, detail, loading, error, o
             >
               Adjust Balance
             </Button>
-            <Button variant="neon" className="flex-1">Reset Password</Button>
           </div>
           <p className="text-[11px] text-ink-lo">
-            Adjust Balance writes via the existing admin balance adjustment surface. Password reset
-            wiring is scheduled in the next iteration; the button is reserved on the drawer so the
-            workflow stays in place.
+            Adjust Balance writes via the existing admin balance adjustment surface. Player-requested
+            password resets are reviewed from the Password Resets page.
           </p>
         </div>
       )}
+
+      <Modal
+        open={blockOpen}
+        onOpenChange={setBlockOpen}
+        title="Block account"
+        description={detail ? `${detail.username} will be locked out until unblocked.` : ''}
+        size="sm"
+      >
+        <form
+          className="space-y-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            setBlockOpen(false);
+            onStatusChange('blocked', blockReason.trim());
+          }}
+        >
+          <FormField
+            label="Reason (shown to the user, optional)"
+            hint="কারণটি ব্যবহারকারীকে দেখানো হবে। ফাঁকা রাখলেও অ্যাকাউন্ট ব্লক হবে।"
+          >
+            <Textarea
+              rows={3}
+              value={blockReason}
+              onChange={(e) => setBlockReason(e.target.value)}
+              placeholder="Example: Multiple accounts detected"
+            />
+          </FormField>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="ghost" onClick={() => setBlockOpen(false)}>Cancel</Button>
+            <Button type="submit" variant="danger">Block account</Button>
+          </div>
+        </form>
+      </Modal>
     </Drawer>
   );
 }

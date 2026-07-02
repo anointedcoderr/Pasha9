@@ -12,6 +12,7 @@ import { Select } from '@/components/ui/Select';
 import { AdminMediaUpload } from '@/components/admin/AdminMediaUpload';
 import { Switch } from '@/components/ui/Switch';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
 import { Trophy, Pencil, Trash2, Plus } from 'lucide-react';
 
 type Accent = 'yellow' | 'blue' | 'red' | 'green';
@@ -61,6 +62,15 @@ export default function AdminRewardsPage() {
   const [error, setError] = useState<string | null>(null);
   const [editor, setEditor] = useState<RewardItem | null>(null);
   const [busy, setBusy] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  // In-page confirm dialog instead of native confirm(), which
+  // installed PWAs suppress silently.
+  const [deleteTarget, setDeleteTarget] = useState<RewardItem | null>(null);
+
+  const notify = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 4000);
+  };
 
   const refresh = useCallback(async () => {
     setError(null);
@@ -113,19 +123,36 @@ export default function AdminRewardsPage() {
     }
   };
 
-  const remove = async (id: string) => {
-    if (!confirm('Delete this reward?')) return;
-    const res = await fetch(`/api/admin/rewards/${id}`, { method: 'DELETE' });
-    if (res.ok) refresh();
+  const remove = async (r: RewardItem) => {
+    try {
+      const res = await fetch(`/api/admin/rewards/${r.id}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        notify('Reward deleted. রিওয়ার্ড মুছে ফেলা হয়েছে।');
+        refresh();
+      } else {
+        setError(`${data?.message ?? data?.code ?? 'Delete failed'} (Delete failed. ডিলিট ব্যর্থ হয়েছে।)`);
+      }
+    } catch {
+      setError('Delete failed: network error. ডিলিট ব্যর্থ হয়েছে: নেটওয়ার্ক সমস্যা।');
+    }
   };
 
   const toggle = async (r: RewardItem) => {
-    await fetch(`/api/admin/rewards/${r.id}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ status: r.status === 'active' ? 'hidden' : 'active' }),
-    });
-    refresh();
+    try {
+      const res = await fetch(`/api/admin/rewards/${r.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ status: r.status === 'active' ? 'hidden' : 'active' }),
+      });
+      if (!res.ok) {
+        setError('Failed to update status. স্ট্যাটাস আপডেট ব্যর্থ হয়েছে।');
+        return;
+      }
+      refresh();
+    } catch {
+      setError('Failed to update status: network error. স্ট্যাটাস আপডেট ব্যর্থ হয়েছে: নেটওয়ার্ক সমস্যা।');
+    }
   };
 
   return (
@@ -137,6 +164,7 @@ export default function AdminRewardsPage() {
         action={<Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setEditor({ ...BLANK, position: items.length + 1 })}>New Reward</Button>}
       />
 
+      {toast ? <Card padding="md" className="mb-4"><p className="text-sm text-signal-ok">{toast}</p></Card> : null}
       {error ? <Card padding="md" className="mb-4"><p className="text-sm text-signal-danger">{error}</p></Card> : null}
 
       {loading ? (
@@ -162,7 +190,7 @@ export default function AdminRewardsPage() {
                 <Switch checked={r.status === 'active'} onChange={() => toggle(r)} />
                 <div className="flex gap-2">
                   <Button size="sm" variant="neon" leftIcon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditor(r)}>Edit</Button>
-                  <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => remove(r.id)}>Delete</Button>
+                  <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => setDeleteTarget(r)}>Delete</Button>
                 </div>
               </div>
             </Card>
@@ -260,6 +288,17 @@ export default function AdminRewardsPage() {
           </form>
         ) : null}
       </Modal>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(v) => !v && setDeleteTarget(null)}
+        title="Delete reward"
+        message={deleteTarget ? `Delete reward "${deleteTarget.title}"? This cannot be undone.` : ''}
+        messageBn={deleteTarget ? `"${deleteTarget.titleBn || deleteTarget.title}" রিওয়ার্ডটি মুছে ফেলবেন? এটি আর ফেরানো যাবে না।` : ''}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        onConfirm={async () => { if (deleteTarget) await remove(deleteTarget); }}
+      />
     </>
   );
 }

@@ -13,6 +13,7 @@ import { PageHeader } from '@/components/site/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { AdminMediaUpload } from '@/components/admin/AdminMediaUpload';
+import { Chip } from '@/components/ui/Chip';
 import { Palette } from 'lucide-react';
 import { ATELIER_SLOTS, type AtelierSlot } from '@/lib/atelier/slots';
 
@@ -42,6 +43,9 @@ export default function AdminAtelierPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  // Per-slot autosave failures. A visible "Not saved" chip renders on
+  // the affected slot instead of the failure being swallowed silently.
+  const [slotErrors, setSlotErrors] = useState<Record<string, boolean>>({});
 
   const refresh = useCallback(async () => {
     setError(null);
@@ -69,7 +73,8 @@ export default function AdminAtelierPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message ?? data.code ?? 'Save failed');
-      setToast('Saved. New assets reach players within 30 seconds.');
+      setSlotErrors({});
+      setToast('Saved. New assets reach players within 30 seconds. সংরক্ষণ হয়েছে।');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Save failed');
     } finally {
@@ -77,15 +82,20 @@ export default function AdminAtelierPage() {
     }
   };
 
+  // Failures mark the slot with a visible "Not saved" chip; the Save
+  // bar at the top can then retry the full payload.
   const setSlotAndSave = async (slotId: string, value: string | null) => {
     setForm((prev) => ({ ...prev, assets: { ...prev.assets, [slotId]: value ?? '' } }));
     try {
-      await fetch('/api/admin/atelier', {
+      const res = await fetch('/api/admin/atelier', {
         method: 'PUT',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ assets: { [slotId]: value ?? null } }),
       });
-    } catch { /* swallow - Save All bar remains */ }
+      setSlotErrors((prev) => ({ ...prev, [slotId]: !res.ok }));
+    } catch {
+      setSlotErrors((prev) => ({ ...prev, [slotId]: true }));
+    }
   };
 
   return (
@@ -129,6 +139,9 @@ export default function AdminAtelierPage() {
                         value={form.assets[slot.id] || null}
                         onChange={(v) => { void setSlotAndSave(slot.id, v); }}
                       />
+                      {slotErrors[slot.id] ? (
+                        <Chip tone="warn">Not saved, tap Save to retry. সংরক্ষণ হয়নি, আবার Save চাপুন।</Chip>
+                      ) : null}
                     </Card>
                   ))}
                 </div>

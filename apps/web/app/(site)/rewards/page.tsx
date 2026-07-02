@@ -295,6 +295,7 @@ export default function RewardsPage() {
   const onCheckIn = async () => {
     setError(null);
     const r = await fetch('/api/rewards/check-in', { method: 'POST', credentials: 'include' });
+    if (r.status === 401) { window.location.href = '/?login=1'; return; }
     const j = await r.json().catch(() => null);
     if (!r.ok) { setError(j?.message ?? j?.code ?? 'Check-in failed'); return; }
     setToast(bn ? `+${j.coinsAwarded} কয়েন` : `+${j.coinsAwarded} coins`);
@@ -313,6 +314,11 @@ export default function RewardsPage() {
         credentials: 'include',
         body: JSON.stringify(selectedTierKey ? { tierKey: selectedTierKey } : {}),
       });
+      if (r.status === 401) {
+        setSpinning(false);
+        window.location.href = '/?login=1';
+        return;
+      }
       const j = await r.json().catch(() => null);
       if (!r.ok) {
         const code = j?.code as string | undefined;

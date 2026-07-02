@@ -11,6 +11,7 @@ import { FormField, Input, Textarea } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Switch } from '@/components/ui/Switch';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
 import { Trophy, Pencil, Trash2, Plus } from 'lucide-react';
 
 type Status = 'active' | 'hidden' | 'paused';
@@ -47,8 +48,16 @@ export default function AdminAffiliateTiersPage() {
   const [tiers, setTiers] = useState<Tier[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const [editor, setEditor] = useState<Tier | null>(null);
+  // Save failures render INSIDE the editor modal; the page error card
+  // sits behind the open modal overlay.
+  const [editorError, setEditorError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Delete confirmation runs through an in-page ConfirmDialog. The
+  // native confirm()/alert() pair is silently suppressed in installed
+  // PWAs, so Delete looked dead and failures were invisible.
+  const [deleteTarget, setDeleteTarget] = useState<Tier | null>(null);
 
   const refresh = useCallback(async () => {
     setError(null);
@@ -69,7 +78,7 @@ export default function AdminAffiliateTiersPage() {
   const save = async () => {
     if (!editor) return;
     setBusy(true);
-    setError(null);
+    setEditorError(null);
     const payload = {
       name: editor.name,
       description: editor.description || null,
@@ -89,34 +98,50 @@ export default function AdminAffiliateTiersPage() {
         ? await fetch(`/api/admin/affiliate/tiers/${editor.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) })
         : await fetch('/api/admin/affiliate/tiers', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message ?? data.code);
+      if (!res.ok) throw new Error(data.message ?? data.code ?? 'Save failed');
       setEditor(null);
+      setToast(`Tier "${editor.name}" saved. টিয়ারটি সংরক্ষণ করা হয়েছে।`);
+      setTimeout(() => setToast(null), 4000);
       await refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed');
+      setEditorError(e instanceof Error ? e.message : 'Save failed');
     } finally {
       setBusy(false);
     }
   };
 
-  const remove = async (id: string) => {
-    if (!confirm('Delete this tier?')) return;
-    const res = await fetch(`/api/admin/affiliate/tiers/${id}`, { method: 'DELETE' });
-    const data = await res.json();
-    if (!res.ok) {
-      alert(data.message ?? data.code);
-      return;
+  // Runs after the operator confirms in the ConfirmDialog.
+  const remove = async (t: Tier) => {
+    setError(null); setToast(null);
+    try {
+      const res = await fetch(`/api/admin/affiliate/tiers/${t.id}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setError(`${data?.message ?? data?.code ?? 'Delete failed'} (Delete failed. ডিলিট ব্যর্থ হয়েছে।)`);
+        return;
+      }
+      setToast(`Tier "${t.name}" deleted. টিয়ারটি মুছে ফেলা হয়েছে।`);
+      setTimeout(() => setToast(null), 4000);
+      refresh();
+    } catch {
+      setError('Delete failed: network error. ডিলিট ব্যর্থ হয়েছে: নেটওয়ার্ক সমস্যা।');
     }
-    refresh();
   };
 
   const toggle = async (t: Tier) => {
-    await fetch(`/api/admin/affiliate/tiers/${t.id}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ status: t.status === 'active' ? 'hidden' : 'active' }),
-    });
-    refresh();
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/affiliate/tiers/${t.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ status: t.status === 'active' ? 'hidden' : 'active' }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.message ?? data?.code ?? 'Toggle failed');
+      refresh();
+    } catch (e) {
+      setError(`${e instanceof Error ? e.message : 'Toggle failed'} (Status change failed. স্ট্যাটাস পরিবর্তন ব্যর্থ হয়েছে।)`);
+    }
   };
 
   return (
@@ -128,6 +153,7 @@ export default function AdminAffiliateTiersPage() {
         action={<Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setEditor({ ...BLANK, position: tiers.length + 1 })}>New Tier</Button>}
       />
 
+      {toast ? <Card padding="md" className="mb-4"><p className="text-sm text-signal-ok">{toast}</p></Card> : null}
       {error ? <Card padding="md" className="mb-4"><p className="text-sm text-signal-danger">{error}</p></Card> : null}
 
       {loading ? (
@@ -162,14 +188,14 @@ export default function AdminAffiliateTiersPage() {
               <div className="flex items-center gap-2">
                 <Switch checked={t.status === 'active'} onChange={() => toggle(t)} />
                 <Button size="sm" variant="neon" leftIcon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditor(t)}>Edit</Button>
-                <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => remove(t.id)}>Delete</Button>
+                <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => setDeleteTarget(t)}>Delete</Button>
               </div>
             </Card>
           ))}
         </div>
       )}
 
-      <Modal open={!!editor} onOpenChange={(v) => !v && setEditor(null)} title={editor?.id ? 'Edit Tier' : 'New Tier'} size="lg">
+      <Modal open={!!editor} onOpenChange={(v) => { if (!v) { setEditor(null); setEditorError(null); } }} title={editor?.id ? 'Edit Tier' : 'New Tier'} size="lg">
         {editor ? (
           <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); void save(); }}>
             <div className="grid gap-3 md:grid-cols-2">
@@ -220,13 +246,29 @@ export default function AdminAffiliateTiersPage() {
               </FormField>
             </div>
             <CardHeader title="Note" subtitle="Saving writes an ActivityLog entry. New approved deposits snapshot these rates at accrual time." />
+            {editorError ? (
+              <p className="text-sm text-signal-danger">Save failed: {editorError} (সংরক্ষণ ব্যর্থ হয়েছে: {editorError})</p>
+            ) : null}
             <div className="flex justify-end gap-2 pt-2">
-              <Button variant="ghost" type="button" onClick={() => setEditor(null)}>Cancel</Button>
+              <Button variant="ghost" type="button" onClick={() => { setEditor(null); setEditorError(null); }}>Cancel</Button>
               <Button type="submit" loading={busy}>Save</Button>
             </div>
           </form>
         ) : null}
       </Modal>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(v) => !v && setDeleteTarget(null)}
+        title="Delete commission tier"
+        message={deleteTarget ? `Delete tier "${deleteTarget.name}"? Affiliates on this tier stop earning until they are moved to another tier.` : ''}
+        messageBn={deleteTarget ? `"${deleteTarget.name}" টিয়ারটি মুছে ফেলবেন? এই টিয়ারের অ্যাফিলিয়েটরা অন্য টিয়ারে না যাওয়া পর্যন্ত কমিশন পাবেন না।` : ''}
+        confirmLabel="Delete"
+        onConfirm={async () => {
+          if (deleteTarget) await remove(deleteTarget);
+          setDeleteTarget(null);
+        }}
+      />
     </>
   );
 }

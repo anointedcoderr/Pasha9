@@ -93,11 +93,16 @@ const BLANK: CampaignRow = {
   payoutCount: 0,
 };
 
+// Formats an ISO timestamp for a datetime-local input in the
+// OPERATOR'S LOCAL TIME. The previous toISOString().slice(0, 16)
+// produced UTC, so every edit prefilled 6 hours behind Dhaka time and
+// re-saving silently shifted the campaign window.
 function toLocalInput(iso: string | null): string {
   if (!iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  return d.toISOString().slice(0, 16);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 export default function AdminCashbackPage() {
@@ -107,6 +112,9 @@ export default function AdminCashbackPage() {
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [editor, setEditor] = useState<CampaignRow | null>(null);
+  // Save failures render INSIDE the editor modal; the page error card
+  // sits behind the open modal overlay.
+  const [editorError, setEditorError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [runResult, setRunResult] = useState<{ campaign: CampaignRow; result: RunResult } | null>(null);
   const [runTarget, setRunTarget] = useState<CampaignRow | null>(null);
@@ -148,7 +156,7 @@ export default function AdminCashbackPage() {
   const save = async () => {
     if (!editor) return;
     setBusy(true);
-    setError(null);
+    setEditorError(null);
     const payload = {
       nameEn: editor.nameEn,
       nameBn: editor.nameBn || null,
@@ -171,9 +179,11 @@ export default function AdminCashbackPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message ?? data.code ?? 'Save failed');
       setEditor(null);
+      setToast(`Campaign "${editor.nameEn}" saved. ক্যাম্পেইনটি সংরক্ষণ করা হয়েছে।`);
+      setTimeout(() => setToast(null), 4000);
       await refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed');
+      setEditorError(e instanceof Error ? e.message : 'Save failed');
     } finally {
       setBusy(false);
     }
@@ -200,13 +210,28 @@ export default function AdminCashbackPage() {
     }
   };
 
+  // Active switch on a campaign that pays real money: the outcome must
+  // be visible. On failure the switch position is refreshed from the
+  // server so it never lies about whether the campaign still pays.
   const toggleActive = async (c: CampaignRow) => {
-    await fetch(`/api/admin/cashback/${c.id}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ isActive: !c.isActive }),
-    });
-    refresh();
+    setError(null); setToast(null);
+    try {
+      const res = await fetch(`/api/admin/cashback/${c.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ isActive: !c.isActive }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.message ?? data?.code ?? 'Toggle failed');
+      setToast(!c.isActive
+        ? `Campaign "${c.nameEn}" activated. ক্যাম্পেইনটি সক্রিয় করা হয়েছে।`
+        : `Campaign "${c.nameEn}" deactivated. ক্যাম্পেইনটি নিষ্ক্রিয় করা হয়েছে।`);
+      setTimeout(() => setToast(null), 4000);
+    } catch (e) {
+      setError(`${e instanceof Error ? e.message : 'Toggle failed'} (Status change failed. স্ট্যাটাস পরিবর্তন ব্যর্থ হয়েছে।)`);
+    } finally {
+      refresh();
+    }
   };
 
   // Two run modes:
@@ -310,7 +335,7 @@ export default function AdminCashbackPage() {
         </div>
       )}
 
-      <Modal open={!!editor} onOpenChange={(v) => !v && setEditor(null)} title={editor?.id ? 'Edit Campaign' : 'New Campaign'} size="lg">
+      <Modal open={!!editor} onOpenChange={(v) => { if (!v) { setEditor(null); setEditorError(null); } }} title={editor?.id ? 'Edit Campaign' : 'New Campaign'} size="lg">
         {editor ? (
           <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); void save(); }}>
             <div className="grid gap-3 md:grid-cols-2">
@@ -453,8 +478,11 @@ export default function AdminCashbackPage() {
                 <Input type="datetime-local" value={toLocalInput(editor.endsAt)} onChange={(e) => setEditor({ ...editor, endsAt: e.target.value || null })} />
               </FormField>
             </div>
+            {editorError ? (
+              <p className="text-sm text-signal-danger">Save failed: {editorError} (সংরক্ষণ ব্যর্থ হয়েছে: {editorError})</p>
+            ) : null}
             <div className="flex justify-end gap-2 pt-2">
-              <Button variant="ghost" type="button" onClick={() => setEditor(null)}>Cancel</Button>
+              <Button variant="ghost" type="button" onClick={() => { setEditor(null); setEditorError(null); }}>Cancel</Button>
               <Button type="submit" loading={busy}>Save</Button>
             </div>
           </form>

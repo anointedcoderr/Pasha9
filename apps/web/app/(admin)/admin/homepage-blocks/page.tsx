@@ -18,6 +18,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Plus, Save, Trash2, ArrowUp, ArrowDown, Eye, EyeOff, Search, Flame, Award, X } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils/cn';
+import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
 
 type SourceType = 'manual' | 'category' | 'brand' | 'jackpot' | 'featured';
 
@@ -71,6 +72,15 @@ export default function AdminHomepageBlocksPage() {
   const [openCreate, setOpenCreate] = useState(false);
   const [pickerBlock, setPickerBlock] = useState<BlockRow | null>(null);
   const [savingBlockId, setSavingBlockId] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  // In-page confirm dialog instead of native confirm(), which
+  // installed PWAs suppress silently.
+  const [deleteTarget, setDeleteTarget] = useState<BlockRow | null>(null);
+
+  const notify = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 4000);
+  };
 
   const refresh = useCallback(async () => {
     setError(null);
@@ -121,15 +131,15 @@ export default function AdminHomepageBlocksPage() {
   };
 
   const onBlockDelete = async (id: string) => {
-    if (!confirm('Delete this block? Items will be removed too.')) return;
     setSavingBlockId(id);
     try {
       const r = await fetch(`/api/admin/homepage-blocks/${id}`, { method: 'DELETE' });
       const j = await r.json().catch(() => null);
       if (!r.ok) throw new Error(j?.message ?? j?.code ?? 'Delete failed');
       setBlocks((rows) => rows.filter((b) => b.id !== id));
+      notify('Block deleted. ব্লক মুছে ফেলা হয়েছে।');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Delete failed');
+      setError(`${e instanceof Error ? e.message : 'Delete failed'} (Delete failed. ডিলিট ব্যর্থ হয়েছে।)`);
     } finally {
       setSavingBlockId(null);
     }
@@ -162,6 +172,7 @@ export default function AdminHomepageBlocksPage() {
         }
       />
 
+      {toast ? <Card padding="sm" className="border-l-4 border-emerald-400/60"><p className="text-sm text-emerald-300">{toast}</p></Card> : null}
       {error ? <Card padding="sm" className="border-l-4 border-rose-400/60"><p className="text-sm text-rose-300">{error}</p></Card> : null}
 
       {loading ? (
@@ -179,7 +190,7 @@ export default function AdminHomepageBlocksPage() {
               first={i === 0}
               last={i === arr.length - 1}
               onPatch={(patch) => onBlockPatch(b.id, patch)}
-              onDelete={() => onBlockDelete(b.id)}
+              onDelete={() => setDeleteTarget(b)}
               onMove={(dir) => onMove(b.id, dir)}
               onOpenItems={() => setPickerBlock(b)}
             />
@@ -200,6 +211,17 @@ export default function AdminHomepageBlocksPage() {
           block={pickerBlock}
         />
       ) : null}
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(v) => !v && setDeleteTarget(null)}
+        title="Delete block"
+        message={deleteTarget ? `Delete block "${deleteTarget.titleEn || deleteTarget.key}"? Its curated items will be removed too.` : ''}
+        messageBn={deleteTarget ? `"${deleteTarget.titleBn || deleteTarget.titleEn || deleteTarget.key}" ব্লকটি মুছে ফেলবেন? এর ভেতরের আইটেমগুলোও মুছে যাবে।` : ''}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        onConfirm={async () => { if (deleteTarget) await onBlockDelete(deleteTarget.id); }}
+      />
     </div>
   );
 }
@@ -395,6 +417,9 @@ function ItemsModal({ open, onOpenChange, block }: { open: boolean; onOpenChange
   const [q, setQ] = useState('');
   const [results, setResults] = useState<Array<{ source: 'external' | 'native'; id?: string; gameCode?: string; displayName: string; providerName?: string; brandName?: string | null; category?: string | null; imageUrl?: string | null }>>([]);
   const [busy, setBusy] = useState(false);
+  // Rendered inside the modal body so failures are visible above the
+  // overlay, not hidden behind it in a page-level card.
+  const [err, setErr] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const r = await fetch(`/api/admin/homepage-blocks/${block.id}/items`, { cache: 'no-store' });
@@ -421,29 +446,60 @@ function ItemsModal({ open, onOpenChange, block }: { open: boolean; onOpenChange
   useEffect(() => { const t = setTimeout(() => { void search(); }, 250); return () => clearTimeout(t); }, [search]);
 
   const add = async (r: typeof results[number]) => {
+    setErr(null);
     const body = r.source === 'external'
       ? { source: 'external', externalGameId: r.id }
       : { source: 'native', nativeGameCode: r.gameCode };
-    const res = await fetch(`/api/admin/homepage-blocks/${block.id}/items`, {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
-    });
-    if (res.ok) load();
+    try {
+      const res = await fetch(`/api/admin/homepage-blocks/${block.id}/items`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+      });
+      const j = await res.json().catch(() => null);
+      if (!res.ok) {
+        setErr(`${j?.message ?? j?.code ?? 'Failed to add game'} (Failed to add game. গেম যোগ করা যায়নি।)`);
+        return;
+      }
+      load();
+    } catch {
+      setErr('Failed to add game: network error. গেম যোগ করা যায়নি: নেটওয়ার্ক সমস্যা।');
+    }
   };
 
   const remove = async (itemId: string) => {
-    await fetch(`/api/admin/homepage-blocks/${block.id}/items/${itemId}`, { method: 'DELETE' });
-    load();
+    setErr(null);
+    try {
+      const res = await fetch(`/api/admin/homepage-blocks/${block.id}/items/${itemId}`, { method: 'DELETE' });
+      const j = await res.json().catch(() => null);
+      if (!res.ok) {
+        setErr(`${j?.message ?? j?.code ?? 'Failed to remove game'} (Failed to remove game. গেম সরানো যায়নি।)`);
+        return;
+      }
+      load();
+    } catch {
+      setErr('Failed to remove game: network error. গেম সরানো যায়নি: নেটওয়ার্ক সমস্যা।');
+    }
   };
 
   const toggleFlag = async (itemId: string, flag: 'isHot' | 'isJackpot', value: boolean) => {
-    await fetch(`/api/admin/homepage-blocks/${block.id}/items/${itemId}`, {
-      method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ [flag]: value }),
-    });
-    load();
+    setErr(null);
+    try {
+      const res = await fetch(`/api/admin/homepage-blocks/${block.id}/items/${itemId}`, {
+        method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ [flag]: value }),
+      });
+      const j = await res.json().catch(() => null);
+      if (!res.ok) {
+        setErr(`${j?.message ?? j?.code ?? 'Failed to update flag'} (Failed to update flag. ফ্ল্যাগ আপডেট ব্যর্থ হয়েছে।)`);
+        return;
+      }
+      load();
+    } catch {
+      setErr('Failed to update flag: network error. ফ্ল্যাগ আপডেট ব্যর্থ হয়েছে: নেটওয়ার্ক সমস্যা।');
+    }
   };
 
   return (
     <Modal open={open} onOpenChange={onOpenChange} size="lg" title={`Games in ${block.titleEn}`} description={`${items.length} selected. Max 30. Search and click to add.`}>
+      {err ? <p className="mb-3 text-sm text-rose-300">{err}</p> : null}
       <div className="grid gap-3 md:grid-cols-2">
         <div>
           <h3 className="text-xs font-bold uppercase tracking-wider text-brand-inkMute">Selected</h3>

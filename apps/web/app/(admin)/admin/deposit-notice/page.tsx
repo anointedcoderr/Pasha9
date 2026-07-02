@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { Bell, Plus, Save, Trash2, Eye, EyeOff } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
+import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
 
 interface NoticeRow {
   id: string;
@@ -40,6 +41,9 @@ export default function AdminDepositNoticePage() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [togglingGlobal, setTogglingGlobal] = useState(false);
+  // In-page confirm dialog instead of native confirm(), which
+  // installed PWAs suppress silently.
+  const [deleteTarget, setDeleteTarget] = useState<NoticeRow | null>(null);
 
   const refresh = useCallback(async () => {
     setError(null);
@@ -70,14 +74,13 @@ export default function AdminDepositNoticePage() {
   };
 
   const remove = async (id: string) => {
-    if (!confirm('Delete this notice?')) return;
     setSavingId(id);
     try {
       const r = await fetch(`/api/admin/deposit-notices/${id}`, { method: 'DELETE' });
       const j = await r.json().catch(() => null);
       if (!r.ok) throw new Error(j?.message ?? j?.code ?? 'Delete failed');
       setRows((rs) => rs.filter((row) => row.id !== id));
-    } catch (e) { setError(e instanceof Error ? e.message : 'Delete failed'); }
+    } catch (e) { setError(`${e instanceof Error ? e.message : 'Delete failed'} (Delete failed. ডিলিট ব্যর্থ হয়েছে।)`); }
     finally { setSavingId(null); }
   };
 
@@ -140,12 +143,23 @@ export default function AdminDepositNoticePage() {
             <p className="text-sm text-brand-inkMute">No notice rows yet. Add the first to populate the popup body.</p>
           ) : null}
           {rows.map((row) => (
-            <NoticeEditor key={row.id} row={row} saving={savingId === row.id} onPatch={(b) => patch(row.id, b)} onDelete={() => remove(row.id)} />
+            <NoticeEditor key={row.id} row={row} saving={savingId === row.id} onPatch={(b) => patch(row.id, b)} onDelete={() => setDeleteTarget(row)} />
           ))}
         </div>
       </Card>
 
       <CreateModal open={createOpen} onOpenChange={setCreateOpen} onCreated={refresh} />
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(v) => !v && setDeleteTarget(null)}
+        title="Delete notice"
+        message={deleteTarget ? `Delete notice "${deleteTarget.titleEn}"? This cannot be undone.` : ''}
+        messageBn={deleteTarget ? `"${deleteTarget.titleBn || deleteTarget.titleEn}" নোটিশটি মুছে ফেলবেন? এটি আর ফেরানো যাবে না।` : ''}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        onConfirm={async () => { if (deleteTarget) await remove(deleteTarget.id); }}
+      />
     </div>
   );
 }

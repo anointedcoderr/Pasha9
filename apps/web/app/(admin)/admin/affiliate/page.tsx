@@ -51,6 +51,10 @@ export default function AdminAffiliatePage() {
   const [pendingAction, setPendingAction] = useState<{ row: AdminAffiliateRow; action: 'approve' | 'reject' | 'suspend' | 'activate' | 'reset' | 'assign_tier' } | null>(null);
   const [actionNotes, setActionNotes] = useState('');
   const [actionTierId, setActionTierId] = useState<string>('');
+  // Action failures render INSIDE the action modal, replacing the old
+  // alert() which installed PWAs suppress silently. Critically, the
+  // NO_TIER_AVAILABLE guidance must stay visible to the operator.
+  const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [diagnoseOpen, setDiagnoseOpen] = useState(false);
@@ -144,6 +148,7 @@ export default function AdminAffiliatePage() {
   const runAction = async () => {
     if (!pendingAction) return;
     setBusy(true);
+    setActionError(null);
     try {
       const payload: Record<string, unknown> = { action: pendingAction.action };
       if (pendingAction.action === 'approve' || pendingAction.action === 'activate' || pendingAction.action === 'assign_tier') {
@@ -160,7 +165,7 @@ export default function AdminAffiliatePage() {
       const data = await res.json();
       if (!res.ok) {
         if (data?.code === 'NO_TIER_AVAILABLE') {
-          throw new Error('No active commission tier exists. Open Manage tiers and create at least one tier before approving.');
+          throw new Error('No active commission tier exists. Open Manage tiers and create at least one tier before approving. কোনো সক্রিয় কমিশন টিয়ার নেই। অনুমোদনের আগে Manage tiers পেজে অন্তত একটি টিয়ার তৈরি করুন।');
         }
         throw new Error(data.message ?? data.code ?? 'Action failed');
       }
@@ -175,7 +180,9 @@ export default function AdminAffiliatePage() {
       setDrawerRow(null);
       await refresh();
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Action failed');
+      // Keep the modal open and show the failure inside it so the
+      // operator sees why the action did not go through.
+      setActionError(e instanceof Error ? e.message : 'Action failed');
     } finally {
       setBusy(false);
     }
@@ -300,7 +307,7 @@ export default function AdminAffiliatePage() {
 
       <Modal
         open={!!pendingAction}
-        onOpenChange={(v) => { if (!v) { setPendingAction(null); setActionNotes(''); setActionTierId(''); } }}
+        onOpenChange={(v) => { if (!v && !busy) { setPendingAction(null); setActionNotes(''); setActionTierId(''); setActionError(null); } }}
         title={pendingAction ? actionTitle(pendingAction.action) : ''}
         description={pendingAction ? `User: ${pendingAction.row.user.username}` : ''}
       >
@@ -353,8 +360,12 @@ export default function AdminAffiliatePage() {
 
             <CardHeader title="Audit" subtitle="This action writes an ActivityLog entry with your admin id and IP." />
 
+            {actionError ? (
+              <p className="text-sm text-signal-danger">Action failed: {actionError}</p>
+            ) : null}
+
             <div className="flex justify-end gap-2 pt-2">
-              <Button variant="ghost" onClick={() => { setPendingAction(null); setActionNotes(''); setActionTierId(''); }}>Cancel</Button>
+              <Button variant="ghost" onClick={() => { setPendingAction(null); setActionNotes(''); setActionTierId(''); setActionError(null); }}>Cancel</Button>
               <Button
                 variant={pendingAction.action === 'reject' || pendingAction.action === 'suspend' ? 'danger' : 'gold'}
                 loading={busy}

@@ -24,6 +24,7 @@ import { Chip } from '@/components/ui/Chip';
 import { EmptyState } from '@/components/ui/EmptyState';
 import Link from 'next/link';
 import { Disc3, Plus, Pencil, Trash2, Sparkles } from 'lucide-react';
+import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
 
 interface TierRow {
   id: string;
@@ -65,8 +66,17 @@ export default function AdminSpinTiersPage() {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [editor, setEditor] = useState<TierRow | null>(null);
+  const [editorError, setEditorError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [seedBusy, setSeedBusy] = useState(false);
+  // In-page confirm dialog instead of native confirm(), which
+  // installed PWAs suppress silently.
+  const [deleteTarget, setDeleteTarget] = useState<TierRow | null>(null);
+
+  const notify = (msg: string) => {
+    setInfo(msg);
+    setTimeout(() => setInfo(null), 4000);
+  };
 
   const refresh = useCallback(async () => {
     setError(null);
@@ -108,7 +118,7 @@ export default function AdminSpinTiersPage() {
   const save = async () => {
     if (!editor) return;
     setBusy(true);
-    setError(null);
+    setEditorError(null);
     const isNew = !editor.id;
     const payload = {
       ...(isNew ? { key: editor.key } : { id: editor.id }),
@@ -132,27 +142,45 @@ export default function AdminSpinTiersPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message ?? data.code ?? 'Save failed');
       setEditor(null);
+      notify(isNew ? 'Tier created. টিয়ার তৈরি হয়েছে।' : 'Tier updated. টিয়ার আপডেট হয়েছে।');
       await refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed');
+      setEditorError(e instanceof Error ? e.message : 'Save failed. সংরক্ষণ ব্যর্থ হয়েছে।');
     } finally {
       setBusy(false);
     }
   };
 
   const remove = async (row: TierRow) => {
-    if (!confirm(`Delete tier "${row.nameEn}"? Segments stay attached to no tier and stop appearing on the public wheel.`)) return;
-    const res = await fetch(`/api/admin/spin-tiers?id=${encodeURIComponent(row.id)}`, { method: 'DELETE' });
-    if (res.ok) refresh();
+    try {
+      const res = await fetch(`/api/admin/spin-tiers?id=${encodeURIComponent(row.id)}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        notify('Tier deleted. টিয়ার মুছে ফেলা হয়েছে।');
+        refresh();
+      } else {
+        setError(`${data?.message ?? data?.code ?? 'Delete failed'} (Delete failed. ডিলিট ব্যর্থ হয়েছে।)`);
+      }
+    } catch {
+      setError('Delete failed: network error. ডিলিট ব্যর্থ হয়েছে: নেটওয়ার্ক সমস্যা।');
+    }
   };
 
   const toggle = async (row: TierRow) => {
-    await fetch('/api/admin/spin-tiers', {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ id: row.id, isActive: !row.isActive }),
-    });
-    refresh();
+    try {
+      const res = await fetch('/api/admin/spin-tiers', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id: row.id, isActive: !row.isActive }),
+      });
+      if (!res.ok) {
+        setError('Failed to update status. স্ট্যাটাস আপডেট ব্যর্থ হয়েছে।');
+        return;
+      }
+      refresh();
+    } catch {
+      setError('Failed to update status: network error. স্ট্যাটাস আপডেট ব্যর্থ হয়েছে: নেটওয়ার্ক সমস্যা।');
+    }
   };
 
   return (
@@ -230,7 +258,7 @@ export default function AdminSpinTiersPage() {
                 >
                   Edit
                 </Button>
-                <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => remove(row)}>
+                <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => setDeleteTarget(row)}>
                   Delete
                 </Button>
               </div>
@@ -239,7 +267,7 @@ export default function AdminSpinTiersPage() {
         )}
       </div>
 
-      <Modal open={!!editor} onOpenChange={(v) => !v && setEditor(null)} title={editor?.id ? 'Edit Tier' : 'New Tier'} size="lg">
+      <Modal open={!!editor} onOpenChange={(v) => { if (!v) { setEditor(null); setEditorError(null); } }} title={editor?.id ? 'Edit Tier' : 'New Tier'} size="lg">
         {editor ? (
           <form
             className="space-y-4"
@@ -289,13 +317,25 @@ export default function AdminSpinTiersPage() {
               <Switch checked={editor.isActive} onChange={(v) => setEditor({ ...editor, isActive: Boolean(v) })} />
               Active
             </label>
+            {editorError ? <p className="text-sm text-signal-danger">{editorError}</p> : null}
             <div className="flex justify-end gap-2 pt-2">
-              <Button variant="ghost" type="button" onClick={() => setEditor(null)}>Cancel</Button>
+              <Button variant="ghost" type="button" onClick={() => { setEditor(null); setEditorError(null); }}>Cancel</Button>
               <Button type="submit" loading={busy}>Save</Button>
             </div>
           </form>
         ) : null}
       </Modal>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(v) => !v && setDeleteTarget(null)}
+        title="Delete tier"
+        message={deleteTarget ? `Delete tier "${deleteTarget.nameEn}"? Segments stay attached to no tier and stop appearing on the public wheel.` : ''}
+        messageBn={deleteTarget ? `"${deleteTarget.nameBn || deleteTarget.nameEn}" টিয়ারটি মুছে ফেলবেন? সেগমেন্টগুলো কোনো টিয়ারে থাকবে না এবং পাবলিক হুইলে আর দেখা যাবে না।` : ''}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        onConfirm={async () => { if (deleteTarget) await remove(deleteTarget); }}
+      />
     </>
   );
 }

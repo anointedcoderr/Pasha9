@@ -1483,19 +1483,35 @@ interface CallbackLogRow {
 function LogsPanel({ providerId }: { providerId: string }) {
   const [kind, setKind] = useState<'request' | 'callback'>('request');
   const [rows, setRows] = useState<RequestLogRow[] | CallbackLogRow[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadingLogs, setLoadingLogs] = useState(true);
   const [reprocessing, setReprocessing] = useState<string | null>(null);
   const [reprocessResult, setReprocessResult] = useState<string | null>(null);
   const [manualRepairLog, setManualRepairLog] = useState<CallbackLogRow | null>(null);
+  // In-page reason form (native window.prompt() is suppressed in the installed PWA)
+  const [reprocessTarget, setReprocessTarget] = useState<CallbackLogRow | null>(null);
   const load = useCallback(async () => {
-    const res = await fetch(`/api/admin/providers/${providerId}/logs?kind=${kind}&limit=50`, { cache: 'no-store' });
-    const j = await res.json().catch(() => null);
-    setRows((j?.rows ?? []) as RequestLogRow[] | CallbackLogRow[]);
+    setLoadingLogs(true);
+    setLoadError(null);
+    try {
+      const res = await fetch(`/api/admin/providers/${providerId}/logs?kind=${kind}&limit=50`, { cache: 'no-store' });
+      const j = await res.json().catch(() => null);
+      if (!res.ok) {
+        setRows([]);
+        setLoadError(`${j?.message ?? j?.code ?? `HTTP ${res.status}`}`);
+        return;
+      }
+      setRows((j?.rows ?? []) as RequestLogRow[] | CallbackLogRow[]);
+    } catch (e) {
+      setRows([]);
+      setLoadError(e instanceof Error ? e.message : 'Network error');
+    } finally {
+      setLoadingLogs(false);
+    }
   }, [providerId, kind]);
   useEffect(() => { load(); }, [load]);
 
-  const onReprocess = async (row: CallbackLogRow) => {
-    const reason = window.prompt('Reason for reprocessing this callback (required, min 3 chars):');
-    if (!reason || reason.trim().length < 3) return;
+  const onReprocess = async (row: CallbackLogRow, reason: string) => {
     setReprocessing(row.id); setReprocessResult(null);
     try {
       const r = await fetch(`/api/admin/providers/${providerId}/callback-logs/${row.id}/reprocess`, {
@@ -1559,7 +1575,16 @@ function LogsPanel({ providerId }: { providerId: string }) {
                     <td className="px-3 py-2 break-all text-signal-danger">{r.errorMessage ?? ''}</td>
                   </tr>
                 ))}
-                {rows.length === 0 ? <tr><td colSpan={6} className="px-3 py-4 text-center text-ink-mid">No requests yet.</td></tr> : null}
+                {loadError ? (
+                  <tr>
+                    <td colSpan={6} className="px-3 py-4 text-center">
+                      <p className="text-sm text-signal-danger">Failed to load logs: {loadError}. লগ লোড করা যায়নি।</p>
+                      <Button size="sm" variant="ghost" className="mt-2" leftIcon={<RefreshCw className="h-3.5 w-3.5" />} onClick={load}>Retry / আবার চেষ্টা করুন</Button>
+                    </td>
+                  </tr>
+                ) : rows.length === 0 ? (
+                  <tr><td colSpan={6} className="px-3 py-4 text-center text-ink-mid">{loadingLogs ? 'Loading...' : 'No requests yet.'}</td></tr>
+                ) : null}
               </tbody>
             </>
           ) : (
@@ -1589,7 +1614,7 @@ function LogsPanel({ providerId }: { providerId: string }) {
                       <td className="px-3 py-2">
                         <div className="flex flex-wrap items-center gap-1">
                           {isRejected ? (
-                            <Button size="sm" variant="ghost" loading={reprocessing === r.id} leftIcon={<RefreshCw className="h-3.5 w-3.5" />} onClick={() => onReprocess(r)}>Reprocess</Button>
+                            <Button size="sm" variant="ghost" loading={reprocessing === r.id} leftIcon={<RefreshCw className="h-3.5 w-3.5" />} onClick={() => setReprocessTarget(r)}>Reprocess</Button>
                           ) : null}
                           {isRejected ? (
                             <Button size="sm" variant="ghost" leftIcon={<Save className="h-3.5 w-3.5" />} onClick={() => setManualRepairLog(r)}>Manual repair</Button>
@@ -1612,7 +1637,16 @@ function LogsPanel({ providerId }: { providerId: string }) {
                     ) : null,
                   ].filter(Boolean) as JSX.Element[];
                 })}
-                {rows.length === 0 ? <tr><td colSpan={8} className="px-3 py-4 text-center text-ink-mid">No callbacks yet.</td></tr> : null}
+                {loadError ? (
+                  <tr>
+                    <td colSpan={8} className="px-3 py-4 text-center">
+                      <p className="text-sm text-signal-danger">Failed to load logs: {loadError}. লগ লোড করা যায়নি।</p>
+                      <Button size="sm" variant="ghost" className="mt-2" leftIcon={<RefreshCw className="h-3.5 w-3.5" />} onClick={load}>Retry / আবার চেষ্টা করুন</Button>
+                    </td>
+                  </tr>
+                ) : rows.length === 0 ? (
+                  <tr><td colSpan={8} className="px-3 py-4 text-center text-ink-mid">{loadingLogs ? 'Loading...' : 'No callbacks yet.'}</td></tr>
+                ) : null}
               </tbody>
             </>
           )}
@@ -1626,7 +1660,66 @@ function LogsPanel({ providerId }: { providerId: string }) {
         log={manualRepairLog}
         onDone={(msg) => { setManualRepairLog(null); setReprocessResult(msg); load(); }}
       />
+
+      <ReprocessReasonModal
+        open={!!reprocessTarget}
+        onOpenChange={(v) => { if (!v) setReprocessTarget(null); }}
+        log={reprocessTarget}
+        onSubmit={(reason) => {
+          const row = reprocessTarget;
+          setReprocessTarget(null);
+          if (row) void onReprocess(row, reason);
+        }}
+      />
     </Card>
+  );
+}
+
+function ReprocessReasonModal({ open, onOpenChange, log, onSubmit }: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  log: CallbackLogRow | null;
+  onSubmit: (reason: string) => void;
+}) {
+  const [reason, setReason] = useState('');
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) { setReason(''); setErr(null); }
+  }, [open]);
+
+  const submit = () => {
+    if (reason.trim().length < 3) {
+      setErr('Reason is required (min 3 characters). কারণ লিখতে হবে (কমপক্ষে ৩ অক্ষর)।');
+      return;
+    }
+    onSubmit(reason.trim());
+  };
+
+  return (
+    <Modal
+      open={open}
+      onOpenChange={onOpenChange}
+      title={log ? `Reprocess callback ${log.id.slice(0, 8)}` : 'Reprocess callback'}
+      description="Give a short reason for the audit trail before rerunning this rejected callback."
+      footer={
+        <>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button variant="gold" leftIcon={<RefreshCw className="h-3.5 w-3.5" />} onClick={submit}>Reprocess</Button>
+        </>
+      }
+    >
+      {err ? <p className="mb-3 text-sm text-signal-danger">{err}</p> : null}
+      <Field label="Reason (required, min 3 chars) / কারণ (আবশ্যক, কমপক্ষে ৩ অক্ষর)">
+        <textarea
+          value={reason}
+          onChange={(e) => { setReason(e.target.value); if (err) setErr(null); }}
+          rows={2}
+          className={cn(inputCls, 'h-auto py-2')}
+          placeholder="e.g. parser upgraded; retrying the rejected settle callback"
+        />
+      </Field>
+    </Modal>
   );
 }
 

@@ -19,6 +19,7 @@ import { Switch } from '@/components/ui/Switch';
 import { Modal } from '@/components/ui/Modal';
 import { Type, Plus, ArrowUp, ArrowDown, Trash2, RefreshCw, Pencil, Save } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
+import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
 
 type Status = 'active' | 'hidden' | 'paused';
 
@@ -42,6 +43,9 @@ export default function AdminPromoTextPage() {
 
   const [editor, setEditor] = useState<PromoRow | null>(null);
   const [saving, setSaving] = useState(false);
+  // In-page confirm dialog instead of native confirm(), which
+  // installed PWAs suppress silently.
+  const [deleteTarget, setDeleteTarget] = useState<PromoRow | null>(null);
 
   const flashToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 4000); };
 
@@ -127,15 +131,14 @@ export default function AdminPromoTextPage() {
   };
 
   const remove = async (it: PromoRow) => {
-    if (!confirm(`Delete promo text "${it.message.slice(0, 60)}"?`)) return;
     try {
       const res = await fetch(`/api/admin/promo-text/${it.id}`, { method: 'DELETE' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.message ?? data?.code ?? 'Delete failed');
-      flashToast('Deleted.');
+      flashToast('Deleted. মুছে ফেলা হয়েছে।');
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Delete failed');
+      setError(`${e instanceof Error ? e.message : 'Delete failed'} (Delete failed. ডিলিট ব্যর্থ হয়েছে।)`);
     }
   };
 
@@ -205,7 +208,7 @@ export default function AdminPromoTextPage() {
                 <Button size="icon" variant="ghost" onClick={() => move(it, 'up')} disabled={idx === 0}><ArrowUp className="h-4 w-4" /></Button>
                 <Button size="icon" variant="ghost" onClick={() => move(it, 'down')} disabled={idx === items.length - 1}><ArrowDown className="h-4 w-4" /></Button>
                 <Button size="sm" variant="neon" leftIcon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditor({ ...it })}>Edit</Button>
-                <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => remove(it)}>Delete</Button>
+                <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => setDeleteTarget(it)}>Delete</Button>
               </li>
             ))}
           </ul>
@@ -235,6 +238,17 @@ export default function AdminPromoTextPage() {
           </form>
         ) : null}
       </Modal>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(v) => !v && setDeleteTarget(null)}
+        title="Delete promo text"
+        message={deleteTarget ? `Delete promo text "${deleteTarget.message.slice(0, 60)}"?` : ''}
+        messageBn={deleteTarget ? `"${deleteTarget.message.slice(0, 60)}" প্রোমো টেক্সটটি মুছে ফেলবেন?` : ''}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        onConfirm={async () => { if (deleteTarget) await remove(deleteTarget); }}
+      />
     </>
   );
 }

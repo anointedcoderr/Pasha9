@@ -8,7 +8,7 @@ import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
 import { balanceAdjustSchema, type BalanceAdjustInput } from '@/lib/utils/validation';
 import { formatBDT } from '@/lib/utils/format';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { User } from '@/types';
 import { AlertTriangle } from 'lucide-react';
 
@@ -16,11 +16,19 @@ interface Props {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   user: User | null;
-  onConfirm: (input: BalanceAdjustInput & { newBalance: number; oldBalance: number }) => void;
+  // Preselects the Type dropdown when the modal opens (the operator
+  // clicked a Credit or a Debit button on the row).
+  initialType?: 'credit' | 'debit';
+  // Performs the real wallet write. Must THROW on failure; the thrown
+  // message renders inside the modal so the operator sees it above
+  // the action buttons instead of behind the overlay. The modal stays
+  // open until this settles and only closes on success.
+  onConfirm: (input: BalanceAdjustInput & { newBalance: number; oldBalance: number }) => void | Promise<void>;
 }
 
-export function BalanceAdjustModal({ open, onOpenChange, user, onConfirm }: Props) {
+export function BalanceAdjustModal({ open, onOpenChange, user, initialType, onConfirm }: Props) {
   const [loading, setLoading] = useState(false);
+  const [serverError, setServerError] = useState<string | null>(null);
 
   const {
     register,
@@ -33,6 +41,15 @@ export function BalanceAdjustModal({ open, onOpenChange, user, onConfirm }: Prop
     defaultValues: { amount: 0, reason: '', type: 'credit' },
   });
 
+  // Re-arm the form each time the modal opens so the Type select
+  // matches the button the operator clicked.
+  useEffect(() => {
+    if (open) {
+      setServerError(null);
+      reset({ amount: 0, reason: '', type: initialType ?? 'credit' });
+    }
+  }, [open, initialType, reset]);
+
   const amount = Number(watch('amount') || 0);
   const type = watch('type');
   const sign = type === 'credit' ? 1 : -1;
@@ -44,7 +61,7 @@ export function BalanceAdjustModal({ open, onOpenChange, user, onConfirm }: Prop
   return (
     <Modal
       open={open}
-      onOpenChange={(v) => { if (!v) reset(); onOpenChange(v); }}
+      onOpenChange={(v) => { if (loading) return; if (!v) { reset(); setServerError(null); } onOpenChange(v); }}
       title="Adjust Balance"
       description={`Manual change on ${user.username}. This action is logged with reason, old and new balance.`}
       size="md"
@@ -52,11 +69,16 @@ export function BalanceAdjustModal({ open, onOpenChange, user, onConfirm }: Prop
       <form
         onSubmit={handleSubmit(async (values) => {
           setLoading(true);
-          await new Promise((r) => setTimeout(r, 500));
-          setLoading(false);
-          onConfirm({ ...values, oldBalance, newBalance });
-          reset();
-          onOpenChange(false);
+          setServerError(null);
+          try {
+            await onConfirm({ ...values, oldBalance, newBalance });
+            reset();
+            onOpenChange(false);
+          } catch (e) {
+            setServerError(e instanceof Error ? e.message : 'Adjustment failed');
+          } finally {
+            setLoading(false);
+          }
         })}
         className="space-y-4"
       >
@@ -80,8 +102,14 @@ export function BalanceAdjustModal({ open, onOpenChange, user, onConfirm }: Prop
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5" />
           <span>This change creates a transaction record and an audit log entry tagged with your admin ID.</span>
         </div>
+        {serverError ? (
+          <div className="rounded-xl border border-signal-danger/40 bg-signal-danger/5 p-3">
+            <p className="text-sm text-signal-danger">Adjustment failed: {serverError}</p>
+            <p className="text-xs text-signal-danger">ব্যালেন্স পরিবর্তন ব্যর্থ হয়েছে। কোনো টাকা লেখা হয়নি; আবার চেষ্টা করুন।</p>
+          </div>
+        ) : null}
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button type="button" variant="ghost" disabled={loading} onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button type="submit" loading={loading}>Confirm</Button>
         </div>
       </form>

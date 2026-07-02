@@ -12,6 +12,7 @@ import { Switch } from '@/components/ui/Switch';
 import { Chip } from '@/components/ui/Chip';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { AdminMediaUpload } from '@/components/admin/AdminMediaUpload';
+import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
 import { PlaySquare, Plus, Pencil, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 
 interface VideoRow {
@@ -52,6 +53,15 @@ export default function AdminHomepageVideosPage() {
   const [error, setError] = useState<string | null>(null);
   const [editor, setEditor] = useState<VideoRow | null>(null);
   const [busy, setBusy] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  // In-page confirm dialog instead of native confirm(), which
+  // installed PWAs suppress silently.
+  const [deleteTarget, setDeleteTarget] = useState<VideoRow | null>(null);
+
+  const notify = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 4000);
+  };
 
   const refresh = useCallback(async () => {
     setError(null);
@@ -102,19 +112,36 @@ export default function AdminHomepageVideosPage() {
     }
   };
 
-  const remove = async (id: string) => {
-    if (!confirm('Delete this video?')) return;
-    const res = await fetch(`/api/admin/homepage-videos/${id}`, { method: 'DELETE' });
-    if (res.ok) refresh();
+  const remove = async (v: VideoRow) => {
+    try {
+      const res = await fetch(`/api/admin/homepage-videos/${v.id}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        notify('Video deleted. ভিডিও মুছে ফেলা হয়েছে।');
+        refresh();
+      } else {
+        setError(`${data?.message ?? data?.code ?? 'Delete failed'} (Delete failed. ডিলিট ব্যর্থ হয়েছে।)`);
+      }
+    } catch {
+      setError('Delete failed: network error. ডিলিট ব্যর্থ হয়েছে: নেটওয়ার্ক সমস্যা।');
+    }
   };
 
   const toggle = async (v: VideoRow) => {
-    await fetch(`/api/admin/homepage-videos/${v.id}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ isActive: !v.isActive }),
-    });
-    refresh();
+    try {
+      const res = await fetch(`/api/admin/homepage-videos/${v.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ isActive: !v.isActive }),
+      });
+      if (!res.ok) {
+        setError('Failed to update status. স্ট্যাটাস আপডেট ব্যর্থ হয়েছে।');
+        return;
+      }
+      refresh();
+    } catch {
+      setError('Failed to update status: network error. স্ট্যাটাস আপডেট ব্যর্থ হয়েছে: নেটওয়ার্ক সমস্যা।');
+    }
   };
 
   const move = async (v: VideoRow, dir: -1 | 1) => {
@@ -124,12 +151,20 @@ export default function AdminHomepageVideosPage() {
     if (swapIdx < 0 || swapIdx >= videos.length) return;
     const ids = videos.map((x) => x.id);
     [ids[idx], ids[swapIdx]] = [ids[swapIdx], ids[idx]];
-    await fetch('/api/admin/homepage-videos', {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ ids }),
-    });
-    refresh();
+    try {
+      const res = await fetch('/api/admin/homepage-videos', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      });
+      if (!res.ok) {
+        setError('Failed to reorder video. ভিডিওর ক্রম পরিবর্তন ব্যর্থ হয়েছে।');
+        return;
+      }
+      refresh();
+    } catch {
+      setError('Failed to reorder video: network error. ক্রম পরিবর্তন ব্যর্থ হয়েছে: নেটওয়ার্ক সমস্যা।');
+    }
   };
 
   return (
@@ -145,6 +180,7 @@ export default function AdminHomepageVideosPage() {
         }
       />
 
+      {toast ? <Card padding="md" className="mb-4"><p className="text-sm text-signal-ok">{toast}</p></Card> : null}
       {error ? <Card padding="md" className="mb-4"><p className="text-sm text-signal-danger">{error}</p></Card> : null}
 
       <div className="space-y-3">
@@ -197,7 +233,7 @@ export default function AdminHomepageVideosPage() {
                 <Button size="sm" variant="neon" leftIcon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditor({ ...v, titleBn: v.titleBn ?? '', subtitleEn: v.subtitleEn ?? '', subtitleBn: v.subtitleBn ?? '', youtubeUrl: v.youtubeUrl ?? '', videoUrl: v.videoUrl ?? '', thumbnailUrl: v.thumbnailUrl ?? '', ctaUrl: v.ctaUrl ?? '' })}>
                   Edit
                 </Button>
-                <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => remove(v.id)}>
+                <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => setDeleteTarget(v)}>
                   Delete
                 </Button>
               </div>
@@ -281,6 +317,17 @@ export default function AdminHomepageVideosPage() {
           </form>
         ) : null}
       </Modal>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(v) => !v && setDeleteTarget(null)}
+        title="Delete video"
+        message={deleteTarget ? `Delete video "${deleteTarget.titleEn || deleteTarget.titleBn || 'Untitled'}"? This cannot be undone.` : ''}
+        messageBn={deleteTarget ? `"${deleteTarget.titleEn || deleteTarget.titleBn || 'Untitled'}" ভিডিওটি মুছে ফেলবেন? এটি আর ফেরানো যাবে না।` : ''}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        onConfirm={async () => { if (deleteTarget) await remove(deleteTarget); }}
+      />
     </>
   );
 }

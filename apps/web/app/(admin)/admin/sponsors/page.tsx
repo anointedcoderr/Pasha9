@@ -17,6 +17,7 @@ import { Trophy, Plus, Save, Trash2, Eye, EyeOff, ArrowUp, ArrowDown } from 'luc
 import { cn } from '@/lib/utils/cn';
 import { ImageUpload } from '@/components/admin/ImageUpload';
 import { PublicSectionHeader } from '@/components/admin/PublicSectionHeader';
+import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
 
 interface Row {
   id: string;
@@ -36,6 +37,9 @@ export default function AdminSponsorsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // In-page confirm dialog instead of native confirm(), which
+  // installed PWAs suppress silently.
+  const [deleteTarget, setDeleteTarget] = useState<Row | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -80,14 +84,13 @@ export default function AdminSponsorsPage() {
   };
 
   const remove = async (id: string) => {
-    if (!confirm('Delete this sponsor?')) return;
     setBusyId(id);
     try {
       const r = await fetch(`/api/admin/sponsors/${id}`, { method: 'DELETE' });
       const j = await r.json().catch(() => null);
       if (!r.ok) throw new Error(j?.message ?? j?.code ?? 'Delete failed');
       setRows((rs) => rs.filter((row) => row.id !== id));
-    } catch (e) { setError(e instanceof Error ? e.message : 'Delete failed'); }
+    } catch (e) { setError(`${e instanceof Error ? e.message : 'Delete failed'} (Delete failed. ডিলিট ব্যর্থ হয়েছে।)`); }
     finally { setBusyId(null); }
   };
 
@@ -131,13 +134,24 @@ export default function AdminSponsorsPage() {
               last={i === rows.length - 1}
               saving={busyId === row.id}
               onPatch={(b) => patch(row.id, b)}
-              onDelete={() => remove(row.id)}
+              onDelete={() => setDeleteTarget(row)}
               onMoveUp={() => reorder(row.id, 'up')}
               onMoveDown={() => reorder(row.id, 'down')}
             />
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(v) => !v && setDeleteTarget(null)}
+        title="Delete sponsor"
+        message={deleteTarget ? `Delete sponsor "${deleteTarget.nameEn}"? This cannot be undone.` : ''}
+        messageBn={deleteTarget ? `"${deleteTarget.nameBn || deleteTarget.nameEn}" স্পনসরটি মুছে ফেলবেন? এটি আর ফেরানো যাবে না।` : ''}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        onConfirm={async () => { if (deleteTarget) await remove(deleteTarget.id); }}
+      />
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { PageHeader } from '@/components/site/PageHeader';
 import { DataTable } from '@/components/ui/DataTable';
 import { ApprovalModal } from '@/components/admin/ApprovalModal';
+import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
 import { Chip } from '@/components/ui/Chip';
 import { Button } from '@/components/ui/Button';
 import { Card, CardHeader } from '@/components/ui/Card';
@@ -70,6 +71,9 @@ export default function AdminWithdrawalsPage() {
 
   const [paidTarget, setPaidTarget] = useState<WithdrawalRow | null>(null);
   const [paidBusy, setPaidBusy] = useState(false);
+  // Mark Paid failures render INSIDE the modal; the page-level toast
+  // sits behind the open modal overlay so the operator never sees it.
+  const [paidError, setPaidError] = useState<string | null>(null);
   const [paidProviderRef, setPaidProviderRef] = useState('');
   const [paidNote, setPaidNote] = useState('');
   const [paidProviderKey, setPaidProviderKey] = useState('manual');
@@ -84,6 +88,11 @@ export default function AdminWithdrawalsPage() {
   const [chaopaopayAvailable, setChaopaopayAvailable] = useState(false);
   const [chaopaopayMethods, setChaopaopayMethods] = useState<string[]>([]);
   const [chaopaopayBusyId, setChaopaopayBusyId] = useState<string | null>(null);
+  // Payout confirmation runs through an in-page ConfirmDialog showing
+  // the account number and amount. The old window.confirm() is
+  // silently suppressed in installed PWAs / in-app webviews (it
+  // returns false with no dialog), so the Send button looked dead.
+  const [payoutTarget, setPayoutTarget] = useState<WithdrawalRow | null>(null);
 
   const [drawerId, setDrawerId] = useState<string | null>(null);
   const [drawerData, setDrawerData] = useState<DetailPayload['withdrawal'] | null>(null);
@@ -143,7 +152,9 @@ export default function AdminWithdrawalsPage() {
     return () => { alive = false; };
   }, [drawerId]);
 
-  const confirm = async (note: string) => {
+  // Approve / reject submitter. Named so it can never shadow
+  // window.confirm.
+  const submitDecision = async (note: string) => {
     if (!item || !action) return;
     try {
       const res = await fetch(`/api/admin/withdrawals/${item.id}/${action}`, {
@@ -175,15 +186,11 @@ export default function AdminWithdrawalsPage() {
   // alreadyInitiated and no double-send happens. On success the row
   // transitions to processingState='payout_initiated' and the actual
   // 'paid' flip is owned by the payout webhook. The operator
-  // explicitly clicks this (two-click flow) so they can double-check
-  // the account number on the row before money leaves.
+  // explicitly clicks this (two-click flow: button, then the
+  // ConfirmDialog showing the account number and amount) so they can
+  // double-check where the money goes before it leaves.
   const sendViaChaopaoPay = async (r: WithdrawalRow) => {
     if (chaopaopayBusyId) return;
-    const accountConfirm = window.confirm(
-      `Send BDT ${formatBDT(r.amount)} to ${r.accountName} (${r.accountNumber}) via ChaopaoPay ${r.method}?\n\n` +
-      'This will call ChaopaoPay payout API. The actual settlement to bKash/Nagad happens after the gateway processes the payout (usually within 1-2 minutes).',
-    );
-    if (!accountConfirm) return;
     setChaopaopayBusyId(r.id);
     try {
       const res = await fetch(`/api/admin/payments/chaopaopay/send-payout/${r.id}`, { method: 'POST' });
@@ -250,6 +257,7 @@ export default function AdminWithdrawalsPage() {
   const submitMarkPaid = async () => {
     if (!paidTarget) return;
     setPaidBusy(true);
+    setPaidError(null);
     try {
       const res = await fetch(`/api/admin/withdrawals/${paidTarget.id}/mark-paid`, {
         method: 'POST',
@@ -270,8 +278,7 @@ export default function AdminWithdrawalsPage() {
       setPaidProviderKey('manual');
       await refresh();
     } catch (e) {
-      setToast({ kind: 'err', text: e instanceof Error ? e.message : 'Mark-paid failed' });
-      setTimeout(() => setToast(null), 4500);
+      setPaidError(`${e instanceof Error ? e.message : 'Mark-paid failed'}. পেইড হিসেবে চিহ্নিত করা যায়নি।`);
     } finally {
       setPaidBusy(false);
     }
@@ -330,12 +337,12 @@ export default function AdminWithdrawalsPage() {
                       leftIcon={<Zap className="h-3 w-3" />}
                       loading={chaopaopayBusyId === r.id}
                       disabled={chaopaopayBusyId !== null && chaopaopayBusyId !== r.id}
-                      onClick={() => sendViaChaopaoPay(r)}
+                      onClick={() => setPayoutTarget(r)}
                     >
                       Send via ChaopaoPay
                     </Button>
                   ) : null}
-                  <Button size="sm" variant="gold" leftIcon={<BanknoteIcon className="h-3 w-3" />} onClick={() => setPaidTarget(r)}>Mark Paid</Button>
+                  <Button size="sm" variant="gold" leftIcon={<BanknoteIcon className="h-3 w-3" />} onClick={() => { setPaidError(null); setPaidTarget(r); }}>Mark Paid</Button>
                 </>
               ) : (
                 <span className="text-xs text-ink-lo">Resolved</span>
@@ -404,7 +411,34 @@ export default function AdminWithdrawalsPage() {
           { label: 'Account', value: `${item.accountName} · ${item.accountNumber}` },
           { label: 'Submitted', value: formatDateTime(item.createdAt, lang) },
         ] : []}
-        onConfirm={(note) => { void confirm(note); }}
+        onConfirm={(note) => { void submitDecision(note); }}
+      />
+
+      <ConfirmDialog
+        open={!!payoutTarget}
+        onOpenChange={(v) => !v && setPayoutTarget(null)}
+        title="Send payout via ChaopaoPay"
+        message={payoutTarget ? (
+          <>
+            Send <span className="font-bold text-ink-hi">{formatBDT(payoutTarget.amount)}</span> to{' '}
+            <span className="font-bold text-ink-hi">{payoutTarget.accountName}</span>{' '}
+            (<code className="font-mono">{payoutTarget.accountNumber}</code>) via ChaopaoPay {payoutTarget.method}?
+            This calls the ChaopaoPay payout API; settlement to bKash/Nagad usually completes within 1 to 2 minutes.
+          </>
+        ) : ''}
+        messageBn={payoutTarget ? (
+          <>
+            ChaopaoPay {payoutTarget.method} দিয়ে {payoutTarget.accountName} ({payoutTarget.accountNumber}) নম্বরে{' '}
+            {formatBDT(payoutTarget.amount)} পাঠাবেন? সাধারণত ১ থেকে ২ মিনিটের মধ্যে টাকা পৌঁছে যায়।
+          </>
+        ) : ''}
+        confirmLabel="Send payout"
+        cancelLabel="Cancel"
+        onConfirm={async () => {
+          const target = payoutTarget;
+          setPayoutTarget(null);
+          if (target) await sendViaChaopaoPay(target);
+        }}
       />
 
       <Modal open={!!paidTarget} onOpenChange={(v) => !v && setPaidTarget(null)} title="Mark Withdrawal Paid" size="md">
@@ -424,6 +458,11 @@ export default function AdminWithdrawalsPage() {
             <FormField label="Note (optional)" hint="Free text, visible in the timeline.">
               <Textarea rows={2} value={paidNote} onChange={(e) => setPaidNote(e.target.value)} />
             </FormField>
+            {paidError ? (
+              <div className="rounded-xl border border-signal-danger/30 bg-signal-danger/10 p-3">
+                <p className="text-sm text-signal-danger">{paidError}</p>
+              </div>
+            ) : null}
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="ghost" type="button" onClick={() => setPaidTarget(null)}>Cancel</Button>
               <Button type="submit" variant="gold" loading={paidBusy}>Mark Paid</Button>

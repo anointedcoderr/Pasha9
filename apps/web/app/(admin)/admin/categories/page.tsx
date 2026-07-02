@@ -12,6 +12,7 @@ import { Chip } from '@/components/ui/Chip';
 import { Switch } from '@/components/ui/Switch';
 import { Layers, Plus, Pencil, Trash2, Upload, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
+import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
 
 type Status = 'active' | 'hidden' | 'paused';
 
@@ -44,6 +45,15 @@ export default function AdminCategoriesPage() {
   const [error, setError] = useState<string | null>(null);
   const [editor, setEditor] = useState<CategoryRow | null>(null);
   const [busy, setBusy] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  // In-page confirm dialog instead of native confirm(), which
+  // installed PWAs suppress silently.
+  const [deleteTarget, setDeleteTarget] = useState<CategoryRow | null>(null);
+
+  const notify = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 4000);
+  };
 
   const refresh = useCallback(async () => {
     setError(null);
@@ -92,19 +102,36 @@ export default function AdminCategoriesPage() {
     }
   };
 
-  const remove = async (id: string) => {
-    if (!confirm('Delete this category? Games linked to it will lose their group.')) return;
-    const res = await fetch(`/api/admin/categories/${id}`, { method: 'DELETE' });
-    if (res.ok) refresh();
+  const remove = async (c: CategoryRow) => {
+    try {
+      const res = await fetch(`/api/admin/categories/${c.id}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        notify('Category deleted. ক্যাটাগরি মুছে ফেলা হয়েছে।');
+        refresh();
+      } else {
+        setError(`${data?.message ?? data?.code ?? 'Delete failed'} (Delete failed. ডিলিট ব্যর্থ হয়েছে।)`);
+      }
+    } catch {
+      setError('Delete failed: network error. ডিলিট ব্যর্থ হয়েছে: নেটওয়ার্ক সমস্যা।');
+    }
   };
 
   const toggleStatus = async (c: CategoryRow) => {
-    await fetch(`/api/admin/categories/${c.id}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ status: c.status === 'active' ? 'hidden' : 'active' }),
-    });
-    refresh();
+    try {
+      const res = await fetch(`/api/admin/categories/${c.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ status: c.status === 'active' ? 'hidden' : 'active' }),
+      });
+      if (!res.ok) {
+        setError('Failed to update status. স্ট্যাটাস আপডেট ব্যর্থ হয়েছে।');
+        return;
+      }
+      refresh();
+    } catch {
+      setError('Failed to update status: network error. স্ট্যাটাস আপডেট ব্যর্থ হয়েছে: নেটওয়ার্ক সমস্যা।');
+    }
   };
 
   return (
@@ -125,6 +152,7 @@ export default function AdminCategoriesPage() {
         }
       />
 
+      {toast ? <Card padding="md" className="mb-4"><p className="text-sm text-signal-ok">{toast}</p></Card> : null}
       {error ? <Card padding="md" className="mb-4"><p className="text-sm text-signal-danger">{error}</p></Card> : null}
 
       {loading ? (
@@ -157,7 +185,7 @@ export default function AdminCategoriesPage() {
               <div className="mt-3 flex items-center gap-2">
                 <Switch checked={c.status === 'active'} onChange={() => toggleStatus(c)} />
                 <Button size="sm" variant="neon" leftIcon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditor({ ...c, iconImageUrl: c.iconImageUrl ?? '' })}>Edit</Button>
-                <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => remove(c.id)}>Delete</Button>
+                <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => setDeleteTarget(c)}>Delete</Button>
               </div>
             </Card>
           ))}
@@ -208,6 +236,17 @@ export default function AdminCategoriesPage() {
           </form>
         ) : null}
       </Modal>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(v) => !v && setDeleteTarget(null)}
+        title="Delete category"
+        message={deleteTarget ? `Delete category "${deleteTarget.nameEn}"? Games linked to it will lose their group.` : ''}
+        messageBn={deleteTarget ? `"${deleteTarget.nameBn || deleteTarget.nameEn}" ক্যাটাগরিটি মুছে ফেলবেন? এর সাথে যুক্ত গেমগুলো গ্রুপ হারাবে।` : ''}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        onConfirm={async () => { if (deleteTarget) await remove(deleteTarget); }}
+      />
     </>
   );
 }

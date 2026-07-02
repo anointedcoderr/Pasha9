@@ -18,6 +18,7 @@ import { Select } from '@/components/ui/Select';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/Tabs';
 import { ShieldCheck, RefreshCw, Ban, Plus, ListChecks, Wifi, Info } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
+import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
 
 interface AttemptRow {
   id: string;
@@ -117,8 +118,10 @@ export default function AdminSecurityPage() {
     } finally { setCreatingRule(false); }
   };
 
+  // In-page confirm (native confirm() is suppressed in the installed PWA)
+  const [unblocking, setUnblocking] = useState<IpRule | null>(null);
+
   const removeRule = async (r: IpRule) => {
-    if (!confirm(`Unblock ${r.ip}?`)) return;
     try {
       const res = await fetch(`/api/admin/security/ip-blocks/${r.id}`, { method: 'DELETE' });
       const data = await res.json().catch(() => ({}));
@@ -260,7 +263,7 @@ export default function AdminSecurityPage() {
                       <td className="px-2 py-2 text-xs text-ink-lo">{r.expiresAt ? new Date(r.expiresAt).toLocaleString() : 'never'}</td>
                       <td className="px-2 py-2 text-xs text-ink-lo">{new Date(r.createdAt).toLocaleString()}</td>
                       <td className="px-2 py-2 text-right">
-                        <Button size="sm" variant="ghost" leftIcon={<Ban className="h-3.5 w-3.5" />} onClick={() => removeRule(r)}>Unblock</Button>
+                        <Button size="sm" variant="ghost" leftIcon={<Ban className="h-3.5 w-3.5" />} onClick={() => setUnblocking(r)}>Unblock</Button>
                       </td>
                     </tr>
                   ))}
@@ -307,6 +310,17 @@ export default function AdminSecurityPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <ConfirmDialog
+        open={!!unblocking}
+        onOpenChange={(v) => { if (!v) setUnblocking(null); }}
+        title="Unblock this IP?"
+        message={<>Remove the block rule for <span className="font-mono">{unblocking?.ip}</span>? Traffic from it will be allowed again.</>}
+        messageBn={<>{unblocking?.ip} এর ব্লক নিয়মটি সরানো হবে? এই আইপি থেকে ট্রাফিক আবার অনুমোদিত হবে।</>}
+        confirmLabel="Unblock"
+        cancelLabel="Cancel"
+        onConfirm={async () => { if (unblocking) await removeRule(unblocking); }}
+      />
     </>
   );
 }

@@ -29,6 +29,17 @@ import { ImageUpload } from '@/components/admin/ImageUpload';
 import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
 import { getPromotionConfig, mergePromotionMeta } from '@/lib/promotions/config';
 
+// Prefill for <input type="datetime-local">. The stored value is UTC
+// ISO; slicing it directly would show UTC in the input, so every
+// edit-and-save round trip shifted the window by the local offset
+// (6 hours in Dhaka). Convert to local wall-clock time first.
+const toLocalInput = (iso?: string | null) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+};
+
 interface RuleRow {
   id: string;
   name: string;
@@ -181,21 +192,37 @@ export default function AdminBonusesPage() {
   const [editor, setEditor] = useState<(Omit<RuleRow, 'id'> & { id: string }) | null>(null);
   const [savingRule, setSavingRule] = useState(false);
   const [ruleError, setRuleError] = useState<string | null>(null);
+  // Save failures render INSIDE the rule editor modal; the page-level
+  // ruleError card sits behind the open modal overlay.
+  const [editorError, setEditorError] = useState<string | null>(null);
   const [spinTiers, setSpinTiers] = useState<SpinTierOption[]>(FALLBACK_SPIN_TIERS);
 
   // Grants state
   const [grants, setGrants] = useState<GrantRow[]>([]);
   const [grantsLoading, setGrantsLoading] = useState(false);
+  const [grantsError, setGrantsError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [grantQuery, setGrantQuery] = useState('');
   const [manualOpen, setManualOpen] = useState(false);
   const [diagnoseOpen, setDiagnoseOpen] = useState(false);
   const [sweeping, setSweeping] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   // Delete confirmation runs through an in-page modal instead of the
   // native confirm(), which installed PWAs / in-app webviews suppress
   // silently, so the Delete button looked dead.
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  // Grant actions run through in-page modals. The old flow used
+  // prompt() / alert(), both silently suppressed in installed PWAs,
+  // so Cancel and + Turnover looked dead and failures were invisible.
+  const [cancelTarget, setCancelTarget] = useState<GrantRow | null>(null);
+  const [cancelNote, setCancelNote] = useState('');
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+  const [turnoverTarget, setTurnoverTarget] = useState<GrantRow | null>(null);
+  const [turnoverAmount, setTurnoverAmount] = useState('');
+  const [turnoverNote, setTurnoverNote] = useState('');
+  const [turnoverBusy, setTurnoverBusy] = useState(false);
+  const [turnoverError, setTurnoverError] = useState<string | null>(null);
 
   // ----- Loaders -----
 
@@ -216,13 +243,21 @@ export default function AdminBonusesPage() {
 
   const loadGrants = useCallback(async () => {
     setGrantsLoading(true);
+    setGrantsError(null);
     try {
       const params = new URLSearchParams();
       if (statusFilter) params.set('status', statusFilter);
       if (grantQuery.trim()) params.set('q', grantQuery.trim());
       const res = await fetch(`/api/admin/bonus-grants?${params.toString()}`, { cache: 'no-store' });
-      const data = await res.json();
-      if (res.ok) setGrants(data.grants as GrantRow[]);
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        // Without this a failed query rendered as an empty table, which
+        // reads as "no grants" instead of "the query failed".
+        throw new Error(data?.message ?? data?.code ?? 'Failed to load grants');
+      }
+      setGrants(data.grants as GrantRow[]);
+    } catch (e) {
+      setGrantsError(`${e instanceof Error ? e.message : 'Failed to load grants'} (Failed to load grants. গ্রান্ট লোড করা যায়নি।)`);
     } finally {
       setGrantsLoading(false);
     }
@@ -253,7 +288,7 @@ export default function AdminBonusesPage() {
 
   const saveRule = async (form: Omit<RuleRow, 'id'> & { id: string }) => {
     setSavingRule(true);
-    setRuleError(null);
+    setEditorError(null);
     try {
       const isNew = form.id === 'new';
       const url = isNew ? '/api/admin/bonus-rules' : `/api/admin/bonus-rules/${form.id}`;
@@ -298,11 +333,12 @@ export default function AdminBonusesPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message ?? data?.code ?? 'Save failed');
       setEditor(null);
-      setToast(isNew ? `Rule "${form.name}" created.` : `Rule "${form.name}" updated.`);
+      setToast({ kind: 'ok', text: isNew ? `Rule "${form.name}" created. রুলটি তৈরি হয়েছে।` : `Rule "${form.name}" updated. রুলটি আপডেট হয়েছে।` });
       setTimeout(() => setToast(null), 4000);
       loadRules();
     } catch (e) {
-      setRuleError(e instanceof Error ? e.message : 'Save failed');
+      // Rendered inside the editor modal, above the Save button.
+      setEditorError(e instanceof Error ? e.message : 'Save failed');
     } finally {
       setSavingRule(false);
     }
@@ -319,9 +355,12 @@ export default function AdminBonusesPage() {
       const res = await fetch(`/api/admin/bonus-rules/${id}`, { method: 'DELETE' });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        setToast(data?.archived
-          ? (data?.message ?? `Rule "${name}" was archived because players already used it. খেলোয়াড়রা ব্যবহার করায় রুলটি আর্কাইভ করা হয়েছে।`)
-          : `Rule "${name}" deleted. রুলটি মুছে ফেলা হয়েছে।`);
+        setToast({
+          kind: 'ok',
+          text: data?.archived
+            ? (data?.message ?? `Rule "${name}" was archived because players already used it. খেলোয়াড়রা ব্যবহার করায় রুলটি আর্কাইভ করা হয়েছে।`)
+            : `Rule "${name}" deleted. রুলটি মুছে ফেলা হয়েছে।`,
+        });
         setTimeout(() => setToast(null), 8000);
         loadRules();
       } else {
@@ -334,45 +373,61 @@ export default function AdminBonusesPage() {
 
   // ----- Grants actions -----
 
-  const cancelGrantAction = async (g: GrantRow) => {
-    const note = prompt(`Cancel grant for ${g.username}? Optional note:`);
-    if (note === null) return;
-    const res = await fetch(`/api/admin/bonus-grants/${g.id}/cancel`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ note }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (res.ok) {
-      setToast(`Grant cancelled for ${g.username}.`);
+  // Submits the cancel from the in-page modal. Failures render inside
+  // the modal, which stays open until the server accepts.
+  const submitCancelGrant = async () => {
+    if (!cancelTarget) return;
+    setCancelBusy(true);
+    setCancelError(null);
+    try {
+      const res = await fetch(`/api/admin/bonus-grants/${cancelTarget.id}/cancel`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ note: cancelNote.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.message ?? data?.code ?? 'Cancel failed');
+      setToast({ kind: 'ok', text: `Grant cancelled for ${cancelTarget.username}. গ্রান্টটি বাতিল করা হয়েছে।` });
       setTimeout(() => setToast(null), 4000);
+      setCancelTarget(null);
+      setCancelNote('');
       loadGrants();
-    } else {
-      alert(data?.message ?? data?.code ?? 'Cancel failed');
+    } catch (e) {
+      setCancelError(e instanceof Error ? e.message : 'Cancel failed');
+    } finally {
+      setCancelBusy(false);
     }
   };
 
-  const addTurnoverAction = async (g: GrantRow) => {
-    const raw = prompt(`Credit turnover to ${g.username} (BDT):`);
-    if (!raw) return;
-    const amount = Number(raw);
+  // Submits the turnover credit from the in-page modal, with the same
+  // amount validation the old prompt() flow enforced.
+  const submitTurnover = async () => {
+    if (!turnoverTarget) return;
+    const amount = Number(turnoverAmount);
     if (!Number.isFinite(amount) || amount <= 0) {
-      alert('Invalid amount.');
+      setTurnoverError('Enter an amount above 0. শূন্যের বেশি পরিমাণ দিন।');
       return;
     }
-    const note = prompt('Reason / note (optional):') ?? undefined;
-    const res = await fetch(`/api/admin/bonus-grants/${g.id}/turnover`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ amount, note }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (res.ok) {
-      setToast(`Turnover +${amount.toLocaleString()} for ${g.username}.`);
+    setTurnoverBusy(true);
+    setTurnoverError(null);
+    try {
+      const res = await fetch(`/api/admin/bonus-grants/${turnoverTarget.id}/turnover`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ amount, note: turnoverNote.trim() || undefined }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.message ?? data?.code ?? 'Adjust failed');
+      setToast({ kind: 'ok', text: `Turnover +${amount.toLocaleString()} for ${turnoverTarget.username}. টার্নওভার যোগ হয়েছে।` });
       setTimeout(() => setToast(null), 4000);
+      setTurnoverTarget(null);
+      setTurnoverAmount('');
+      setTurnoverNote('');
       loadGrants();
-    } else {
-      alert(data?.message ?? data?.code ?? 'Adjust failed');
+    } catch (e) {
+      setTurnoverError(e instanceof Error ? e.message : 'Adjust failed');
+    } finally {
+      setTurnoverBusy(false);
     }
   };
 
@@ -380,12 +435,14 @@ export default function AdminBonusesPage() {
     setSweeping(true);
     try {
       const res = await fetch('/api/admin/bonus-grants/sweep', { method: 'POST' });
-      const data = await res.json();
-      if (res.ok) {
-        setToast(`Sweep done. Expired ${data.expired ?? 0} grants.`);
-        setTimeout(() => setToast(null), 5000);
-        loadGrants();
-      }
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.message ?? data?.code ?? 'Sweep failed');
+      setToast({ kind: 'ok', text: `Sweep done. Expired ${data.expired ?? 0} grants. সুইপ সম্পন্ন হয়েছে।` });
+      setTimeout(() => setToast(null), 5000);
+      loadGrants();
+    } catch (e) {
+      setToast({ kind: 'err', text: `${e instanceof Error ? e.message : 'Sweep failed'} (Sweep failed. সুইপ ব্যর্থ হয়েছে।)` });
+      setTimeout(() => setToast(null), 5000);
     } finally {
       setSweeping(false);
     }
@@ -427,7 +484,7 @@ export default function AdminBonusesPage() {
         }
       />
 
-      {toast ? <Card padding="md" className="mb-4"><p className="text-sm text-signal-ok">{toast}</p></Card> : null}
+      {toast ? <Card padding="md" className="mb-4"><p className={toast.kind === 'ok' ? 'text-sm text-signal-ok' : 'text-sm text-signal-danger'}>{toast.text}</p></Card> : null}
       {ruleError ? <Card padding="md" className="mb-4"><p className="text-sm text-signal-danger">{ruleError}</p></Card> : null}
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as 'rules' | 'grants')}>
@@ -509,10 +566,14 @@ export default function AdminBonusesPage() {
             </div>
           </Card>
 
+          {grantsError ? (
+            <Card padding="md" className="mb-3"><p className="text-sm text-signal-danger">{grantsError}</p></Card>
+          ) : null}
+
           {grantsLoading ? (
             <p className="text-sm text-ink-mid">Loading grants...</p>
           ) : grants.length === 0 ? (
-            <Card padding="lg"><p className="text-sm text-ink-mid">No grants match the current filter.</p></Card>
+            grantsError ? null : <Card padding="lg"><p className="text-sm text-ink-mid">No grants match the current filter.</p></Card>
           ) : (
             <Card padding="md" className="overflow-x-auto">
               <table className="w-full min-w-[920px] text-sm">
@@ -557,8 +618,8 @@ export default function AdminBonusesPage() {
                         <td className="px-2 py-2 text-right">
                           {g.status === 'active' ? (
                             <div className="inline-flex gap-1">
-                              <Button size="sm" variant="ghost" onClick={() => addTurnoverAction(g)}>+ Turnover</Button>
-                              <Button size="sm" variant="ghost" leftIcon={<Ban className="h-3.5 w-3.5" />} onClick={() => cancelGrantAction(g)}>Cancel</Button>
+                              <Button size="sm" variant="ghost" onClick={() => { setTurnoverTarget(g); setTurnoverAmount(''); setTurnoverNote(''); setTurnoverError(null); }}>+ Turnover</Button>
+                              <Button size="sm" variant="ghost" leftIcon={<Ban className="h-3.5 w-3.5" />} onClick={() => { setCancelTarget(g); setCancelNote(''); setCancelError(null); }}>Cancel</Button>
                             </div>
                           ) : null}
                         </td>
@@ -572,14 +633,15 @@ export default function AdminBonusesPage() {
         </TabsContent>
       </Tabs>
 
-      <Modal open={!!editor} onOpenChange={(v) => !v && setEditor(null)} title={editor?.id === 'new' ? 'New Bonus Rule' : 'Edit Bonus Rule'} size="lg">
+      <Modal open={!!editor} onOpenChange={(v) => { if (!v) { setEditor(null); setEditorError(null); } }} title={editor?.id === 'new' ? 'New Bonus Rule' : 'Edit Bonus Rule'} size="lg">
         {editor ? (
           <RuleEditor
             value={editor}
             onChange={setEditor}
             onSave={() => saveRule(editor)}
             saving={savingRule}
-            onCancel={() => setEditor(null)}
+            error={editorError}
+            onCancel={() => { setEditor(null); setEditorError(null); }}
             spinTiers={spinTiers}
           />
         ) : null}
@@ -590,11 +652,64 @@ export default function AdminBonusesPage() {
           rules={rules.filter((r) => r.status === 'active')}
           onDone={(msg) => {
             setManualOpen(false);
-            setToast(msg);
+            setToast({ kind: 'ok', text: msg });
             setTimeout(() => setToast(null), 4000);
             loadGrants();
           }}
         />
+      </Modal>
+
+      <Modal
+        open={!!cancelTarget}
+        onOpenChange={(v) => { if (!v && !cancelBusy) { setCancelTarget(null); setCancelError(null); } }}
+        title="Cancel bonus grant"
+        description={cancelTarget ? `${cancelTarget.username} . ${formatBDT(cancelTarget.amount)} (${cancelTarget.rule.name})` : ''}
+        size="sm"
+      >
+        {cancelTarget ? (
+          <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); void submitCancelGrant(); }}>
+            <p className="text-sm text-ink-mid">
+              Cancelling removes the locked bonus from the player. This cannot be undone.
+              {' '}<span className="text-ink-lo">বাতিল করলে খেলোয়াড়ের লক করা বোনাসটি সরে যাবে। এটি আর ফেরানো যাবে না।</span>
+            </p>
+            <FormField label="Note (optional)" hint="নোটটি ঐচ্ছিক; অডিট লগে সংরক্ষিত হবে।">
+              <Textarea rows={2} value={cancelNote} onChange={(e) => setCancelNote(e.target.value)} placeholder="Why this grant is cancelled" />
+            </FormField>
+            {cancelError ? (
+              <p className="text-sm text-signal-danger">Cancel failed: {cancelError} (বাতিল ব্যর্থ হয়েছে: {cancelError})</p>
+            ) : null}
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="ghost" disabled={cancelBusy} onClick={() => setCancelTarget(null)}>Keep grant</Button>
+              <Button type="submit" variant="danger" loading={cancelBusy}>Cancel grant</Button>
+            </div>
+          </form>
+        ) : null}
+      </Modal>
+
+      <Modal
+        open={!!turnoverTarget}
+        onOpenChange={(v) => { if (!v && !turnoverBusy) { setTurnoverTarget(null); setTurnoverError(null); } }}
+        title="Credit turnover"
+        description={turnoverTarget ? `${turnoverTarget.username} . progress ${formatBDT(turnoverTarget.turnoverProgress)} of ${formatBDT(turnoverTarget.turnoverRequired)}` : ''}
+        size="sm"
+      >
+        {turnoverTarget ? (
+          <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); void submitTurnover(); }}>
+            <FormField label="Amount (BDT)" required hint="টার্নওভার হিসেবে কত টাকা যোগ হবে।">
+              <Input type="number" min="1" step="1" value={turnoverAmount} onChange={(e) => setTurnoverAmount(e.target.value)} placeholder="1000" />
+            </FormField>
+            <FormField label="Reason / note (optional)">
+              <Textarea rows={2} value={turnoverNote} onChange={(e) => setTurnoverNote(e.target.value)} placeholder="Internal context only." />
+            </FormField>
+            {turnoverError ? (
+              <p className="text-sm text-signal-danger">Turnover credit failed: {turnoverError} (টার্নওভার যোগ ব্যর্থ হয়েছে: {turnoverError})</p>
+            ) : null}
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="ghost" disabled={turnoverBusy} onClick={() => setTurnoverTarget(null)}>Cancel</Button>
+              <Button type="submit" loading={turnoverBusy}>Credit turnover</Button>
+            </div>
+          </form>
+        ) : null}
       </Modal>
 
       <Modal open={diagnoseOpen} onOpenChange={setDiagnoseOpen} title="Bonus Engine Diagnose" size="lg">
@@ -631,6 +746,7 @@ function RuleEditor({
   onChange,
   onSave,
   saving,
+  error,
   onCancel,
   spinTiers,
 }: {
@@ -638,6 +754,7 @@ function RuleEditor({
   onChange: (v: Omit<RuleRow, 'id'> & { id: string }) => void;
   onSave: () => void;
   saving: boolean;
+  error?: string | null;
   onCancel: () => void;
   spinTiers: SpinTierOption[];
 }) {
@@ -780,10 +897,10 @@ function RuleEditor({
 
       <div className="grid gap-3 md:grid-cols-2">
         <FormField label="Starts at" hint="Optional public visibility and claim window.">
-          <Input type="datetime-local" value={value.startsAt ? value.startsAt.slice(0, 16) : ''} onChange={(e) => set('startsAt', e.target.value ? new Date(e.target.value).toISOString() : null)} />
+          <Input type="datetime-local" value={toLocalInput(value.startsAt)} onChange={(e) => set('startsAt', e.target.value ? new Date(e.target.value).toISOString() : null)} />
         </FormField>
         <FormField label="Ends at" hint="Expired promotions stay visible to admin but disappear publicly.">
-          <Input type="datetime-local" value={value.endsAt ? value.endsAt.slice(0, 16) : ''} onChange={(e) => set('endsAt', e.target.value ? new Date(e.target.value).toISOString() : null)} />
+          <Input type="datetime-local" value={toLocalInput(value.endsAt)} onChange={(e) => set('endsAt', e.target.value ? new Date(e.target.value).toISOString() : null)} />
         </FormField>
       </div>
 
@@ -823,6 +940,10 @@ function RuleEditor({
           <Textarea rows={5} value={value.termsBn ?? ''} onChange={(e) => set('termsBn', e.target.value)} placeholder="বাংলা শর্তাবলী।" />
         </FormField>
       </div>
+
+      {error ? (
+        <p className="text-sm text-signal-danger">Save failed: {error} (সংরক্ষণ ব্যর্থ হয়েছে: {error})</p>
+      ) : null}
 
       <div className="flex justify-end gap-2 pt-2">
         <Button variant="ghost" type="button" onClick={onCancel}>Cancel</Button>

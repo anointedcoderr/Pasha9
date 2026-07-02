@@ -19,6 +19,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Chip } from '@/components/ui/Chip';
 import { Sparkles, Plus, Pencil, Trash2, RefreshCw, AlertTriangle, ArrowUp, ArrowDown, Ban, Check } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
+import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
 
 type PayoutType = 'coins' | 'bonus' | 'cash' | 'free_bet' | 'freebet' | 'freespin' | 'nothing' | 'loss';
 
@@ -81,6 +82,9 @@ export default function AdminSpinSegmentsPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [editor, setEditor] = useState<Segment | null>(null);
+  // Rendered inside the editor modal body so failures are visible
+  // above the overlay, not hidden behind it in the page-level card.
+  const [editorError, setEditorError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Confirm-dialog state for the Winnable / Exclude-from-wins toggle.
@@ -90,6 +94,13 @@ export default function AdminSpinSegmentsPage() {
   const [excludeTarget, setExcludeTarget] = useState<Segment | null>(null);
   const [excludeReasonDraft, setExcludeReasonDraft] = useState('');
   const [excludeBusy, setExcludeBusy] = useState(false);
+  // Rendered inside the exclude modal: the required-reason validation
+  // used to land in the page-level card behind the overlay, so the
+  // Exclude button felt dead.
+  const [excludeError, setExcludeError] = useState<string | null>(null);
+  // In-page confirm dialog instead of native confirm(), which
+  // installed PWAs suppress silently.
+  const [deleteTarget, setDeleteTarget] = useState<Segment | null>(null);
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
@@ -154,7 +165,7 @@ export default function AdminSpinSegmentsPage() {
   const saveSegment = async () => {
     if (!editor) return;
     setBusy(true);
-    setError(null);
+    setEditorError(null);
     try {
       const payload = {
         label: editor.label,
@@ -185,14 +196,13 @@ export default function AdminSpinSegmentsPage() {
       setEditor(null);
       await refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed');
+      setEditorError(e instanceof Error ? e.message : 'Save failed. সংরক্ষণ ব্যর্থ হয়েছে।');
     } finally {
       setBusy(false);
     }
   };
 
   const removeSegment = async (id: string) => {
-    if (!confirm('Delete this segment? It cannot be undone.')) return;
     try {
       const r = await fetch(`/api/admin/spin-segments?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
       if (!r.ok) {
@@ -201,12 +211,13 @@ export default function AdminSpinSegmentsPage() {
       }
       await refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Delete failed');
+      setError(`${e instanceof Error ? e.message : 'Delete failed'} (Delete failed. ডিলিট ব্যর্থ হয়েছে।)`);
     }
   };
 
   const openExcludeDialog = (segment: Segment) => {
     setExcludeTarget(segment);
+    setExcludeError(null);
     // Pre-fill the reason field when an admin is editing an existing
     // exclusion reason; clear it when toggling a fresh segment.
     setExcludeReasonDraft(segment.excludeFromWins ? segment.excludeReason ?? '' : '');
@@ -216,13 +227,14 @@ export default function AdminSpinSegmentsPage() {
     if (!excludeTarget) return;
     const turningOff = !excludeTarget.excludeFromWins;
     // When EXCLUDING a wedge (Winnable -> off) the audit trail wants a
-    // reason. Re-enabling without a reason is fine.
+    // reason. Re-enabling without a reason is fine. The message renders
+    // INSIDE the modal; a page-level card would sit behind the overlay.
     if (turningOff && excludeReasonDraft.trim().length === 0) {
-      setError('Reason is required when excluding a wedge from the win pool.');
+      setExcludeError('Reason is required when excluding a wedge from the win pool. উইন পুল থেকে বাদ দিতে হলে কারণ লেখা আবশ্যক।');
       return;
     }
     setExcludeBusy(true);
-    setError(null);
+    setExcludeError(null);
     try {
       const r = await fetch('/api/admin/spin-segments', {
         method: 'PATCH',
@@ -239,7 +251,7 @@ export default function AdminSpinSegmentsPage() {
       setExcludeReasonDraft('');
       await refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Toggle failed');
+      setExcludeError(e instanceof Error ? e.message : 'Toggle failed. টগল ব্যর্থ হয়েছে।');
     } finally {
       setExcludeBusy(false);
     }
@@ -410,7 +422,7 @@ export default function AdminSpinSegmentsPage() {
                   type="button"
                   aria-label="Move down"
                   onClick={() => reorder(s.id, 'down')}
-                  disabled={i === segments.length - 1}
+                  disabled={i === visibleSegments.length - 1}
                   className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-brand-divider text-brand-inkSoft hover:text-brand-ink disabled:opacity-40"
                 >
                   <ArrowDown className="h-3.5 w-3.5" />
@@ -425,7 +437,7 @@ export default function AdminSpinSegmentsPage() {
                 {s.excludeFromWins ? 'Make winnable' : 'Exclude'}
               </Button>
               <Button size="sm" variant="ghost" leftIcon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditor(s)}>Edit</Button>
-              <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => removeSegment(s.id)}>Delete</Button>
+              <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => setDeleteTarget(s)}>Delete</Button>
               {s.excludeFromWins && s.excludeReason ? (
                 <p className="basis-full pl-12 text-[11px] italic text-amber-300">
                   Excluded: {s.excludeReason}
@@ -437,7 +449,7 @@ export default function AdminSpinSegmentsPage() {
         </div>
       )}
 
-      <Modal open={!!editor} onOpenChange={(v) => !v && setEditor(null)} title={editor?.id ? 'Edit segment' : 'New segment'} size="lg">
+      <Modal open={!!editor} onOpenChange={(v) => { if (!v) { setEditor(null); setEditorError(null); } }} title={editor?.id ? 'Edit segment' : 'New segment'} size="lg">
         {editor ? (
           <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); void saveSegment(); }}>
             <div className="grid gap-3 md:grid-cols-2">
@@ -499,8 +511,9 @@ export default function AdminSpinSegmentsPage() {
                 ) : null}
               </div>
             </div>
+            {editorError ? <p className="text-sm text-rose-300">{editorError}</p> : null}
             <div className="flex justify-end gap-2 pt-2">
-              <Button variant="ghost" type="button" onClick={() => setEditor(null)}>Cancel</Button>
+              <Button variant="ghost" type="button" onClick={() => { setEditor(null); setEditorError(null); }}>Cancel</Button>
               <Button type="submit" loading={busy}>Save</Button>
             </div>
           </form>
@@ -509,7 +522,7 @@ export default function AdminSpinSegmentsPage() {
 
       <Modal
         open={!!excludeTarget}
-        onOpenChange={(v) => { if (!v) { setExcludeTarget(null); setExcludeReasonDraft(''); } }}
+        onOpenChange={(v) => { if (!v) { setExcludeTarget(null); setExcludeReasonDraft(''); setExcludeError(null); } }}
         title={excludeTarget?.excludeFromWins ? 'Make wedge winnable' : 'Exclude wedge from wins'}
         size="md"
       >
@@ -546,11 +559,12 @@ export default function AdminSpinSegmentsPage() {
                 autoFocus
               />
             </FormField>
+            {excludeError ? <p className="text-sm text-rose-300">{excludeError}</p> : null}
             <div className="flex justify-end gap-2 pt-1">
               <Button
                 variant="ghost"
                 type="button"
-                onClick={() => { setExcludeTarget(null); setExcludeReasonDraft(''); }}
+                onClick={() => { setExcludeTarget(null); setExcludeReasonDraft(''); setExcludeError(null); }}
               >
                 Cancel
               </Button>
@@ -565,6 +579,17 @@ export default function AdminSpinSegmentsPage() {
           </form>
         ) : null}
       </Modal>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(v) => !v && setDeleteTarget(null)}
+        title="Delete segment"
+        message={deleteTarget ? `Delete segment "${deleteTarget.label}"? It cannot be undone.` : ''}
+        messageBn={deleteTarget ? `"${deleteTarget.label}" সেগমেন্টটি মুছে ফেলবেন? এটি আর ফেরানো যাবে না।` : ''}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        onConfirm={async () => { if (deleteTarget) await removeSegment(deleteTarget.id); }}
+      />
     </>
   );
 }

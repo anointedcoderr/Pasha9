@@ -161,6 +161,7 @@ export default function AdminReportsPage() {
   const [snapTo, setSnapTo] = useState<string>(defaultTo());
   const [snap, setSnap] = useState<BusinessSnapshot | null>(null);
   const [snapBusy, setSnapBusy] = useState(false);
+  const [snapError, setSnapError] = useState<string | null>(null);
 
   // Time-series tab
   const [tsMetric, setTsMetric] = useState<string>('deposits');
@@ -169,6 +170,7 @@ export default function AdminReportsPage() {
   const [tsTo, setTsTo] = useState<string>(defaultTo());
   const [tsData, setTsData] = useState<TsResponse | null>(null);
   const [tsBusy, setTsBusy] = useState(false);
+  const [tsError, setTsError] = useState<string | null>(null);
 
   // Cohorts tab
   const [cohortGranularity, setCohortGranularity] = useState<'day' | 'week' | 'month'>('week');
@@ -176,6 +178,7 @@ export default function AdminReportsPage() {
   const [cohortTo, setCohortTo] = useState<string>(defaultTo());
   const [cohortData, setCohortData] = useState<CohortsResponse | null>(null);
   const [cohortBusy, setCohortBusy] = useState(false);
+  const [cohortError, setCohortError] = useState<string | null>(null);
 
   // Breakdown tab
   const [bdKind, setBdKind] = useState<string>('deposit_by_method');
@@ -183,6 +186,7 @@ export default function AdminReportsPage() {
   const [bdTo, setBdTo] = useState<string>(defaultTo());
   const [bdData, setBdData] = useState<BreakdownResponse | null>(null);
   const [bdBusy, setBdBusy] = useState(false);
+  const [bdError, setBdError] = useState<string | null>(null);
 
   // Overview loaders
   const loadOverview = useCallback(async () => {
@@ -224,6 +228,7 @@ export default function AdminReportsPage() {
 
   const loadTs = useCallback(async () => {
     setTsBusy(true);
+    setTsError(null);
     try {
       const params = new URLSearchParams({
         metric: tsMetric,
@@ -232,13 +237,17 @@ export default function AdminReportsPage() {
         to: new Date(tsTo).toISOString(),
       });
       const res = await fetch(`/api/admin/reports/timeseries?${params.toString()}`, { cache: 'no-store' });
-      const body = await res.json();
-      if (res.ok) setTsData(body as TsResponse);
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(body?.message ?? body?.code ?? `HTTP ${res.status}`);
+      setTsData(body as TsResponse);
+    } catch (e) {
+      setTsError(e instanceof Error ? e.message : 'Failed to load');
     } finally { setTsBusy(false); }
   }, [tsMetric, tsGranularity, tsFrom, tsTo]);
 
   const loadCohorts = useCallback(async () => {
     setCohortBusy(true);
+    setCohortError(null);
     try {
       const params = new URLSearchParams({
         granularity: cohortGranularity,
@@ -246,13 +255,17 @@ export default function AdminReportsPage() {
         to: new Date(cohortTo).toISOString(),
       });
       const res = await fetch(`/api/admin/reports/cohorts?${params.toString()}`, { cache: 'no-store' });
-      const body = await res.json();
-      if (res.ok) setCohortData(body as CohortsResponse);
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(body?.message ?? body?.code ?? `HTTP ${res.status}`);
+      setCohortData(body as CohortsResponse);
+    } catch (e) {
+      setCohortError(e instanceof Error ? e.message : 'Failed to load');
     } finally { setCohortBusy(false); }
   }, [cohortGranularity, cohortFrom, cohortTo]);
 
   const loadBreakdown = useCallback(async () => {
     setBdBusy(true);
+    setBdError(null);
     try {
       const params = new URLSearchParams({
         kind: bdKind,
@@ -260,20 +273,28 @@ export default function AdminReportsPage() {
         to: new Date(bdTo).toISOString(),
       });
       const res = await fetch(`/api/admin/reports/breakdown?${params.toString()}`, { cache: 'no-store' });
-      const body = await res.json();
-      if (res.ok) setBdData(body as BreakdownResponse);
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(body?.message ?? body?.code ?? `HTTP ${res.status}`);
+      setBdData(body as BreakdownResponse);
+    } catch (e) {
+      setBdError(e instanceof Error ? e.message : 'Failed to load');
     } finally { setBdBusy(false); }
   }, [bdKind, bdFrom, bdTo]);
 
   const loadSnap = useCallback(async () => {
     setSnapBusy(true);
+    setSnapError(null);
     try {
       const params = new URLSearchParams({
         from: new Date(snapFrom).toISOString(),
         to: new Date(snapTo).toISOString(),
       });
       const res = await fetch(`/api/admin/reports/business-snapshot?${params.toString()}`, { cache: 'no-store' });
-      if (res.ok) setSnap(await res.json() as BusinessSnapshot);
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(body?.message ?? body?.code ?? `HTTP ${res.status}`);
+      setSnap(body as BusinessSnapshot);
+    } catch (e) {
+      setSnapError(e instanceof Error ? e.message : 'Failed to load');
     } finally { setSnapBusy(false); }
   }, [snapFrom, snapTo]);
 
@@ -344,14 +365,19 @@ export default function AdminReportsPage() {
                 <Input type="datetime-local" value={snapTo} onChange={(e) => setSnapTo(e.target.value)} />
               </FormField>
               <Button onClick={() => loadSnap()} loading={snapBusy} leftIcon={<Calendar className="h-3.5 w-3.5" />}>Apply</Button>
-              <Button variant="ghost" onClick={() => { setSnapFrom(defaultFrom(1)); setSnapTo(defaultTo()); setTimeout(loadSnap, 0); }}>Today</Button>
-              <Button variant="ghost" onClick={() => { setSnapFrom(defaultFrom(7)); setSnapTo(defaultTo()); setTimeout(loadSnap, 0); }}>7 days</Button>
-              <Button variant="ghost" onClick={() => { setSnapFrom(defaultFrom(30)); setSnapTo(defaultTo()); setTimeout(loadSnap, 0); }}>30 days</Button>
-              <Button variant="ghost" onClick={() => { setSnapFrom(defaultFrom(90)); setSnapTo(defaultTo()); setTimeout(loadSnap, 0); }}>90 days</Button>
+              {/* Setting the range re-creates loadSnap, and the tab effect
+                  re-runs it with the fresh values. A setTimeout here would
+                  capture the stale closure and race that effect. */}
+              <Button variant="ghost" onClick={() => { setSnapFrom(defaultFrom(1)); setSnapTo(defaultTo()); }}>Today</Button>
+              <Button variant="ghost" onClick={() => { setSnapFrom(defaultFrom(7)); setSnapTo(defaultTo()); }}>7 days</Button>
+              <Button variant="ghost" onClick={() => { setSnapFrom(defaultFrom(30)); setSnapTo(defaultTo()); }}>30 days</Button>
+              <Button variant="ghost" onClick={() => { setSnapFrom(defaultFrom(90)); setSnapTo(defaultTo()); }}>90 days</Button>
             </div>
           </Card>
 
-          {snap ? (
+          {snapError ? (
+            <LoadErrorCard message={snapError} onRetry={loadSnap} />
+          ) : snap ? (
             <>
               <h2 className="mb-2 text-xs font-bold uppercase tracking-wider text-ink-mid">Acquisition</h2>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -467,7 +493,9 @@ export default function AdminReportsPage() {
             </div>
           </Card>
 
-          {!tsData ? <p className="text-sm text-ink-mid">Loading...</p> : (
+          {tsError ? (
+            <LoadErrorCard message={tsError} onRetry={loadTs} />
+          ) : !tsData ? <p className="text-sm text-ink-mid">Loading...</p> : (
             <Card padding="lg">
               <CardHeader title={tsData.label} subtitle={`${tsChartData.length} bucket(s) . total ${formatBDT(tsData.totals.value)} . count ${tsData.totals.count.toLocaleString()}`} />
               <div className="h-80 w-full">
@@ -508,7 +536,9 @@ export default function AdminReportsPage() {
             </div>
           </Card>
 
-          {!cohortData ? <p className="text-sm text-ink-mid">Loading...</p> : cohortData.rows.length === 0 ? (
+          {cohortError ? (
+            <LoadErrorCard message={cohortError} onRetry={loadCohorts} />
+          ) : !cohortData ? <p className="text-sm text-ink-mid">Loading...</p> : cohortData.rows.length === 0 ? (
             <Card padding="lg"><p className="text-sm text-ink-mid">No signups in the selected range.</p></Card>
           ) : (
             <Card padding="md" className="overflow-x-auto">
@@ -563,7 +593,9 @@ export default function AdminReportsPage() {
             </div>
           </Card>
 
-          {!bdData ? <p className="text-sm text-ink-mid">Loading...</p> : bdData.rows.length === 0 ? (
+          {bdError ? (
+            <LoadErrorCard message={bdError} onRetry={loadBreakdown} />
+          ) : !bdData ? <p className="text-sm text-ink-mid">Loading...</p> : bdData.rows.length === 0 ? (
             <Card padding="lg"><p className="text-sm text-ink-mid">No data in the selected range.</p></Card>
           ) : (
             <div className="grid gap-4 lg:grid-cols-2">
@@ -632,6 +664,18 @@ export default function AdminReportsPage() {
         </p>
       </Card>
     </>
+  );
+}
+
+function LoadErrorCard({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <Card padding="lg">
+      <p className="text-sm text-signal-danger">Failed to load: {message}</p>
+      <p className="mt-1 text-sm text-signal-danger">ডেটা লোড করা যায়নি।</p>
+      <Button variant="ghost" size="sm" className="mt-3" leftIcon={<RefreshCw className="h-3.5 w-3.5" />} onClick={onRetry}>
+        Retry / আবার চেষ্টা করুন
+      </Button>
+    </Card>
   );
 }
 

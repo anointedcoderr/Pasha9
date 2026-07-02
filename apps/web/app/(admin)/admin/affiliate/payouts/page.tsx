@@ -58,6 +58,9 @@ export default function AffiliatePayoutsPage() {
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [actioning, setActioning] = useState<{ row: PayoutRow; mode: 'approve' | 'reject' | 'mark_paid' } | null>(null);
+  // Action failures render INSIDE the action modal; the page error
+  // card sits behind the open modal overlay.
+  const [actionError, setActionError] = useState<string | null>(null);
   const [note, setNote] = useState('');
   const [providerKey, setProviderKey] = useState('');
   const [providerRef, setProviderRef] = useState('');
@@ -85,6 +88,7 @@ export default function AffiliatePayoutsPage() {
 
   const openAction = (row: PayoutRow, mode: 'approve' | 'reject' | 'mark_paid') => {
     setActioning({ row, mode });
+    setActionError(null);
     setNote('');
     setProviderKey('');
     setProviderRef('');
@@ -93,6 +97,7 @@ export default function AffiliatePayoutsPage() {
   const runAction = async () => {
     if (!actioning) return;
     setBusy(true);
+    setActionError(null);
     try {
       const res = await fetch(`/api/admin/affiliate/payouts/${actioning.row.id}`, {
         method: 'PATCH',
@@ -111,7 +116,8 @@ export default function AffiliatePayoutsPage() {
       setActioning(null);
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Action failed');
+      // Keep the modal open and show the failure inside it.
+      setActionError(e instanceof Error ? e.message : 'Action failed');
     } finally {
       setBusy(false);
     }
@@ -219,7 +225,7 @@ export default function AffiliatePayoutsPage() {
         </Card>
       )}
 
-      <Modal open={!!actioning} onOpenChange={(v) => !v && setActioning(null)} title={actioning ? `${actioning.mode.replace('_', ' ')} payout` : ''} size="md">
+      <Modal open={!!actioning} onOpenChange={(v) => { if (!v && !busy) { setActioning(null); setActionError(null); } }} title={actioning ? `${actioning.mode.replace('_', ' ')} payout` : ''} size="md">
         {actioning ? (
           <form
             className="space-y-4"
@@ -243,8 +249,11 @@ export default function AffiliatePayoutsPage() {
             <FormField label="Admin note (optional)">
               <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder={actioning.mode === 'reject' ? 'Reason shown to the affiliate.' : 'Internal note for the audit log.'} />
             </FormField>
+            {actionError ? (
+              <p className="text-sm text-signal-danger">Action failed: {actionError} (কাজটি ব্যর্থ হয়েছে: {actionError})</p>
+            ) : null}
             <div className="flex justify-end gap-2 pt-2">
-              <Button variant="ghost" type="button" onClick={() => setActioning(null)}>Cancel</Button>
+              <Button variant="ghost" type="button" disabled={busy} onClick={() => { setActioning(null); setActionError(null); }}>Cancel</Button>
               <Button type="submit" loading={busy} variant={actioning.mode === 'reject' ? 'ghost' : 'gold'}>
                 {actioning.mode === 'approve' ? 'Approve' : actioning.mode === 'reject' ? 'Reject' : 'Mark Paid'}
               </Button>

@@ -14,6 +14,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Ticket, Pencil, Trash2, Plus, Crown, CheckCircle2, Stethoscope, RefreshCcw, Sparkles, Trophy, Wand2, List } from 'lucide-react';
 import { formatBDT, formatDateTime } from '@/lib/utils/format';
 import { useLang } from '@/lib/i18n/context';
+import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
 
 type Accent = 'yellow' | 'blue' | 'red' | 'royal';
 type Status = 'active' | 'hidden' | 'paused';
@@ -109,6 +110,17 @@ interface WinnersBreakdown {
   sumAmount: number;
 }
 
+// Prefill for <input type="datetime-local">. The stored value is UTC
+// ISO; slicing it directly would show UTC in the input, so every
+// edit-and-save round trip shifted the draw time by the local offset
+// (6 hours in Dhaka). Convert to local wall-clock time first.
+const toLocalInput = (iso?: string | null) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+};
+
 const BLANK: Draw = {
   id: '',
   name: '',
@@ -151,6 +163,11 @@ export default function AdminLottoPage() {
   const [winnersBusy, setWinnersBusy] = useState(false);
   // Auto-generate result button state
   const [generateBusy, setGenerateBusy] = useState(false);
+  // In-page confirm dialogs (native confirm() is suppressed in the installed PWA)
+  const [deleting, setDeleting] = useState<Draw | null>(null);
+  const [orphanDraw, setOrphanDraw] = useState<Draw | null>(null);
+  // Errors raised inside the settle modal render inside it, not behind the overlay
+  const [settleError, setSettleError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setError(null);
@@ -233,25 +250,66 @@ export default function AdminLottoPage() {
     }
   };
 
-  const remove = async (id: string) => {
-    if (!confirm('Delete this draw?')) return;
-    const res = await fetch(`/api/admin/lotto/${id}`, { method: 'DELETE' });
-    if (res.ok) refresh();
+  const remove = async () => {
+    if (!deleting) return;
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/lotto/${deleting.id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setToast('Draw deleted. ড্র মুছে ফেলা হয়েছে।');
+        setTimeout(() => setToast(null), 4000);
+        await refresh();
+        return;
+      }
+      const data = await res.json().catch(() => ({} as { code?: string; message?: string }));
+      if (res.status === 409 && data?.code === 'DRAW_IN_USE') {
+        setError('This draw has tickets or a published result attached, so it cannot be deleted. Hide or pause it instead. এই ড্রতে টিকিট বা প্রকাশিত ফলাফল যুক্ত থাকায় এটি মুছে ফেলা যাবে না। এর বদলে এটি হাইড বা পজ করুন।');
+      } else {
+        setError(`Delete failed: ${data?.message ?? data?.code ?? `HTTP ${res.status}`}. ড্র মুছে ফেলা যায়নি।`);
+      }
+    } catch (e) {
+      setError(`Delete failed: ${e instanceof Error ? e.message : String(e)}. ড্র মুছে ফেলা যায়নি।`);
+    }
+  };
+
+  const scoreOrphans = async () => {
+    if (!orphanDraw) return;
+    setError(null);
+    try {
+      const r = await fetch(`/api/admin/lotto/${orphanDraw.id}/score-orphans`, { method: 'POST' });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j?.message ?? j?.code ?? 'Failed');
+      setToast(`Score orphans done: attached ${j.attached} ticket(s), ${j.winners} winner(s), ${formatBDT(Number(j.paid))} credited. সম্পন্ন: ${j.winners} জন বিজয়ীকে ক্রেডিট করা হয়েছে।`);
+      setTimeout(() => setToast(null), 8000);
+      await refresh();
+    } catch (e) {
+      setError(`Score orphans failed: ${e instanceof Error ? e.message : String(e)}. অরফান টিকিট স্কোরিং ব্যর্থ হয়েছে।`);
+    }
   };
 
   const toggle = async (d: Draw) => {
-    await fetch(`/api/admin/lotto/${d.id}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ status: d.status === 'active' ? 'hidden' : 'active' }),
-    });
-    refresh();
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/lotto/${d.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ status: d.status === 'active' ? 'hidden' : 'active' }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({} as { code?: string; message?: string }));
+        setError(`${data?.message ?? data?.code ?? 'Failed to update status'}. স্ট্যাটাস আপডেট ব্যর্থ হয়েছে।`);
+        return;
+      }
+      await refresh();
+    } catch {
+      setError('Failed to update status: network error. স্ট্যাটাস আপডেট ব্যর্থ হয়েছে: নেটওয়ার্ক সমস্যা।');
+    }
   };
 
   const settle = async () => {
     if (!settling) return;
     setBusy(true);
-    setError(null);
+    setSettleError(null);
     try {
       const specials = settling.specials.split(',').map((s) => s.trim()).filter((s) => /^\d{4}$/.test(s));
       const consolations = settling.consolations.split(',').map((s) => s.trim()).filter((s) => /^\d{4}$/.test(s));
@@ -290,9 +348,10 @@ export default function AdminLottoPage() {
       );
       setTimeout(() => setToast(null), 8000);
       setSettling(null);
+      setSettleError(null);
       await refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Settle failed');
+      setSettleError(`${e instanceof Error ? e.message : 'Settle failed'}. সেটেল ব্যর্থ হয়েছে।`);
     } finally {
       setBusy(false);
     }
@@ -303,7 +362,7 @@ export default function AdminLottoPage() {
   const runGenerate = async () => {
     if (!settling) return;
     setGenerateBusy(true);
-    setError(null);
+    setSettleError(null);
     try {
       const res = await fetch(`/api/admin/lotto/${settling.draw.id}/generate-result`, { method: 'POST' });
       const data = await res.json();
@@ -320,7 +379,7 @@ export default function AdminLottoPage() {
       setToast('Generated 23 winning numbers. Review and edit before publishing.');
       setTimeout(() => setToast(null), 4000);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Generate failed');
+      setSettleError(`${e instanceof Error ? e.message : 'Generate failed'}. নম্বর জেনারেট ব্যর্থ হয়েছে।`);
     } finally {
       setGenerateBusy(false);
     }
@@ -365,7 +424,7 @@ export default function AdminLottoPage() {
   const runDiagnose = async () => {
     if (!settling) return;
     setDiagnoseBusy(true);
-    setError(null);
+    setSettleError(null);
     try {
       const payload = {
         winningNumber: settling.winningNumber,
@@ -385,7 +444,7 @@ export default function AdminLottoPage() {
       if (!res.ok) throw new Error(data.message ?? data.code ?? 'Diagnose failed');
       setDiagnose(data as DiagnoseResult);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Diagnose failed');
+      setSettleError(`${e instanceof Error ? e.message : 'Diagnose failed'}. ডায়াগনোজ ব্যর্থ হয়েছে।`);
     } finally {
       setDiagnoseBusy(false);
     }
@@ -632,24 +691,13 @@ export default function AdminLottoPage() {
                     <Button
                       size="sm"
                       variant="neon"
-                      onClick={async () => {
-                        if (!confirm('Score every orphan ticket against this draw\'s result and credit winners?\n\nUse this when tickets were created BEFORE the draw existed (drawId=null) and the original settle reported 0 winners even though tickets matched.\n\nIdempotent: re-running after a successful pass does nothing.')) return;
-                        try {
-                          const r = await fetch(`/api/admin/lotto/${d.id}/score-orphans`, { method: 'POST' });
-                          const j = await r.json();
-                          if (!r.ok) throw new Error(j?.message ?? j?.code ?? 'Failed');
-                          alert(`Done. Attached ${j.attached} ticket(s), ${j.winners} winner(s), ${j.paid} BDT credited.`);
-                          await refresh();
-                        } catch (e) {
-                          alert(`Score orphans failed: ${e instanceof Error ? e.message : String(e)}`);
-                        }
-                      }}
+                      onClick={() => setOrphanDraw(d)}
                     >
                       Score orphans
                     </Button>
                   ) : null}
-                  <Button size="sm" variant="neon" leftIcon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditor({ ...d, drawsAt: d.drawsAt ? d.drawsAt.slice(0, 16) : '' })}>Edit</Button>
-                  <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => remove(d.id)}>Delete</Button>
+                  <Button size="sm" variant="neon" leftIcon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditor({ ...d, drawsAt: toLocalInput(d.drawsAt) })}>Edit</Button>
+                  <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => setDeleting(d)}>Delete</Button>
                 </div>
               </Card>
             );
@@ -713,7 +761,7 @@ export default function AdminLottoPage() {
         ) : null}
       </Modal>
 
-      <Modal open={!!settling} onOpenChange={(v) => { if (!v) { setSettling(null); setDiagnose(null); } }} title="Settle Draw" size="md">
+      <Modal open={!!settling} onOpenChange={(v) => { if (!v) { setSettling(null); setDiagnose(null); setSettleError(null); } }} title="Settle Draw" size="md">
         {settling ? (
           <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); void settle(); }}>
             <div className="rounded-xl border border-neon/10 bg-base-deep/50 p-3 text-sm">
@@ -823,8 +871,14 @@ export default function AdminLottoPage() {
               </div>
             ) : null}
 
+            {settleError ? (
+              <div className="rounded-xl border border-signal-danger/30 bg-signal-danger/10 p-3">
+                <p className="text-sm text-signal-danger">{settleError}</p>
+              </div>
+            ) : null}
+
             <div className="flex flex-wrap justify-end gap-2 pt-2">
-              <Button variant="ghost" type="button" onClick={() => { setSettling(null); setDiagnose(null); }}>Cancel</Button>
+              <Button variant="ghost" type="button" onClick={() => { setSettling(null); setDiagnose(null); setSettleError(null); }}>Cancel</Button>
               <Button
                 type="button"
                 variant="neon"
@@ -1037,6 +1091,28 @@ export default function AdminLottoPage() {
           </div>
         ) : null}
       </Modal>
+
+      <ConfirmDialog
+        open={!!deleting}
+        onOpenChange={(v) => { if (!v) setDeleting(null); }}
+        title="Delete this draw?"
+        message={<>Permanently delete <span className="font-semibold">{deleting?.name}</span>? This cannot be undone.</>}
+        messageBn={<>{deleting?.name} ড্রটি স্থায়ীভাবে মুছে ফেলা হবে? এটি আর ফেরানো যাবে না।</>}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        onConfirm={remove}
+      />
+
+      <ConfirmDialog
+        open={!!orphanDraw}
+        onOpenChange={(v) => { if (!v) setOrphanDraw(null); }}
+        title="Score orphan tickets?"
+        message={<>Score every orphan ticket against the result of <span className="font-semibold">{orphanDraw?.name}</span> and credit winners. Use this when tickets were created before the draw existed and the original settle reported 0 winners even though tickets matched. Idempotent: re-running after a successful pass does nothing.</>}
+        messageBn={<>{orphanDraw?.name} ড্রয়ের ফলাফলের সাথে সব অরফান টিকিট মিলিয়ে বিজয়ীদের ক্রেডিট করা হবে। সফলভাবে চালানোর পর আবার চালালে কিছুই পরিবর্তন হবে না।</>}
+        confirmLabel="Score and credit"
+        cancelLabel="Cancel"
+        onConfirm={scoreOrphans}
+      />
     </>
   );
 }

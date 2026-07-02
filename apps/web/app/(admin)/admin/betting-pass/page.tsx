@@ -20,6 +20,7 @@ import { Chip } from '@/components/ui/Chip';
 import { Sparkles, Plus, Pencil, Trash2, Save, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { AdminMediaUpload } from '@/components/admin/AdminMediaUpload';
+import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
 
 interface Config {
   enabled: boolean;
@@ -89,6 +90,13 @@ export default function AdminBettingPassPage() {
   const [editor, setEditor] = useState<Rule | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  // Tier-save failures render INSIDE the editor modal; the page error
+  // card sits behind the open modal overlay.
+  const [editorError, setEditorError] = useState<string | null>(null);
+  // Delete confirmation runs through an in-page ConfirmDialog. The
+  // native confirm() is silently suppressed in installed PWAs.
+  const [deleteTarget, setDeleteTarget] = useState<Rule | null>(null);
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
@@ -122,6 +130,10 @@ export default function AdminBettingPassPage() {
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data?.message ?? data?.code ?? 'Save failed');
+      // Visible success feedback; without it the Save button flashed
+      // and the operator could not tell whether the config landed.
+      setToast('Config saved. কনফিগ সংরক্ষণ করা হয়েছে।');
+      setTimeout(() => setToast(null), 4000);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Save failed');
     } finally {
@@ -132,7 +144,7 @@ export default function AdminBettingPassPage() {
   const saveRule = async () => {
     if (!editor) return;
     setBusy(true);
-    setError(null);
+    setEditorError(null);
     try {
       const payload = {
         tier: Number(editor.tier),
@@ -153,22 +165,27 @@ export default function AdminBettingPassPage() {
       const data = await r.json();
       if (!r.ok) throw new Error(data?.message ?? data?.code ?? 'Save failed');
       setEditor(null);
+      setToast(`Tier "${editor.nameEn}" saved. টিয়ারটি সংরক্ষণ করা হয়েছে।`);
+      setTimeout(() => setToast(null), 4000);
       await refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed');
+      setEditorError(e instanceof Error ? e.message : 'Save failed');
     } finally {
       setBusy(false);
     }
   };
 
-  const removeRule = async (id: string) => {
-    if (!confirm('Delete this tier? Existing claims on this tier are cascade-deleted.')) return;
+  // Runs after the operator confirms in the ConfirmDialog.
+  const removeRule = async (rule: Rule) => {
+    setError(null); setToast(null);
     try {
-      const r = await fetch(`/api/admin/betting-pass/${id}`, { method: 'DELETE' });
+      const r = await fetch(`/api/admin/betting-pass/${rule.id}`, { method: 'DELETE' });
       if (!r.ok) throw new Error(await r.text());
+      setToast(`Tier "${rule.nameEn}" deleted. টিয়ারটি মুছে ফেলা হয়েছে।`);
+      setTimeout(() => setToast(null), 4000);
       await refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Delete failed');
+      setError(`${e instanceof Error ? e.message : 'Delete failed'} (Delete failed. ডিলিট ব্যর্থ হয়েছে।)`);
     }
   };
 
@@ -185,6 +202,7 @@ export default function AdminBettingPassPage() {
         }
       />
 
+      {toast ? <Card padding="md" className="mb-4 border-l-4 border-emerald-400/60"><p className="text-sm text-emerald-300">{toast}</p></Card> : null}
       {error ? <Card padding="md" className="mb-4 border-l-4 border-rose-500"><p className="text-sm text-rose-300">{error}</p></Card> : null}
 
       <Card padding="md" className="mb-4">
@@ -245,7 +263,7 @@ export default function AdminBettingPassPage() {
               </div>
               <Chip tone={r.isActive ? 'ok' : 'neutral'}>{r.isActive ? 'active' : 'paused'}</Chip>
               <Button size="sm" variant="ghost" leftIcon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditor({ ...r, nameBn: r.nameBn ?? '', descriptionEn: r.descriptionEn ?? '', descriptionBn: r.descriptionBn ?? '', iconUrl: r.iconUrl ?? '' })}>Edit</Button>
-              <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => removeRule(r.id)}>Delete</Button>
+              <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => setDeleteTarget(r)}>Delete</Button>
             </div>
           ))}
         </div>
@@ -285,7 +303,7 @@ export default function AdminBettingPassPage() {
         </Card>
       </div>
 
-      <Modal open={!!editor} onOpenChange={(v) => !v && setEditor(null)} title={editor?.id ? 'Edit tier' : 'New tier'} size="lg">
+      <Modal open={!!editor} onOpenChange={(v) => { if (!v) { setEditor(null); setEditorError(null); } }} title={editor?.id ? 'Edit tier' : 'New tier'} size="lg">
         {editor ? (
           <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); void saveRule(); }}>
             <div className="grid gap-3 md:grid-cols-2">
@@ -320,13 +338,29 @@ export default function AdminBettingPassPage() {
               <p className="text-sm font-semibold text-brand-ink">Active</p>
               <Switch checked={editor.isActive} onChange={(v) => setEditor({ ...editor, isActive: v })} />
             </div>
+            {editorError ? (
+              <p className="text-sm text-signal-danger">Save failed: {editorError} (সংরক্ষণ ব্যর্থ হয়েছে: {editorError})</p>
+            ) : null}
             <div className="flex justify-end gap-2 pt-2">
-              <Button variant="ghost" type="button" onClick={() => setEditor(null)}>Cancel</Button>
+              <Button variant="ghost" type="button" onClick={() => { setEditor(null); setEditorError(null); }}>Cancel</Button>
               <Button type="submit" loading={busy}>Save</Button>
             </div>
           </form>
         ) : null}
       </Modal>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(v) => !v && setDeleteTarget(null)}
+        title="Delete betting pass tier"
+        message={deleteTarget ? `Delete tier ${deleteTarget.tier} "${deleteTarget.nameEn}"? Existing claims on this tier are cascade-deleted.` : ''}
+        messageBn={deleteTarget ? `টিয়ার ${deleteTarget.tier} "${deleteTarget.nameEn}" মুছে ফেলবেন? এই টিয়ারের সব ক্লেইমও মুছে যাবে।` : ''}
+        confirmLabel="Delete"
+        onConfirm={async () => {
+          if (deleteTarget) await removeRule(deleteTarget);
+          setDeleteTarget(null);
+        }}
+      />
     </>
   );
 }

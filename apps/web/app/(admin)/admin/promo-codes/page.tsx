@@ -11,6 +11,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Switch } from '@/components/ui/Switch';
 import { Chip } from '@/components/ui/Chip';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
 import { Tag, Plus, Pencil, Trash2, Eye } from 'lucide-react';
 
 interface PromoCodeRow {
@@ -77,11 +78,16 @@ const BLANK: Omit<PromoCodeRow, 'id' | 'redemptionCount'> & { id: string; redemp
   redemptionCount: 0,
 };
 
+// Formats an ISO timestamp for a datetime-local input in the
+// OPERATOR'S LOCAL TIME. The previous toISOString().slice(0, 16)
+// produced UTC, so every edit prefilled 6 hours behind Dhaka time and
+// re-saving silently shifted the window.
 function toLocalInput(iso: string | null): string {
   if (!iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  return d.toISOString().slice(0, 16);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 export default function AdminPromoCodesPage() {
@@ -89,8 +95,15 @@ export default function AdminPromoCodesPage() {
   const [rules, setRules] = useState<BonusRuleOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const [editor, setEditor] = useState<PromoCodeRow | null>(null);
+  // Save failures render INSIDE the editor modal; the page error card
+  // sits behind the open modal overlay.
+  const [editorError, setEditorError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Delete confirmation runs through an in-page ConfirmDialog. The
+  // native confirm() is silently suppressed in installed PWAs.
+  const [deleteTarget, setDeleteTarget] = useState<PromoCodeRow | null>(null);
   const [redemptionsFor, setRedemptionsFor] = useState<PromoCodeRow | null>(null);
   const [redemptionList, setRedemptionList] = useState<RedemptionRow[]>([]);
   const [redLoading, setRedLoading] = useState(false);
@@ -129,7 +142,7 @@ export default function AdminPromoCodesPage() {
   const save = async () => {
     if (!editor) return;
     setBusy(true);
-    setError(null);
+    setEditorError(null);
     const payload = {
       code: editor.code,
       titleEn: editor.titleEn,
@@ -155,29 +168,48 @@ export default function AdminPromoCodesPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message ?? data.code ?? 'Save failed');
       setEditor(null);
+      setToast(`Code "${payload.code}" saved. প্রোমো কোডটি সংরক্ষণ করা হয়েছে।`);
+      setTimeout(() => setToast(null), 4000);
       await refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed');
+      setEditorError(e instanceof Error ? e.message : 'Save failed');
     } finally {
       setBusy(false);
     }
   };
 
-  const remove = async (id: string) => {
-    if (!confirm('Delete this promo code? Only allowed when no redemptions exist.')) return;
-    const res = await fetch(`/api/admin/promo-codes/${id}`, { method: 'DELETE' });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) setError(data?.message ?? 'Delete failed');
-    else refresh();
+  // Runs after the operator confirms in the ConfirmDialog.
+  const remove = async (c: PromoCodeRow) => {
+    setError(null); setToast(null);
+    try {
+      const res = await fetch(`/api/admin/promo-codes/${c.id}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(`${data?.message ?? data?.code ?? 'Delete failed'} (Delete failed. ডিলিট ব্যর্থ হয়েছে।)`);
+      } else {
+        setToast(`Code "${c.code}" deleted. প্রোমো কোডটি মুছে ফেলা হয়েছে।`);
+        setTimeout(() => setToast(null), 4000);
+        refresh();
+      }
+    } catch {
+      setError('Delete failed: network error. ডিলিট ব্যর্থ হয়েছে: নেটওয়ার্ক সমস্যা।');
+    }
   };
 
   const toggleActive = async (c: PromoCodeRow) => {
-    await fetch(`/api/admin/promo-codes/${c.id}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ isActive: !c.isActive }),
-    });
-    refresh();
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/promo-codes/${c.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ isActive: !c.isActive }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.message ?? data?.code ?? 'Toggle failed');
+      refresh();
+    } catch (e) {
+      setError(`${e instanceof Error ? e.message : 'Toggle failed'} (Status change failed. স্ট্যাটাস পরিবর্তন ব্যর্থ হয়েছে।)`);
+    }
   };
 
   const showRedemptions = async (c: PromoCodeRow) => {
@@ -203,6 +235,7 @@ export default function AdminPromoCodesPage() {
         }
       />
 
+      {toast ? <Card padding="md" className="mb-4"><p className="text-sm text-signal-ok">{toast}</p></Card> : null}
       {error ? <Card padding="md" className="mb-4"><p className="text-sm text-signal-danger">{error}</p></Card> : null}
 
       <div className="space-y-3">
@@ -239,7 +272,7 @@ export default function AdminPromoCodesPage() {
                 <Button size="sm" variant="neon" leftIcon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditor(c)}>
                   Edit
                 </Button>
-                <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => remove(c.id)}>
+                <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => setDeleteTarget(c)}>
                   Delete
                 </Button>
               </div>
@@ -248,7 +281,7 @@ export default function AdminPromoCodesPage() {
         )}
       </div>
 
-      <Modal open={!!editor} onOpenChange={(v) => !v && setEditor(null)} title={editor?.id ? 'Edit Code' : 'New Code'} size="lg">
+      <Modal open={!!editor} onOpenChange={(v) => { if (!v) { setEditor(null); setEditorError(null); } }} title={editor?.id ? 'Edit Code' : 'New Code'} size="lg">
         {editor ? (
           <form
             className="space-y-4"
@@ -347,13 +380,29 @@ export default function AdminPromoCodesPage() {
                 <Input type="datetime-local" value={toLocalInput(editor.endsAt)} onChange={(e) => setEditor({ ...editor, endsAt: e.target.value || null })} />
               </FormField>
             </div>
+            {editorError ? (
+              <p className="text-sm text-signal-danger">Save failed: {editorError} (সংরক্ষণ ব্যর্থ হয়েছে: {editorError})</p>
+            ) : null}
             <div className="flex justify-end gap-2 pt-2">
-              <Button variant="ghost" type="button" onClick={() => setEditor(null)}>Cancel</Button>
+              <Button variant="ghost" type="button" onClick={() => { setEditor(null); setEditorError(null); }}>Cancel</Button>
               <Button type="submit" loading={busy}>Save</Button>
             </div>
           </form>
         ) : null}
       </Modal>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(v) => !v && setDeleteTarget(null)}
+        title="Delete promo code"
+        message={deleteTarget ? `Delete code "${deleteTarget.code}"? Deletion is only allowed when no redemptions exist.` : ''}
+        messageBn={deleteTarget ? `"${deleteTarget.code}" কোডটি মুছে ফেলবেন? কোনো রিডেম্পশন না থাকলেই কেবল মুছে ফেলা যাবে।` : ''}
+        confirmLabel="Delete"
+        onConfirm={async () => {
+          if (deleteTarget) await remove(deleteTarget);
+          setDeleteTarget(null);
+        }}
+      />
 
       <Modal open={!!redemptionsFor} onOpenChange={(v) => !v && setRedemptionsFor(null)} title={redemptionsFor ? `Redemptions . ${redemptionsFor.code}` : ''} size="lg">
         {redLoading ? (

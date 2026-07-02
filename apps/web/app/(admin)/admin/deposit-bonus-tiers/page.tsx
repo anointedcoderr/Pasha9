@@ -56,6 +56,9 @@ export default function AdminDepositBonusTiersPage() {
   const [info, setInfo] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [busyResync, setBusyResync] = useState(false);
+  // Busy guard on Add tier: without it a slow POST let the operator
+  // double-click and create duplicate tiers.
+  const [busyCreate, setBusyCreate] = useState(false);
   // Deletion confirms through an in-page modal. The old native
   // confirm() is silently suppressed in installed PWAs / in-app
   // webviews (it returns false with no dialog), which made the Delete
@@ -76,7 +79,9 @@ export default function AdminDepositBonusTiersPage() {
   useEffect(() => { refresh(); }, [refresh]);
 
   const create = async () => {
-    setError(null);
+    if (busyCreate) return;
+    setBusyCreate(true);
+    setError(null); setInfo(null);
     try {
       const r = await fetch('/api/admin/deposit-bonus-tiers', {
         method: 'POST', headers: { 'content-type': 'application/json' },
@@ -84,8 +89,10 @@ export default function AdminDepositBonusTiersPage() {
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j?.message ?? j?.code ?? 'Create failed');
+      setInfo('Tier created. Adjust the values below and save. টিয়ার তৈরি হয়েছে। নিচের মানগুলো ঠিক করে সংরক্ষণ করুন।');
       await refresh();
-    } catch (e) { setError(e instanceof Error ? e.message : 'Create failed'); }
+    } catch (e) { setError(e instanceof Error ? e.message : 'Create failed. টিয়ার তৈরি ব্যর্থ হয়েছে।'); }
+    finally { setBusyCreate(false); }
   };
 
   const patch = async (id: string, body: Partial<TierRow>) => {
@@ -158,7 +165,7 @@ export default function AdminDepositBonusTiersPage() {
           </div>
           <div className="flex gap-2">
             <Button variant="ghost" leftIcon={<RefreshCcw className="h-4 w-4" />} loading={busyResync} onClick={resync}>Resync rules</Button>
-            <Button variant="gold" leftIcon={<Plus className="h-4 w-4" />} onClick={create}>Add tier</Button>
+            <Button variant="gold" leftIcon={<Plus className="h-4 w-4" />} loading={busyCreate} onClick={create}>Add tier</Button>
           </div>
         </div>
 

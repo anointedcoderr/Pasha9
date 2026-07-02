@@ -11,6 +11,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Chip } from '@/components/ui/Chip';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Megaphone, Plus, Send, Trash2, AlertCircle, CheckCircle2, Eye } from 'lucide-react';
+import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
 
 interface CampaignRow {
   id: string;
@@ -86,6 +87,9 @@ export default function AdminCampaignsPage() {
   const [busy, setBusy] = useState(false);
   const [composing, setComposing] = useState(false);
   const [audit, setAudit] = useState<{ campaign: CampaignRow | null; recipients: RecipientRow[] }>({ campaign: null, recipients: [] });
+  // In-page confirms (native confirm() is suppressed in the installed PWA)
+  const [dispatching, setDispatching] = useState<CampaignRow | null>(null);
+  const [deleting, setDeleting] = useState<CampaignRow | null>(null);
 
   const refresh = useCallback(async () => {
     setError(null);
@@ -139,7 +143,6 @@ export default function AdminCampaignsPage() {
   };
 
   const dispatchCampaign = async (id: string) => {
-    if (!confirm('Dispatch this campaign now? This will attempt delivery via the configured provider.')) return;
     setError(null);
     setToast(null);
     try {
@@ -164,11 +167,19 @@ export default function AdminCampaignsPage() {
   };
 
   const remove = async (id: string) => {
-    if (!confirm('Delete this draft?')) return;
-    const res = await fetch(`/api/admin/campaigns/${id}`, { method: 'DELETE' });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) setError(data?.message ?? 'Delete failed');
-    else refresh();
+    setError(null);
+    setToast(null);
+    try {
+      const res = await fetch(`/api/admin/campaigns/${id}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({} as { code?: string; message?: string }));
+      if (!res.ok) setError(`${data?.message ?? 'Delete failed'}. ড্রাফট মুছে ফেলা যায়নি।`);
+      else {
+        setToast('Draft deleted. ড্রাফট মুছে ফেলা হয়েছে।');
+        refresh();
+      }
+    } catch (e) {
+      setError(`Delete failed: ${e instanceof Error ? e.message : String(e)}. ড্রাফট মুছে ফেলা যায়নি।`);
+    }
   };
 
   const openAudit = async (c: CampaignRow) => {
@@ -228,12 +239,12 @@ export default function AdminCampaignsPage() {
                     Recipients
                   </Button>
                   {c.status === 'draft' || c.status === 'provider_setup_required' || c.status === 'failed' ? (
-                    <Button size="sm" leftIcon={<Send className="h-3.5 w-3.5" />} onClick={() => dispatchCampaign(c.id)}>
+                    <Button size="sm" leftIcon={<Send className="h-3.5 w-3.5" />} onClick={() => setDispatching(c)}>
                       Dispatch
                     </Button>
                   ) : null}
                   {c.status === 'draft' || c.status === 'provider_setup_required' ? (
-                    <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => remove(c.id)}>
+                    <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => setDeleting(c)}>
                       Delete
                     </Button>
                   ) : null}
@@ -302,6 +313,28 @@ export default function AdminCampaignsPage() {
           </div>
         )}
       </Modal>
+
+      <ConfirmDialog
+        open={!!dispatching}
+        onOpenChange={(v) => { if (!v) setDispatching(null); }}
+        title="Dispatch this campaign?"
+        message={<>Dispatch <span className="font-semibold">{dispatching?.title}</span> now? This will attempt delivery via the configured provider.</>}
+        messageBn={<>{dispatching?.title} ক্যাম্পেইনটি এখনই পাঠানো হবে? কনফিগার করা প্রোভাইডারের মাধ্যমে ডেলিভারি চেষ্টা করা হবে।</>}
+        confirmLabel="Dispatch"
+        cancelLabel="Cancel"
+        onConfirm={async () => { if (dispatching) await dispatchCampaign(dispatching.id); }}
+      />
+
+      <ConfirmDialog
+        open={!!deleting}
+        onOpenChange={(v) => { if (!v) setDeleting(null); }}
+        title="Delete this draft?"
+        message={<>Delete draft <span className="font-semibold">{deleting?.title}</span>? This cannot be undone.</>}
+        messageBn={<>{deleting?.title} ড্রাফটটি মুছে ফেলা হবে? এটি আর ফেরানো যাবে না।</>}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        onConfirm={async () => { if (deleting) await remove(deleting.id); }}
+      />
     </>
   );
 }

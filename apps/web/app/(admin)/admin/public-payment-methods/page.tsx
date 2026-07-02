@@ -18,6 +18,7 @@ import { CreditCard, Plus, Save, Trash2, Eye, EyeOff, ArrowUp, ArrowDown } from 
 import { cn } from '@/lib/utils/cn';
 import { ImageUpload } from '@/components/admin/ImageUpload';
 import { PublicSectionHeader } from '@/components/admin/PublicSectionHeader';
+import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
 
 interface Row {
   id: string;
@@ -35,6 +36,11 @@ export default function AdminPublicPaymentMethodsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // Busy guard so a double tap on Add brand does not create duplicates.
+  const [creating, setCreating] = useState(false);
+  // In-page confirm dialog instead of native confirm(), which
+  // installed PWAs suppress silently.
+  const [deleteTarget, setDeleteTarget] = useState<Row | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -50,6 +56,8 @@ export default function AdminPublicPaymentMethodsPage() {
   useEffect(() => { load(); }, [load]);
 
   const create = async () => {
+    if (creating) return;
+    setCreating(true);
     setError(null);
     try {
       const r = await fetch('/api/admin/public-payment-methods', {
@@ -60,7 +68,8 @@ export default function AdminPublicPaymentMethodsPage() {
       const j = await r.json();
       if (!r.ok) throw new Error(j?.message ?? j?.code ?? 'Create failed');
       await load();
-    } catch (e) { setError(e instanceof Error ? e.message : 'Create failed'); }
+    } catch (e) { setError(`${e instanceof Error ? e.message : 'Create failed'} (Create failed. তৈরি করা যায়নি।)`); }
+    finally { setCreating(false); }
   };
 
   const patch = async (id: string, body: Partial<Row>) => {
@@ -79,14 +88,13 @@ export default function AdminPublicPaymentMethodsPage() {
   };
 
   const remove = async (id: string) => {
-    if (!confirm('Delete this payment pill?')) return;
     setBusyId(id);
     try {
       const r = await fetch(`/api/admin/public-payment-methods/${id}`, { method: 'DELETE' });
       const j = await r.json().catch(() => null);
       if (!r.ok) throw new Error(j?.message ?? j?.code ?? 'Delete failed');
       setRows((rs) => rs.filter((row) => row.id !== id));
-    } catch (e) { setError(e instanceof Error ? e.message : 'Delete failed'); }
+    } catch (e) { setError(`${e instanceof Error ? e.message : 'Delete failed'} (Delete failed. ডিলিট ব্যর্থ হয়েছে।)`); }
     finally { setBusyId(null); }
   };
 
@@ -109,7 +117,7 @@ export default function AdminPublicPaymentMethodsPage() {
         icon={<CreditCard className="h-5 w-5" />}
         title="Public payment methods"
         subtitle="Public payment pills shown in the footer. Separate from real gateway configuration."
-        action={<Button variant="gold" leftIcon={<Plus className="h-4 w-4" />} onClick={create}>Add brand</Button>}
+        action={<Button variant="gold" leftIcon={<Plus className="h-4 w-4" />} loading={creating} disabled={creating} onClick={create}>Add brand</Button>}
       />
 
       {error ? <Card padding="sm" className="border-l-4 border-rose-400/60"><p className="text-sm text-rose-300">{error}</p></Card> : null}
@@ -130,13 +138,24 @@ export default function AdminPublicPaymentMethodsPage() {
               last={i === rows.length - 1}
               saving={busyId === row.id}
               onPatch={(b) => patch(row.id, b)}
-              onDelete={() => remove(row.id)}
+              onDelete={() => setDeleteTarget(row)}
               onMoveUp={() => reorder(row.id, 'up')}
               onMoveDown={() => reorder(row.id, 'down')}
             />
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(v) => !v && setDeleteTarget(null)}
+        title="Delete payment pill"
+        message={deleteTarget ? `Delete payment pill "${deleteTarget.buttonText}"? This cannot be undone.` : ''}
+        messageBn={deleteTarget ? `"${deleteTarget.buttonText}" পেমেন্ট পিলটি মুছে ফেলবেন? এটি আর ফেরানো যাবে না।` : ''}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        onConfirm={async () => { if (deleteTarget) await remove(deleteTarget.id); }}
+      />
     </div>
   );
 }

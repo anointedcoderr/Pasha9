@@ -13,6 +13,18 @@ import { Chip } from '@/components/ui/Chip';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { formatDateTime } from '@/lib/utils/format';
 import { useLang } from '@/lib/i18n/context';
+import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
+
+// Prefill for <input type="datetime-local">. The stored value is UTC
+// ISO; slicing it directly would show UTC in the input, so every
+// edit-and-save round trip shifted the schedule by the local offset
+// (6 hours in Dhaka). Convert to local wall-clock time first.
+const toLocalInput = (iso?: string | null) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+};
 
 type Status = 'active' | 'hidden' | 'paused';
 
@@ -46,7 +58,17 @@ export default function AdminPopupsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editor, setEditor] = useState<PopupRow | null>(null);
+  const [editorError, setEditorError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  // In-page confirm dialog instead of native confirm(), which
+  // installed PWAs suppress silently.
+  const [deleteTarget, setDeleteTarget] = useState<PopupRow | null>(null);
+
+  const notify = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 4000);
+  };
 
   const refresh = useCallback(async () => {
     setError(null);
@@ -67,7 +89,7 @@ export default function AdminPopupsPage() {
   const save = async () => {
     if (!editor) return;
     setBusy(true);
-    setError(null);
+    setEditorError(null);
     const toIso = (v?: string | null) => (v ? new Date(v).toISOString() : null);
     const payload = {
       title: editor.title,
@@ -85,27 +107,45 @@ export default function AdminPopupsPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message ?? data.code);
       setEditor(null);
+      notify(editor.id ? 'Popup updated. পপআপ আপডেট হয়েছে।' : 'Popup created. পপআপ তৈরি হয়েছে।');
       await refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed');
+      setEditorError(e instanceof Error ? e.message : 'Save failed. সংরক্ষণ ব্যর্থ হয়েছে।');
     } finally {
       setBusy(false);
     }
   };
 
   const toggle = async (p: PopupRow) => {
-    await fetch(`/api/admin/popups/${p.id}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ status: p.status === 'active' ? 'hidden' : 'active' }),
-    });
-    refresh();
+    try {
+      const res = await fetch(`/api/admin/popups/${p.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ status: p.status === 'active' ? 'hidden' : 'active' }),
+      });
+      if (!res.ok) {
+        setError('Failed to update status. স্ট্যাটাস আপডেট ব্যর্থ হয়েছে।');
+        return;
+      }
+      refresh();
+    } catch {
+      setError('Failed to update status: network error. স্ট্যাটাস আপডেট ব্যর্থ হয়েছে: নেটওয়ার্ক সমস্যা।');
+    }
   };
 
-  const remove = async (id: string) => {
-    if (!confirm('Delete this popup?')) return;
-    await fetch(`/api/admin/popups/${id}`, { method: 'DELETE' });
-    refresh();
+  const remove = async (p: PopupRow) => {
+    try {
+      const res = await fetch(`/api/admin/popups/${p.id}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        notify('Popup deleted. পপআপ মুছে ফেলা হয়েছে।');
+        refresh();
+      } else {
+        setError(`${data?.message ?? data?.code ?? 'Delete failed'} (Delete failed. ডিলিট ব্যর্থ হয়েছে।)`);
+      }
+    } catch {
+      setError('Delete failed: network error. ডিলিট ব্যর্থ হয়েছে: নেটওয়ার্ক সমস্যা।');
+    }
   };
 
   return (
@@ -117,6 +157,7 @@ export default function AdminPopupsPage() {
         action={<Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setEditor({ ...NEW_POPUP })}>New Popup</Button>}
       />
 
+      {toast ? <Card padding="md" className="mb-4"><p className="text-sm text-signal-ok">{toast}</p></Card> : null}
       {error ? <Card padding="md" className="mb-4"><p className="text-sm text-signal-danger">{error}</p></Card> : null}
 
       <div className="space-y-4">
@@ -142,17 +183,17 @@ export default function AdminPopupsPage() {
                 <Switch checked={p.status === 'active'} onChange={() => toggle(p)} />
                 <Button size="sm" variant="neon" leftIcon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditor({
                   ...p,
-                  startAt: p.startAt ? p.startAt.slice(0, 16) : '',
-                  endAt: p.endAt ? p.endAt.slice(0, 16) : '',
+                  startAt: toLocalInput(p.startAt),
+                  endAt: toLocalInput(p.endAt),
                 })}>Edit</Button>
-                <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => remove(p.id)}>Delete</Button>
+                <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => setDeleteTarget(p)}>Delete</Button>
               </div>
             </Card>
           ))
         )}
       </div>
 
-      <Modal open={!!editor} onOpenChange={(v) => !v && setEditor(null)} title={editor?.id ? 'Edit Popup' : 'New Popup'} size="lg">
+      <Modal open={!!editor} onOpenChange={(v) => { if (!v) { setEditor(null); setEditorError(null); } }} title={editor?.id ? 'Edit Popup' : 'New Popup'} size="lg">
         {editor ? (
           <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); void save(); }}>
             <FormField label="Title" required>
@@ -175,13 +216,25 @@ export default function AdminPopupsPage() {
                 <Input type="datetime-local" value={editor.endAt ?? ''} onChange={(e) => setEditor({ ...editor, endAt: e.target.value })} />
               </FormField>
             </div>
+            {editorError ? <p className="text-sm text-signal-danger">{editorError}</p> : null}
             <div className="flex justify-end gap-2 pt-2">
-              <Button variant="ghost" type="button" onClick={() => setEditor(null)}>Cancel</Button>
+              <Button variant="ghost" type="button" onClick={() => { setEditor(null); setEditorError(null); }}>Cancel</Button>
               <Button type="submit" loading={busy}>Save</Button>
             </div>
           </form>
         ) : null}
       </Modal>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(v) => !v && setDeleteTarget(null)}
+        title="Delete popup"
+        message={deleteTarget ? `Delete popup "${deleteTarget.title}"? This cannot be undone.` : ''}
+        messageBn={deleteTarget ? `"${deleteTarget.title}" পপআপটি মুছে ফেলবেন? এটি আর ফেরানো যাবে না।` : ''}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        onConfirm={async () => { if (deleteTarget) await remove(deleteTarget); }}
+      />
     </>
   );
 }

@@ -12,6 +12,7 @@ import { Switch } from '@/components/ui/Switch';
 import { Chip } from '@/components/ui/Chip';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { AdminMediaUpload } from '@/components/admin/AdminMediaUpload';
+import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
 import { Share2, Plus, Pencil, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 
 interface LinkRow {
@@ -58,6 +59,15 @@ export default function AdminSocialLinksPage() {
   const [error, setError] = useState<string | null>(null);
   const [editor, setEditor] = useState<LinkRow | null>(null);
   const [busy, setBusy] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  // In-page confirm dialog instead of native confirm(), which
+  // installed PWAs suppress silently.
+  const [deleteTarget, setDeleteTarget] = useState<LinkRow | null>(null);
+
+  const notify = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 4000);
+  };
 
   const refresh = useCallback(async () => {
     setError(null);
@@ -114,19 +124,36 @@ export default function AdminSocialLinksPage() {
     }
   };
 
-  const remove = async (id: string) => {
-    if (!confirm('Delete this social link?')) return;
-    const res = await fetch(`/api/admin/social-links/${id}`, { method: 'DELETE' });
-    if (res.ok) refresh();
+  const remove = async (b: LinkRow) => {
+    try {
+      const res = await fetch(`/api/admin/social-links/${b.id}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        notify('Social link deleted. সোশ্যাল লিংক মুছে ফেলা হয়েছে।');
+        refresh();
+      } else {
+        setError(`${data?.message ?? data?.code ?? 'Delete failed'} (Delete failed. ডিলিট ব্যর্থ হয়েছে।)`);
+      }
+    } catch {
+      setError('Delete failed: network error. ডিলিট ব্যর্থ হয়েছে: নেটওয়ার্ক সমস্যা।');
+    }
   };
 
   const toggle = async (b: LinkRow) => {
-    await fetch(`/api/admin/social-links/${b.id}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ isActive: !b.isActive }),
-    });
-    refresh();
+    try {
+      const res = await fetch(`/api/admin/social-links/${b.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ isActive: !b.isActive }),
+      });
+      if (!res.ok) {
+        setError('Failed to update status. স্ট্যাটাস আপডেট ব্যর্থ হয়েছে।');
+        return;
+      }
+      refresh();
+    } catch {
+      setError('Failed to update status: network error. স্ট্যাটাস আপডেট ব্যর্থ হয়েছে: নেটওয়ার্ক সমস্যা।');
+    }
   };
 
   const move = async (b: LinkRow, dir: -1 | 1) => {
@@ -136,12 +163,20 @@ export default function AdminSocialLinksPage() {
     if (swapIdx < 0 || swapIdx >= links.length) return;
     const ids = links.map((x) => x.id);
     [ids[idx], ids[swapIdx]] = [ids[swapIdx], ids[idx]];
-    await fetch('/api/admin/social-links', {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ ids }),
-    });
-    refresh();
+    try {
+      const res = await fetch('/api/admin/social-links', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      });
+      if (!res.ok) {
+        setError('Failed to reorder link. লিংকের ক্রম পরিবর্তন ব্যর্থ হয়েছে।');
+        return;
+      }
+      refresh();
+    } catch {
+      setError('Failed to reorder link: network error. ক্রম পরিবর্তন ব্যর্থ হয়েছে: নেটওয়ার্ক সমস্যা।');
+    }
   };
 
   return (
@@ -160,6 +195,11 @@ export default function AdminSocialLinksPage() {
         }
       />
 
+      {toast ? (
+        <Card padding="md" className="mb-4">
+          <p className="text-sm text-signal-ok">{toast}</p>
+        </Card>
+      ) : null}
       {error ? (
         <Card padding="md" className="mb-4">
           <p className="text-sm text-signal-danger">{error}</p>
@@ -212,7 +252,7 @@ export default function AdminSocialLinksPage() {
                 <Button size="sm" variant="neon" leftIcon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditor(b)}>
                   Edit
                 </Button>
-                <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => remove(b.id)}>
+                <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => setDeleteTarget(b)}>
                   Delete
                 </Button>
               </div>
@@ -297,6 +337,17 @@ export default function AdminSocialLinksPage() {
           </form>
         ) : null}
       </Modal>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(v) => !v && setDeleteTarget(null)}
+        title="Delete social link"
+        message={deleteTarget ? `Delete link "${deleteTarget.label}"? This cannot be undone.` : ''}
+        messageBn={deleteTarget ? `"${deleteTarget.labelBn || deleteTarget.label}" লিংকটি মুছে ফেলবেন? এটি আর ফেরানো যাবে না।` : ''}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        onConfirm={async () => { if (deleteTarget) await remove(deleteTarget); }}
+      />
     </>
   );
 }

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { PageHeader } from '@/components/site/PageHeader';
 import { DataTable } from '@/components/ui/DataTable';
 import { ApprovalModal } from '@/components/admin/ApprovalModal';
+import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
 import { Chip } from '@/components/ui/Chip';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -50,6 +51,11 @@ export default function AdminDepositsPage() {
   const [action, setAction] = useState<'approve' | 'reject' | null>(null);
   const [open, setOpen] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
+  // Backfill confirmation runs through an in-page ConfirmDialog. The
+  // old code called confirm(...) which resolved to the LOCAL approve /
+  // reject submitter below (shadowing window.confirm), so backfill ran
+  // with no confirmation at all and could fire a stray POST.
+  const [backfillTarget, setBackfillTarget] = useState<DepositRow | null>(null);
 
   const refresh = useCallback(async () => {
     setError(null);
@@ -69,7 +75,9 @@ export default function AdminDepositsPage() {
     refresh();
   }, [refresh]);
 
-  const confirm = async (note: string) => {
+  // Approve / reject submitter. Renamed from `confirm` so it can never
+  // shadow window.confirm again.
+  const submitDecision = async (note: string) => {
     if (!item || !action) return;
     const trimmed = note.trim();
     // M4 Phase C: reject endpoint requires a clear reason. Validate
@@ -127,8 +135,8 @@ export default function AdminDepositsPage() {
     }
   };
 
+  // Runs only after the operator confirms in the ConfirmDialog.
   const backfillCommission = async (row: DepositRow) => {
-    if (!confirm(`Backfill affiliate commission for this deposit (${formatBDT(row.amount)} from ${row.username})? This walks the referral chain and writes commission rows at the current tier rates. Refuses if commissions already exist.`)) return;
     try {
       const res = await fetch(`/api/admin/affiliate/backfill/${row.id}`, { method: 'POST' });
       const data = await res.json();
@@ -217,7 +225,7 @@ export default function AdminDepositsPage() {
                 variant="ghost"
                 leftIcon={<BadgeDollarSign className="h-3.5 w-3.5" />}
                 title="Retro-accrue affiliate commission for this deposit. Use after fixing the upline tier."
-                onClick={() => backfillCommission(row.original)}
+                onClick={() => setBackfillTarget(row.original)}
               >
                 Backfill commission
               </Button>
@@ -283,7 +291,21 @@ export default function AdminDepositsPage() {
           { label: 'TX ID', value: item.transactionId },
           { label: 'Submitted', value: formatDateTime(item.createdAt, lang) },
         ] : []}
-        onConfirm={(note) => { void confirm(note); }}
+        onConfirm={(note) => { void submitDecision(note); }}
+      />
+
+      <ConfirmDialog
+        open={!!backfillTarget}
+        onOpenChange={(v) => !v && setBackfillTarget(null)}
+        title="Backfill affiliate commission"
+        message={backfillTarget ? `Backfill affiliate commission for this deposit (${formatBDT(backfillTarget.amount)} from ${backfillTarget.username})? This walks the referral chain and writes commission rows at the current tier rates. It refuses if commissions already exist.` : ''}
+        messageBn={backfillTarget ? `এই ডিপোজিটের (${backfillTarget.username} থেকে ${formatBDT(backfillTarget.amount)}) জন্য অ্যাফিলিয়েট কমিশন ব্যাকফিল করবেন? রেফারেল চেইন ধরে বর্তমান টিয়ার রেটে কমিশন লেখা হবে। কমিশন আগেই থাকলে এটি প্রত্যাখ্যান করবে।` : ''}
+        confirmLabel="Backfill"
+        cancelLabel="Cancel"
+        onConfirm={async () => {
+          if (backfillTarget) await backfillCommission(backfillTarget);
+          setBackfillTarget(null);
+        }}
       />
     </>
   );

@@ -12,6 +12,7 @@ import { Switch } from '@/components/ui/Switch';
 import { Chip } from '@/components/ui/Chip';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { AdminMediaUpload } from '@/components/admin/AdminMediaUpload';
+import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
 import { Flag, Plus, Pencil, Trash2 } from 'lucide-react';
 
 interface EventRow {
@@ -61,11 +62,14 @@ const BLANK: EventRow = {
   source: 'manual',
 };
 
+// Prefill for <input type="datetime-local">. Convert the stored UTC
+// value to local wall-clock time so an edit-and-save round trip does
+// not shift the schedule by the local offset.
 function toLocalInput(iso: string | null): string {
   if (!iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  return d.toISOString().slice(0, 16);
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 }
 
 export default function AdminSportsEventsPage() {
@@ -74,6 +78,15 @@ export default function AdminSportsEventsPage() {
   const [error, setError] = useState<string | null>(null);
   const [editor, setEditor] = useState<EventRow | null>(null);
   const [busy, setBusy] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  // In-page confirm dialog instead of native confirm(), which
+  // installed PWAs suppress silently.
+  const [deleteTarget, setDeleteTarget] = useState<EventRow | null>(null);
+
+  const notify = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 4000);
+  };
 
   const refresh = useCallback(async () => {
     setError(null);
@@ -130,19 +143,36 @@ export default function AdminSportsEventsPage() {
     }
   };
 
-  const remove = async (id: string) => {
-    if (!confirm('Delete this fixture?')) return;
-    const res = await fetch(`/api/admin/sports-events/${id}`, { method: 'DELETE' });
-    if (res.ok) refresh();
+  const remove = async (ev: EventRow) => {
+    try {
+      const res = await fetch(`/api/admin/sports-events/${ev.id}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        notify('Fixture deleted. ফিক্সচার মুছে ফেলা হয়েছে।');
+        refresh();
+      } else {
+        setError(`${data?.message ?? data?.code ?? 'Delete failed'} (Delete failed. ডিলিট ব্যর্থ হয়েছে।)`);
+      }
+    } catch {
+      setError('Delete failed: network error. ডিলিট ব্যর্থ হয়েছে: নেটওয়ার্ক সমস্যা।');
+    }
   };
 
   const toggle = async (ev: EventRow) => {
-    await fetch(`/api/admin/sports-events/${ev.id}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ isActive: !ev.isActive }),
-    });
-    refresh();
+    try {
+      const res = await fetch(`/api/admin/sports-events/${ev.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ isActive: !ev.isActive }),
+      });
+      if (!res.ok) {
+        setError('Failed to update status. স্ট্যাটাস আপডেট ব্যর্থ হয়েছে।');
+        return;
+      }
+      refresh();
+    } catch {
+      setError('Failed to update status: network error. স্ট্যাটাস আপডেট ব্যর্থ হয়েছে: নেটওয়ার্ক সমস্যা।');
+    }
   };
 
   return (
@@ -152,12 +182,13 @@ export default function AdminSportsEventsPage() {
         subtitle="Cards rendered in the homepage Sportsbook carousel. Manual entries today; a real provider feed adapter will upsert into this same table."
         icon={<Flag className="h-5 w-5" />}
         action={
-          <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setEditor({ ...BLANK, startsAt: new Date().toISOString().slice(0, 16) })}>
+          <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setEditor({ ...BLANK, startsAt: toLocalInput(new Date().toISOString()) })}>
             New fixture
           </Button>
         }
       />
 
+      {toast ? <Card padding="md" className="mb-4"><p className="text-sm text-signal-ok">{toast}</p></Card> : null}
       {error ? <Card padding="md" className="mb-4"><p className="text-sm text-signal-danger">{error}</p></Card> : null}
 
       <div className="space-y-3">
@@ -192,7 +223,7 @@ export default function AdminSportsEventsPage() {
                 <Button size="sm" variant="neon" leftIcon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditor({ ...ev, startsAt: toLocalInput(ev.startsAt), endsAt: ev.endsAt ? toLocalInput(ev.endsAt) : null, leagueNameBn: ev.leagueNameBn ?? '', teamAShortName: ev.teamAShortName ?? '', teamALogoUrl: ev.teamALogoUrl ?? '', teamBShortName: ev.teamBShortName ?? '', teamBLogoUrl: ev.teamBLogoUrl ?? '', providerName: ev.providerName ?? '', providerEventId: ev.providerEventId ?? '', deepLinkUrl: ev.deepLinkUrl ?? '' })}>
                   Edit
                 </Button>
-                <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => remove(ev.id)}>
+                <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => setDeleteTarget(ev)}>
                   Delete
                 </Button>
               </div>
@@ -310,6 +341,17 @@ export default function AdminSportsEventsPage() {
           </form>
         ) : null}
       </Modal>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(v) => !v && setDeleteTarget(null)}
+        title="Delete fixture"
+        message={deleteTarget ? `Delete fixture "${deleteTarget.teamAName} vs ${deleteTarget.teamBName}"? This cannot be undone.` : ''}
+        messageBn={deleteTarget ? `"${deleteTarget.teamAName} vs ${deleteTarget.teamBName}" ফিক্সচারটি মুছে ফেলবেন? এটি আর ফেরানো যাবে না।` : ''}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        onConfirm={async () => { if (deleteTarget) await remove(deleteTarget); }}
+      />
     </>
   );
 }

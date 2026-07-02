@@ -45,6 +45,11 @@ export function ConfirmDialog({
     try {
       await onConfirm();
       onOpenChange(false);
+    } catch {
+      // Callers surface their own errors on the page. If onConfirm
+      // still rejects unexpectedly, close anyway so the dialog is
+      // never stranded open in a permanent busy state.
+      onOpenChange(false);
     } finally {
       setBusy(false);
     }

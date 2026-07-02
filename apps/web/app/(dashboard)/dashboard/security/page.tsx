@@ -20,6 +20,7 @@ import { Modal } from '@/components/ui/Modal';
 import { ShieldCheck, Smartphone, RefreshCw, LogOut, KeyRound, ScanLine, AlertTriangle, Copy, Download, Check } from 'lucide-react';
 import { useMe } from '@/lib/hooks/useMe';
 import { cn } from '@/lib/utils/cn';
+import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
 
 interface SessionRow {
   id: string;
@@ -176,8 +177,10 @@ export default function SecurityPage() {
     } finally { setDisabling(false); }
   };
 
+  // In-page confirm (native confirm() is suppressed in the installed PWA)
+  const [revoking, setRevoking] = useState<SessionRow | null>(null);
+
   const revoke = async (id: string) => {
-    if (!confirm('Sign out this device? You will need to log in again on that device.')) return;
     try {
       const res = await fetch('/api/auth/sessions', {
         method: 'DELETE',
@@ -290,7 +293,7 @@ export default function SecurityPage() {
                   </p>
                 </div>
                 {!s.revokedAt ? (
-                  <Button size="sm" variant="ghost" leftIcon={<LogOut className="h-3.5 w-3.5" />} onClick={() => revoke(s.id)}>Sign out</Button>
+                  <Button size="sm" variant="ghost" leftIcon={<LogOut className="h-3.5 w-3.5" />} onClick={() => setRevoking(s)}>Sign out</Button>
                 ) : null}
               </li>
             ))}
@@ -336,6 +339,17 @@ export default function SecurityPage() {
           <Button variant="danger" loading={disabling} onClick={disable2fa} disabled={!disableCode.trim()}>Disable</Button>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        open={!!revoking}
+        onOpenChange={(v) => { if (!v) setRevoking(null); }}
+        title="Sign out this device?"
+        message="You will need to log in again on that device."
+        messageBn="এই ডিভাইসটি সাইন আউট করা হবে? সেই ডিভাইসে আবার লগইন করতে হবে।"
+        confirmLabel="Sign out"
+        cancelLabel="Cancel"
+        onConfirm={async () => { if (revoking) await revoke(revoking.id); }}
+      />
     </>
   );
 }

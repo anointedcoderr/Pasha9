@@ -15,6 +15,9 @@ import { PageHeader } from '@/components/site/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
+import { Modal } from '@/components/ui/Modal';
+import { FormField, Textarea } from '@/components/ui/Input';
+import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
 import { Users, Save, RefreshCw, Search } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 
@@ -77,6 +80,14 @@ export default function AdminReferralClaimsPage() {
   const [info, setInfo] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'' | 'pending' | 'paid' | 'rejected'>('');
+  // In-page review dialogs. The old flow used prompt() for the reject
+  // note (suppressed in installed PWAs, so a reject fired instantly
+  // with an empty note) and paid out on Approve with no confirmation.
+  const [approveTarget, setApproveTarget] = useState<ClaimRow | null>(null);
+  const [rejectTarget, setRejectTarget] = useState<ClaimRow | null>(null);
+  const [rejectNote, setRejectNote] = useState('');
+  const [rejectBusy, setRejectBusy] = useState(false);
+  const [rejectError, setRejectError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -139,24 +150,42 @@ export default function AdminReferralClaimsPage() {
     }
   };
 
-  const reviewClaim = async (id: string, action: 'approve' | 'reject') => {
-    const note = action === 'reject' ? (prompt('Rejection note (optional but recommended):') ?? '') : '';
+  // Sends the review decision. THROWS on failure so each caller can
+  // surface the error in the right place (the reject modal renders it
+  // inside itself; the approve dialog reports to the page card).
+  const reviewClaim = async (id: string, action: 'approve' | 'reject', note?: string) => {
     setActingId(id); setError(null);
     try {
       const r = await fetch(`/api/admin/referral-claims/${id}`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action, adminNote: note || undefined }),
+        body: JSON.stringify({ action, adminNote: note?.trim() || undefined }),
       });
-      const j = await r.json();
+      const j = await r.json().catch(() => null);
       if (!r.ok) throw new Error(j?.message ?? j?.code ?? 'Action failed');
-      setInfo(`Claim ${action}ed.`);
-      setTimeout(() => setInfo(null), 3000);
+      setInfo(action === 'approve'
+        ? 'Claim approved and paid. ক্লেইম অনুমোদন করা হয়েছে এবং টাকা পরিশোধ হয়েছে।'
+        : 'Claim rejected. ক্লেইম প্রত্যাখ্যান করা হয়েছে।');
+      setTimeout(() => setInfo(null), 4000);
       await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Action failed');
     } finally {
       setActingId(null);
+    }
+  };
+
+  const submitReject = async () => {
+    if (!rejectTarget) return;
+    setRejectBusy(true); setRejectError(null);
+    try {
+      await reviewClaim(rejectTarget.id, 'reject', rejectNote);
+      setRejectTarget(null);
+      setRejectNote('');
+    } catch (e) {
+      // Keep the modal open and show the failure inside it; the page
+      // level error card would sit behind the overlay.
+      setRejectError(e instanceof Error ? e.message : 'Reject failed');
+    } finally {
+      setRejectBusy(false);
     }
   };
 
@@ -290,8 +319,8 @@ export default function AdminReferralClaimsPage() {
                   <td className="px-2 py-2 text-right">
                     {c.status === 'pending' ? (
                       <div className="inline-flex gap-2">
-                        <Button size="sm" variant="gold" loading={actingId === c.id} onClick={() => reviewClaim(c.id, 'approve')}>Approve</Button>
-                        <Button size="sm" variant="ghost" loading={actingId === c.id} onClick={() => reviewClaim(c.id, 'reject')}>Reject</Button>
+                        <Button size="sm" variant="gold" loading={actingId === c.id} onClick={() => setApproveTarget(c)}>Approve</Button>
+                        <Button size="sm" variant="ghost" loading={actingId === c.id} onClick={() => { setRejectTarget(c); setRejectNote(''); setRejectError(null); }}>Reject</Button>
                       </div>
                     ) : null}
                   </td>
@@ -301,6 +330,52 @@ export default function AdminReferralClaimsPage() {
           </table>
         </div>
       </Card>
+
+      <ConfirmDialog
+        open={!!approveTarget}
+        onOpenChange={(v) => !v && setApproveTarget(null)}
+        title="Approve referral claim"
+        message={approveTarget ? `Approve and pay ${formatBDT(approveTarget.amount)} to ${approveTarget.username}? The amount is credited to the affiliate wallet immediately.` : ''}
+        messageBn={approveTarget ? `${approveTarget.username} কে ${formatBDT(approveTarget.amount)} অনুমোদন করে পরিশোধ করবেন? টাকা সাথে সাথে অ্যাফিলিয়েট ওয়ালেটে জমা হবে।` : ''}
+        confirmLabel="Approve and pay"
+        cancelLabel="Cancel"
+        onConfirm={async () => {
+          const target = approveTarget;
+          setApproveTarget(null);
+          if (!target) return;
+          try {
+            await reviewClaim(target.id, 'approve');
+          } catch (e) {
+            setError(`${e instanceof Error ? e.message : 'Approve failed'} (Approve failed. অনুমোদন ব্যর্থ হয়েছে।)`);
+          }
+        }}
+      />
+
+      <Modal
+        open={!!rejectTarget}
+        onOpenChange={(v) => { if (!v && !rejectBusy) { setRejectTarget(null); setRejectError(null); } }}
+        title="Reject referral claim"
+        description={rejectTarget ? `${rejectTarget.username} . ${formatBDT(rejectTarget.amount)}` : ''}
+        size="sm"
+      >
+        {rejectTarget ? (
+          <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); void submitReject(); }}>
+            <FormField
+              label="Rejection note (optional but recommended)"
+              hint="নোটটি ঐচ্ছিক তবে দেওয়া ভালো; অডিট লগে সংরক্ষিত হবে।"
+            >
+              <Textarea rows={3} value={rejectNote} onChange={(e) => setRejectNote(e.target.value)} placeholder="Why this claim is rejected" />
+            </FormField>
+            {rejectError ? (
+              <p className="text-sm text-signal-danger">Reject failed: {rejectError} (প্রত্যাখ্যান ব্যর্থ হয়েছে: {rejectError})</p>
+            ) : null}
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="ghost" disabled={rejectBusy} onClick={() => setRejectTarget(null)}>Cancel</Button>
+              <Button type="submit" variant="danger" loading={rejectBusy}>Reject claim</Button>
+            </div>
+          </form>
+        ) : null}
+      </Modal>
     </div>
   );
 }

@@ -44,6 +44,7 @@ export default function AdminBalancePage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const [search, setSearch] = useState('');
 
   const refresh = useCallback(async (q?: string) => {
@@ -97,26 +98,32 @@ export default function AdminBalancePage() {
     },
   ], []);
 
-  const onConfirm = async (payload: { amount: number; reason: string; type?: string }) => {
+  // Called by BalanceAdjustModal on submit. The API enum is
+  // adjust | bonus | referral, so the modal's credit/debit choice maps
+  // onto the SIGN of the amount (positive credits, negative debits)
+  // with type always 'adjust'. The sign comes from the modal's Type
+  // select, the same field that drives the New balance preview, so the
+  // preview and the actual write always agree. Throws on failure: the
+  // modal renders the error inside itself and stays open.
+  const onConfirm = async (payload: { amount: number; reason: string; type: 'credit' | 'debit' }) => {
     if (!user) return;
-    setError(null);
-    try {
-      const r = await fetch(`/api/admin/users/${user.id}/balance`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          amount: mode === 'credit' ? Math.abs(payload.amount) : -Math.abs(payload.amount),
-          reason: payload.reason,
-          type: payload.type ?? 'manual_adjust',
-        }),
-      });
-      const j = await r.json().catch(() => null);
-      if (!r.ok) throw new Error(j?.message ?? j?.code ?? 'Adjustment failed');
-      setOpen(false);
-      await refresh(search);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Adjustment failed');
-    }
+    const signed = payload.type === 'credit' ? Math.abs(payload.amount) : -Math.abs(payload.amount);
+    const r = await fetch(`/api/admin/users/${user.id}/balance`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        amount: signed,
+        reason: payload.reason,
+        type: 'adjust',
+      }),
+    });
+    const j = await r.json().catch(() => null);
+    if (!r.ok) throw new Error(j?.message ?? j?.code ?? 'Adjustment failed');
+    setToast(
+      `${payload.type === 'credit' ? 'Credited' : 'Debited'} ${formatBDT(Math.abs(payload.amount))} ${payload.type === 'credit' ? 'to' : 'from'} ${user.username}. New balance ${formatBDT(Number(j?.balance?.after ?? 0))}. ব্যালেন্স সফলভাবে আপডেট হয়েছে।`,
+    );
+    setTimeout(() => setToast(null), 4500);
+    await refresh(search);
   };
 
   return (
@@ -132,6 +139,7 @@ export default function AdminBalancePage() {
         }
       />
 
+      {toast ? <Card padding="md" className="mb-4 border-l-4 border-emerald-400/60"><p className="text-sm text-emerald-300">{toast}</p></Card> : null}
       {error ? <Card padding="md" className="mb-4 border-l-4 border-rose-400/60"><p className="text-sm text-rose-300">{error}</p></Card> : null}
 
       <Card padding="sm" className="mb-3">
@@ -162,6 +170,7 @@ export default function AdminBalancePage() {
           bonusBalance: user.bonusBalance,
           lockedBalance: user.lockedBalance,
         } as never : null}
+        initialType={mode}
         onConfirm={onConfirm}
       />
     </>

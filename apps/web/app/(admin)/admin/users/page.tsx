@@ -25,6 +25,7 @@ export default function AdminUsersPage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [balanceUser, setBalanceUser] = useState<AdminUserSummary | null>(null);
   const [balanceOpen, setBalanceOpen] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -146,6 +147,7 @@ export default function AdminUsersPage() {
         }
       />
 
+      {toast ? <Card padding="md" className="mb-4"><p className="text-sm text-signal-ok">{toast}</p></Card> : null}
       {error ? <Card padding="md" className="mb-4"><p className="text-sm text-signal-danger">{error}</p></Card> : null}
 
       {loading ? (
@@ -169,6 +171,7 @@ export default function AdminUsersPage() {
         onAdjustBalance={(u) => { setBalanceUser(u); setBalanceOpen(true); setDrawerOpen(false); }}
         onStatusChange={(nextStatus, reason) => {
           if (!detail) return;
+          setDetailError(null);
           fetch(`/api/admin/users/${detail.id}`, {
             method: 'PATCH',
             headers: { 'content-type': 'application/json' },
@@ -177,8 +180,16 @@ export default function AdminUsersPage() {
               blockedReason: nextStatus === 'blocked' ? (reason ?? null) : null,
             }),
           })
-            .then((r) => r.json())
-            .then((body) => {
+            .then((r) => r.json().catch(() => null).then((body) => ({ ok: r.ok, body })))
+            .then(({ ok, body }) => {
+              if (!ok) {
+                // Do NOT flip the drawer state: the server refused the
+                // change, so the account is still in its old status.
+                setDetailError(
+                  `${body?.message ?? body?.code ?? 'Status change failed'} (Status change failed. স্ট্যাটাস পরিবর্তন ব্যর্থ হয়েছে।)`,
+                );
+                return;
+              }
               const updated = body?.user as { blockedReason?: string | null; blockedAt?: string | null } | undefined;
               setDetail({
                 ...detail,
@@ -186,9 +197,17 @@ export default function AdminUsersPage() {
                 blockedReason: nextStatus === 'blocked' ? (updated?.blockedReason ?? reason ?? null) : null,
                 blockedAt: nextStatus === 'blocked' ? (updated?.blockedAt ?? new Date().toISOString()) : null,
               });
+              setToast(nextStatus === 'blocked'
+                ? `${detail.username} blocked. অ্যাকাউন্টটি ব্লক করা হয়েছে।`
+                : `${detail.username} unblocked. অ্যাকাউন্টটি আনব্লক করা হয়েছে।`);
+              setTimeout(() => setToast(null), 4500);
               load();
             })
-            .catch(() => {});
+            .catch((e) => {
+              setDetailError(
+                `${e instanceof Error ? e.message : 'Status change failed'} (Status change failed. স্ট্যাটাস পরিবর্তন ব্যর্থ হয়েছে।)`,
+              );
+            });
         }}
       />
 
@@ -196,8 +215,28 @@ export default function AdminUsersPage() {
         open={balanceOpen}
         onOpenChange={setBalanceOpen}
         user={balanceUser as unknown as Parameters<typeof BalanceAdjustModal>[0]['user']}
-        onConfirm={(payload) => {
-          console.info('balance adjustment (M1 surface, real wallet write ships in M2)', payload);
+        onConfirm={async (payload) => {
+          // Real wallet write. POST /api/admin/users/[id]/balance takes a
+          // SIGNED amount (positive credits, negative debits), a reason,
+          // and a type restricted to adjust | bonus | referral. The modal
+          // throws-through: on failure the error renders inside the modal
+          // and the modal stays open; on success it closes itself.
+          if (!balanceUser) return;
+          const signed = payload.type === 'credit' ? Math.abs(payload.amount) : -Math.abs(payload.amount);
+          const res = await fetch(`/api/admin/users/${balanceUser.id}/balance`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ amount: signed, reason: payload.reason, type: 'adjust' }),
+          });
+          const data = await res.json().catch(() => null);
+          if (!res.ok) {
+            throw new Error(data?.message ?? data?.code ?? 'Adjustment failed');
+          }
+          setToast(
+            `${payload.type === 'credit' ? 'Credited' : 'Debited'} ${formatBDT(Math.abs(payload.amount))} ${payload.type === 'credit' ? 'to' : 'from'} ${balanceUser.username}. New balance ${formatBDT(Number(data?.balance?.after ?? 0))}. ব্যালেন্স সফলভাবে আপডেট হয়েছে।`,
+          );
+          setTimeout(() => setToast(null), 4500);
+          await load();
         }}
       />
     </>
