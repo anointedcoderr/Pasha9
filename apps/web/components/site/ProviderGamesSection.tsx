@@ -268,14 +268,17 @@ export function ProviderGamesSection({ showAdminLink = false }: Props) {
           >
             <div className="relative aspect-square overflow-hidden">
               <CategoryHeroArt code={p.code} className="absolute inset-0 h-full w-full opacity-80" />
-              <span className="absolute left-2 top-2 inline-flex h-5 items-center rounded-full border border-amber-300/60 bg-amber-200/80 px-1.5 text-[9px] font-bold uppercase tracking-wider text-amber-950 backdrop-blur">
-                {lang === 'bn' ? 'প্রোভাইডার' : 'Provider'}
-              </span>
             </div>
             <div className="px-3 pb-3 pt-2">
               <h3 className="truncate text-sm font-extrabold leading-tight text-white">
                 {lang === 'bn' ? p.labelBn : p.labelEn}
               </h3>
+              {/* Provider label lives in the caption strip below the art,
+                  matching ProviderGameCard: nothing may overlay the
+                  thumbnail except HOT / NEW style status chips. */}
+              <p className="truncate text-[10px] font-semibold uppercase tracking-wider text-white/70">
+                {lang === 'bn' ? 'প্রোভাইডার' : 'Provider'}
+              </p>
               <p className="mt-1 inline-flex items-center gap-1 rounded-full border border-white/20 bg-white/5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white/75">
                 <Lock className="h-2.5 w-2.5" />
                 {lang === 'bn' ? 'ক্রেডেনশিয়াল প্রতীক্ষায়' : 'Awaiting credentials'}
