@@ -122,7 +122,12 @@ export function PromotionBannerSlider({ banners }: { banners: PromotionBannerRow
           <button type="button" aria-label="Next" onClick={next} className="absolute right-2 top-1/2 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-black/35 md:flex">
             <ChevronRight className="h-4 w-4" />
           </button>
-          <div className="absolute inset-x-0 bottom-2 flex justify-center gap-1.5">
+          {/* Slide indicator dots plus the rotation pause / play toggle,
+              grouped in one bottom-center cluster so the toggle reads as
+              a carousel control, not a content playback button on the
+              banner artwork. The toggle is hidden when reduced motion
+              has already stopped auto-rotation. */}
+          <div className="absolute inset-x-0 bottom-2 flex items-center justify-center gap-1.5">
             {banners.map((banner, bannerIndex) => (
               <button
                 key={banner.id}
@@ -132,28 +137,32 @@ export function PromotionBannerSlider({ banners }: { banners: PromotionBannerRow
                 className={cn('h-1.5 rounded-full transition-all', bannerIndex === safeIndex ? 'w-6 bg-brand-yellow-400' : 'w-1.5 bg-white/40')}
               />
             ))}
+            {!reducedMotion ? (
+              <button
+                type="button"
+                aria-pressed={paused}
+                aria-label={
+                  paused
+                    ? (bn ? 'স্বয়ংক্রিয় স্লাইড চালু করুন' : 'Play automatic slideshow')
+                    : (bn ? 'স্বয়ংক্রিয় স্লাইড থামান' : 'Pause automatic slideshow')
+                }
+                onClick={(event) => {
+                  // The whole banner may be wrapped in a link; keep this
+                  // control from navigating.
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setPaused((current) => !current);
+                }}
+                className="relative ml-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur transition hover:bg-black/65 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-yellow-400/60"
+              >
+                {/* Invisible hit-area extender: keeps the visible control
+                    at dot scale while preserving a roughly 44x44 tap
+                    target. */}
+                <span aria-hidden className="absolute -inset-2.5" />
+                {paused ? <Play className="h-3 w-3" /> : <Pause className="h-3 w-3" />}
+              </button>
+            ) : null}
           </div>
-          {!reducedMotion ? (
-            <button
-              type="button"
-              aria-pressed={paused}
-              aria-label={
-                paused
-                  ? (bn ? 'স্বয়ংক্রিয় স্লাইড চালু করুন' : 'Play automatic slideshow')
-                  : (bn ? 'স্বয়ংক্রিয় স্লাইড থামান' : 'Pause automatic slideshow')
-              }
-              onClick={(event) => {
-                // The whole banner may be wrapped in a link; keep this
-                // control from navigating.
-                event.preventDefault();
-                event.stopPropagation();
-                setPaused((current) => !current);
-              }}
-              className="absolute bottom-2 right-2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur transition hover:bg-black/65 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-yellow-400/60"
-            >
-              {paused ? <Play className="h-3 w-3" /> : <Pause className="h-3 w-3" />}
-            </button>
-          ) : null}
         </>
       ) : null}
     </div>

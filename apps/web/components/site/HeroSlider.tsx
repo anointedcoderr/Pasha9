@@ -498,6 +498,11 @@ export function HeroSlider() {
         </button>
       ) : null}
 
+      {/* Slide indicator dots plus the rotation pause / play toggle,
+          grouped in one bottom-center cluster so the toggle reads as a
+          carousel control, not a content playback button on the banner
+          artwork. The toggle is hidden when reduced motion has already
+          stopped auto-rotation or when there is a single slide. */}
       <div className="absolute inset-x-0 bottom-3 z-10 flex items-center justify-center gap-2">
         {slides.map((_, idx) => (
           <button
@@ -510,25 +515,25 @@ export function HeroSlider() {
             )}
           />
         ))}
+        {slides.length > 1 && !reducedMotion ? (
+          <button
+            type="button"
+            onClick={() => setPaused((p) => !p)}
+            aria-pressed={paused}
+            aria-label={
+              paused
+                ? (lang === 'bn' ? 'স্বয়ংক্রিয় স্লাইড চালু করুন' : 'Play automatic slideshow')
+                : (lang === 'bn' ? 'স্বয়ংক্রিয় স্লাইড থামান' : 'Pause automatic slideshow')
+            }
+            className="relative ml-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur transition hover:bg-black/65 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-yellow-500/60"
+          >
+            {/* Invisible hit-area extender: keeps the visible control at
+                dot scale while preserving a roughly 44x44 tap target. */}
+            <span aria-hidden className="absolute -inset-2.5" />
+            {paused ? <Play className="h-3 w-3" /> : <Pause className="h-3 w-3" />}
+          </button>
+        ) : null}
       </div>
-
-      {/* Pause / play control for the auto-rotation. Hidden when reduced
-          motion already stopped rotation or when there is a single slide. */}
-      {slides.length > 1 && !reducedMotion ? (
-        <button
-          type="button"
-          onClick={() => setPaused((p) => !p)}
-          aria-pressed={paused}
-          aria-label={
-            paused
-              ? (lang === 'bn' ? 'স্বয়ংক্রিয় স্লাইড চালু করুন' : 'Play automatic slideshow')
-              : (lang === 'bn' ? 'স্বয়ংক্রিয় স্লাইড থামান' : 'Pause automatic slideshow')
-          }
-          className="absolute bottom-2 right-3 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur transition hover:bg-black/65 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-yellow-500/60"
-        >
-          {paused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
-        </button>
-      ) : null}
 
       <button
         type="button"
