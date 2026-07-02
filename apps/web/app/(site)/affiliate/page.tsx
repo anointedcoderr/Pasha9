@@ -48,6 +48,7 @@ export default function AffiliatePage() {
   const t = useT();
   const { lang } = useLang();
   const [tiers, setTiers] = useState<Tier[]>([]);
+  const [tiersLoaded, setTiersLoaded] = useState(false);
   const [me, setMe] = useState<Me | null>(null);
   const [loadedMe, setLoadedMe] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -58,7 +59,8 @@ export default function AffiliatePage() {
     fetch('/api/content/commission-tiers')
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => { if (data?.tiers) setTiers(data.tiers as Tier[]); })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setTiersLoaded(true));
     fetch('/api/affiliate/me')
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => { if (data?.user) setMe(data as Me); })
@@ -136,10 +138,23 @@ export default function AffiliatePage() {
               </tr>
             </thead>
             <tbody>
-              {tiers.length === 0 ? (
+              {!tiersLoaded ? (
                 <tr>
                   <td colSpan={6} className="py-6 text-center text-sm text-brand-inkMute">
-                    {lang === 'bn' ? 'টিয়ার লোড হচ্ছে...' : 'Tiers loading...'}
+                    {lang === 'bn' ? 'টিয়ার লোড হচ্ছে...' : 'Loading tiers...'}
+                  </td>
+                </tr>
+              ) : tiers.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-8 text-center">
+                    <p className="text-sm font-semibold text-brand-ink">
+                      {lang === 'bn' ? 'কমিশন রেট শীঘ্রই প্রকাশ করা হবে।' : 'Commission rates are being finalized.'}
+                    </p>
+                    <p className="mx-auto mt-1 max-w-md text-xs text-brand-inkMute">
+                      {lang === 'bn'
+                        ? 'এখনই আবেদন করুন - রেট প্রকাশ হলে আপনার ড্যাশবোর্ডে সেগুলো দেখতে পাবেন।'
+                        : 'Apply now - the moment rates go live you will see them here and in your affiliate dashboard.'}
+                    </p>
                   </td>
                 </tr>
               ) : (
@@ -176,7 +191,7 @@ export default function AffiliatePage() {
             <Bullet icon={<Sparkles className="h-4 w-4" />} text={lang === 'bn' ? 'কাস্টম প্রমোশনাল কপি' : 'Custom promotional copy'} />
           </div>
           <p className="mt-4 inline-flex items-center gap-2 rounded-md bg-brand-yellow-500/10 px-3 py-1 text-[11px] font-semibold text-brand-yellow-700">
-            {lang === 'bn' ? 'পেআউট প্রসেসিং মাইলস্টোন ২-এ যুক্ত হবে' : 'Automated payouts ship in Milestone 2'}
+            {lang === 'bn' ? 'অনুমোদনের পর আপনার রেফারেল লিঙ্ক এবং অ্যাসেট আনলক হবে' : 'Your referral link and assets unlock once your application is approved'}
           </p>
         </Card>
 
@@ -321,11 +336,11 @@ function FaqSection({ lang }: { lang: 'bn' | 'en' }) {
     },
     {
       q: lang === 'bn' ? 'কীভাবে কমিশন গণনা করা হয়?' : 'How are commissions calculated?',
-      a: lang === 'bn' ? 'প্রতিটি টিয়ারের জন্য নির্ধারিত শতাংশ অনুযায়ী রেফার্ড প্লেয়ারের কার্যকলাপ থেকে গণনা।' : 'Per-tier percentage applied to your referred players activity. Auto calculation launches in Milestone 2.',
+      a: lang === 'bn' ? 'প্রতিটি টিয়ারের জন্য নির্ধারিত শতাংশ অনুযায়ী রেফার্ড প্লেয়ারের কার্যকলাপ থেকে গণনা করা হয়। বর্তমান রেট উপরের টেবিলে দেখুন।' : 'Your tier sets a percentage for each of the three referral levels, applied to your referred players activity. The current rates are shown in the table above.',
     },
     {
       q: lang === 'bn' ? 'কখন পেআউট পাওয়া যায়?' : 'When are payouts processed?',
-      a: lang === 'bn' ? 'অনুমোদিত কমিশনের পেআউট প্রক্রিয়া মাইলস্টোন ২-এ যুক্ত হবে।' : 'Approved commission payout pipeline ships in Milestone 2.',
+      a: lang === 'bn' ? 'আমাদের টিম প্রতিটি কমিশন পর্যালোচনা করে, অনুমোদনের পর তা আপনার ওয়ালেটে পেআউট করা হয়।' : 'Our team reviews each commission and pays it to your wallet once approved.',
     },
     {
       q: lang === 'bn' ? 'আমার পরিচিতি কি প্রকাশ পাবে?' : 'Is my identity exposed to referred players?',

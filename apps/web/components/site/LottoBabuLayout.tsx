@@ -132,6 +132,27 @@ function Countdown({ drawsAt }: { drawsAt: string | null }) {
     return () => window.clearInterval(id);
   }, [drawsAt]);
 
+  // No live draw scheduled yet. The old behaviour rendered a clock of
+  // "-- : -- : --" with no explanation, which read as broken. Tell the
+  // player plainly that the schedule is coming.
+  if (!drawsAt) {
+    return (
+      <section className="rounded-xl border border-brand-divider bg-brand-paper px-4 py-5 text-center">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand-inkSoft">
+          {bn ? 'পরবর্তী ড্র' : 'Next Draw'}
+        </p>
+        <p className="mt-2 text-lg font-extrabold text-brand-ink">
+          {bn ? 'পরবর্তী ড্রয়ের সময় শীঘ্রই ঘোষণা করা হবে' : 'Next draw will be announced soon'}
+        </p>
+        <p className="mt-1 text-xs text-brand-inkMute">
+          {bn
+            ? 'ততক্ষণে ডিপোজিট করে টিকিট জমা করুন, ড্র ঘোষণা হলেই এখানে কাউন্টডাউন শুরু হবে।'
+            : 'Earn tickets in the meantime. The countdown starts here as soon as the draw is scheduled.'}
+        </p>
+      </section>
+    );
+  }
+
   // Spoken duration for screen readers. The bare "07 : 23 : 41" digits
   // carry no unit context, so we build one label that names hours,
   // minutes and seconds and hide the individual digit spans from

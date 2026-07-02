@@ -145,17 +145,44 @@ export default function AdminHomepageBlocksPage() {
     }
   };
 
-  const onMove = (id: string, dir: 'up' | 'down') => {
+  // Up/down arrows swap with the neighbour in the position-sorted
+  // order, then renumber every block to a normalized slot (10, 20,
+  // 30...). Swapping raw position values is a no-op when legacy rows
+  // share a tied position (for example all 100), so the renumber
+  // self-heals ties. Only blocks whose position actually changed are
+  // PATCHed.
+  const onMove = async (id: string, dir: 'up' | 'down') => {
     const sorted = [...blocks].sort((a, b) => a.position - b.position);
     const idx = sorted.findIndex((r) => r.id === id);
     if (idx < 0) return;
     const swap = dir === 'up' ? idx - 1 : idx + 1;
     if (swap < 0 || swap >= sorted.length) return;
-    const a = sorted[idx], b = sorted[swap];
-    void Promise.all([
-      onBlockPatch(a.id, { position: b.position }),
-      onBlockPatch(b.id, { position: a.position }),
-    ]);
+    const next = [...sorted];
+    [next[idx], next[swap]] = [next[swap], next[idx]];
+    const updates = next
+      .map((row, i) => ({ row, position: (i + 1) * 10 }))
+      .filter(({ row, position }) => row.position !== position);
+    if (updates.length === 0) return;
+    setSavingBlockId(id);
+    setError(null);
+    try {
+      const results = await Promise.all(updates.map(({ row, position }) =>
+        fetch(`/api/admin/homepage-blocks/${row.id}`, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ position }),
+        }),
+      ));
+      if (results.some((r) => !r.ok)) {
+        setError('Failed to reorder blocks. ব্লকের ক্রম পরিবর্তন ব্যর্থ হয়েছে।');
+        return;
+      }
+      await refresh();
+    } catch {
+      setError('Failed to reorder blocks: network error. ব্লকের ক্রম পরিবর্তন ব্যর্থ হয়েছে: নেটওয়ার্ক সমস্যা।');
+    } finally {
+      setSavingBlockId(null);
+    }
   };
 
   return (
@@ -335,7 +362,9 @@ function CreateBlockModal({ open, onOpenChange, brands, onCreated }: { open: boo
   const [category, setCategory] = useState('slots');
   const [brandId, setBrandId] = useState('');
   const [limit, setLimit] = useState('12');
-  const [position, setPosition] = useState('100');
+  // Blank means "append after the last block" - the server assigns
+  // max(position)+10 so new blocks never tie and reorder always works.
+  const [position, setPosition] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -355,7 +384,7 @@ function CreateBlockModal({ open, onOpenChange, brands, onCreated }: { open: boo
           category: sourceType === 'category' ? category : undefined,
           brandId: sourceType === 'brand' ? brandId || undefined : undefined,
           limit: Math.min(Math.max(Number(limit) || 12, 1), 30),
-          position: Number(position) || 100,
+          position: position.trim() === '' ? undefined : Math.max(Number(position) || 0, 0),
           isVisible: true,
           layout: 'grid',
         }),
@@ -406,7 +435,7 @@ function CreateBlockModal({ open, onOpenChange, brands, onCreated }: { open: boo
           </select>
         ) : null}
         <input type="number" min={1} max={30} value={limit} onChange={(e) => setLimit(e.target.value)} className={inputCls} placeholder="Limit (1-30)" />
-        <input type="number" value={position} onChange={(e) => setPosition(e.target.value)} className={inputCls} placeholder="Position" />
+        <input type="number" value={position} onChange={(e) => setPosition(e.target.value)} className={inputCls} placeholder="Position (blank = last)" />
       </div>
     </Modal>
   );
@@ -456,12 +485,44 @@ function ItemsModal({ open, onOpenChange, block }: { open: boolean; onOpenChange
       });
       const j = await res.json().catch(() => null);
       if (!res.ok) {
+        if (j?.code === 'BLOCK_FULL') {
+          setErr('This block is full: max 30 games. Remove a game before adding another. ব্লকটি পূর্ণ: সর্বোচ্চ ৩০টি গেম। নতুন গেম যোগ করার আগে একটি গেম সরান।');
+          return;
+        }
         setErr(`${j?.message ?? j?.code ?? 'Failed to add game'} (Failed to add game. গেম যোগ করা যায়নি।)`);
         return;
       }
       load();
     } catch {
       setErr('Failed to add game: network error. গেম যোগ করা যায়নি: নেটওয়ার্ক সমস্যা।');
+    }
+  };
+
+  // Up/down arrows swap with the neighbour, then push the whole
+  // normalized order (10, 20, 30...) to the PUT reorder endpoint so
+  // duplicate positions self-heal.
+  const moveItem = async (itemId: string, dir: -1 | 1) => {
+    setErr(null);
+    const idx = items.findIndex((x) => x.id === itemId);
+    if (idx < 0) return;
+    const swapIdx = idx + dir;
+    if (swapIdx < 0 || swapIdx >= items.length) return;
+    const next = [...items];
+    [next[idx], next[swapIdx]] = [next[swapIdx], next[idx]];
+    try {
+      const res = await fetch(`/api/admin/homepage-blocks/${block.id}/items`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ positions: next.map((it, i) => ({ id: it.id, position: (i + 1) * 10 })) }),
+      });
+      const j = await res.json().catch(() => null);
+      if (!res.ok) {
+        setErr(`${j?.message ?? j?.code ?? 'Failed to reorder games'} (Failed to reorder games. গেমের ক্রম পরিবর্তন ব্যর্থ হয়েছে।)`);
+        return;
+      }
+      load();
+    } catch {
+      setErr('Failed to reorder games: network error. গেমের ক্রম পরিবর্তন ব্যর্থ হয়েছে: নেটওয়ার্ক সমস্যা।');
     }
   };
 
@@ -505,12 +566,14 @@ function ItemsModal({ open, onOpenChange, block }: { open: boolean; onOpenChange
           <h3 className="text-xs font-bold uppercase tracking-wider text-brand-inkMute">Selected</h3>
           <ul className="mt-2 max-h-[60vh] space-y-1 overflow-y-auto pr-2">
             {items.length === 0 ? <li className="text-xs text-brand-inkMute">None yet.</li> : null}
-            {items.map((it) => (
+            {items.map((it, idx) => (
               <li key={it.id} className="flex items-center gap-2 rounded-lg border border-brand-divider bg-brand-paper px-2 py-1.5 text-xs">
                 <div className="min-w-0 grow">
                   <p className="truncate font-semibold text-brand-ink">{it.displayName}</p>
                   <p className="truncate text-[10px] text-brand-inkMute">{it.brandName ?? it.providerName} {it.category ? `. ${it.category}` : ''} {!it.live ? '. removed' : ''}</p>
                 </div>
+                <button type="button" disabled={idx === 0} onClick={() => moveItem(it.id, -1)} className="rounded p-1 text-brand-inkMute hover:bg-brand-surface disabled:opacity-40" title="Move up"><ArrowUp className="h-3.5 w-3.5" /></button>
+                <button type="button" disabled={idx === items.length - 1} onClick={() => moveItem(it.id, 1)} className="rounded p-1 text-brand-inkMute hover:bg-brand-surface disabled:opacity-40" title="Move down"><ArrowDown className="h-3.5 w-3.5" /></button>
                 <button type="button" onClick={() => toggleFlag(it.id, 'isHot', !it.isHot)} className={cn('rounded p-1', it.isHot ? 'bg-rose-500/15 text-rose-200' : 'text-brand-inkMute hover:bg-brand-surface')} title="Toggle hot"><Flame className="h-3.5 w-3.5" /></button>
                 <button type="button" onClick={() => toggleFlag(it.id, 'isJackpot', !it.isJackpot)} className={cn('rounded p-1', it.isJackpot ? 'bg-amber-500/15 text-amber-200' : 'text-brand-inkMute hover:bg-brand-surface')} title="Toggle jackpot"><Award className="h-3.5 w-3.5" /></button>
                 <button type="button" onClick={() => remove(it.id)} className="rounded p-1 text-rose-400 hover:bg-rose-500/10" title="Remove"><X className="h-3.5 w-3.5" /></button>

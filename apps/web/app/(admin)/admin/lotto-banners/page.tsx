@@ -5,10 +5,10 @@
 // Operator-facing manager for the carousel that sits at the top of
 // /lotto. Each row is either an image OR a video; the editor switches
 // between modes based on the kind dropdown. Image uploads use the
-// shared AdminMediaUpload (banners category, ~1200x600); video URLs
-// point at /uploads/videos/... (operator drops mp4 via the atelier
-// or any direct upload tool) and an optional poster image is the
-// thumbnail shown before play starts.
+// shared AdminMediaUpload (banners category, ~1200x600); videos use
+// the same uploader with the banner_videos category (the URL input
+// stays as a fallback for externally hosted files) and an optional
+// poster image is the thumbnail shown before play starts.
 
 'use client';
 
@@ -304,11 +304,19 @@ export default function AdminLottoBannersPage() {
               />
             ) : (
               <>
-                <FormField label="Video URL" required hint="mp4 served from /uploads/videos/...">
+                <AdminMediaUpload
+                  label="Upload video / ভিডিও আপলোড"
+                  hint="Upload an MP4 / WebM file, or paste a URL below."
+                  value={editor.videoUrl || null}
+                  category="banner_videos"
+                  constraintHint="MP4 / WebM, max 20 MB"
+                  onChange={(url) => setEditor({ ...editor, videoUrl: url ?? '' })}
+                />
+                <FormField label="Video URL" hint="Filled automatically after upload, or paste an MP4 / WebM link (absolute or /uploads/... path).">
                   <Input
                     value={editor.videoUrl ?? ''}
                     onChange={(e) => setEditor({ ...editor, videoUrl: e.target.value })}
-                    placeholder="/uploads/videos/lotto-explainer.mp4"
+                    placeholder="/uploads/banner_videos/lotto-explainer.mp4"
                   />
                 </FormField>
                 <AdminMediaUpload

@@ -29,7 +29,11 @@ const createSchema = z.object({
   category: z.string().trim().max(60).optional().nullable(),
   brandId: z.string().trim().max(60).optional().nullable(),
   limit: z.coerce.number().int().min(1).max(30).default(12),
-  position: z.coerce.number().int().min(0).max(9999).default(0),
+  // Optional: when omitted the block is appended after the current
+  // last one (max position + 10) so the up/down swap arrows always
+  // have distinct positions to exchange. A hardcoded default (100)
+  // made every new block tie and the swap-based reorder a no-op.
+  position: z.coerce.number().int().min(0).max(9999).optional(),
   isVisible: z.boolean().default(true),
   layout: z.string().trim().max(20).default('grid'),
 });
@@ -65,6 +69,12 @@ export async function POST(req: NextRequest) {
       return jsonError(400, 'BRAND_REQUIRED', 'sourceType=brand requires a brandId.');
     }
 
+    let position = parsed.data.position;
+    if (position === undefined) {
+      const maxPos = (await db.homepageGameBlock.aggregate({ _max: { position: true } }))._max.position ?? 0;
+      position = maxPos + 10;
+    }
+
     const row = await db.homepageGameBlock.create({
       data: {
         key: parsed.data.key,
@@ -76,7 +86,7 @@ export async function POST(req: NextRequest) {
         category: parsed.data.sourceType === 'category' ? parsed.data.category ?? null : null,
         brandId: parsed.data.sourceType === 'brand' ? parsed.data.brandId ?? null : null,
         limit: parsed.data.limit,
-        position: parsed.data.position,
+        position,
         isVisible: parsed.data.isVisible,
         layout: parsed.data.layout,
       },

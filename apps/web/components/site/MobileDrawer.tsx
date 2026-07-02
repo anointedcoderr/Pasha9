@@ -93,12 +93,15 @@ export function MobileDrawer({ open, onClose, isLoggedIn, onRequestLogin, onRequ
   const onCloseRef = useRef(onClose);
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
 
+  // The download entry only renders when the operator has configured
+  // the APK url (same treatment as AppDownloadSection); the old /apk
+  // fallback 404'd for players, so no url means no drawer entry.
   useEffect(() => {
     if (!open) return;
     fetch('/api/content/apk')
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        if (data?.url) setApkUrl(data.url as string);
+        setApkUrl(typeof data?.url === 'string' && data.url.trim() ? (data.url as string) : null);
       })
       .catch(() => {});
   }, [open]);
@@ -276,18 +279,20 @@ export function MobileDrawer({ open, onClose, isLoggedIn, onRequestLogin, onRequ
               </span>
               <span>{t('drawer.liveChat')}</span>
             </Link>
-            <a
-              href={apkUrl ?? '/apk'}
-              target={apkUrl ? '_blank' : undefined}
-              rel={apkUrl ? 'noreferrer' : undefined}
-              onClick={onClose}
-              className="drawer-link"
-            >
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-brand-yellow-500/10 text-brand-yellow-700">
-                <Download className="h-3.5 w-3.5" />
-              </span>
-              <span>{t('drawer.downloadApp')}</span>
-            </a>
+            {apkUrl ? (
+              <a
+                href={apkUrl}
+                target="_blank"
+                rel="noreferrer"
+                onClick={onClose}
+                className="drawer-link"
+              >
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-brand-yellow-500/10 text-brand-yellow-700">
+                  <Download className="h-3.5 w-3.5" />
+                </span>
+                <span>{t('drawer.downloadApp')}</span>
+              </a>
+            ) : null}
             {isLoggedIn ? (
               <button
                 type="button"

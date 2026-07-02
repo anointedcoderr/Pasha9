@@ -12,7 +12,7 @@
 
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { PageHeader } from '@/components/site/PageHeader';
 import { Card, CardHeader } from '@/components/ui/Card';
@@ -78,20 +78,34 @@ export default function AdminStaffPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [drawerStaff, setDrawerStaff] = useState<StaffRow | null>(null);
 
+  // Single AbortController shared by every loadStaff() invocation
+  // (manual Apply button, post-save reloads AND the debounced search
+  // effect). Each call aborts the previous in-flight request before
+  // starting its own, so a slow stale response can never clobber
+  // fresher results.
+  const abortRef = useRef<AbortController | null>(null);
+
   const loadStaff = useCallback(async () => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const signal = controller.signal;
     setError(null);
     try {
       const url = search.trim()
         ? `/api/admin/staff?q=${encodeURIComponent(search.trim())}`
         : '/api/admin/staff';
-      const res = await fetch(url, { cache: 'no-store' });
+      const res = await fetch(url, { cache: 'no-store', signal });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message ?? data?.code ?? 'Failed to load');
       setStaff(data.staff as StaffRow[]);
     } catch (e) {
+      // Aborted requests are superseded by a newer keystroke; a stale
+      // response must never clobber the fresh one (or paint an error).
+      if (e instanceof DOMException && e.name === 'AbortError') return;
       setError(e instanceof Error ? e.message : 'Failed to load staff');
     } finally {
-      setLoading(false);
+      if (!signal.aborted) setLoading(false);
     }
   }, [search]);
 
@@ -106,8 +120,16 @@ export default function AdminStaffPage() {
     } catch { /* ignore */ }
   }, []);
 
-  useEffect(() => { loadStaff(); }, [loadStaff]);
+  // Debounced (300ms): typing in the search box does not fire a fetch
+  // per keystroke. Cancellation of in-flight requests happens inside
+  // loadStaff() itself via abortRef.
+  useEffect(() => {
+    const timer = setTimeout(() => { void loadStaff(); }, 300);
+    return () => clearTimeout(timer);
+  }, [loadStaff]);
   useEffect(() => { loadSnapshot(); }, [loadSnapshot]);
+  // Abort any in-flight request when the page unmounts.
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   const permsByGroup = useMemo(() => {
     const map = new Map<string, PermissionRef[]>();
@@ -146,7 +168,7 @@ export default function AdminStaffPage() {
           <FormField label="Search">
             <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="username, phone, email" />
           </FormField>
-          <Button leftIcon={<RefreshCw className="h-3.5 w-3.5" />} onClick={loadStaff}>Apply</Button>
+          <Button leftIcon={<RefreshCw className="h-3.5 w-3.5" />} onClick={() => loadStaff()}>Apply</Button>
         </div>
       </Card>
 

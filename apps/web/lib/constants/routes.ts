@@ -22,6 +22,7 @@ export const ROUTES = {
   profile: '/profile',
   support: '/support',
   terms: '/terms',
+  privacy: '/privacy',
   responsible: '/responsible-gaming',
   dashboard: {
     home: '/dashboard',

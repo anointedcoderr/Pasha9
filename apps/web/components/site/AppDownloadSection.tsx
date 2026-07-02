@@ -1,8 +1,9 @@
 // Built by Anointed Coder.
 // App download promo with a phone mock SVG on the right and a Download Now
 // button on the left. The actual APK download link is sourced from the
-// SystemSetting `apk_download_url` via /api/content/apk; until it is set,
-// the CTA links to /apk with a placeholder visual.
+// SystemSetting `apk_download_url` via /api/content/apk. The APK ships
+// after handover, so until the operator sets the URL the whole section
+// stays hidden; the old fallback linked to /apk which 404'd for players.
 
 'use client';
 
@@ -24,8 +25,10 @@ export function AppDownloadSection() {
     return () => { alive = false; };
   }, []);
 
-  const href = apk.url ?? '/apk';
-  const external = !!apk.url;
+  // No APK configured yet: render nothing instead of a dead link.
+  if (!apk.url) return null;
+
+  const href = apk.url;
 
   return (
     <section className="overflow-hidden rounded-2xl border border-brand-divider bg-brand-paper">
@@ -41,8 +44,8 @@ export function AppDownloadSection() {
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <Link
               href={href}
-              target={external ? '_blank' : undefined}
-              rel={external ? 'noreferrer' : undefined}
+              target="_blank"
+              rel="noreferrer"
               className="btn-yellow inline-flex h-11 items-center gap-2 rounded-lg px-5 text-sm"
             >
               <Download className="h-4 w-4" /> {t('home.app.download')}

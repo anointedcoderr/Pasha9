@@ -14,12 +14,16 @@ import { useT } from '@/lib/i18n/context';
 const DISMISS_KEY = 'pasha9_app_strip_dismissed';
 
 // Visual states:
-//   'pending'   - effect has not run; render a hidden skeleton at the
-//                 same height as 'open' so the header sits at its
-//                 final Y from frame 1
-//   'open'      - real strip visible
-//   'closed'    - strip dismissed; height collapses to 0 and the
-//                 header rises to top
+//   'pending'   - effect has not run or the /api/content/apk probe has
+//                 not resolved; render a hidden skeleton at the same
+//                 height as 'open' so the header sits at its final Y
+//                 from frame 1
+//   'open'      - real strip visible (APK url is configured)
+//   'closed'    - strip dismissed, or no APK url configured; height
+//                 collapses to 0 and the header rises to top. Like
+//                 AppDownloadSection, the strip never links to the dead
+//                 /apk fallback - it simply stays hidden until the
+//                 operator sets the download URL.
 type State = 'pending' | 'open' | 'closed';
 
 export function MobileTopBar() {
@@ -31,13 +35,15 @@ export function MobileTopBar() {
     let alive = true;
     const dismissed = typeof window !== 'undefined' && localStorage.getItem(DISMISS_KEY) === '1';
     if (dismissed) { setState('closed'); return; }
-    setState('open');
     fetch('/api/content/apk')
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        if (alive && data?.url) setApkUrl(data.url as string);
+        if (!alive) return;
+        const url = typeof data?.url === 'string' && data.url.trim() ? (data.url as string) : null;
+        setApkUrl(url);
+        setState(url ? 'open' : 'closed');
       })
-      .catch(() => {});
+      .catch(() => { if (alive) setState('closed'); });
     return () => { alive = false; };
   }, []);
 
@@ -50,7 +56,7 @@ export function MobileTopBar() {
 
   // Pre-hydration skeleton holds the same height + border so the
   // header below does not shift when the real strip materialises.
-  if (state === 'pending') {
+  if (state === 'pending' || !apkUrl) {
     return (
       <div aria-hidden className="flex h-[57px] items-center border-b border-brand-divider bg-brand-paper lg:hidden" />
     );
@@ -77,9 +83,9 @@ export function MobileTopBar() {
         <p className="truncate text-[11px] text-brand-inkMute">Pasha 9</p>
       </div>
       <a
-        href={apkUrl ?? '/apk'}
-        target={apkUrl ? '_blank' : undefined}
-        rel={apkUrl ? 'noreferrer' : undefined}
+        href={apkUrl}
+        target="_blank"
+        rel="noreferrer"
         className="btn-yellow inline-flex h-11 items-center rounded-lg px-4 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue-500/40"
       >
         {t('navx.downloadApp')}

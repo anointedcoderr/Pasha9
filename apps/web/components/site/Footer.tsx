@@ -267,7 +267,7 @@ export function Footer() {
               <Link href={ROUTES.terms}>{lang === 'bn' ? 'শর্তাবলী' : 'Terms'}</Link>
               <Link href={ROUTES.responsible}>{lang === 'bn' ? 'দায়িত্বশীল গেমিং' : 'Responsible Gaming'}</Link>
               <Link href={ROUTES.support}>{lang === 'bn' ? 'সাপোর্ট' : 'Support'}</Link>
-              <Link href={ROUTES.terms}>{lang === 'bn' ? 'প্রাইভেসি' : 'Privacy'}</Link>
+              <Link href={ROUTES.privacy}>{lang === 'bn' ? 'প্রাইভেসি' : 'Privacy'}</Link>
             </nav>
           </div>
 

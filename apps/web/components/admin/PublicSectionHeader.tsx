@@ -34,6 +34,7 @@ export function PublicSectionHeader({ sectionKey, group }: { sectionKey: string;
   const [subtitleEn, setSubtitleEn] = useState('');
   const [subtitleBn, setSubtitleBn] = useState('');
   const [saving, setSaving] = useState(false);
+  const [seeding, setSeeding] = useState(false);
   const [info, setInfo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -84,10 +85,35 @@ export function PublicSectionHeader({ sectionKey, group }: { sectionKey: string;
     }
   };
 
+  // Recreates the default section rows (idempotent, keeps existing
+  // rows untouched) so the operator can fix an unseeded database with
+  // one click instead of a developer command.
+  const onSeed = async () => {
+    setSeeding(true);
+    setError(null);
+    try {
+      const r = await fetch('/api/admin/public-sections/seed', { method: 'POST' });
+      const j = await r.json().catch(() => null);
+      if (!r.ok) throw new Error(j?.message ?? j?.code ?? 'Set up failed. সেটআপ ব্যর্থ হয়েছে।');
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Set up failed. সেটআপ ব্যর্থ হয়েছে।');
+    } finally {
+      setSeeding(false);
+    }
+  };
+
   if (!row) {
     return (
       <Card padding="sm" className="border-l-4 border-amber-400/60">
-        <p className="text-sm text-amber-300">PublicSection row for &quot;{sectionKey}&quot; not found. Run the Phase A seed.</p>
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="text-sm text-amber-300">
+            This section has not been set up on this site yet. Click <strong>Set up section</strong> to create it with default titles you can edit right after.
+            {' '}এই সেকশনটি এখনো চালু হয়নি। <strong>Set up section</strong> বাটনে ক্লিক করলে ডিফল্ট শিরোনামসহ সেকশনটি তৈরি হবে, এরপরই আপনি সম্পাদনা করতে পারবেন।
+          </p>
+          <Button variant="gold" loading={seeding} onClick={onSeed}>Set up section</Button>
+          {error ? <span className="text-xs text-rose-300">{error}</span> : null}
+        </div>
       </Card>
     );
   }

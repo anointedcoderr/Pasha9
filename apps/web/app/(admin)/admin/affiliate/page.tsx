@@ -33,6 +33,9 @@ interface AdminAffiliateRow {
     affiliateTier?: { id: string; name: string } | null;
     _count: { referrals: number };
   };
+  // Flattened username + phone + referral code so the DataTable text
+  // search matches real values instead of stringifying the user object.
+  searchText: string;
 }
 
 interface TierLite {
@@ -66,7 +69,11 @@ export default function AdminAffiliatePage() {
       const res = await fetch(url, { cache: 'no-store' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message ?? data.code);
-      setRows((data.applications ?? []) as AdminAffiliateRow[]);
+      const list = (data.applications ?? []) as AdminAffiliateRow[];
+      setRows(list.map((r) => ({
+        ...r,
+        searchText: [r.user?.username, r.user?.phone, r.user?.referralCode].filter(Boolean).join(' '),
+      })));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load');
     } finally {
@@ -240,7 +247,7 @@ export default function AdminAffiliatePage() {
           columns={columns}
           data={rows}
           searchPlaceholder="Search username, phone, code"
-          searchKey={'user' as never}
+          searchKey="searchText"
         />
       )}
 

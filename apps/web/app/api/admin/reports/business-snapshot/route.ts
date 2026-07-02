@@ -19,7 +19,9 @@ function parseDate(v: string | null, fallback: Date): Date {
 
 export async function GET(req: NextRequest) {
   return withAuth(async () => {
-    await ensurePermission('reports.read');
+    // Same permission as the other reports/activity endpoints and the
+    // admin nav, so the whole reports page works under one grant.
+    await ensurePermission('activity.read');
     try {
       const url = req.nextUrl;
       const to = parseDate(url.searchParams.get('to'), new Date());

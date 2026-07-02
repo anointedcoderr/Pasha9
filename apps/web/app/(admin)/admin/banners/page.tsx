@@ -154,14 +154,29 @@ export default function AdminBannersPage() {
     }
   };
 
+  // Swap with the neighbour (like /admin/lotto-banners) instead of
+  // nudging position +/-1, which does nothing on ties and drives
+  // repeated taps toward 0. Positions are re-numbered 1..n from the
+  // swapped order so duplicate positions self-heal.
   const move = async (b: BannerRow, dir: -1 | 1) => {
+    const idx = banners.findIndex((x) => x.id === b.id);
+    if (idx < 0) return;
+    const swapIdx = idx + dir;
+    if (swapIdx < 0 || swapIdx >= banners.length) return;
+    const next = [...banners];
+    [next[idx], next[swapIdx]] = [next[swapIdx], next[idx]];
     try {
-      const res = await fetch(`/api/admin/banners/${b.id}`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ position: Math.max(0, b.position + dir) }),
-      });
-      if (!res.ok) {
+      const updates = next
+        .map((row, i) => ({ row, position: i + 1 }))
+        .filter(({ row, position }) => row.position !== position);
+      const results = await Promise.all(updates.map(({ row, position }) =>
+        fetch(`/api/admin/banners/${row.id}`, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ position }),
+        }),
+      ));
+      if (results.some((r) => !r.ok)) {
         setError('Failed to reorder banner. ব্যানারের ক্রম পরিবর্তন ব্যর্থ হয়েছে।');
         return;
       }
@@ -193,7 +208,7 @@ export default function AdminBannersPage() {
         ) : banners.length === 0 ? (
           <Card padding="lg"><EmptyState title="No banners yet" description="Create the first banner to populate the homepage hero." /></Card>
         ) : (
-          banners.map((b) => (
+          banners.map((b, idx) => (
             <Card key={b.id} padding="lg" className="flex flex-col gap-4 md:flex-row md:items-center">
               <BannerPreview accent={b.accent} title={b.title} subtitle={b.subtitle ?? ''} ctaLabel={b.ctaLabel ?? ''} />
               <div className="flex-1 space-y-2">
@@ -212,8 +227,8 @@ export default function AdminBannersPage() {
                 )}
               </div>
               <div className="flex flex-row items-center gap-2 md:flex-col">
-                <Button size="icon" variant="ghost" onClick={() => move(b, -1)}><ArrowUp className="h-4 w-4" /></Button>
-                <Button size="icon" variant="ghost" onClick={() => move(b, 1)}><ArrowDown className="h-4 w-4" /></Button>
+                <Button size="icon" variant="ghost" disabled={idx === 0} onClick={() => move(b, -1)}><ArrowUp className="h-4 w-4" /></Button>
+                <Button size="icon" variant="ghost" disabled={idx === banners.length - 1} onClick={() => move(b, 1)}><ArrowDown className="h-4 w-4" /></Button>
               </div>
               <div className="flex items-center gap-2">
                 <Switch checked={b.status === 'active'} onChange={() => toggle(b)} />

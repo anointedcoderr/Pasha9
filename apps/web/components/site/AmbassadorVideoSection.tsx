@@ -1,9 +1,10 @@
 // Built by Anointed Coder.
 // Brand ambassador + promo video section. Admin-editable from
-// /admin/ambassador. Until the admin populates them, the section falls
-// back to original Pasha 9 placeholder visuals so nothing copyrighted
-// ships by default. If the admin hides the ambassador via the active
-// toggle, the section renders nothing.
+// /admin/ambassador. The section only renders once the operator has
+// configured real content (an ambassador name or photo, or a promo
+// video); until then it stays hidden so the homepage never shows a
+// placeholder ambassador with a dead play button. If the admin hides
+// the ambassador via the active toggle, the section renders nothing.
 
 'use client';
 
@@ -39,7 +40,18 @@ export function AmbassadorVideoSection() {
     return () => { alive = false; };
   }, []);
 
-  if (data && !data.active) return null;
+  // Hidden until the fetch resolves AND the operator has switched the
+  // section on with real content behind it.
+  if (!data || !data.active) return null;
+
+  // Each card only renders when its own content exists, so a
+  // half-configured section (video without ambassador, or ambassador
+  // without video) never shows a placeholder card or a dead play
+  // button. With only one side configured the single card spans the
+  // full row.
+  const hasAmbassador = !!data.ambassador.name?.trim() || !!data.ambassador.imageUrl?.trim();
+  const hasVideo = !!data.video.url?.trim() || !!data.video.posterUrl?.trim();
+  if (!hasAmbassador && !hasVideo) return null;
 
   const a = {
     name: data?.ambassador.name ?? t('home.ambassador.fallbackName'),
@@ -54,9 +66,9 @@ export function AmbassadorVideoSection() {
   };
 
   return (
-    <section className="grid gap-3 md:grid-cols-2">
-      <AmbassadorCard {...a} />
-      <VideoCard {...v} />
+    <section className={hasAmbassador && hasVideo ? 'grid gap-3 md:grid-cols-2' : 'grid gap-3'}>
+      {hasAmbassador ? <AmbassadorCard {...a} /> : null}
+      {hasVideo ? <VideoCard {...v} /> : null}
     </section>
   );
 }
@@ -104,6 +116,9 @@ function VideoCard({ title, caption, url, posterUrl }: { title: string; caption:
           <h3 className="mt-2 text-xl font-extrabold leading-tight md:text-2xl">{title}</h3>
           <p className="mt-2 max-w-md text-sm text-white/75">{caption}</p>
         </div>
+        {/* The play button only renders when a real video url exists.
+            A poster-only configuration shows the artwork and copy with
+            no dead disabled button. */}
         {url ? (
           <a
             href={url}
@@ -114,16 +129,7 @@ function VideoCard({ title, caption, url, posterUrl }: { title: string; caption:
           >
             <Play className="h-5 w-5" />
           </a>
-        ) : (
-          <button
-            type="button"
-            aria-label="Play promo video"
-            disabled
-            className="inline-flex h-12 w-12 cursor-not-allowed items-center justify-center self-start rounded-full bg-brand-yellow-500/60 text-brand-ink shadow-lg"
-          >
-            <Play className="h-5 w-5" />
-          </button>
-        )}
+        ) : null}
       </div>
     </article>
   );

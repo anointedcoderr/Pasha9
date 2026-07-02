@@ -7,7 +7,7 @@
 
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { PageHeader } from '@/components/site/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -51,7 +51,17 @@ export default function AdminActivityPage() {
   const [to, setTo] = useState('');
   const [take, setTake] = useState(100);
 
+  // Single AbortController shared by every load() invocation (manual
+  // Reload / Apply buttons AND the debounced filter effect). Each call
+  // aborts the previous in-flight request before starting its own, so
+  // a slow stale response can never clobber fresher results.
+  const abortRef = useRef<AbortController | null>(null);
+
   const load = useCallback(async () => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const signal = controller.signal;
     setLoading(true);
     setError(null);
     try {
@@ -62,18 +72,30 @@ export default function AdminActivityPage() {
       if (from) params.set('from', new Date(from).toISOString());
       if (to) params.set('to', new Date(to).toISOString());
       params.set('take', String(Math.min(200, Math.max(1, take))));
-      const res = await fetch(`/api/admin/activity?${params.toString()}`, { cache: 'no-store' });
+      const res = await fetch(`/api/admin/activity?${params.toString()}`, { cache: 'no-store', signal });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message ?? data?.code ?? 'Failed to load');
       setRows((data.logs ?? []) as Row[]);
     } catch (e) {
+      // Aborted requests are superseded by a newer filter change; a
+      // stale response must never clobber the fresh one.
+      if (e instanceof DOMException && e.name === 'AbortError') return;
       setError(e instanceof Error ? e.message : 'Failed to load');
     } finally {
-      setLoading(false);
+      if (!signal.aborted) setLoading(false);
     }
   }, [q, action, actorId, from, to, take]);
 
-  useEffect(() => { load(); }, [load]);
+  // Debounced (300ms): typing in the filter inputs does not fire a
+  // fetch per keystroke. Cancellation of in-flight requests happens
+  // inside load() itself via abortRef.
+  useEffect(() => {
+    const timer = setTimeout(() => { void load(); }, 300);
+    return () => clearTimeout(timer);
+  }, [load]);
+
+  // Abort any in-flight request when the page unmounts.
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   const clearFilters = () => {
     setQ('');
@@ -93,7 +115,7 @@ export default function AdminActivityPage() {
         subtitle="Append-only audit trail across deposits, withdrawals, bonuses, commissions, lotto, staff and auth"
         icon={<ClipboardList className="h-5 w-5" />}
         action={
-          <Button variant="ghost" leftIcon={<RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />} onClick={load}>
+          <Button variant="ghost" leftIcon={<RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />} onClick={() => load()}>
             Reload
           </Button>
         }
@@ -126,7 +148,7 @@ export default function AdminActivityPage() {
             {hasFilters ? (
               <Button variant="ghost" leftIcon={<X className="h-3.5 w-3.5" />} onClick={clearFilters}>Clear filters</Button>
             ) : null}
-            <Button leftIcon={<FilterIcon className="h-3.5 w-3.5" />} onClick={load}>Apply</Button>
+            <Button leftIcon={<FilterIcon className="h-3.5 w-3.5" />} onClick={() => load()}>Apply</Button>
           </div>
         </div>
       </Card>

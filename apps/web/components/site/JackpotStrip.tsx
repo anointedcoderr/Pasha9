@@ -2,11 +2,13 @@
 //
 // Premium jackpot strip. Reads admin-configured values from
 // /api/content/jackpot (title, subtitle, background, per-card title +
-// icon + base value). Falls back to the bundled premium defaults when
-// the operator has not configured a key. Returns null when the admin
-// has disabled the section. The ticker on top still adds small live
-// increments so the card feels alive - those increments are purely
-// visual, no wallet or transaction impact.
+// icon + base value). The strip stays hidden until the operator has
+// configured a base value for every pool - the old bundled defaults
+// were invented numbers that animated straight out of the box, which
+// misled players. Returns null when the admin has disabled the
+// section. The ticker on top still adds small live increments so the
+// card feels alive - those increments are purely visual, no wallet or
+// transaction impact.
 
 'use client';
 
@@ -31,16 +33,12 @@ interface JackpotConfig {
   major: JackpotCard;
 }
 
-const DEFAULT_MINI = 493;
-const DEFAULT_GRAND = 121_497;
-const DEFAULT_MAJOR = 7_923;
-
 export function JackpotStrip() {
   const t = useT();
   const [cfg, setCfg] = useState<JackpotConfig | null>(null);
-  const [mini, setMini] = useState(DEFAULT_MINI);
-  const [grand, setGrand] = useState(DEFAULT_GRAND);
-  const [major, setMajor] = useState(DEFAULT_MAJOR);
+  const [mini, setMini] = useState(0);
+  const [grand, setGrand] = useState(0);
+  const [major, setMajor] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -66,8 +64,15 @@ export function JackpotStrip() {
     return () => clearInterval(id);
   }, []);
 
-  // Admin disabled the whole section. Render nothing.
-  if (cfg && cfg.enabled === false) return null;
+  // Render nothing until the config arrives, when the admin disabled
+  // the section, or while any pool is missing a real operator-set
+  // base value. No invented amounts ever reach the player.
+  if (!cfg || cfg.enabled === false) return null;
+  const configured =
+    typeof cfg.mini.value === 'number' &&
+    typeof cfg.grand.value === 'number' &&
+    typeof cfg.major.value === 'number';
+  if (!configured) return null;
 
   const sectionTitle = cfg?.title?.trim() || t('home.jackpot.title');
   const sectionSubtitle = cfg?.subtitle?.trim() || t('home.jackpot.subtitle');

@@ -129,15 +129,17 @@ export default function AdminNotificationsPage() {
   const setValue = (key: string, v: string) => setEdits((e) => ({ ...e, [key]: v }));
   const isMaskedDisplay = (key: string) => SECRET_KEY.test(key) && !(key in edits);
 
-  const save = async (keys: string[]) => {
+  // `pending` carries key/value pairs that were just chosen but may not
+  // be in the `edits` closure yet (setEdits is async). The catalog
+  // "Use this" button passes { sms_provider } explicitly so the PATCH
+  // body is never empty because of a stale closure.
+  const save = async (keys: string[], pending?: Record<string, string>) => {
     setSaving(true);
     try {
+      const merged: Record<string, string> = { ...edits, ...pending };
       const updates = keys
-        .filter((k) => k in edits)
-        .map((k) => ({ key: k, value: edits[k] }));
-      // Sensible default: when changing sms_provider via the catalog
-      // buttons we may not be in `edits` - allow direct add via setValue
-      // above.
+        .filter((k) => k in merged)
+        .map((k) => ({ key: k, value: merged[k] }));
       if (updates.length === 0) {
         flashToast('No changes to save.');
         setSaving(false);
@@ -159,7 +161,7 @@ export default function AdminNotificationsPage() {
 
   const setSmsProvider = async (newKey: string) => {
     setEdits((e) => ({ ...e, sms_provider: newKey }));
-    await save(['sms_provider']);
+    await save(['sms_provider'], { sms_provider: newKey });
   };
 
   const sendTestSms = async () => {

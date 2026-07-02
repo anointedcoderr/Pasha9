@@ -42,12 +42,17 @@ export const ADMIN_PERMISSION_MAP: AdminPermissionEntry[] = [
   { prefix: '/admin/payment-methods', permission: 'payment_methods.read' },
   { prefix: '/admin/withdrawal-limits', permission: 'withdrawals.read' },
   { prefix: '/admin/payments-reconciliation', permission: 'payments.read' },
-  { prefix: '/admin/deposit-notices', permission: 'settings.write' },
+  { prefix: '/admin/deposit-notice', permission: 'settings.write' },
   { prefix: '/admin/deposit-bonus-tiers', permission: 'bonuses.write' },
 
   // Users + balance + referral
   { prefix: '/admin/users', permission: 'users.read' },
-  { prefix: '/admin/balance', permission: 'balance.write' },
+  // The balance page's core mutation (/api/admin/users/[id]/balance)
+  // checks users.balance.adjust, so the page gate matches it.
+  { prefix: '/admin/balance', permission: 'users.balance.adjust' },
+  // VIP Club tier ladder + application queue; tiers API checks
+  // settings.write (same perm as the affiliate tier editor).
+  { prefix: '/admin/vip', permission: 'settings.write' },
   { prefix: '/admin/referrals', permission: 'referrals.read' },
   { prefix: '/admin/referral-claims', permission: 'referrals.write' },
   { prefix: '/admin/recovery', permission: 'recovery.write' },
@@ -81,18 +86,24 @@ export const ADMIN_PERMISSION_MAP: AdminPermissionEntry[] = [
 
   // Lotto and rewards
   { prefix: '/admin/lotto', permission: 'lotto.write' },
+  // The lotto-banners API checks homepage.write (it is homepage-style
+  // media curation, not draw management).
+  { prefix: '/admin/lotto-banners', permission: 'homepage.write' },
   { prefix: '/admin/rewards', permission: 'rewards.write' },
   { prefix: '/admin/reward-claims', permission: 'rewards.write' },
   { prefix: '/admin/betting-pass', permission: 'rewards.write' },
   { prefix: '/admin/spin-segments', permission: 'rewards.write' },
+  { prefix: '/admin/spin-tiers', permission: 'rewards.write' },
   { prefix: '/admin/native-games', permission: 'settings.write' },
 
   // Games catalogue
   { prefix: '/admin/categories', permission: 'settings.write' },
   { prefix: '/admin/providers', permission: 'settings.write' },
 
-  // Reports and marketing channels
-  { prefix: '/admin/reports', permission: 'reports.read' },
+  // Reports and marketing channels. The reports APIs (timeseries,
+  // cohorts, breakdown, export) check activity.read, so the page gate
+  // grants what the data endpoints actually demand.
+  { prefix: '/admin/reports', permission: 'activity.read' },
   { prefix: '/admin/marketing', permission: 'bonuses.read' },
   { prefix: '/admin/campaigns', permission: 'settings.write' },
   { prefix: '/admin/cashback', permission: 'bonuses.write' },
@@ -113,7 +124,8 @@ export const ADMIN_PERMISSION_MAP: AdminPermissionEntry[] = [
   { prefix: '/admin/deposit-prompt', permission: 'settings.write' },
   { prefix: '/admin/support', permission: 'support.read' },
   { prefix: '/admin/settings', permission: 'settings.write' },
-  { prefix: '/admin/activity', permission: 'reports.read' },
+  // /api/admin/activity checks activity.read.
+  { prefix: '/admin/activity', permission: 'activity.read' },
   { prefix: '/admin/handover', permission: 'staff.manage' },
 ];
 
@@ -163,7 +175,9 @@ export const ADMIN_MENU_PERMISSIONS: Record<string, string> = {
   depositBonusTiers: 'bonuses.write',
   // Users + balance + referral
   users: 'users.read',
-  balance: 'balance.write',
+  // Matches /api/admin/users/[id]/balance, which checks
+  // users.balance.adjust.
+  balance: 'users.balance.adjust',
   referrals: 'referrals.read',
   referralClaims: 'referrals.write',
   recovery: 'recovery.write',
@@ -193,11 +207,14 @@ export const ADMIN_MENU_PERMISSIONS: Record<string, string> = {
   socialLinks: 'settings.write',
   // Lotto + rewards
   lotto: 'lotto.write',
+  // The lotto-banners API checks homepage.write (media curation).
+  lottoBanners: 'homepage.write',
   rewards: 'rewards.write',
   rewardClaims: 'rewards.write',
   bettingPass: 'rewards.write',
   bettingPassBanners: 'rewards.write',
   spinSegments: 'rewards.write',
+  spinTiers: 'rewards.write',
   nativeGames: 'settings.write',
   // Games
   categories: 'settings.write',
@@ -206,8 +223,9 @@ export const ADMIN_MENU_PERMISSIONS: Record<string, string> = {
   // tier editor since the concepts are parallel (a tier ladder the
   // operator curates + an application queue staff approve from).
   vip: 'settings.write',
-  // Reports + marketing
-  reports: 'reports.read',
+  // Reports + marketing. The reports data APIs check activity.read,
+  // so the nav grants what the endpoints actually demand.
+  reports: 'activity.read',
   marketing: 'bonuses.read',
   campaigns: 'settings.write',
   cashback: 'bonuses.write',
@@ -226,7 +244,8 @@ export const ADMIN_MENU_PERMISSIONS: Record<string, string> = {
   depositPrompt: 'settings.write',
   support: 'support.read',
   settings: 'settings.write',
-  activity: 'reports.read',
+  // /api/admin/activity checks activity.read.
+  activity: 'activity.read',
   handover: 'staff.manage',
 };
 

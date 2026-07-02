@@ -208,45 +208,49 @@ export default function BettingPassPage() {
         </div>
       ) : null}
 
+      {/* No public ladder endpoint exists (the ladder rides on the
+          authed /api/betting-pass/me payload), so guests get a clear
+          bilingual login prompt instead of the misleading zeroed KPI
+          row that used to read "Top tier reached" with 0 points. */}
       {auth.kind === 'guest' ? (
-        <div className="card-light flex flex-wrap items-center justify-between gap-3 p-4">
-          <div className="flex items-start gap-3">
-            <Lock className="mt-0.5 h-5 w-5 text-brand-yellow-700" />
-            <div>
-              <p className="text-sm font-bold text-brand-ink">
-                {lang === 'bn' ? 'বেটিং পাস দেখতে লগইন করুন।' : 'Log in to see your Betting Pass.'}
-              </p>
-              <p className="text-xs text-brand-inkMute">
-                {lang === 'bn'
-                  ? 'প্রতিটি ডিপোজিট এবং প্রভাইডার বেট আপনাকে পয়েন্ট দেয়।'
-                  : 'Every approved deposit and provider bet earns points.'}
-              </p>
-            </div>
-          </div>
-          <Link href="/?login=1" className="btn-yellow inline-flex h-10 items-center rounded-lg px-5 text-sm">
+        <div className="card-light p-6 text-center">
+          <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-brand-yellow-500/15 text-brand-yellow-700">
+            <Lock className="h-6 w-6" />
+          </span>
+          <p className="mt-3 text-base font-extrabold text-brand-ink">
+            {lang === 'bn' ? 'আপনার বেটিং পাস দেখতে লগইন করুন।' : 'Log in to see your Betting Pass.'}
+          </p>
+          <p className="mx-auto mt-1 max-w-md text-sm text-brand-inkMute">
+            {lang === 'bn'
+              ? 'প্রতিটি অনুমোদিত ডিপোজিট এবং প্রভাইডার বেট আপনাকে পয়েন্ট দেয়। পয়েন্ট জমিয়ে স্তর আনলক করুন এবং রিওয়ার্ড দাবি করুন।'
+              : 'Every approved deposit and provider bet earns points. Collect points to unlock tiers and claim rewards. Log in to see your points, the tier ladder and what you can claim.'}
+          </p>
+          <Link href="/?login=1" className="btn-yellow mt-4 inline-flex h-10 items-center rounded-lg px-5 text-sm">
             <LogIn className="mr-1.5 h-4 w-4" />
             {lang === 'bn' ? 'লগইন' : 'Log in'}
           </Link>
         </div>
       ) : null}
 
+      {auth.kind === 'authed' && data ? (
       <section className="grid gap-3 md:grid-cols-3">
         <KpiCard
           icon={<Crown className="h-5 w-5" />}
           title={lang === 'bn' ? 'বর্তমান স্তর' : 'Current tier'}
-          value={data?.progress.currentTierName ?? (lang === 'bn' ? 'এখনো নেই' : 'Not yet')}
+          value={data.progress.currentTierName ?? (lang === 'bn' ? 'এখনো নেই' : 'Not yet')}
         />
         <KpiCard
           icon={<Star className="h-5 w-5" />}
           title={lang === 'bn' ? 'পাস পয়েন্ট' : 'Pass points'}
-          value={data ? data.progress.pointsTotal.toLocaleString() : '0'}
+          value={data.progress.pointsTotal.toLocaleString()}
         />
         <KpiCard
           icon={<Zap className="h-5 w-5" />}
           title={lang === 'bn' ? 'পরবর্তী রিওয়ার্ড' : 'Next reward'}
-          value={data?.progress.nextTierName ?? (lang === 'bn' ? 'সর্বোচ্চ স্তর' : 'Top tier reached')}
+          value={data.progress.nextTierName ?? (lang === 'bn' ? 'সর্বোচ্চ স্তর' : 'Top tier reached')}
         />
       </section>
+      ) : null}
 
       {data?.progress.nextTierRequirement && data.progress.pointsToNextTier > 0 ? (
         <section className="card-light p-4">
@@ -269,6 +273,7 @@ export default function BettingPassPage() {
         </section>
       ) : null}
 
+      {auth.kind === 'authed' ? (
       <section className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
         {(data?.ladder ?? []).length === 0 && !loading ? (
           <div className="col-span-full rounded-2xl border border-brand-divider bg-brand-paper p-4 text-sm text-brand-inkMute">
@@ -355,6 +360,7 @@ export default function BettingPassPage() {
           </article>
         ))}
       </section>
+      ) : null}
 
       {data?.enabled === false ? (
         <section className="card-light p-4">

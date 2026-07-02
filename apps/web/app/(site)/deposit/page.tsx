@@ -110,6 +110,13 @@ export default function DepositPage() {
   // CTA becomes "Pay BDT X with bKash/Nagad" which opens the
   // ChaopaoPay-hosted payment page.
   const [expressAvailable, setExpressAvailable] = useState(false);
+  // expressChecked / zinipayChecked flip true once each availability
+  // probe settles (success or failure). The method grid waits for
+  // methodsLoaded AND both flags before deciding between the empty
+  // state and the tile grid, so a gateway-only operator never sees
+  // the "no deposit methods" card flash while the probes are still
+  // in flight.
+  const [expressChecked, setExpressChecked] = useState(false);
   const [expressMethods, setExpressMethods] = useState<string[]>([]);
   const [expressIcons, setExpressIcons] = useState<{ bkash: string | null; nagad: string | null }>({ bkash: null, nagad: null });
   const [expressBusy, setExpressBusy] = useState<null | 'bkash' | 'nagad'>(null);
@@ -120,6 +127,7 @@ export default function DepositPage() {
   // wallet (bKash / Nagad / Rocket) on the ZinIPay page itself, so there
   // is no per-method choice on our side.
   const [zinipayAvailable, setZinipayAvailable] = useState(false);
+  const [zinipayChecked, setZinipayChecked] = useState(false);
   const [zinipayIcon, setZinipayIcon] = useState<string | null>(null);
   const [zinipayBusy, setZinipayBusy] = useState(false);
   const [notices, setNotices] = useState<NoticeRow[]>([]);
@@ -183,7 +191,8 @@ export default function DepositPage() {
           });
         }
       })
-      .catch(() => { /* probe is best-effort; Quick Pay just stays hidden */ });
+      .catch(() => { /* probe is best-effort; Quick Pay just stays hidden */ })
+      .finally(() => { if (alive) setExpressChecked(true); });
 
     // ZinIPay availability probe (independent of ChaopaoPay).
     fetch('/api/payments/zinipay/availability', { cache: 'no-store' })
@@ -195,7 +204,8 @@ export default function DepositPage() {
           setZinipayIcon(typeof j.icon === 'string' && j.icon.trim() ? j.icon : null);
         }
       })
-      .catch(() => { /* probe is best-effort */ });
+      .catch(() => { /* probe is best-effort */ })
+      .finally(() => { if (alive) setZinipayChecked(true); });
 
     fetch('/api/content/deposit-notice', { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
@@ -648,8 +658,27 @@ export default function DepositPage() {
                   ? 'একটি পদ্ধতি বেছে নিন। বিকাশ ও নগদ অটো-ক্রেডিট, অন্যান্য ম্যানুয়াল অনুমোদন।'
                   : 'Pick a method. bKash and Nagad auto-credit, others go through manual review.'}
               />
-              {!methodsLoaded && !expressAvailable ? (
+              {!methodsLoaded || !expressChecked || !zinipayChecked ? (
                 <p className="text-sm text-ink-mid">{lang === 'bn' ? 'লোড হচ্ছে...' : 'Loading...'}</p>
+              ) : methods.length === 0 && !expressAvailable && !zinipayAvailable ? (
+                // Designed empty state (mirrors the withdraw page): shown
+                // when the operator has not configured a single deposit
+                // channel yet, so the player knows what to do next
+                // instead of staring at an empty tile grid.
+                <div className="rounded-xl border border-dashed border-neon/25 bg-base-deep/40 px-4 py-8 text-center">
+                  <AlertTriangle className="mx-auto h-6 w-6 text-amber-500" />
+                  <p className="mt-3 text-sm font-semibold text-ink-hi">
+                    {lang === 'bn' ? 'কোনো ডিপোজিট পদ্ধতি এখনো চালু নেই।' : 'No deposit methods are available yet.'}
+                  </p>
+                  <p className="mx-auto mt-1 max-w-sm text-xs text-ink-mid">
+                    {lang === 'bn'
+                      ? 'অপারেটর টিম পেমেন্ট চ্যানেল প্রস্তুত করছে। কিছুক্ষণ পরে আবার চেষ্টা করুন, অথবা সাপোর্ট টিমের সাথে যোগাযোগ করুন।'
+                      : 'The team is setting up payment channels. Please check back shortly, or reach out to support and we will help you deposit.'}
+                  </p>
+                  <Link href="/support" className="mt-4 inline-flex h-9 items-center rounded-lg border border-neon/25 px-4 text-xs font-semibold text-ink-hi hover:border-neon/45">
+                    {lang === 'bn' ? 'সাপোর্টে যোগাযোগ করুন' : 'Contact support'}
+                  </Link>
+                </div>
               ) : (
                 <>
                   <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
