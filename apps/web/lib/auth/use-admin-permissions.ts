@@ -6,6 +6,12 @@
 // the mobile drawer and the layout-level URL gate without parallel
 // round-trips. Refresh fires when the wallet-refresh event runs
 // (login/logout/role change pushes through that channel today).
+//
+// Failure semantics matter here: a TRANSIENT failure (server restart
+// mid-deploy, network blip) must not be cached as "no permissions" for
+// the rest of the session, or the operator sees a nearly empty menu
+// until a hard reload. Transient failures retry with backoff; only a
+// definitive 401/403 (genuinely signed out or not staff) is final.
 
 'use client';
 
@@ -18,31 +24,62 @@ interface AdminAuth {
 }
 
 const INITIAL: AdminAuth = { loaded: false, role: '', permissions: [] };
+const RETRY_DELAYS_MS = [1000, 3000, 8000];
 
 let cached: AdminAuth = INITIAL;
-let inFlight: Promise<AdminAuth> | null = null;
+let inFlight: Promise<void> | null = null;
+let retryTimer: ReturnType<typeof setTimeout> | null = null;
+let attempt = 0;
 const listeners = new Set<(next: AdminAuth) => void>();
 
-async function fetchAuth(): Promise<AdminAuth> {
+function notify() {
+  for (const listener of listeners) listener(cached);
+}
+
+async function fetchAuth(): Promise<void> {
   try {
     const res = await fetch('/api/auth/me', { cache: 'no-store', credentials: 'include' });
-    if (!res.ok) {
+    if (res.status === 401 || res.status === 403) {
+      // Definitive: not signed in / not staff. Empty permissions are
+      // the truth, not an error.
       cached = { loaded: true, role: '', permissions: [] };
-      return cached;
+      attempt = 0;
+      return;
     }
+    if (!res.ok) throw new Error(`auth/me HTTP ${res.status}`);
     const data = await res.json();
     const role = String(data?.user?.role?.key ?? '');
     const permissions = Array.isArray(data?.permissions) ? (data.permissions as string[]) : [];
     cached = { loaded: true, role, permissions };
-    return cached;
+    attempt = 0;
   } catch {
-    cached = { loaded: true, role: '', permissions: [] };
-    return cached;
+    // Transient (restart, proxy hiccup, offline). Keep loaded=false so
+    // consumers know the answer is still pending, and retry with
+    // backoff instead of caching an empty permission set.
+    if (attempt < RETRY_DELAYS_MS.length) {
+      const delay = RETRY_DELAYS_MS[attempt];
+      attempt += 1;
+      if (!retryTimer) {
+        retryTimer = setTimeout(() => {
+          retryTimer = null;
+          kick();
+        }, delay);
+      }
+    } else {
+      // Give up after the backoff ladder; a hard reload or the
+      // wallet-refresh event starts a fresh cycle.
+      cached = { loaded: true, role: '', permissions: [] };
+      attempt = 0;
+    }
   }
 }
 
-function notify() {
-  for (const listener of listeners) listener(cached);
+function kick() {
+  if (inFlight) return;
+  inFlight = fetchAuth().then(() => {
+    inFlight = null;
+    notify();
+  });
 }
 
 export function useAdminPermissions(): AdminAuth {
@@ -50,21 +87,23 @@ export function useAdminPermissions(): AdminAuth {
 
   useEffect(() => {
     listeners.add(setState);
-    if (!cached.loaded) {
+    // Sync in case the module cache advanced between render and effect.
+    setState(cached);
+    if (!cached.loaded && !retryTimer) kick();
+    const onRefresh = () => {
+      // Explicit refresh (login/logout/role change): reset the backoff
+      // ladder and refetch even if a cached answer exists.
+      attempt = 0;
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+        retryTimer = null;
+      }
       if (!inFlight) {
-        inFlight = fetchAuth().then((next) => {
+        inFlight = fetchAuth().then(() => {
           inFlight = null;
           notify();
-          return next;
         });
       }
-    }
-    const onRefresh = () => {
-      inFlight = fetchAuth().then((next) => {
-        inFlight = null;
-        notify();
-        return next;
-      });
     };
     window.addEventListener('pasha9:wallet-refresh', onRefresh);
     return () => {
