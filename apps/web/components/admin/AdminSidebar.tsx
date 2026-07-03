@@ -251,6 +251,7 @@ export function AdminSidebar() {
             {BRAND.developer.name}
           </a>
         </p>
+        <p className="mt-0.5 text-[11px] text-brand-inkMute">{BRAND.developer.tagline}</p>
         <p className="mt-1 text-xs text-brand-inkSoft">
           <a href={`mailto:${BRAND.developer.email}`} className="hover:text-brand-ink">{BRAND.developer.email}</a>
         </p>

@@ -332,6 +332,8 @@ export function Footer() {
               >
                 {BRAND.developer.name}
               </a>
+              {'. '}
+              {BRAND.developer.tagline}
             </span>
             <a href={`mailto:${BRAND.developer.email}`} className="inline-flex items-center gap-1.5 hover:text-white">
               <Mail className="h-3 w-3" />

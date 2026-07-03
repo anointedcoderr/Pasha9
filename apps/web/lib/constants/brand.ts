@@ -27,6 +27,8 @@ export const BRAND = {
   developer: {
     label: 'Built by Anointed Coder',
     name: 'Anointed Coder',
+    /** Short pitch shown beside the credit. Invites work without offering copies of this platform. */
+    tagline: 'Want a platform this good? We build originals, not clones.',
     /** Public site for the developer; the "Anointed Coder" label in the footer links here. */
     website: 'https://anointedcoder.com',
     email: 'info@anointedcoder.com',
