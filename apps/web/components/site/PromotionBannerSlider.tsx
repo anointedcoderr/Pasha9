@@ -62,13 +62,24 @@ export function PromotionBannerSlider({ banners }: { banners: PromotionBannerRow
       onBlurCapture={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setHovered(false);
       }}
-      onTouchStart={(event) => { touchStartX.current = event.touches[0]?.clientX ?? null; }}
+      onTouchStart={(event) => {
+        // Touch pause: auto-rotation stops while a finger rests on the
+        // banner, reusing the same transient pause state hover uses.
+        setHovered(true);
+        touchStartX.current = event.touches[0]?.clientX ?? null;
+      }}
       onTouchEnd={(event) => {
+        // Resume rotation only once the last finger lifts.
+        if (event.touches.length === 0) setHovered(false);
         if (touchStartX.current == null) return;
         const distance = (event.changedTouches[0]?.clientX ?? touchStartX.current) - touchStartX.current;
         touchStartX.current = null;
         if (distance > 40) previous();
         if (distance < -40) next();
+      }}
+      onTouchCancel={() => {
+        touchStartX.current = null;
+        setHovered(false);
       }}
     >
       {active.imageUrl ? (() => {
@@ -122,10 +133,15 @@ export function PromotionBannerSlider({ banners }: { banners: PromotionBannerRow
           <button type="button" aria-label="Next" onClick={next} className="absolute right-2 top-1/2 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-black/35 md:flex">
             <ChevronRight className="h-4 w-4" />
           </button>
-          {/* Slide indicator dots plus the rotation pause / play toggle,
-              grouped in one bottom-center cluster so the toggle reads as
-              a carousel control, not a content playback button on the
-              banner artwork. The toggle is hidden when reduced motion
+          {/* Slide indicator dots stay visible; the rotation pause /
+              play toggle is visually hidden so operator banner artwork
+              shows with no floating control on top of it, on mobile
+              and desktop. The toggle stays in the tab order (same
+              sr-only plus focus:not-sr-only pattern as the skip link)
+              and pops in above the dots while keyboard focused, so
+              auto-rotating content keeps a working pause affordance.
+              Touch users get an implicit pause via the touch handlers
+              on the banner. The toggle is omitted when reduced motion
               has already stopped auto-rotation. */}
           <div className="absolute inset-x-0 bottom-2 flex items-center justify-center gap-1.5">
             {banners.map((banner, bannerIndex) => (
@@ -153,12 +169,8 @@ export function PromotionBannerSlider({ banners }: { banners: PromotionBannerRow
                   event.stopPropagation();
                   setPaused((current) => !current);
                 }}
-                className="relative ml-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur transition hover:bg-black/65 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-yellow-400/60"
+                className="sr-only focus:not-sr-only focus:absolute focus:bottom-full focus:left-1/2 focus:z-30 focus:mb-2 focus:inline-flex focus:h-6 focus:w-6 focus:-translate-x-1/2 focus:items-center focus:justify-center focus:rounded-full focus:bg-black/45 focus:text-white focus:backdrop-blur focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-yellow-400/60"
               >
-                {/* Invisible hit-area extender: keeps the visible control
-                    at dot scale while preserving a roughly 44x44 tap
-                    target. */}
-                <span aria-hidden className="absolute -inset-2.5" />
                 {paused ? <Play className="h-3 w-3" /> : <Pause className="h-3 w-3" />}
               </button>
             ) : null}

@@ -276,11 +276,17 @@ export function HeroSlider() {
   // gestures horizontally.
   const swipeRef = useRef<{ startX: number; startY: number; t: number } | null>(null);
   const onTouchStart = (e: React.TouchEvent<HTMLElement>) => {
+    // Touch pause: auto-rotation stops while a finger rests on the
+    // slider, reusing the same transient pause state the mouse hover
+    // pause uses. Released on touch end / cancel below.
+    setHovered(true);
     if (e.touches.length !== 1 || slides.length < 2) return;
     const t = e.touches[0];
     swipeRef.current = { startX: t.clientX, startY: t.clientY, t: Date.now() };
   };
   const onTouchEnd = (e: React.TouchEvent<HTMLElement>) => {
+    // Resume rotation only once the last finger lifts.
+    if (e.touches.length === 0) setHovered(false);
     const start = swipeRef.current;
     swipeRef.current = null;
     if (!start || slides.length < 2) return;
@@ -292,6 +298,10 @@ export function HeroSlider() {
     if (dt > 800) return;
     if (dx < 0) setI((p) => (p + 1) % slides.length);
     else setI((p) => (p - 1 + slides.length) % slides.length);
+  };
+  const onTouchCancel = () => {
+    swipeRef.current = null;
+    setHovered(false);
   };
 
   // Auto-rotate. Use the longer dwell when the active slide is a video so
@@ -325,6 +335,7 @@ export function HeroSlider() {
     <section
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
+      onTouchCancel={onTouchCancel}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onFocusCapture={() => setHovered(true)}
@@ -498,11 +509,16 @@ export function HeroSlider() {
         </button>
       ) : null}
 
-      {/* Slide indicator dots plus the rotation pause / play toggle,
-          grouped in one bottom-center cluster so the toggle reads as a
-          carousel control, not a content playback button on the banner
-          artwork. The toggle is hidden when reduced motion has already
-          stopped auto-rotation or when there is a single slide. */}
+      {/* Slide indicator dots stay visible; the rotation pause / play
+          toggle is visually hidden so operator banner artwork shows
+          with no floating control on top of it, on mobile and desktop.
+          The toggle stays in the tab order (same sr-only plus
+          focus:not-sr-only pattern as the skip link) and pops in above
+          the dots while keyboard focused, so auto-rotating content
+          keeps a working pause affordance. Touch users get an implicit
+          pause via the touch handlers on the section. The toggle is
+          omitted when reduced motion has already stopped auto-rotation
+          or when there is a single slide. */}
       <div className="absolute inset-x-0 bottom-3 z-10 flex items-center justify-center gap-2">
         {slides.map((_, idx) => (
           <button
@@ -525,11 +541,8 @@ export function HeroSlider() {
                 ? (lang === 'bn' ? 'স্বয়ংক্রিয় স্লাইড চালু করুন' : 'Play automatic slideshow')
                 : (lang === 'bn' ? 'স্বয়ংক্রিয় স্লাইড থামান' : 'Pause automatic slideshow')
             }
-            className="relative ml-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur transition hover:bg-black/65 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-yellow-500/60"
+            className="sr-only focus:not-sr-only focus:absolute focus:bottom-full focus:left-1/2 focus:z-30 focus:mb-2 focus:inline-flex focus:h-6 focus:w-6 focus:-translate-x-1/2 focus:items-center focus:justify-center focus:rounded-full focus:bg-black/45 focus:text-white focus:backdrop-blur focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-yellow-500/60"
           >
-            {/* Invisible hit-area extender: keeps the visible control at
-                dot scale while preserving a roughly 44x44 tap target. */}
-            <span aria-hidden className="absolute -inset-2.5" />
             {paused ? <Play className="h-3 w-3" /> : <Pause className="h-3 w-3" />}
           </button>
         ) : null}
