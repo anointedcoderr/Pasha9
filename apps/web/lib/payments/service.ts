@@ -272,13 +272,24 @@ export async function ingestProviderEvent(provider: ProviderKey, event: Provider
       where: { id: credited.depositId },
       select: { method: true },
     });
-    const { notifyDepositApproved } = await import('@/lib/notifications/notify');
+    const { notifyDepositApproved, notifyAdminsDepositAutoCredited } = await import('@/lib/notifications/notify');
     await notifyDepositApproved({
       userId: candidate.userId,
       amount: Number(amount),
       method: depRow?.method ?? provider,
       depositId: credited.depositId,
     });
+    // Operator-facing ping (bell + push + Telegram). Gateway credits
+    // used to be invisible to staff because only the manual submit path
+    // called notifyAdmins. Runs after the credit transaction committed,
+    // fire-and-forget: a notify failure never affects the credit.
+    notifyAdminsDepositAutoCredited({
+      depositId: credited.depositId,
+      amount: Number(amount),
+      method: depRow?.method ?? provider,
+      provider,
+      userId: candidate.userId,
+    }).catch((err) => console.error('auto-credit admin notify failed', err));
   } catch (err) {
     console.error('auto-credit notify failed', err);
   }

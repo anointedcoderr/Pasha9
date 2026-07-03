@@ -12,6 +12,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db/client';
 import { withAuth, ensurePermission, recordActivity } from '@/lib/auth/guard';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
+import { invalidateTelegramSettingsCache } from '@/lib/telegram/notify';
 
 const ALLOWED_KEYS = new Set([
   'sms_provider',
@@ -24,6 +25,9 @@ const ALLOWED_KEYS = new Set([
   'sms_twilio_from',
   'sms_smsnetbd_api_key',
   'sms_smsnetbd_endpoint',
+  'telegram_alerts_enabled',
+  'telegram_bot_token',
+  'telegram_chat_id',
   'pixel_facebook',
   'pixel_facebook_capi_token',
   'pixel_facebook_test_event_code',
@@ -61,7 +65,9 @@ export async function PATCH(req: NextRequest) {
         db.systemSetting.upsert({
           where: { key: u.key },
           update: { value: u.value },
-          create: { key: u.key, value: u.value, category: u.key.startsWith('sms_') ? 'sms' : 'tracking' },
+          // SettingCategory has no dedicated telegram value, so the
+          // Telegram keys live under 'general' (schema stays untouched).
+          create: { key: u.key, value: u.value, category: u.key.startsWith('sms_') ? 'sms' : u.key.startsWith('telegram_') ? 'general' : 'tracking' },
         }),
       );
       writtenKeys.push(u.key);
@@ -70,6 +76,12 @@ export async function PATCH(req: NextRequest) {
     if (ops.length === 0) return jsonOk({ ok: true, updated: 0 });
 
     await db.$transaction(ops);
+
+    // Telegram settings are cached briefly on the hot notify path;
+    // drop the cache so a fresh token / chat id applies immediately.
+    if (writtenKeys.some((k) => k.startsWith('telegram_'))) {
+      invalidateTelegramSettingsCache();
+    }
 
     await recordActivity({
       actorId: session.sub,

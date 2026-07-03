@@ -8,11 +8,30 @@ import { db } from '@/lib/db/client';
 import { withAuth, ensurePermission, recordActivity } from '@/lib/auth/guard';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 
+// Secret-shaped keys (telegram_bot_token, sms_*_api_token, CAPI
+// tokens, ...) must never leave this route in full. Same regex and
+// masked form as the notifications snapshot route. Masking in place
+// (instead of dropping the rows) is safe here because every consumer
+// of this GET (/admin/settings, /admin/website,
+// /admin/withdrawal-limits) filters to its own non-secret keys and
+// PATCHes only those keys back from local state, so a masked value
+// can never round-trip into a save.
+const SECRET_KEY = /(token|secret|api_key|api_token|auth_token)/i;
+
+function maskSecret(value: string): string {
+  if (!value) return '';
+  if (value.length <= 8) return '****';
+  return `${value.slice(0, 4)}...${value.slice(-2)}`;
+}
+
 export async function GET() {
   return withAuth(async () => {
     await ensurePermission('settings.write');
     const settings = await db.systemSetting.findMany({ orderBy: { key: 'asc' } });
-    return jsonOk({ settings });
+    const safe = settings.map((s) =>
+      SECRET_KEY.test(s.key) ? { ...s, value: maskSecret(s.value ?? '') } : s,
+    );
+    return jsonOk({ settings: safe });
   });
 }
 

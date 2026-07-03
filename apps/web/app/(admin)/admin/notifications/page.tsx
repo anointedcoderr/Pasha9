@@ -15,7 +15,8 @@ import { Chip } from '@/components/ui/Chip';
 import { FormField, Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/Tabs';
-import { Bell, RefreshCw, Save, Send, Activity, Wifi, Eye, EyeOff, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Switch } from '@/components/ui/Switch';
+import { Bell, RefreshCw, Save, Send, Activity, Wifi, Eye, EyeOff, AlertCircle, CheckCircle2, MessageCircle, Search } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 
 interface SmsAdapterRow {
@@ -77,8 +78,14 @@ function statusTone(s: string): 'ok' | 'warn' | 'neutral' {
   return 'neutral';
 }
 
+interface TelegramChatRow {
+  id: string;
+  title: string;
+  type: string;
+}
+
 export default function AdminNotificationsPage() {
-  const [tab, setTab] = useState<'sms' | 'tracking' | 'history'>('sms');
+  const [tab, setTab] = useState<'sms' | 'telegram' | 'tracking' | 'history'>('sms');
 
   // Deep-linking: /admin/notifications?tab=tracking should land on
   // the Tracking tab without a flash. Runs once on mount; SSR
@@ -86,7 +93,7 @@ export default function AdminNotificationsPage() {
   // mismatch.
   useEffect(() => {
     const v = new URLSearchParams(window.location.search).get('tab');
-    if (v === 'tracking' || v === 'history') setTab(v);
+    if (v === 'telegram' || v === 'tracking' || v === 'history') setTab(v);
   }, []);
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const [loading, setLoading] = useState(true);
@@ -108,6 +115,12 @@ export default function AdminNotificationsPage() {
   const [testEventValue, setTestEventValue] = useState(1000);
   const [eventBusy, setEventBusy] = useState(false);
 
+  // Telegram tab
+  const [telegramTestBusy, setTelegramTestBusy] = useState(false);
+  const [detectBusy, setDetectBusy] = useState(false);
+  const [detectedChats, setDetectedChats] = useState<TelegramChatRow[] | null>(null);
+  const [detectError, setDetectError] = useState<string | null>(null);
+
   const load = useCallback(async () => {
     setError(null);
     try {
@@ -127,7 +140,6 @@ export default function AdminNotificationsPage() {
 
   const value = (key: string): string => edits[key] ?? snap?.settings[key] ?? '';
   const setValue = (key: string, v: string) => setEdits((e) => ({ ...e, [key]: v }));
-  const isMaskedDisplay = (key: string) => SECRET_KEY.test(key) && !(key in edits);
 
   // `pending` carries key/value pairs that were just chosen but may not
   // be in the `edits` closure yet (setEdits is async). The catalog
@@ -202,8 +214,52 @@ export default function AdminNotificationsPage() {
     } finally { setEventBusy(false); }
   };
 
+  const sendTestTelegram = async () => {
+    setTelegramTestBusy(true);
+    try {
+      const res = await fetch('/api/admin/notifications/test-telegram', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message ?? data?.code ?? 'Send failed');
+      const r = data.result;
+      if (r.ok) flashToast('Test message delivered to the Telegram group. টেস্ট মেসেজ টেলিগ্রাম গ্রুপে পৌঁছেছে।');
+      else flashToast(`Telegram test failed: ${r.error ?? 'unknown error'}. টেলিগ্রাম টেস্ট ব্যর্থ হয়েছে।`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Send failed');
+    } finally { setTelegramTestBusy(false); }
+  };
+
+  const detectTelegramChats = async () => {
+    setDetectBusy(true);
+    setDetectError(null);
+    setDetectedChats(null);
+    try {
+      const res = await fetch('/api/admin/notifications/telegram-chats', { cache: 'no-store' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message ?? data?.code ?? 'Detect failed');
+      if (!data.ok) {
+        setDetectError(data.error ?? 'Could not read updates from Telegram.');
+        return;
+      }
+      setDetectedChats(data.chats as TelegramChatRow[]);
+    } catch (e) {
+      setDetectError(e instanceof Error ? e.message : 'Detect failed');
+    } finally { setDetectBusy(false); }
+  };
+
+  const setTelegramEnabled = async (next: boolean) => {
+    const v = next ? 'true' : 'false';
+    setEdits((e) => ({ ...e, telegram_alerts_enabled: v }));
+    await save(['telegram_alerts_enabled'], { telegram_alerts_enabled: v });
+  };
+
+  const applyDetectedChatId = async (id: string) => {
+    setEdits((e) => ({ ...e, telegram_chat_id: id }));
+    await save(['telegram_chat_id'], { telegram_chat_id: id });
+  };
+
   const trackingDirty = useMemo(() => Object.keys(edits).some((k) => k.startsWith('pixel_') || k.startsWith('analytics_')), [edits]);
   const smsDirty = useMemo(() => Object.keys(edits).some((k) => k.startsWith('sms_')), [edits]);
+  const telegramDirty = useMemo(() => Object.keys(edits).some((k) => k === 'telegram_bot_token' || k === 'telegram_chat_id'), [edits]);
 
   return (
     <>
@@ -228,9 +284,10 @@ export default function AdminNotificationsPage() {
       {toast ? <Card padding="md" className="mb-4"><p className="text-sm text-signal-ok">{toast}</p></Card> : null}
       {error ? <Card padding="md" className="mb-4"><p className="text-sm text-signal-danger">{error}</p></Card> : null}
 
-      <Tabs value={tab} onValueChange={(v) => setTab(v as 'sms' | 'tracking' | 'history')}>
+      <Tabs value={tab} onValueChange={(v) => setTab(v as 'sms' | 'telegram' | 'tracking' | 'history')}>
         <TabsList>
           <TabsTrigger value="sms"><Send className="mr-1.5 h-3.5 w-3.5" /> SMS</TabsTrigger>
+          <TabsTrigger value="telegram"><MessageCircle className="mr-1.5 h-3.5 w-3.5" /> Telegram</TabsTrigger>
           <TabsTrigger value="tracking"><Wifi className="mr-1.5 h-3.5 w-3.5" /> Tracking</TabsTrigger>
           <TabsTrigger value="history"><Activity className="mr-1.5 h-3.5 w-3.5" /> History</TabsTrigger>
         </TabsList>
@@ -267,9 +324,14 @@ export default function AdminNotificationsPage() {
                     {a.settingKeys.map((k) => (
                       <FormField key={k} label={k} hint={SECRET_KEY.test(k) ? 'Stored masked. Leave blank to keep current value.' : undefined}>
                         <Input
-                          value={isMaskedDisplay(k) && !showSecrets ? value(k) : (edits[k] ?? (showSecrets ? snap.settings[k] ?? '' : value(k)))}
+                          // Secret fields start empty so the masked
+                          // hint can never be edited and saved as the
+                          // real value; the stored mask is shown as
+                          // placeholder text only. Blank still means
+                          // "keep the current value" on save.
+                          value={SECRET_KEY.test(k) ? (edits[k] ?? '') : value(k)}
                           onChange={(e) => setValue(k, e.target.value)}
-                          placeholder={isMaskedDisplay(k) ? 'masked' : undefined}
+                          placeholder={SECRET_KEY.test(k) ? (snap.settings[k] || 'not set') : undefined}
                           type={SECRET_KEY.test(k) && !showSecrets ? 'password' : 'text'}
                         />
                       </FormField>
@@ -295,6 +357,113 @@ export default function AdminNotificationsPage() {
                   <Button variant="gold" leftIcon={<Save className="h-3.5 w-3.5" />} loading={saving} disabled={!smsDirty}
                     onClick={() => save(Object.keys(edits).filter((k) => k.startsWith('sms_')))}>
                     Save SMS settings
+                  </Button>
+                </div>
+              </Card>
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="telegram">
+          {!snap ? <p className="text-sm text-ink-mid">Loading...</p> : (
+            <div className="space-y-4">
+              <Card padding="md">
+                <CardHeader
+                  title="Telegram group alerts"
+                  subtitle="Every staff notification (deposits, withdrawals, VIP requests, reward claims, gateway auto-credits) is also posted to your private Telegram group. প্রতিটি অ্যাডমিন নোটিফিকেশন আপনার প্রাইভেট টেলিগ্রাম গ্রুপেও পাঠানো হবে।"
+                />
+                <div className="mt-3 flex items-center justify-between rounded-xl border border-neon/10 bg-base-deep/40 p-3">
+                  <div>
+                    <p className="text-sm font-semibold text-ink-hi">Send alerts to Telegram</p>
+                    <p className="mt-0.5 text-xs text-ink-mid">Turn on after the test message below works. নিচের টেস্ট মেসেজ সফল হলে চালু করুন।</p>
+                  </div>
+                  <Switch
+                    checked={value('telegram_alerts_enabled') === 'true'}
+                    onChange={(next) => { void setTelegramEnabled(next); }}
+                    label="Send alerts to Telegram"
+                    disabled={saving}
+                  />
+                </div>
+              </Card>
+
+              <Card padding="md">
+                <CardHeader
+                  title="Bot credentials"
+                  subtitle="Open Telegram, message @BotFather, send /newbot and copy the token it gives you. Then add the bot to your operator group. টেলিগ্রামে @BotFather-কে /newbot পাঠিয়ে টোকেন নিন, তারপর বটটিকে আপনার গ্রুপে যোগ করুন।"
+                />
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  <FormField label="Bot token" hint="Stored masked. Leave blank to keep current value. টোকেন গোপন রাখা হয়; ফাঁকা রাখলে আগেরটাই থাকবে।">
+                    <Input
+                      // Starts empty; the stored masked token is only
+                      // a placeholder so it can never be submitted.
+                      // Blank keeps the saved token.
+                      value={edits['telegram_bot_token'] ?? ''}
+                      onChange={(e) => setValue('telegram_bot_token', e.target.value)}
+                      placeholder={snap.settings['telegram_bot_token'] || '123456789:AA...'}
+                      type={showSecrets ? 'text' : 'password'}
+                    />
+                  </FormField>
+                  <FormField label="Group chat id" hint="Use the detect button below; you never have to type this by hand. নিচের ডিটেক্ট বাটন ব্যবহার করুন।">
+                    <Input
+                      value={value('telegram_chat_id')}
+                      onChange={(e) => setValue('telegram_chat_id', e.target.value)}
+                      placeholder="-1001234567890"
+                    />
+                  </FormField>
+                </div>
+                <div className="mt-3 flex justify-end">
+                  <Button variant="gold" leftIcon={<Save className="h-3.5 w-3.5" />} loading={saving} disabled={!telegramDirty}
+                    onClick={() => save(Object.keys(edits).filter((k) => k === 'telegram_bot_token' || k === 'telegram_chat_id'))}>
+                    Save Telegram settings
+                  </Button>
+                </div>
+              </Card>
+
+              <Card padding="md">
+                <CardHeader
+                  title="Detect group id"
+                  subtitle="Save the bot token first, add the bot to your group and send any message there, then click detect. We list every group the bot can see so you just pick yours. টোকেন সেভ করে বটটিকে গ্রুপে যোগ করুন, গ্রুপে একটি মেসেজ পাঠান, তারপর ডিটেক্ট চাপুন।"
+                />
+                <div className="mt-3 flex justify-end">
+                  <Button variant="ghost" leftIcon={<Search className="h-3.5 w-3.5" />} loading={detectBusy} onClick={detectTelegramChats}>
+                    Detect group id
+                  </Button>
+                </div>
+                {detectError ? <p className="mt-2 text-sm text-signal-danger">{detectError}</p> : null}
+                {detectedChats !== null ? (
+                  detectedChats.length === 0 ? (
+                    <p className="mt-2 text-sm text-ink-mid">
+                      No groups found yet. Add the bot to your operator group and send one message there, then try again.
+                      {' '}এখনও কোনো গ্রুপ পাওয়া যায়নি। বটটিকে গ্রুপে যোগ করে সেখানে একটি মেসেজ পাঠান, তারপর আবার চেষ্টা করুন।
+                    </p>
+                  ) : (
+                    <div className="mt-3 space-y-2">
+                      {detectedChats.map((c) => (
+                        <div key={c.id} className="flex items-center justify-between gap-2 rounded-xl border border-neon/10 bg-base-deep/40 p-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-ink-hi">{c.title}</p>
+                            <p className="mt-0.5 font-mono text-[11px] text-ink-lo">{c.type} ; {c.id}</p>
+                          </div>
+                          {value('telegram_chat_id') === c.id ? (
+                            <Chip tone="ok"><span className="inline-flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> current</span></Chip>
+                          ) : (
+                            <Button size="sm" variant="neon" disabled={saving} onClick={() => applyDetectedChatId(c.id)}>Use this group</Button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )
+                ) : null}
+              </Card>
+
+              <Card padding="md">
+                <CardHeader
+                  title="Send a test message"
+                  subtitle="Posts a short test line to the saved group using the saved token, even while alerts are still switched off. সেভ করা টোকেন ও গ্রুপে একটি টেস্ট মেসেজ পাঠায়; অ্যালার্ট বন্ধ থাকলেও কাজ করে।"
+                />
+                <div className="mt-3 flex justify-end">
+                  <Button variant="ghost" leftIcon={<Send className="h-3.5 w-3.5" />} loading={telegramTestBusy} onClick={sendTestTelegram}>
+                    Send test message
                   </Button>
                 </div>
               </Card>
@@ -355,8 +524,12 @@ export default function AdminNotificationsPage() {
                   ].map(([k, label]) => (
                     <FormField key={k} label={label} hint={SECRET_KEY.test(k) ? 'Stored masked. Leave blank to keep current value.' : undefined}>
                       <Input
-                        value={edits[k] ?? (showSecrets ? snap.settings[k] ?? '' : (isMaskedDisplay(k) ? snap.settings[k] ?? '' : ''))}
+                        // Same rule as the SMS credentials: secret
+                        // fields start empty, the stored mask is only
+                        // a placeholder, blank keeps the saved value.
+                        value={SECRET_KEY.test(k) ? (edits[k] ?? '') : value(k)}
                         onChange={(e) => setValue(k, e.target.value)}
+                        placeholder={SECRET_KEY.test(k) ? (snap.settings[k] || 'not set') : undefined}
                         type={SECRET_KEY.test(k) && !showSecrets ? 'password' : 'text'}
                       />
                     </FormField>

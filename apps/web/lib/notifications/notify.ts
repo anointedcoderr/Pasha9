@@ -19,6 +19,7 @@
 import { db } from '@/lib/db/client';
 import { dispatchFcmToUsers } from '@/lib/push/fcm';
 import { dispatchPushToUsers } from '@/lib/push/dispatch';
+import { buildAdminTelegramMessage, sendTelegramAlert } from '@/lib/telegram/notify';
 
 export type NotificationKind =
   | 'cashback'
@@ -47,6 +48,7 @@ export type NotificationKind =
   // tests the player flow on the same account does not see player
   // celebration popups in the admin shell.
   | 'admin_deposit_pending'
+  | 'admin_deposit_auto_credited'
   | 'admin_withdrawal_pending'
   | 'admin_reward_claim_pending'
   | 'admin_affiliate_application_pending'
@@ -418,6 +420,18 @@ export async function notifyAdmins(opts: NotifyAdminsOpts): Promise<string | nul
       notificationId: n.id,
     }).catch((err) => console.error('[notifyAdmins] web-push dispatch failed', opts.kind, err));
 
+    // Telegram group alert for the operator team. Same best-effort
+    // fire-and-forget contract as the two push channels above: the
+    // adapter no-ops when the admin toggle is off, has its own 5s
+    // timeout, and never throws, so a Telegram outage can never touch
+    // the money flow that triggered this notification.
+    void sendTelegramAlert(buildAdminTelegramMessage({
+      titleEn: opts.titleEn,
+      titleBn: opts.titleBn,
+      bodyEn: opts.bodyEn,
+      linkUrl: opts.linkUrl,
+    })).catch((err) => console.error('[notifyAdmins] telegram dispatch failed', opts.kind, err));
+
     return n.id;
   } catch (err) {
     console.error('[notifyAdmins] failed', opts.kind, err);
@@ -459,6 +473,29 @@ export async function notifyAdminsDepositPending(input: {
     titleBn: `নতুন ডিপোজিট: ${fmt(input.amount)} BDT (${input.method})`,
     bodyEn: `${who} submitted a ${fmt(input.amount)} BDT deposit via ${input.method}. Ref ${shortRef(input.depositId)}. Review at /admin/deposits.`,
     bodyBn: `${who} ${input.method}-এর মাধ্যমে ${fmt(input.amount)} BDT ডিপোজিট জমা দিয়েছেন। Ref ${shortRef(input.depositId)}.`,
+    linkUrl: '/admin/deposits',
+    priority: 'high',
+  });
+}
+
+// Gateway webhook auto-credits (ZiniPay, ChaopaoPay) approve a deposit
+// without any admin action, so before this helper existed the operator
+// never heard about them. Called AFTER the credit transaction commits,
+// fire-and-forget, exactly like the manual-deposit pending ping above.
+export async function notifyAdminsDepositAutoCredited(input: {
+  depositId: string;
+  amount: number;
+  method: string;
+  provider: string;
+  userId: string;
+}): Promise<void> {
+  const who = await resolvePlayerHandle(input.userId);
+  await notifyAdmins({
+    kind: 'admin_deposit_auto_credited',
+    titleEn: `Deposit auto-credited: ${fmt(input.amount)} BDT (${input.method})`,
+    titleBn: `ডিপোজিট অটো-ক্রেডিট: ${fmt(input.amount)} BDT (${input.method})`,
+    bodyEn: `${who} was credited ${fmt(input.amount)} BDT automatically via the ${input.provider} gateway. Ref ${shortRef(input.depositId)}. Details at /admin/deposits.`,
+    bodyBn: `${who} ${input.provider} গেটওয়ের মাধ্যমে স্বয়ংক্রিয়ভাবে ${fmt(input.amount)} BDT ক্রেডিট পেয়েছেন। Ref ${shortRef(input.depositId)}.`,
     linkUrl: '/admin/deposits',
     priority: 'high',
   });
