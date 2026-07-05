@@ -255,6 +255,11 @@ model User {
   bettingPassProgress   UserBettingPassProgress?
   bettingPassEvents     BettingPassEvent[]
   bettingPassClaims     BettingPassClaim[]
+  // WinGo colour-prediction native game: every bet this user placed
+  // across all four modes. Cascade-deletes with the user so a permanent
+  // removal sweeps the player's WinGo history in one transaction. The
+  // shared WingoRound rows are never user-owned and are left intact.
+  wingoBets             WingoBet[]
 
   @@index([referredById])
   @@index([roleId])
@@ -2781,4 +2786,129 @@ model VipApplication {
 
   @@index([userId, status, createdAt])
   @@index([status, createdAt])
+}
+
+// =====================================================================
+// WinGo colour-prediction native game. Additive: two new models plus
+// one User back-relation. Follows the native-games conventions used by
+// Dice/Mines/Crash: Decimal(14,2) money, Decimal(10,4) multipliers,
+// String status fields (not enums), AEAD-encrypted serverSeed with a
+// public serverSeedHash for provable fairness, and a unique
+// idempotencyKey to make settlement replay-safe. The whole game ships
+// DISABLED (gated by the NativeGameProvider `wingo` row + SystemSetting
+// flags), so an empty schema never affects any existing flow.
+// =====================================================================
+
+// One shared round per (mode, periodNumber). Unlike the per-user
+// Dice/Mines rounds, a WinGo round is a public draw that many players
+// bet into. Each mode (wingo_30s | wingo_1m | wingo_3m | wingo_5m)
+// runs its own back-to-back stream: the next round starts exactly at
+// the previous round's drawsAt, deterministic from a fixed epoch
+// anchor. Lifecycle by wall clock, enforced server-side:
+//   OPEN    startsAt <= now < betCloseAt   (bets accepted)
+//   CLOSED  betCloseAt <= now < drawsAt     (betting locked)
+//   DRAWN   now >= drawsAt, result generated once
+//   SETTLED all bets of the round paid exactly once
+// betCloseAt is drawsAt minus 5 seconds. Fairness: serverSeed is
+// AEAD-encrypted (lib/crypto/aead.ts) and committed as serverSeedHash
+// at round open; the plaintext seed is revealed at settle so anyone
+// can replay result = derive(serverSeed, periodNumber) and confirm the
+// draw was never rigged. The house edge lives in the paytable, not the
+// draw.
+model WingoRound {
+  id             String    @id @default(cuid())
+  // wingo_30s | wingo_1m | wingo_3m | wingo_5m
+  mode           String
+  // Human-facing id like 20260704100052169: YYYYMMDD + mode tag + a
+  // per-mode-per-day running sequence. Unique within a mode.
+  periodNumber   String
+  // open | closed | drawn | settled. Advanced only by guarded
+  // conditional updates (updateMany where status in the pre-draw set)
+  // so exactly one caller draws each round under concurrent cron ticks.
+  status         String    @default("open")
+  startsAt       DateTime
+  // drawsAt minus 5 seconds. Server rejects any bet at/after this.
+  betCloseAt     DateTime
+  drawsAt        DateTime
+  // Winning digit 0..9, null until the round is drawn. Generated once
+  // at draw time from the revealed serverSeed, never admin-selectable.
+  result         Int?
+  // Convenience audit fields derived from result at draw time:
+  // resultColor is red | green | violet | red_violet | green_violet;
+  // resultSize is big (5..9) | small (0..4). Null until drawn.
+  resultColor    String?
+  resultSize     String?
+  // AEAD-encrypted seed blob, committed at open, decrypted at settle.
+  serverSeed     String    @db.Text
+  // SHA-256 hex of the plaintext seed, public from round open.
+  serverSeedHash String
+  // Running audit aggregates over this round's bets.
+  betCount       Int       @default(0)
+  totalStake     Decimal   @default(0) @db.Decimal(14, 2)
+  totalPayout    Decimal   @default(0) @db.Decimal(14, 2)
+  drawnAt        DateTime?
+  settledAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  bets WingoBet[]
+
+  // Round identity: never two rounds with the same period id in a mode.
+  @@unique([mode, periodNumber])
+  // Per-mode stream lookups (current/next open round, admin filters).
+  @@index([mode, status])
+  // Cron settle + open scan: rounds of a mode ordered by draw time.
+  @@index([mode, drawsAt])
+  // Cross-mode "anything past drawsAt still not settled" cron sweep.
+  @@index([status, drawsAt])
+}
+
+// One bet line per (user, round, selection). A player may place many
+// bets in a single round. Each line carries a quantity chip (X1..X100)
+// that multiplies the unit stake; betAmount is the total debited
+// (unitAmount * quantity) and is enforced <= 100000 BDT server-side
+// after the multiplier. The wallet debit at placement and the win
+// credit at settle each get their own Transaction row keyed by
+// reference = round.id, exactly like the other native games. status
+// stays PENDING until the round settles; settlement guards on
+// status = PENDING so re-running it can never double-pay.
+model WingoBet {
+  id               String    @id @default(cuid())
+  roundId          String
+  userId           String
+  // Denormalised from the round so My-history queries filter by mode
+  // without joining WingoRound.
+  mode             String
+  // color | number | size
+  betType          String
+  // The pick within betType: color -> green | violet | red;
+  // number -> "0".."9"; size -> big | small.
+  betValue         String
+  // Base stake for one chip, before the quantity multiplier.
+  unitAmount       Decimal   @db.Decimal(14, 2)
+  // X1..X100 chip. betAmount = unitAmount * quantity.
+  quantity         Int       @default(1)
+  // Total staked = the wallet debit at placement.
+  betAmount        Decimal   @db.Decimal(14, 2)
+  // Paytable total-return multiplier applied on win, 0 on loss.
+  payoutMultiplier Decimal   @default(0) @db.Decimal(10, 4)
+  // Gross credit applied on win (betAmount * payoutMultiplier), 0 loss.
+  payoutAmount     Decimal   @default(0) @db.Decimal(14, 2)
+  // PENDING | WON | LOST | REFUNDED. Settlement flips PENDING -> WON/
+  // LOST once; REFUNDED only if a round is voided.
+  status           String    @default("PENDING")
+  // Blocks a double-debit when a client retries the same placement.
+  idempotencyKey   String    @unique
+  settledAt        DateTime?
+  createdAt        DateTime  @default(now())
+
+  round WingoRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  user  User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Settlement: pull this round's still-pending bets to pay.
+  @@index([roundId, status])
+  // All bets of a round (admin round audit view).
+  @@index([roundId])
+  // Player My-history feed, newest first.
+  @@index([userId, createdAt])
 }

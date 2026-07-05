@@ -1,0 +1,110 @@
+// Built by Anointed Coder.
+//
+// Admin config + overview for Pasha WinGo. Mirrors the native-games admin
+// contract: GET returns the current settings plus a per-mode audit
+// summary; PATCH edits the settings (global on/off, per-mode on/off,
+// min/max stake). Gating and permissions match the native-games admin:
+//   - GET  requires users.read (anyone who can view the back office)
+//   - PATCH requires settings.write (the same perm native-games PATCH uses)
+//
+// The game ships DISABLED by default (the wingo_enabled SystemSetting
+// defaults to 'false' in flag.ts), so this surface is the only way to
+// turn it on. No money logic lives here; settlement is the engine's job.
+
+export const dynamic = 'force-dynamic';
+
+import { NextRequest } from 'next/server';
+import { z } from 'zod';
+import { withAuth, ensurePermission, recordActivity } from '@/lib/auth/guard';
+import { getCurrentSession } from '@/lib/auth/rbac';
+import { jsonError, jsonOk } from '@/lib/auth/errors';
+import { getWingoAdminOverview } from '@/lib/wingo/admin';
+import {
+  loadWingoSettings,
+  setWingoEnabled,
+  setWingoModeEnabled,
+  setWingoStakeLimits,
+} from '@/lib/wingo/flag';
+import { isWingoMode, type WingoMode } from '@/lib/wingo/config';
+
+export async function GET() {
+  return withAuth(async () => {
+    await ensurePermission('users.read');
+    const overview = await getWingoAdminOverview();
+    return jsonOk(overview);
+  });
+}
+
+const modeFlagsSchema = z.record(z.string(), z.boolean());
+
+const patchSchema = z.object({
+  enabled: z.boolean().optional(),
+  // Map of wingo mode -> enabled. Only known modes are applied.
+  modes: modeFlagsSchema.optional(),
+  minStake: z.coerce.number().positive().max(100_000).optional(),
+  maxStake: z.coerce.number().positive().max(100_000).optional(),
+});
+
+export async function PATCH(req: NextRequest) {
+  return withAuth(async () => {
+    await ensurePermission('settings.write');
+    const claims = await getCurrentSession();
+    if (!claims) return jsonError(401, 'UNAUTHENTICATED');
+
+    const body = await req.json().catch(() => ({}));
+    const parsed = patchSchema.safeParse(body);
+    if (!parsed.success) return jsonError(400, 'VALIDATION', undefined, { issues: parsed.error.issues });
+
+    const before = await loadWingoSettings();
+
+    // Validate stake bounds together before writing either. clampMin /
+    // clampMax in flag.ts keep them inside the engine's hard limits, but
+    // reject an inverted pair up front so the operator gets a clear error.
+    if (parsed.data.minStake !== undefined || parsed.data.maxStake !== undefined) {
+      const nextMin = parsed.data.minStake ?? before.minStake;
+      const nextMax = parsed.data.maxStake ?? before.maxStake;
+      if (nextMax < nextMin) {
+        return jsonError(400, 'MAX_LESS_THAN_MIN', 'Maximum stake must be greater than or equal to the minimum.');
+      }
+      await setWingoStakeLimits(nextMin, nextMax);
+    }
+
+    if (parsed.data.enabled !== undefined) {
+      await setWingoEnabled(parsed.data.enabled);
+    }
+
+    if (parsed.data.modes) {
+      for (const [mode, on] of Object.entries(parsed.data.modes)) {
+        if (isWingoMode(mode)) {
+          await setWingoModeEnabled(mode as WingoMode, on);
+        }
+      }
+    }
+
+    const after = await loadWingoSettings();
+
+    await recordActivity({
+      actorId: claims.sub,
+      actorRole: claims.role,
+      action: 'WINGO_CONFIG_UPDATE',
+      target: 'wingo',
+      meta: {
+        before: {
+          enabled: before.enabled,
+          modes: before.modes,
+          minStake: before.minStake,
+          maxStake: before.maxStake,
+        },
+        after: {
+          enabled: after.enabled,
+          modes: after.modes,
+          minStake: after.minStake,
+          maxStake: after.maxStake,
+        },
+      },
+    });
+
+    const overview = await getWingoAdminOverview();
+    return jsonOk(overview);
+  });
+}

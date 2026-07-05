@@ -82,6 +82,7 @@ export const ROUTES = {
     notifications: '/admin/notifications',
     integrations: '/admin/integrations',
     nativeGames: '/admin/native-games',
+    wingo: '/admin/wingo',
     rewardClaims: '/admin/reward-claims',
     bettingPass: '/admin/betting-pass',
     spinSegments: '/admin/spin-segments',

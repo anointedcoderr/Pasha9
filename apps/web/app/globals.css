@@ -997,6 +997,89 @@ body.theme-light input[type="checkbox"].accent-neon { accent-color: #1E73E8; }
   }
 }
 
+/* Pasha WinGo colour-prediction animations. Transform/opacity only so
+ * every effect stays on the GPU compositor at 60fps. All are neutralised
+ * under prefers-reduced-motion at the foot of this block. */
+@keyframes wingo-takeover-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes wingo-sheet-in {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}
+@keyframes wingo-pop {
+  0%   { transform: scale(0.4); opacity: 0; }
+  55%  { transform: scale(1.14); opacity: 1; }
+  100% { transform: scale(1);   opacity: 1; }
+}
+@keyframes wingo-tumble {
+  0%   { transform: translateY(-14px) rotate(-12deg); filter: blur(1.5px); }
+  50%  { transform: translateY(10px)  rotate(10deg);  filter: blur(2.5px); }
+  100% { transform: translateY(-14px) rotate(-12deg); filter: blur(1.5px); }
+}
+@keyframes wingo-burst {
+  0%   { transform: scale(0.3); opacity: 0.9; }
+  100% { transform: scale(1.8); opacity: 0;   }
+}
+@keyframes wingo-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+@keyframes wingo-flip {
+  0%   { transform: rotateX(0deg); }
+  50%  { transform: rotateX(18deg); }
+  100% { transform: rotateX(0deg); }
+}
+@keyframes wingo-drift {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50%      { transform: translateY(-16px) rotate(8deg); }
+}
+@keyframes wingo-drift-slow {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50%      { transform: translateY(14px) rotate(-6deg); }
+}
+@keyframes wingo-lock-in {
+  from { transform: scale(0.85); opacity: 0; }
+  to   { transform: scale(1);    opacity: 1; }
+}
+@keyframes wingo-spark {
+  0%   { transform: translateY(-10px) scale(1); opacity: 0; }
+  20%  { opacity: 1; }
+  100% { transform: translateY(220px) scale(0.4); opacity: 0; }
+}
+
+.wingo-takeover  { animation: wingo-takeover-in 0.25s ease-out 1 both; }
+.wingo-sheet-in  { animation: wingo-sheet-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) 1 both; }
+.wingo-pop       { animation: wingo-pop 0.5s cubic-bezier(0.22, 1, 0.36, 1) 1 both; }
+.wingo-tumble    { animation: wingo-tumble 0.6s ease-in-out infinite; }
+.wingo-burst     { animation: wingo-burst 0.7s ease-out 1 both; }
+.wingo-fade-in   { animation: wingo-fade-in 0.3s ease-out 1 both; }
+.wingo-flip      { animation: wingo-flip 0.9s ease-in-out infinite; }
+.wingo-drift     { animation: wingo-drift 3.4s ease-in-out infinite; }
+.wingo-drift-slow{ animation: wingo-drift-slow 4.6s ease-in-out infinite; }
+.wingo-lock-in   { animation: wingo-lock-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) 1 both; }
+.wingo-spark     { animation: wingo-spark 1.6s ease-in infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .wingo-takeover,
+  .wingo-sheet-in,
+  .wingo-pop,
+  .wingo-tumble,
+  .wingo-burst,
+  .wingo-fade-in,
+  .wingo-flip,
+  .wingo-drift,
+  .wingo-drift-slow,
+  .wingo-lock-in,
+  .wingo-spark {
+    animation: none !important;
+    transform: none !important;
+    filter: none !important;
+    opacity: 1 !important;
+  }
+}
+
 /* ---------------------------------------------------------------------------
  * Premium atelier (Spin + Lotto)
  *

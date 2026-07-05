@@ -95,6 +95,7 @@ export const ADMIN_PERMISSION_MAP: AdminPermissionEntry[] = [
   { prefix: '/admin/spin-segments', permission: 'rewards.write' },
   { prefix: '/admin/spin-tiers', permission: 'rewards.write' },
   { prefix: '/admin/native-games', permission: 'settings.write' },
+  { prefix: '/admin/wingo', permission: 'settings.write' },
 
   // Games catalogue
   { prefix: '/admin/categories', permission: 'settings.write' },
@@ -216,6 +217,7 @@ export const ADMIN_MENU_PERMISSIONS: Record<string, string> = {
   spinSegments: 'rewards.write',
   spinTiers: 'rewards.write',
   nativeGames: 'settings.write',
+  wingo: 'settings.write',
   // Games
   categories: 'settings.write',
   providers: 'settings.write',

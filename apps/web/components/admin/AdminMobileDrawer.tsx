@@ -49,6 +49,7 @@ import {
   Bell,
   Plug,
   Gamepad2,
+  Dices,
   Share2,
   Tag,
   TrendingUp,
@@ -144,6 +145,7 @@ const GROUPS = [
       { key: 'spinTiers', href: '/admin/spin-tiers', icon: Sparkles },
       { key: 'spinSegments', href: ROUTES.admin.spinSegments, icon: Sparkles },
       { key: 'nativeGames', href: ROUTES.admin.nativeGames, icon: Gamepad2 },
+      { key: 'wingo', href: ROUTES.admin.wingo, icon: Dices },
     ],
   },
   {

@@ -56,6 +56,9 @@ export default function GamesPage() {
 
   const [natives, setNatives] = useState<NativeGameSummary[]>([]);
   const [nativesEnabled, setNativesEnabled] = useState<boolean>(true);
+  // WinGo is its own round-based system with a separate flag, so it is
+  // fetched on its own and rendered alongside the native originals.
+  const [wingoEnabled, setWingoEnabled] = useState<boolean>(false);
 
   useEffect(() => {
     let alive = true;
@@ -65,6 +68,13 @@ export default function GamesPage() {
         if (!alive || !data) return;
         setNatives(Array.isArray(data.games) ? (data.games as NativeGameSummary[]) : []);
         setNativesEnabled(Boolean(data.enabled));
+      })
+      .catch(() => {});
+    fetch('/api/games/wingo/state?mode=wingo_30s', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!alive || !data) return;
+        setWingoEnabled(Boolean(data.enabled));
       })
       .catch(() => {});
     return () => { alive = false; };
@@ -85,7 +95,7 @@ export default function GamesPage() {
         ]}
       />
 
-      {nativesEnabled && natives.length > 0 ? (
+      {(nativesEnabled && natives.length > 0) || wingoEnabled ? (
         <section>
           <div className="mb-3 flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-brand-yellow-600" />
@@ -151,6 +161,8 @@ export default function GamesPage() {
                 </div>
               );
             })}
+
+            {wingoEnabled ? <WingoLobbyCard lang={lang} /> : null}
           </div>
         </section>
       ) : null}
@@ -175,5 +187,66 @@ export default function GamesPage() {
 
       <ProviderGamesSection showAdminLink />
     </div>
+  );
+}
+
+// WinGo lobby card. Original mini artwork (glossy colour balls over a
+// mahogany field) rather than a copied asset. Links into the four-mode
+// play page.
+function WingoLobbyCard({ lang }: { lang: 'bn' | 'en' }) {
+  const BALLS: Array<{ n: number; from: string; to: string }> = [
+    { n: 1, from: '#16c98d', to: '#0a6b4a' },
+    { n: 5, from: '#b06bff', to: '#6b21a8' },
+    { n: 6, from: '#ef4459', to: '#8f0f22' },
+    { n: 3, from: '#16c98d', to: '#0a6b4a' },
+  ];
+  return (
+    <Link
+      href="/games/wingo"
+      className="block rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-yellow-500/50"
+    >
+      <div className="group png-card relative h-full overflow-hidden rounded-2xl border border-white/10 bg-brand-ink text-white shadow-[0_8px_24px_-12px_rgba(0,0,0,0.55)]">
+        <div className="relative aspect-[4/3] overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-[#2a1608] via-[#1a0d18] to-black" />
+          <div aria-hidden className="absolute inset-0 bg-[radial-gradient(circle_at_75%_25%,rgba(255,213,84,0.22),transparent_60%)]" />
+          <div className="absolute inset-0 flex items-center justify-center gap-1.5">
+            {BALLS.map((b, i) => (
+              <span
+                key={b.n}
+                className="inline-flex items-center justify-center rounded-full text-xs font-black text-white shadow-[inset_0_-4px_8px_rgba(0,0,0,0.35)]"
+                style={{
+                  width: 34 - i * 2,
+                  height: 34 - i * 2,
+                  background: `radial-gradient(circle at 32% 26%, rgba(255,255,255,0.85) 0%, ${b.from} 45%, ${b.to} 100%)`,
+                }}
+              >
+                {b.n}
+              </span>
+            ))}
+          </div>
+          <div aria-hidden className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-b from-transparent to-brand-ink/95" />
+          <div className="absolute left-2 top-2 flex flex-wrap items-center gap-1">
+            <span className="rounded-full border border-amber-200/60 bg-amber-200/70 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-950">
+              {lang === 'bn' ? 'নতুন' : 'New'}
+            </span>
+            <span className="rounded-full border border-white/30 bg-white/40 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white">
+              {lang === 'bn' ? 'অরিজিনাল' : 'Original'}
+            </span>
+          </div>
+        </div>
+        <div className="relative -mt-7 px-3 pb-3 pt-0">
+          <h3 className="truncate text-sm font-extrabold leading-tight text-white">
+            {lang === 'bn' ? 'পাশা উইনগো' : 'Pasha WinGo'}
+          </h3>
+          <div className="mt-1 flex items-center justify-between gap-1">
+            <span className="inline-flex h-7 items-center gap-1 rounded-full bg-gradient-to-b from-amber-300 to-amber-500 px-2.5 text-[10px] font-extrabold uppercase tracking-wider text-[#3A1F00] shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]">
+              {lang === 'bn' ? 'খেলুন' : 'Play'}
+              <ArrowRight className="h-3 w-3" />
+            </span>
+            <span className="text-[10px] tabular-nums text-white/55">৳1+</span>
+          </div>
+        </div>
+      </div>
+    </Link>
   );
 }
