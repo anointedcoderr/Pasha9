@@ -348,8 +348,9 @@ export function WingoGame() {
       <ModeTabs mode={mode} onSelect={setMode} />
 
       {/* Round card */}
-      <section className="relative overflow-hidden rounded-2xl border border-amber-300/20 bg-gradient-to-br from-[#2a1608] via-[#1a0d18] to-black p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
-        <div aria-hidden className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(255,213,84,0.14),transparent_60%)]" />
+      <section className="relative overflow-hidden rounded-2xl border border-amber-300/25 bg-gradient-to-br from-[#2a1608] via-[#1a0d18] to-black p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_20px_50px_-30px_rgba(0,0,0,0.85)]">
+        <div aria-hidden className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(255,213,84,0.16),transparent_60%)]" />
+        <span aria-hidden className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-amber-200/40 to-transparent" />
         <div className="relative flex items-start justify-between gap-3">
           {/* Left: recent mini balls + period */}
           <div className="min-w-0 flex-1">
@@ -379,8 +380,11 @@ export function WingoGame() {
             ) : (
               <div className="h-8 w-24 animate-pulse rounded-md bg-white/10 motion-keep" />
             )}
-            <div className="mt-2 inline-flex items-center gap-1.5">
-              <span className={cn('h-2 w-2 rounded-full', locked ? 'bg-rose-400' : 'bg-emerald-400')} />
+            <div className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-black/40 px-2.5 py-1">
+              <span
+                className={cn('h-2 w-2 rounded-full', locked ? 'bg-rose-400' : 'bg-emerald-400')}
+                style={{ boxShadow: locked ? '0 0 8px 1px rgba(244,63,94,0.7)' : '0 0 8px 1px rgba(52,211,153,0.7)' }}
+              />
               <span className={cn('text-[10px] font-bold uppercase tracking-wider', locked ? 'text-rose-200' : 'text-emerald-200')}>
                 {locked ? (bn ? 'লকড' : 'Locked') : bn ? 'ওপেন' : 'Open'}
               </span>

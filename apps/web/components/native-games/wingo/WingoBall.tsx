@@ -9,7 +9,7 @@
 'use client';
 
 import { cn } from '@/lib/utils/cn';
-import { ballSkin } from './ui';
+import { ballSkin, ballShadow } from './ui';
 
 interface Props {
   n: number;
@@ -29,15 +29,27 @@ export function WingoBall({ n, size = 56, selected = false, onClick, asBadge = f
     width: size,
     height: size,
     background: skin.background,
-    boxShadow: selected
-      ? `0 0 0 2px rgba(255,213,84,0.95), 0 0 18px 2px ${skin.glow}, inset 0 -6px 12px rgba(0,0,0,0.35)`
-      : `0 0 0 1px ${skin.ring}, 0 6px 14px -6px ${skin.glow}, inset 0 -6px 12px rgba(0,0,0,0.35)`,
+    boxShadow: ballShadow(skin, size, selected),
     color: skin.ink,
   };
+
+  // A soft elliptical top gloss band sitting above the digit sells the wet,
+  // glass-marble shine. Purely decorative, no layout, transform-free.
+  const gloss = (
+    <span
+      aria-hidden
+      className="pointer-events-none absolute left-1/2 top-[7%] z-20 h-[36%] w-[64%] -translate-x-1/2 rounded-[100%]"
+      style={{ background: 'radial-gradient(60% 100% at 50% 0%, rgba(255,255,255,0.72) 0%, rgba(255,255,255,0.14) 55%, rgba(255,255,255,0) 100%)' }}
+    />
+  );
+
   const digit = (
     <span
-      className="relative z-10 font-black tabular-nums leading-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.45)]"
-      style={{ fontSize: Math.round(size * 0.46) }}
+      className="relative z-10 font-black tabular-nums leading-none"
+      style={{
+        fontSize: Math.round(size * 0.46),
+        textShadow: '0 1px 2px rgba(0,0,0,0.5), 0 0 1px rgba(0,0,0,0.4)',
+      }}
     >
       {n}
     </span>
@@ -51,6 +63,7 @@ export function WingoBall({ n, size = 56, selected = false, onClick, asBadge = f
         className={cn('relative inline-flex select-none items-center justify-center rounded-full', className)}
         style={style}
       >
+        {size >= 24 ? gloss : null}
         {digit}
       </span>
     );
@@ -63,12 +76,14 @@ export function WingoBall({ n, size = 56, selected = false, onClick, asBadge = f
       aria-pressed={selected}
       aria-label={ariaLabel ?? `Number ${n}`}
       className={cn(
-        'wingo-ball relative inline-flex select-none items-center justify-center rounded-full transition-transform duration-100',
-        'hover:-translate-y-0.5 active:scale-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/80',
+        'wingo-ball relative inline-flex select-none items-center justify-center rounded-full transition-transform duration-150 ease-out',
+        'hover:-translate-y-0.5 hover:scale-[1.04] active:scale-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-black/40',
+        selected && 'wingo-selected',
         className,
       )}
       style={style}
     >
+      {gloss}
       {digit}
     </button>
   );

@@ -12,7 +12,7 @@ import { useEffect, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useLang } from '@/lib/i18n/context';
 import { WingoBall } from './WingoBall';
-import { colorOf, sizeOf, colorLabel, sizeLabel, ballSkin } from './ui';
+import { colorOf, sizeOf, colorLabel, sizeLabel, ballSkin, sizePillSkin, colorChipSkin } from './ui';
 
 interface Props {
   open: boolean;
@@ -46,6 +46,10 @@ export function WingoResultReveal({ open, result, periodNumber, onClose }: Props
   const id = colorOf(result);
   const size = sizeOf(result);
   const skin = ballSkin(result);
+  // Glossy identity pills, drawn from the same shared tokens as the history
+  // ladder so the reveal reads as one material with the rest of the board.
+  const colorChip = colorChipSkin(id);
+  const sizeChip = sizePillSkin(size);
 
   return (
     <Dialog.Root open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
@@ -53,9 +57,11 @@ export function WingoResultReveal({ open, result, periodNumber, onClose }: Props
         <Dialog.Overlay className="fixed inset-0 z-[90] bg-black/80 backdrop-blur-md" />
         <Dialog.Content
           aria-describedby={undefined}
-          className="fixed left-1/2 top-1/2 z-[91] w-[calc(100%-2rem)] max-w-[360px] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-3xl border border-amber-400/40 p-6 text-center outline-none"
-          style={{ background: 'linear-gradient(180deg,#2a1810 0%,#120a06 100%)' }}
+          className="fixed left-1/2 top-1/2 z-[91] w-[calc(100%-2rem)] max-w-[360px] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-3xl border border-amber-400/40 p-6 text-center outline-none shadow-[0_40px_100px_-30px_rgba(0,0,0,0.85),inset_0_1px_0_rgba(255,255,255,0.08)]"
+          style={{ background: 'radial-gradient(120% 90% at 50% 0%, #34200f 0%, #1a0d08 55%, #0d0704 100%)' }}
         >
+          {/* Soft gold hairline crown for depth. */}
+          <span aria-hidden className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-amber-200/50 to-transparent" />
           <Dialog.Title className="text-[11px] font-bold uppercase tracking-[0.3em] text-amber-300/90">
             {bn ? 'ফলাফল' : 'Result'} {periodNumber ? `. ${periodNumber}` : ''}
           </Dialog.Title>
@@ -88,10 +94,24 @@ export function WingoResultReveal({ open, result, periodNumber, onClose }: Props
                 {bn ? 'নম্বর' : 'Number'} {result}
               </p>
               <div className="mt-2 flex items-center justify-center gap-2">
-                <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-bold text-white/90">
+                <span
+                  className="inline-flex items-center justify-center rounded-full px-3.5 py-1 text-xs font-black uppercase tracking-wide"
+                  style={{
+                    background: colorChip.grad,
+                    color: colorChip.ink,
+                    boxShadow: `inset 0 1px 0 rgba(255,255,255,0.5), inset 0 0 0 1px ${colorChip.rim}, 0 2px 8px -3px rgba(0,0,0,0.6)`,
+                  }}
+                >
                   {colorLabel(id, lang)}
                 </span>
-                <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-bold text-white/90">
+                <span
+                  className="inline-flex items-center justify-center rounded-full px-3.5 py-1 text-xs font-black uppercase tracking-wide"
+                  style={{
+                    background: sizeChip.grad,
+                    color: sizeChip.ink,
+                    boxShadow: `inset 0 1px 0 rgba(255,255,255,0.55), inset 0 0 0 1px ${sizeChip.rim}, 0 2px 8px -3px rgba(0,0,0,0.6)`,
+                  }}
+                >
                   {sizeLabel(size, lang)}
                 </span>
               </div>

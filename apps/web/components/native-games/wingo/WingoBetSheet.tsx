@@ -154,11 +154,12 @@ export function WingoBetSheet({ open, selection, initialQuantity = 1, minStake, 
                     key={a}
                     type="button"
                     onClick={() => setStake(a)}
+                    aria-pressed={stake === a}
                     className={cn(
-                      'h-11 rounded-xl border text-sm font-extrabold tabular-nums transition',
+                      'h-11 min-w-[44px] rounded-xl border px-2 text-sm font-extrabold tabular-nums transition-transform duration-150 ease-out active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/70 focus-visible:ring-offset-2 focus-visible:ring-offset-black/50',
                       stake === a
-                        ? 'border-amber-300 bg-amber-400/20 text-amber-100'
-                        : 'border-white/15 bg-white/5 text-white/80 hover:border-white/30 hover:bg-white/10',
+                        ? 'border-amber-300/80 bg-gradient-to-b from-amber-300/30 to-amber-500/15 text-amber-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.3),0_4px_12px_-6px_rgba(245,180,0,0.6)]'
+                        : 'border-white/15 bg-white/5 text-white/70 hover:border-white/30 hover:bg-white/10',
                     )}
                   >
                     {a}
@@ -201,11 +202,12 @@ export function WingoBetSheet({ open, selection, initialQuantity = 1, minStake, 
                     key={q}
                     type="button"
                     onClick={() => setQuantity(q)}
+                    aria-pressed={quantity === q}
                     className={cn(
-                      'h-9 rounded-lg border text-xs font-bold tabular-nums transition',
+                      'h-11 rounded-lg border px-1 text-xs font-bold tabular-nums transition-transform duration-150 ease-out active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/70 focus-visible:ring-offset-2 focus-visible:ring-offset-black/50',
                       quantity === q
-                        ? 'border-amber-300 bg-amber-400/20 text-amber-100'
-                        : 'border-white/15 bg-white/5 text-white/70 hover:bg-white/10',
+                        ? 'border-amber-300/80 bg-gradient-to-b from-amber-300/30 to-amber-500/15 text-amber-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.3),0_4px_12px_-6px_rgba(245,180,0,0.6)]'
+                        : 'border-white/15 bg-white/5 text-white/70 hover:border-white/30 hover:bg-white/10',
                     )}
                   >
                     X{q}

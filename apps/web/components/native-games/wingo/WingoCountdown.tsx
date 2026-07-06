@@ -27,29 +27,41 @@ function digits(ms: number): [string, string, string, string] {
   return [m[0], m[1], s[0], s[1]];
 }
 
-// Inline digital timer used inside the round card header.
+// Inline digital timer used inside the round card header. In the open
+// phase's final ten seconds it reads as urgent (rose tint + a soft haloed
+// pulse) without ever claiming to be locked, so it never contradicts the
+// board, which still accepts bets until the server closes the round.
 export function WingoTimer({ ms, locked }: { ms: number; locked: boolean }) {
   const [d0, d1, d2, d3] = digits(ms);
+  const urgent = !locked && ms <= 10_000;
   return (
-    <div className="flex items-center gap-1" role="timer" aria-live="off">
-      <Cell ch={d0} locked={locked} />
-      <Cell ch={d1} locked={locked} />
-      <span className="px-0.5 text-lg font-black text-amber-300">:</span>
-      <Cell ch={d2} locked={locked} />
-      <Cell ch={d3} locked={locked} />
+    <div
+      className={'flex items-center gap-1 ' + (urgent ? 'wingo-urgent' : '')}
+      role="timer"
+      aria-live="off"
+    >
+      <Cell ch={d0} locked={locked} urgent={urgent} />
+      <Cell ch={d1} locked={locked} urgent={urgent} />
+      <span
+        className={
+          'wingo-timer-pulse px-0.5 text-lg font-black ' + (locked || urgent ? 'text-rose-300' : 'text-amber-300')
+        }
+      >
+        :
+      </span>
+      <Cell ch={d2} locked={locked} urgent={urgent} />
+      <Cell ch={d3} locked={locked} urgent={urgent} />
     </div>
   );
 }
 
-function Cell({ ch, locked }: { ch: string; locked: boolean }) {
+function Cell({ ch, locked, urgent = false }: { ch: string; locked: boolean; urgent?: boolean }) {
+  const tone = locked || urgent
+    ? 'border-rose-400/60 bg-gradient-to-b from-rose-900/80 to-rose-950/90 text-rose-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),inset_0_-4px_8px_-2px_rgba(0,0,0,0.6)]'
+    : 'border-amber-300/40 bg-gradient-to-b from-[#241405] to-black text-amber-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.1),inset_0_-4px_8px_-2px_rgba(0,0,0,0.6)]';
   return (
     <span
-      className={
-        'inline-flex h-8 w-6 items-center justify-center rounded-md border text-lg font-black tabular-nums shadow-inner ' +
-        (locked
-          ? 'border-rose-400/50 bg-rose-950/70 text-rose-200'
-          : 'border-amber-300/40 bg-black/60 text-amber-100')
-      }
+      className={'inline-flex h-8 w-6 items-center justify-center rounded-md border text-lg font-black tabular-nums ' + tone}
     >
       {ch}
     </span>

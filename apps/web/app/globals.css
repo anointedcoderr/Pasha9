@@ -1048,6 +1048,36 @@ body.theme-light input[type="checkbox"].accent-neon { accent-color: #1E73E8; }
   20%  { opacity: 1; }
   100% { transform: translateY(220px) scale(0.4); opacity: 0; }
 }
+/* One-shot bounce when a ball becomes the active selection. */
+@keyframes wingo-selected {
+  0%   { transform: scale(1); }
+  45%  { transform: scale(1.16); }
+  100% { transform: scale(1); }
+}
+/* Diagonal light sweep across a glossy button on hover. */
+@keyframes wingo-sheen {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(520%); }
+}
+/* Refined per-second tick for the round countdown: a calm breathing pulse
+ * on the open timer. Transform + opacity only. */
+@keyframes wingo-timer-pulse {
+  0%, 100% { transform: scale(1);    opacity: 0.95; }
+  50%      { transform: scale(1.03); opacity: 1;    }
+}
+/* Final-seconds urgency: a tighter pulse with a soft red halo (filter),
+ * never touching layout. Paired with a static rose tint in the markup. */
+@keyframes wingo-urgent {
+  0%, 100% { transform: scale(1);    filter: drop-shadow(0 0 0 rgba(244,63,94,0)); }
+  50%      { transform: scale(1.06); filter: drop-shadow(0 0 7px rgba(244,63,94,0.65)); }
+}
+/* The most recent winner on the trend chart breathes gently so the eye
+ * lands on the latest draw. Transform + filter only, so it composites on
+ * the GPU and never nudges the ladder layout. */
+@keyframes wingo-trend-latest {
+  0%, 100% { transform: scale(1);    filter: drop-shadow(0 0 3px rgba(245,180,0,0.55)); }
+  50%      { transform: scale(1.22); filter: drop-shadow(0 0 8px rgba(245,180,0,0.9));  }
+}
 
 .wingo-takeover  { animation: wingo-takeover-in 0.25s ease-out 1 both; }
 .wingo-sheet-in  { animation: wingo-sheet-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) 1 both; }
@@ -1060,6 +1090,12 @@ body.theme-light input[type="checkbox"].accent-neon { accent-color: #1E73E8; }
 .wingo-drift-slow{ animation: wingo-drift-slow 4.6s ease-in-out infinite; }
 .wingo-lock-in   { animation: wingo-lock-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) 1 both; }
 .wingo-spark     { animation: wingo-spark 1.6s ease-in infinite; }
+.wingo-selected  { animation: wingo-selected 0.4s cubic-bezier(0.22, 1, 0.36, 1) 1; }
+/* The sheen sweeps only while the button is hovered, then resets. */
+.group:hover .wingo-sheen { animation: wingo-sheen 0.85s ease-out 1; }
+.wingo-timer-pulse { animation: wingo-timer-pulse 1s ease-in-out infinite; }
+.wingo-urgent    { animation: wingo-urgent 1s ease-in-out infinite; }
+.wingo-trend-latest { animation: wingo-trend-latest 1.8s ease-in-out infinite; }
 
 @media (prefers-reduced-motion: reduce) {
   .wingo-takeover,
@@ -1072,7 +1108,12 @@ body.theme-light input[type="checkbox"].accent-neon { accent-color: #1E73E8; }
   .wingo-drift,
   .wingo-drift-slow,
   .wingo-lock-in,
-  .wingo-spark {
+  .wingo-spark,
+  .wingo-selected,
+  .wingo-sheen,
+  .wingo-timer-pulse,
+  .wingo-urgent,
+  .wingo-trend-latest {
     animation: none !important;
     transform: none !important;
     filter: none !important;
