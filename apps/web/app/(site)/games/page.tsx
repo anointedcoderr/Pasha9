@@ -17,7 +17,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { CategoryHero } from '@/components/site/CategoryHero';
 import { useT, useLang } from '@/lib/i18n/context';
-import { Sparkles, ArrowRight, Lock } from 'lucide-react';
+import { Sparkles, ArrowRight, Lock, Trophy } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { GameArt } from '@/components/native-games/GameArt';
 import { ProviderGamesSection } from '@/components/site/ProviderGamesSection';
@@ -94,6 +94,34 @@ export default function GamesPage() {
           { label: 'Wallet Connected', tone: 'sky' },
         ]}
       />
+
+      {/* WinGo tournament leaderboard entry point. */}
+      <Link
+        href="/leaderboard"
+        className="group relative flex items-center gap-4 overflow-hidden rounded-2xl border border-gold-500/30 bg-[radial-gradient(120%_140%_at_12%_0%,#16110a_0%,#0b0e14_60%,#070a0f_100%)] px-4 py-4 text-white shadow-[0_14px_36px_-22px_rgba(0,0,0,0.8)] focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-300"
+      >
+        <span
+          aria-hidden
+          className="pointer-events-none absolute -right-8 -top-10 h-40 w-40 rounded-full bg-[radial-gradient(circle,rgba(245,208,97,0.22),transparent_65%)]"
+        />
+        <span className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gold-500/15 text-gold-300">
+          <Trophy className="h-6 w-6" />
+        </span>
+        <span className="relative min-w-0 flex-1">
+          <span className="flex items-center gap-2">
+            <span className="font-en text-sm font-extrabold text-white md:text-base">
+              {lang === 'bn' ? 'WinGo টুর্নামেন্ট লিডারবোর্ড' : 'WinGo Tournament Leaderboard'}
+            </span>
+            <span className="rounded-full border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-gold-300">
+              {lang === 'bn' ? 'লাইভ' : 'Live'}
+            </span>
+          </span>
+          <span className="mt-0.5 block truncate text-xs text-white/60">
+            {lang === 'bn' ? 'সবচেয়ে বেশি বাজি ধরুন এবং পুরস্কার জিতুন।' : 'Wager the most to top the board and win prizes.'}
+          </span>
+        </span>
+        <ArrowRight className="relative h-4 w-4 shrink-0 text-gold-300 transition-transform duration-150 motion-safe:group-hover:translate-x-0.5" />
+      </Link>
 
       {(nativesEnabled && natives.length > 0) || wingoEnabled ? (
         <section>

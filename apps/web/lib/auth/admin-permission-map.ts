@@ -96,6 +96,10 @@ export const ADMIN_PERMISSION_MAP: AdminPermissionEntry[] = [
   { prefix: '/admin/spin-tiers', permission: 'rewards.write' },
   { prefix: '/admin/native-games', permission: 'settings.write' },
   { prefix: '/admin/wingo', permission: 'settings.write' },
+  // WinGo tournaments credit real prize money on settlement, so the
+  // page + its create/void/settle actions require bonuses.write (the
+  // same gate the tournament APIs enforce).
+  { prefix: '/admin/tournaments', permission: 'bonuses.write' },
 
   // Games catalogue
   { prefix: '/admin/categories', permission: 'settings.write' },
@@ -218,6 +222,9 @@ export const ADMIN_MENU_PERMISSIONS: Record<string, string> = {
   spinTiers: 'rewards.write',
   nativeGames: 'settings.write',
   wingo: 'settings.write',
+  // WinGo tournaments pay real prize money, so the nav gate matches the
+  // tournament APIs' bonuses.write requirement.
+  tournaments: 'bonuses.write',
   // Games
   categories: 'settings.write',
   providers: 'settings.write',

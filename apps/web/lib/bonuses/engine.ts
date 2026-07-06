@@ -115,6 +115,12 @@ const DIRECT_BALANCE_LOCK_SOURCES = new Set([
   // direct keeps release/clawback from touching the wallet a second
   // time (the money is already in balance, not lockedBalance).
   'promo_code',
+  // WinGo tournament prizes credit Wallet.balance directly with an
+  // optional turnover lock tracked via UserBonus (same shape as
+  // cashback). Marking the source direct keeps release/clawback from
+  // touching the wallet a second time; the withdrawal gate subtracts
+  // the still-locked prize from withdrawable funds until wagered.
+  'tournament_prize',
 ]);
 
 async function creditBonus(tx: Tx, userId: string, amount: Prisma.Decimal, sourceType: string | null = null): Promise<void> {

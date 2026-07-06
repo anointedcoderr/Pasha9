@@ -245,6 +245,9 @@ model User {
   campaignsCreated      Campaign[]               @relation("CampaignsCreated")
   campaignRecipients    CampaignRecipient[]
   cashbackPayouts       CashbackPayout[]
+  // WinGo tournaments this admin created, and prizes this user won.
+  tournamentsCreated    Tournament[]             @relation("TournamentsCreated")
+  tournamentPayouts     TournamentPayout[]
   rewardClaims          RewardClaim[]
   dailyCheckIns         DailyCheckInLog[]
   spinResults           SpinResult[]
@@ -2704,6 +2707,96 @@ model CashbackPayout {
   @@index([campaignId, createdAt])
 }
 
+// ---------- WinGo Tournaments ----------
+//
+// Honest player-engagement tournaments scoped to the WinGo native game.
+// Ranking metric is TOTAL WAGERED: the sum of WingoBet.betAmount by each
+// player whose createdAt falls in [startsAt, endsAt). Mirrors the
+// cashback engine blueprint (CashbackCampaign / CashbackPayout): a
+// single guarded status transition settles the tournament and pays the
+// top ranks idempotently, each payout keyed by a unique idempotencyKey.
+//
+// Lifecycle: draft -> active -> ended -> paid, plus a terminal 'void'.
+// active while now in [startsAt, endsAt); ended once now >= endsAt
+// (leaderboard frozen); paid once settlement credits the winners. An
+// admin may void a draft/active/ended tournament before it is paid; a
+// voided tournament never pays.
+//
+// prizes is an ordered JSON list [{rank:1,amount},{rank:2,amount},...]
+// for the top N; ranks must be 1..N contiguous + unique and amounts > 0.
+// Each prize credits the winner's MAIN balance with an optional
+// per-tournament turnoverX lock (default 1) applied as a UserBonus via
+// the bonus engine's 'tournament_prize' direct-balance source, so prizes
+// are wagered once before withdrawal; turnoverX = 0 means pure cash.
+model Tournament {
+  id          String    @id @default(cuid())
+  nameEn      String
+  nameBn      String?
+  // draft | active | ended | paid | void.
+  status      String    @default("draft")
+  // Game scope. WinGo only for now; kept for future metrics.
+  scope       String    @default("wingo")
+  // Ranking metric. 'turnover' = sum of WingoBet.betAmount in window.
+  rankMetric  String    @default("turnover")
+  startsAt    DateTime
+  endsAt      DateTime
+  // Ordered prize table [{ rank, amount }] for the top N.
+  prizes      Json      @default("[]")
+  // Turnover multiplier locked on each prize (0 = pure cash).
+  turnoverX   Decimal   @default(1) @db.Decimal(6, 2)
+  // Minimum wagered score a user must reach to qualify (0 = all).
+  minTurnover Decimal   @default(0) @db.Decimal(14, 2)
+  createdById String?
+  // Stamped when settlement claims the tournament (ended -> settling), so
+  // the freeze stays atomic. Crediting completes shortly after.
+  settledAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  createdBy User?              @relation("TournamentsCreated", fields: [createdById], references: [id])
+  payouts   TournamentPayout[]
+
+  // Cron/admin scan for active + due-to-end tournaments.
+  @@index([status])
+  @@index([status, endsAt])
+}
+
+// One row per winning rank. Written FROZEN in a 'pending' state the
+// moment settlement claims a tournament (ended -> settling), then flipped
+// to 'paid' by an idempotent, per-row-guarded credit pass. Mirrors the
+// WinGo "draw then drain" model: standings are frozen into these rows
+// once and never recomputed, so a live leaderboard shift or a settle
+// re-run can never change who is paid.
+//
+// idempotencyKey = tournamentId:userId guarantees a player is credited at
+// most once even under concurrent cron ticks; @@unique([tournamentId,
+// userId]) enforces one payout per player per tournament, and the second,
+// independent @@unique([tournamentId, rank]) guarantees a given rank maps
+// to at most one credited row regardless of which user holds it. A crash
+// mid-settlement resumes and credits only the still-'pending' rows.
+model TournamentPayout {
+  id             String   @id @default(cuid())
+  tournamentId   String
+  userId         String
+  rank           Int
+  // Frozen final wagered score at settlement time.
+  score          Decimal  @db.Decimal(14, 2)
+  amount         Decimal  @db.Decimal(14, 2)
+  walletTxId     String?
+  userBonusId    String?
+  // pending (frozen, awaiting credit) -> paid (credited exactly once).
+  status         String   @default("pending")
+  idempotencyKey String   @unique
+  createdAt      DateTime @default(now())
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tournamentId, userId])
+  @@unique([tournamentId, rank])
+  @@index([tournamentId, rank])
+}
+
 // Operator-managed social-media link directory rendered in the public
 // Footer. Empty / inactive rows are hidden. Falls back to the legacy
 // SystemSetting telegram/whatsapp/email contact values when this table
@@ -2911,4 +3004,6 @@ model WingoBet {
   @@index([roundId])
   // Player My-history feed, newest first.
   @@index([userId, createdAt])
+  // Tournament leaderboard aggregation: sum stakes over a [start,end) window.
+  @@index([createdAt])
 }

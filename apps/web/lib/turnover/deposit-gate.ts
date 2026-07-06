@@ -70,6 +70,15 @@ const BDT_BALANCE_LOCK_SOURCE_TYPES: string[] = [
   'betting_pass',
   'cashback_campaign',
   'promo_code',
+  // WinGo tournament prizes credit Wallet.balance directly with an
+  // optional turnoverX lock tracked via a UserBonus row of this source
+  // type (see lib/tournaments/engine.ts). Without this entry the lock
+  // was a no-op and a winner could withdraw the prize before turning it
+  // over - identical to the earlier promo_code / cashback_campaign
+  // bypass. addTurnover advances these grants FIFO like every other
+  // sourceType; a turnoverX=0 prize creates no UserBonus (pure cash) so
+  // it never appears here.
+  'tournament_prize',
 ];
 const REFERRAL_LOCK_SOURCE_TYPES = ['referral_first_deposit', 'referral_commission'];
 

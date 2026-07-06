@@ -141,6 +141,7 @@ const GROUPS = [
       { key: 'spinSegments', href: ROUTES.admin.spinSegments, icon: Sparkles },
       { key: 'nativeGames', href: ROUTES.admin.nativeGames, icon: Gamepad2 },
       { key: 'wingo', href: ROUTES.admin.wingo, icon: Dices },
+      { key: 'tournaments', href: ROUTES.admin.tournaments, icon: Trophy },
     ],
   },
   {
