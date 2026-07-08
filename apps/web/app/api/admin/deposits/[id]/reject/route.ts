@@ -14,7 +14,7 @@ import { db } from '@/lib/db/client';
 import { withAuth, ensurePermission, recordActivity } from '@/lib/auth/guard';
 import { jsonOk, jsonError } from '@/lib/auth/errors';
 import { sendSms } from '@/lib/sms/service';
-import { notifyDepositRejected } from '@/lib/notifications/notify';
+import { notifyDepositRejected, notifyAdminsDepositRejected } from '@/lib/notifications/notify';
 
 const schema = z.object({
   rejectionReason: z.string().trim().min(3, 'Provide a clear reason').max(500),
@@ -85,6 +85,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         amount: Number(deposit.amount),
         reason: parsed.data.rejectionReason ?? null,
         depositId: deposit.id,
+      });
+      await notifyAdminsDepositRejected({
+        depositId: deposit.id,
+        amount: Number(deposit.amount),
+        reason: parsed.data.rejectionReason ?? null,
+        userId: deposit.userId,
       });
     } catch (err) {
       console.error('[deposit-reject] notify failed', err);

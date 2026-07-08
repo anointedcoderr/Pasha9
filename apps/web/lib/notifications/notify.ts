@@ -53,7 +53,20 @@ export type NotificationKind =
   | 'admin_reward_claim_pending'
   | 'admin_affiliate_application_pending'
   | 'admin_promotion_claim_pending'
-  | 'admin_vip_application_pending';
+  | 'admin_vip_application_pending'
+  // Admin-targeted kinds for money/account actions that previously only
+  // pinged the player. Wired AFTER the DB commit at each handler so the
+  // operator team also sees the outcome in the bell + Telegram group.
+  | 'admin_deposit_approved'
+  | 'admin_deposit_rejected'
+  | 'admin_withdrawal_approved'
+  | 'admin_withdrawal_rejected'
+  | 'admin_withdrawal_paid'
+  | 'admin_user_registered'
+  | 'admin_password_reset_requested'
+  | 'admin_betting_pass_claim'
+  | 'admin_promo_redeemed'
+  | 'admin_promotion_claimed';
 
 // Role keys that should receive admin-targeted notifications. Kept in
 // sync with STAFF_ROLES in lib/auth/rbac.ts so the people who can
@@ -573,6 +586,236 @@ export async function notifyAdminsVipApplicationPending(input: {
     bodyEn: `${who} applied for the VIP Club (${input.tierName}). Ref ${shortRef(input.applicationId)}. Review at /admin/vip.`,
     bodyBn: `${who} ভিআইপি ক্লাবে আবেদন করেছেন (${input.tierName})। Ref ${shortRef(input.applicationId)}.`,
     linkUrl: '/admin/vip',
+    priority: 'normal',
+  });
+}
+
+// ----- Admin outcome alerts for money / account actions --------------
+//
+// These previously reached only the player via notifyUser. Each helper
+// below is called fire-and-forget AFTER the DB commit so the same event
+// also lands in the admin bell and the Telegram group. Compact by
+// design: who, amount/outcome, ref, and a link to the admin page.
+
+// Masks a phone so the Telegram group and bell show enough to identify
+// the account without publishing the full number. Keeps the last 3
+// digits: "+8801712345678" becomes "+88017*****678".
+function maskPhone(phone: string | null | undefined): string {
+  const p = (phone ?? '').trim();
+  if (p.length <= 6) return p || 'unknown';
+  const head = p.slice(0, 6);
+  const tail = p.slice(-3);
+  return `${head}*****${tail}`;
+}
+
+export async function notifyAdminsDepositApproved(input: {
+  depositId: string;
+  amount: number;
+  method: string;
+  userId: string;
+}): Promise<void> {
+  const who = await resolvePlayerHandle(input.userId);
+  await notifyAdmins({
+    kind: 'admin_deposit_approved',
+    titleEn: `Deposit approved: ${fmt(input.amount)} BDT (${input.method})`,
+    titleBn: `ডিপোজিট অনুমোদিত: ${fmt(input.amount)} BDT (${input.method})`,
+    bodyEn: `${who}'s ${fmt(input.amount)} BDT deposit via ${input.method} was approved and credited. Ref ${shortRef(input.depositId)}. Details at /admin/deposits.`,
+    bodyBn: `${who}-এর ${input.method}-এর মাধ্যমে ${fmt(input.amount)} BDT ডিপোজিট অনুমোদিত ও ক্রেডিট হয়েছে। Ref ${shortRef(input.depositId)}.`,
+    linkUrl: '/admin/deposits',
+    priority: 'normal',
+  });
+}
+
+export async function notifyAdminsDepositRejected(input: {
+  depositId: string;
+  amount: number;
+  reason: string | null;
+  userId: string;
+}): Promise<void> {
+  const who = await resolvePlayerHandle(input.userId);
+  const reason = (input.reason ?? '').trim();
+  await notifyAdmins({
+    kind: 'admin_deposit_rejected',
+    titleEn: `Deposit rejected: ${fmt(input.amount)} BDT`,
+    titleBn: `ডিপোজিট প্রত্যাখ্যাত: ${fmt(input.amount)} BDT`,
+    bodyEn: reason
+      ? `${who}'s ${fmt(input.amount)} BDT deposit was rejected. Reason: ${reason}. Ref ${shortRef(input.depositId)}. Details at /admin/deposits.`
+      : `${who}'s ${fmt(input.amount)} BDT deposit was rejected. Ref ${shortRef(input.depositId)}. Details at /admin/deposits.`,
+    bodyBn: reason
+      ? `${who}-এর ${fmt(input.amount)} BDT ডিপোজিট প্রত্যাখ্যান করা হয়েছে। কারণ: ${reason}। Ref ${shortRef(input.depositId)}.`
+      : `${who}-এর ${fmt(input.amount)} BDT ডিপোজিট প্রত্যাখ্যান করা হয়েছে। Ref ${shortRef(input.depositId)}.`,
+    linkUrl: '/admin/deposits',
+    priority: 'normal',
+  });
+}
+
+export async function notifyAdminsWithdrawalApproved(input: {
+  withdrawalId: string;
+  amount: number;
+  method: string;
+  userId: string;
+}): Promise<void> {
+  const who = await resolvePlayerHandle(input.userId);
+  await notifyAdmins({
+    kind: 'admin_withdrawal_approved',
+    titleEn: `Withdrawal approved: ${fmt(input.amount)} BDT (${input.method})`,
+    titleBn: `উইথড্র অনুমোদিত: ${fmt(input.amount)} BDT (${input.method})`,
+    bodyEn: `${who}'s ${fmt(input.amount)} BDT withdrawal via ${input.method} was approved and queued for payout. Ref ${shortRef(input.withdrawalId)}. Details at /admin/withdrawals.`,
+    bodyBn: `${who}-এর ${input.method}-এর মাধ্যমে ${fmt(input.amount)} BDT উইথড্র অনুমোদিত ও পেআউটের জন্য অপেক্ষমান। Ref ${shortRef(input.withdrawalId)}.`,
+    linkUrl: '/admin/withdrawals',
+    priority: 'normal',
+  });
+}
+
+export async function notifyAdminsWithdrawalRejected(input: {
+  withdrawalId: string;
+  amount: number;
+  reason: string | null;
+  userId: string;
+}): Promise<void> {
+  const who = await resolvePlayerHandle(input.userId);
+  const reason = (input.reason ?? '').trim();
+  await notifyAdmins({
+    kind: 'admin_withdrawal_rejected',
+    titleEn: `Withdrawal rejected: ${fmt(input.amount)} BDT`,
+    titleBn: `উইথড্র প্রত্যাখ্যাত: ${fmt(input.amount)} BDT`,
+    bodyEn: reason
+      ? `${who}'s ${fmt(input.amount)} BDT withdrawal was rejected and refunded. Reason: ${reason}. Ref ${shortRef(input.withdrawalId)}. Details at /admin/withdrawals.`
+      : `${who}'s ${fmt(input.amount)} BDT withdrawal was rejected and refunded. Ref ${shortRef(input.withdrawalId)}. Details at /admin/withdrawals.`,
+    bodyBn: reason
+      ? `${who}-এর ${fmt(input.amount)} BDT উইথড্র প্রত্যাখ্যান ও ফেরত দেওয়া হয়েছে। কারণ: ${reason}। Ref ${shortRef(input.withdrawalId)}.`
+      : `${who}-এর ${fmt(input.amount)} BDT উইথড্র প্রত্যাখ্যান ও ফেরত দেওয়া হয়েছে। Ref ${shortRef(input.withdrawalId)}.`,
+    linkUrl: '/admin/withdrawals',
+    priority: 'normal',
+  });
+}
+
+export async function notifyAdminsWithdrawalPaid(input: {
+  withdrawalId: string;
+  amount: number;
+  method: string;
+  userId: string;
+  providerRef?: string | null;
+}): Promise<void> {
+  const who = await resolvePlayerHandle(input.userId);
+  const providerRef = (input.providerRef ?? '').trim();
+  await notifyAdmins({
+    kind: 'admin_withdrawal_paid',
+    titleEn: `Withdrawal paid: ${fmt(input.amount)} BDT (${input.method})`,
+    titleBn: `উইথড্র সম্পন্ন: ${fmt(input.amount)} BDT (${input.method})`,
+    bodyEn: providerRef
+      ? `${who}'s ${fmt(input.amount)} BDT payout via ${input.method} was sent. Provider ref: ${providerRef}. Ref ${shortRef(input.withdrawalId)}. Details at /admin/withdrawals.`
+      : `${who}'s ${fmt(input.amount)} BDT payout via ${input.method} was sent. Ref ${shortRef(input.withdrawalId)}. Details at /admin/withdrawals.`,
+    bodyBn: providerRef
+      ? `${who}-এর ${input.method}-এর মাধ্যমে ${fmt(input.amount)} BDT পেআউট পাঠানো হয়েছে। প্রোভাইডার রেফ: ${providerRef}। Ref ${shortRef(input.withdrawalId)}.`
+      : `${who}-এর ${input.method}-এর মাধ্যমে ${fmt(input.amount)} BDT পেআউট পাঠানো হয়েছে। Ref ${shortRef(input.withdrawalId)}.`,
+    linkUrl: '/admin/withdrawals',
+    priority: 'normal',
+  });
+}
+
+export async function notifyAdminsUserRegistered(input: {
+  userId: string;
+  username: string;
+  phone: string;
+  referred?: boolean;
+}): Promise<void> {
+  const masked = maskPhone(input.phone);
+  await notifyAdmins({
+    kind: 'admin_user_registered',
+    titleEn: `New registration: ${input.username}`,
+    titleBn: `নতুন রেজিস্ট্রেশন: ${input.username}`,
+    bodyEn: `${input.username} (${masked}) just signed up${input.referred ? ' via a referral link' : ''}. Ref ${shortRef(input.userId)}. View at /admin/users.`,
+    bodyBn: `${input.username} (${masked}) সবেমাত্র রেজিস্টার করেছেন${input.referred ? ' (রেফারেল লিঙ্কের মাধ্যমে)' : ''}। Ref ${shortRef(input.userId)}.`,
+    linkUrl: '/admin/users',
+    priority: 'low',
+  });
+}
+
+// Fires for both the admin-panel reset request and the SMS OTP flow.
+// Never carries the token or OTP: the message only says a reset was
+// requested and by which channel, so a leak of the alert reveals nothing.
+export async function notifyAdminsPasswordResetRequested(input: {
+  identifier: string;
+  channel: 'admin' | 'sms';
+}): Promise<void> {
+  const channelEn = input.channel === 'sms' ? 'SMS OTP' : 'admin review';
+  const channelBn = input.channel === 'sms' ? 'SMS OTP' : 'অ্যাডমিন রিভিউ';
+  await notifyAdmins({
+    kind: 'admin_password_reset_requested',
+    titleEn: `Password reset requested (${channelEn})`,
+    titleBn: `পাসওয়ার্ড রিসেট অনুরোধ (${channelBn})`,
+    bodyEn: `A password reset was requested for "${input.identifier}" via ${channelEn}. Review at /admin/password-resets.`,
+    bodyBn: `"${input.identifier}"-এর জন্য ${channelBn}-এর মাধ্যমে পাসওয়ার্ড রিসেট অনুরোধ করা হয়েছে। রিভিউ করুন /admin/password-resets.`,
+    linkUrl: '/admin/password-resets',
+    priority: 'normal',
+  });
+}
+
+// Highlights physical rewards so staff know a claim needs manual
+// fulfilment (shipping / hand-off) rather than an auto-credited amount.
+export async function notifyAdminsBettingPassClaim(input: {
+  claimId: string;
+  userId: string;
+  tier: number;
+  rewardLabel: string;
+  amount: number;
+  physical?: boolean;
+}): Promise<void> {
+  const who = await resolvePlayerHandle(input.userId);
+  const value = input.amount > 0 ? `${fmt(input.amount)} ${input.rewardLabel}` : input.rewardLabel;
+  await notifyAdmins({
+    kind: 'admin_betting_pass_claim',
+    titleEn: input.physical
+      ? `Betting Pass reward needs fulfilment: ${input.rewardLabel}`
+      : `Betting Pass reward claimed: ${input.rewardLabel}`,
+    titleBn: input.physical
+      ? `বেটিং পাস পুরস্কার ফুলফিলমেন্ট প্রয়োজন: ${input.rewardLabel}`
+      : `বেটিং পাস পুরস্কার গ্রহণ: ${input.rewardLabel}`,
+    bodyEn: input.physical
+      ? `${who} claimed Tier ${input.tier} reward "${value}". This is a physical reward and needs manual fulfilment. Ref ${shortRef(input.claimId)}. Details at /admin/betting-pass.`
+      : `${who} claimed Tier ${input.tier} reward "${value}". Ref ${shortRef(input.claimId)}. Details at /admin/betting-pass.`,
+    bodyBn: input.physical
+      ? `${who} টিয়ার ${input.tier} পুরস্কার "${value}" দাবি করেছেন। এটি একটি ফিজিক্যাল পুরস্কার, ম্যানুয়াল ফুলফিলমেন্ট প্রয়োজন। Ref ${shortRef(input.claimId)}.`
+      : `${who} টিয়ার ${input.tier} পুরস্কার "${value}" দাবি করেছেন। Ref ${shortRef(input.claimId)}.`,
+    linkUrl: '/admin/betting-pass',
+    priority: input.physical ? 'high' : 'normal',
+  });
+}
+
+export async function notifyAdminsPromoRedeemed(input: {
+  userId: string;
+  code: string;
+  rewardLabel: string;
+  amount: number;
+}): Promise<void> {
+  const who = await resolvePlayerHandle(input.userId);
+  const value = input.amount > 0 ? `${fmt(input.amount)} ${input.rewardLabel}` : input.rewardLabel;
+  await notifyAdmins({
+    kind: 'admin_promo_redeemed',
+    titleEn: `Promo code redeemed: ${input.code}`,
+    titleBn: `প্রমো কোড রিডিম: ${input.code}`,
+    bodyEn: `${who} redeemed code "${input.code}" for ${value}. Details at /admin/promo-codes.`,
+    bodyBn: `${who} "${input.code}" কোড রিডিম করে ${value} পেয়েছেন। বিস্তারিত /admin/promo-codes.`,
+    linkUrl: '/admin/promo-codes',
+    priority: 'normal',
+  });
+}
+
+export async function notifyAdminsPromotionClaimed(input: {
+  userId: string;
+  promotionName: string;
+  amount?: number | null;
+}): Promise<void> {
+  const who = await resolvePlayerHandle(input.userId);
+  const value = input.amount && input.amount > 0 ? `${fmt(input.amount)} BDT` : input.promotionName;
+  await notifyAdmins({
+    kind: 'admin_promotion_claimed',
+    titleEn: `Promotion claimed: ${value}`,
+    titleBn: `প্রমোশন গ্রহণ: ${value}`,
+    bodyEn: `${who} claimed the "${input.promotionName}" promotion${input.amount && input.amount > 0 ? ` (${fmt(input.amount)} BDT)` : ''}. Details at /admin/promotions.`,
+    bodyBn: `${who} "${input.promotionName}" প্রমোশন গ্রহণ করেছেন${input.amount && input.amount > 0 ? ` (${fmt(input.amount)} BDT)` : ''}। বিস্তারিত /admin/promotions.`,
+    linkUrl: '/admin/promotions',
     priority: 'normal',
   });
 }

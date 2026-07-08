@@ -23,7 +23,7 @@ import { requireActiveUser } from '@/lib/auth/rbac';
 import { jsonOk, jsonError } from '@/lib/auth/errors';
 import { rateLimit } from '@/lib/auth/rate-limit';
 import { claimBettingPassReward } from '@/lib/betting-pass/engine';
-import { notifyBettingPassRewardClaimed } from '@/lib/notifications/notify';
+import { notifyBettingPassRewardClaimed, notifyAdminsBettingPassClaim } from '@/lib/notifications/notify';
 
 export async function POST(_req: NextRequest, { params }: { params: { id: string } }) {
   return withAuth(async () => {
@@ -64,6 +64,15 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
       rewardLabel: String(result.rewardKind ?? 'reward'),
       amount: Number(result.rewardAmount ?? 0),
     }).catch((err) => console.error('[betting-pass-claim] notify failed', err));
+
+    notifyAdminsBettingPassClaim({
+      claimId: String(result.claimId),
+      userId: session.sub,
+      tier: Number(result.currentTier ?? 0),
+      rewardLabel: String(result.rewardKind ?? 'reward'),
+      amount: Number(result.rewardAmount ?? 0),
+      physical: String(result.rewardKind ?? '') === 'physical',
+    }).catch((err) => console.error('[betting-pass-claim] admin notify failed', err));
 
     return jsonOk({
       ok: true,

@@ -189,6 +189,9 @@ export function Header() {
 
   const logout = async () => {
     try { await fetch('/api/auth/logout', { method: 'POST' }); } catch { /* ignore */ }
+    // Forget the once-only WinGo rules acceptance so the next player on
+    // this device is asked to agree again.
+    try { window.localStorage.removeItem('pasha9:wingo_rules_accepted'); } catch { /* ignore */ }
     setMe(null);
     triggerWalletRefresh();
     router.refresh();

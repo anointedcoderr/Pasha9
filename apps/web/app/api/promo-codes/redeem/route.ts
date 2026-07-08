@@ -11,7 +11,7 @@ import { requireActiveUser } from '@/lib/auth/rbac';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 import { rateLimit } from '@/lib/auth/rate-limit';
 import { redeemPromoCode } from '@/lib/promo-codes/redeem';
-import { notifyPromoCodeGranted } from '@/lib/notifications/notify';
+import { notifyPromoCodeGranted, notifyAdminsPromoRedeemed } from '@/lib/notifications/notify';
 
 const bodySchema = z.object({
   code: z.string().trim().min(2).max(40),
@@ -47,6 +47,13 @@ export async function POST(req: NextRequest) {
       rewardLabel: String(result.rewardType ?? 'reward'),
       amount: Number(result.amount ?? 0),
     }).catch((err) => console.error('[promo-redeem] notify failed', err));
+
+    notifyAdminsPromoRedeemed({
+      userId: session.sub,
+      code: parsed.data.code.trim().toUpperCase(),
+      rewardLabel: String(result.rewardType ?? 'reward'),
+      amount: Number(result.amount ?? 0),
+    }).catch((err) => console.error('[promo-redeem] admin notify failed', err));
 
     return jsonOk({
       ok: true,

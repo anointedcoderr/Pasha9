@@ -2,10 +2,14 @@
 
 export const dynamic = 'force-dynamic';
 
+import { cookies } from 'next/headers';
 import { db } from '@/lib/db/client';
 import { getOrRefreshSessionClaims } from '@/lib/auth/session';
 import { loadEffectivePermissions } from '@/lib/auth/rbac';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
+import { LANG_COOKIE } from '@/lib/i18n/context';
+
+const LANG_COOKIE_MAX_AGE = 60 * 60 * 24 * 365; // 1 year
 
 export async function GET() {
   // Transparent refresh: if the short access cookie has expired but the
@@ -39,6 +43,28 @@ export async function GET() {
   });
 
   if (!user) return jsonError(401, 'UNAUTHENTICATED');
+
+  // Seed the SSR language cookie from the signed-in user's saved
+  // preference when the browser did not send one. This covers the app
+  // webview first load where the cookie does not ride the request, so
+  // SSR would otherwise fall back to Bangla and ignore their choice. We
+  // only set it when absent, so a live toggle this session still wins.
+  // Best-effort: never blocks or fails the response.
+  try {
+    const jar = cookies();
+    const current = jar.get(LANG_COOKIE)?.value;
+    if (current !== 'bn' && current !== 'en' && (user.language === 'bn' || user.language === 'en')) {
+      jar.set(LANG_COOKIE, user.language, {
+        httpOnly: false,
+        sameSite: 'lax',
+        secure: process.env.NODE_ENV === 'production',
+        path: '/',
+        maxAge: LANG_COOKIE_MAX_AGE,
+      });
+    }
+  } catch {
+    // Cookie seeding is a convenience; the client mount effect also corrects SSR.
+  }
 
   // Surface effective permissions for staff users so the admin shell
   // can filter the sidebar + drawer + page access. Players never get

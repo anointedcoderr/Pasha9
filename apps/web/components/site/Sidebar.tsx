@@ -7,6 +7,8 @@ import { ROUTES } from '@/lib/constants/routes';
 import {
   Home,
   Flame,
+  Dice5,
+  Medal,
   Cherry,
   Fish,
   Trophy,
@@ -24,6 +26,8 @@ import { cn } from '@/lib/utils/cn';
 const items = [
   { key: 'home', href: ROUTES.home, icon: Home },
   { key: 'hot', href: '/games/hot', icon: Flame },
+  { key: 'wingo', href: '/games/wingo', icon: Dice5 },
+  { key: 'leaderboard', href: ROUTES.leaderboard, icon: Medal },
   { key: 'slots', href: ROUTES.slots, icon: Cherry },
   { key: 'fishing', href: ROUTES.fishing, icon: Fish },
   { key: 'sports', href: ROUTES.sports, icon: Trophy },

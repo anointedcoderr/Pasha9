@@ -18,6 +18,7 @@ import { rateLimit } from '@/lib/auth/rate-limit';
 import { sendOtpSms } from '@/lib/sms/service';
 import { canonicalBdPhone, bdPhoneSearchVariants } from '@/lib/auth/bd-phone';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
+import { notifyAdminsPasswordResetRequested } from '@/lib/notifications/notify';
 
 const schema = z.object({ phone: z.string().trim().min(6).max(20) });
 const TTL_MIN = 5;
@@ -73,6 +74,14 @@ export async function POST(req: NextRequest) {
       await sendOtpSms(local, code, 'reset');
     } catch (err) {
       console.error('[forgot/sms/start] send failed', err);
+    }
+    // Best-effort admin ping (bell + Telegram). Masks all but the last
+    // 3 digits and never carries the OTP.
+    try {
+      const masked = local.length > 3 ? `${'*'.repeat(local.length - 3)}${local.slice(-3)}` : local;
+      await notifyAdminsPasswordResetRequested({ identifier: masked, channel: 'sms' });
+    } catch (err) {
+      console.error('[forgot/sms/start] admin notify failed', err);
     }
   }
 

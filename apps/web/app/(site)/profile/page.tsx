@@ -20,7 +20,7 @@ import { triggerWalletRefresh } from '@/components/site/WalletStrip';
 
 export default function ProfilePage() {
   const { me, loading } = useMe();
-  const { lang } = useLang();
+  const { lang, setLang } = useLang();
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   // Bilingual show/hide labels for the password reveal toggles so the
@@ -68,6 +68,10 @@ export default function ProfilePage() {
       const j = await r.json().catch(() => null);
       if (!r.ok) { setError(j?.message ?? j?.code ?? 'Save failed'); return; }
       setToast('Profile updated.');
+      // Apply the language choice immediately: this persists the cookie +
+      // localStorage so SSR and the rest of the app switch without a manual
+      // toggle. Runs after the DB save succeeded and only when it changed.
+      if (language !== me?.language) setLang(language);
       triggerWalletRefresh();
     } finally { setSaving(false); }
   };

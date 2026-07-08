@@ -35,6 +35,8 @@
   "nav": {
     "home": "Home",
     "hot": "Hot Games",
+    "wingo": "WinGo",
+    "leaderboard": "Leaderboard",
     "slots": "Slots",
     "fishing": "Fishing",
     "sports": "Sports",

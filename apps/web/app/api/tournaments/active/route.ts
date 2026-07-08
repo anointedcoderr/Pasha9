@@ -23,17 +23,9 @@ import { jsonOk } from '@/lib/auth/errors';
 import { getCurrentSession } from '@/lib/auth/rbac';
 import { db } from '@/lib/db/client';
 import { getActiveTournamentPublic, type StandingRow } from '@/lib/tournaments/engine';
+import { maskHandle } from '@/lib/utils/mask';
 
 const TOP_LIMIT = 100;
-
-// Mask a username to a short public handle: keep the first two and last
-// character, star the middle. Short names are partly starred too.
-function maskHandle(username: string | null | undefined, fallback: string): string {
-  const name = (username ?? '').trim();
-  if (!name) return fallback;
-  if (name.length <= 3) return `${name.slice(0, 1)}**`;
-  return `${name.slice(0, 2)}${'*'.repeat(Math.min(4, name.length - 3))}${name.slice(-1)}`;
-}
 
 export async function GET() {
   return withAuth(async () => {

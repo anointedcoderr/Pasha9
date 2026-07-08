@@ -21,6 +21,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { BackBar } from '@/components/site/BackBar';
+import { LiveWinnersFeed } from '@/components/site/LiveWinnersFeed';
 import { useLang } from '@/lib/i18n/context';
 import { formatBDT } from '@/lib/utils/format';
 import {
@@ -239,6 +240,11 @@ export default function LeaderboardPage() {
           </p>
         </div>
       )}
+
+      {/* Recent Winners: a live, public, masked feed of recent real wins.
+          Rendered under the board so it is present whether or not a
+          tournament is active. */}
+      <LiveWinnersFeed />
     </div>
   );
 }

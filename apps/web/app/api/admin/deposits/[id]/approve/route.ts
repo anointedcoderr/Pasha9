@@ -37,7 +37,7 @@ import { notifyDepositBonusAwarded } from '@/lib/notifications/notify';
 import { accrueBettingPassOnDeposit } from '@/lib/betting-pass/engine';
 import { sendSms } from '@/lib/sms/service';
 import { fireEvent } from '@/lib/tracking/dispatcher';
-import { notifyDepositApproved } from '@/lib/notifications/notify';
+import { notifyDepositApproved, notifyAdminsDepositApproved } from '@/lib/notifications/notify';
 import { applySelectedDepositPromotion } from '@/lib/promotions/deposit';
 import { pickBestTier, resolveActiveTierRule } from '@/lib/bonuses/deposit-tiers';
 
@@ -384,6 +384,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         amount: Number(amount),
         method: deposit.method,
         depositId: deposit.id,
+      });
+      await notifyAdminsDepositApproved({
+        depositId: deposit.id,
+        amount: Number(amount),
+        method: deposit.method,
+        userId: deposit.userId,
       });
       await fireEvent({
         event: 'deposit',

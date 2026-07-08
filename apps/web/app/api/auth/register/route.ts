@@ -11,6 +11,7 @@ import { generateUniqueReferralCode } from '@/lib/auth/referral';
 import { loadPermissionsForRole } from '@/lib/auth/rbac';
 import { rateLimit } from '@/lib/auth/rate-limit';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
+import { notifyAdminsUserRegistered } from '@/lib/notifications/notify';
 
 const bdPhone = /^(?:\+?880|0)?1[3-9]\d{8}$/;
 
@@ -111,6 +112,20 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     console.error('[register] tracking fire failed', err);
+  }
+
+  // Best-effort admin ping so the operator team sees new signups in the
+  // bell + Telegram group. Never carries the password. Fire-and-forget:
+  // notifyAdmins swallows its own errors, so this cannot fail the signup.
+  try {
+    await notifyAdminsUserRegistered({
+      userId: user.id,
+      username: user.username,
+      phone: user.phone,
+      referred: referredById !== null,
+    });
+  } catch (err) {
+    console.error('[register] admin notify failed', err);
   }
 
   return jsonOk({

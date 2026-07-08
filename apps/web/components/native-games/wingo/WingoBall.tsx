@@ -60,7 +60,7 @@ export function WingoBall({ n, size = 56, selected = false, onClick, asBadge = f
       <span
         aria-hidden={ariaLabel ? undefined : true}
         aria-label={ariaLabel}
-        className={cn('relative inline-flex select-none items-center justify-center rounded-full', className)}
+        className={cn('relative inline-flex shrink-0 select-none items-center justify-center rounded-full', className)}
         style={style}
       >
         {size >= 24 ? gloss : null}
@@ -76,7 +76,7 @@ export function WingoBall({ n, size = 56, selected = false, onClick, asBadge = f
       aria-pressed={selected}
       aria-label={ariaLabel ?? `Number ${n}`}
       className={cn(
-        'wingo-ball relative inline-flex select-none items-center justify-center rounded-full transition-transform duration-150 ease-out',
+        'wingo-ball relative inline-flex shrink-0 select-none items-center justify-center rounded-full transition-transform duration-150 ease-out',
         'hover:-translate-y-0.5 hover:scale-[1.04] active:scale-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-black/40',
         selected && 'wingo-selected',
         className,

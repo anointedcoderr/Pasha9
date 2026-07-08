@@ -26,6 +26,30 @@ import {
 } from './ui';
 import { WingoBall } from './WingoBall';
 
+// Persisted acceptance of the bet rules. Once the player agrees a single
+// time we remember it so every future slip is pre-accepted and they are
+// never asked again (cleared on logout by the Header and blocked-account
+// forced logout).
+const RULES_ACCEPTED_KEY = 'pasha9:wingo_rules_accepted';
+
+function readRulesAccepted(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.localStorage.getItem(RULES_ACCEPTED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function persistRulesAccepted(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(RULES_ACCEPTED_KEY, '1');
+  } catch {
+    /* swallow */
+  }
+}
+
 export interface WingoSelection {
   betType: WingoBetType;
   selection: string;
@@ -67,14 +91,17 @@ export function WingoBetSheet({ open, selection, initialQuantity = 1, minStake, 
 
   const [stake, setStake] = useState<number>(minStake > 0 ? Math.max(1, minStake) : 1);
   const [quantity, setQuantity] = useState<number>(1);
-  const [agreed, setAgreed] = useState<boolean>(false);
+  // Seed acceptance from storage so a returning player is never re-asked.
+  const [agreed, setAgreed] = useState<boolean>(() => readRulesAccepted());
 
-  // Reset on each open so a fresh slip never inherits stale numbers.
+  // Reset on each open so a fresh slip never inherits stale numbers. The
+  // rules acceptance is intentionally NOT reset to false: it is re-read
+  // from storage so a previously accepted player stays accepted.
   useEffect(() => {
     if (open) {
       setStake(Math.max(1, minStake));
       setQuantity(Math.min(100, Math.max(1, initialQuantity)));
-      setAgreed(false);
+      setAgreed(readRulesAccepted());
     }
   }, [open, minStake, initialQuantity]);
 
@@ -257,7 +284,11 @@ export function WingoBetSheet({ open, selection, initialQuantity = 1, minStake, 
               <input
                 type="checkbox"
                 checked={agreed}
-                onChange={(e) => setAgreed(e.target.checked)}
+                onChange={(e) => {
+                  const next = e.target.checked;
+                  setAgreed(next);
+                  if (next) persistRulesAccepted();
+                }}
                 className="mt-0.5 h-4 w-4 shrink-0 accent-amber-400"
               />
               <span>
@@ -270,7 +301,7 @@ export function WingoBetSheet({ open, selection, initialQuantity = 1, minStake, 
             {/* Confirm */}
             <button
               type="button"
-              onClick={() => onConfirm(Math.round(stake), quantity)}
+              onClick={() => { persistRulesAccepted(); onConfirm(Math.round(stake), quantity); }}
               disabled={!canConfirm}
               className={cn(
                 'inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-b from-amber-300 to-amber-500 text-base font-extrabold uppercase tracking-wider text-[#3A1F00] shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_8px_22px_-8px_rgba(245,180,0,0.7)] transition',

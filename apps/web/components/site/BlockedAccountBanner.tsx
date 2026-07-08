@@ -60,6 +60,8 @@ export function BlockedAccountBanner({ username, reason, at }: BlockedAccountBan
     } catch {
       /* ignore */
     }
+    // Forget the once-only WinGo rules acceptance on forced logout.
+    try { window.localStorage.removeItem('pasha9:wingo_rules_accepted'); } catch { /* ignore */ }
     triggerWalletRefresh();
     router.replace('/');
     router.refresh();

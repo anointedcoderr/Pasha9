@@ -15,6 +15,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db/client';
 import { jsonOk, jsonError } from '@/lib/auth/errors';
 import { rateLimit } from '@/lib/auth/rate-limit';
+import { notifyAdminsPasswordResetRequested } from '@/lib/notifications/notify';
 
 const schema = z.object({
   identifier: z.string().trim().min(3).max(120),
@@ -47,6 +48,13 @@ export async function POST(req: NextRequest) {
         identifier: id,
       },
     });
+
+    // Best-effort admin ping (bell + Telegram). Never carries the token.
+    try {
+      await notifyAdminsPasswordResetRequested({ identifier: id, channel: 'admin' });
+    } catch (err) {
+      console.error('[forgot-password] admin notify failed', err);
+    }
   }
 
   return jsonOk({

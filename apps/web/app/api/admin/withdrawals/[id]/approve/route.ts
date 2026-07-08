@@ -32,7 +32,7 @@ import { sendSms } from '@/lib/sms/service';
 import { fireEvent } from '@/lib/tracking/dispatcher';
 import { computeDepositTurnover } from '@/lib/turnover/deposit-gate';
 import { createChaopaoPayOut, type ChaopaoPayMethod } from '@/lib/payments/chaopaopay-client';
-import { notifyWithdrawalApproved } from '@/lib/notifications/notify';
+import { notifyWithdrawalApproved, notifyAdminsWithdrawalApproved } from '@/lib/notifications/notify';
 
 const schema = z.object({ adminNote: z.string().max(500).optional() });
 
@@ -309,6 +309,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         amount: Number(amount),
         method: withdrawal.method,
         withdrawalId: withdrawal.id,
+      });
+      await notifyAdminsWithdrawalApproved({
+        withdrawalId: withdrawal.id,
+        amount: Number(amount),
+        method: withdrawal.method,
+        userId: withdrawal.userId,
       });
       await fireEvent({
         event: 'withdrawal',

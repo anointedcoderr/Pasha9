@@ -9,7 +9,10 @@
 
 'use client';
 
+import { useEffect, useRef } from 'react';
 import { useLang } from '@/lib/i18n/context';
+import { useSoundContext } from '@/lib/sounds/client';
+import { getToneContext, playTone } from '@/lib/sounds/tone';
 import type { WingoPhase } from './useWingoState';
 import { WingoBall } from './WingoBall';
 
@@ -34,6 +37,55 @@ function digits(ms: number): [string, string, string, string] {
 export function WingoTimer({ ms, locked }: { ms: number; locked: boolean }) {
   const [d0, d1, d2, d3] = digits(ms);
   const urgent = !locked && ms <= 10_000;
+
+  // Final-seconds countdown beep. Gated on the shared sound consent
+  // (admin master toggle, user mute, reduced motion) via the sound
+  // context's canPlay, and on a real user gesture so autoplay policy is
+  // satisfied. Tones are generated with the Web Audio API so no asset is
+  // needed. See lib/sounds/tone.ts.
+  const soundCtx = useSoundContext();
+  const canBeep = soundCtx?.canPlay === true;
+  const defaultVolume = soundCtx?.map?.defaultVolume ?? 0.7;
+  const lastBeepSecRef = useRef<number | null>(null);
+  const prevLockedRef = useRef<boolean>(locked);
+
+  // Prime (create + resume) the tone AudioContext on the first user
+  // gesture so the later timer-driven beep is allowed to play.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const prime = () => { getToneContext(); };
+    window.addEventListener('pointerdown', prime, { once: true });
+    window.addEventListener('keydown', prime, { once: true });
+    return () => {
+      window.removeEventListener('pointerdown', prime);
+      window.removeEventListener('keydown', prime);
+    };
+  }, []);
+
+  useEffect(() => {
+    const wasLocked = prevLockedRef.current;
+    prevLockedRef.current = locked;
+    if (!canBeep) { lastBeepSecRef.current = null; return; }
+    // Distinct higher final tone the moment betting locks.
+    if (!wasLocked && locked) {
+      playTone({ freq: 1320, durationMs: 240, volume: 0.32 * defaultVolume, type: 'triangle' });
+      lastBeepSecRef.current = null;
+      return;
+    }
+    if (!locked) {
+      const secs = Math.ceil(ms / 1000);
+      if (secs >= 1 && secs <= 5) {
+        // One beep per whole second; do not double-fire within a second.
+        if (lastBeepSecRef.current !== secs) {
+          lastBeepSecRef.current = secs;
+          playTone({ freq: 880, durationMs: 90, volume: 0.24 * defaultVolume });
+        }
+      } else {
+        lastBeepSecRef.current = null;
+      }
+    }
+  }, [ms, locked, canBeep, defaultVolume]);
+
   return (
     <div
       className={'flex items-center gap-1 ' + (urgent ? 'wingo-urgent' : '')}

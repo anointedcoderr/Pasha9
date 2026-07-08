@@ -12,7 +12,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db/client';
 import { withAuth, ensurePermission, recordActivity } from '@/lib/auth/guard';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
-import { notifyWithdrawalPaid } from '@/lib/notifications/notify';
+import { notifyWithdrawalPaid, notifyAdminsWithdrawalPaid } from '@/lib/notifications/notify';
 
 const schema = z.object({
   providerKey: z.string().trim().max(60).optional().nullable(),
@@ -96,6 +96,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         amount: Number(updated.amount),
         method: updated.method,
         withdrawalId: updated.id,
+        providerRef: parsed.data.providerRef ?? null,
+      });
+      await notifyAdminsWithdrawalPaid({
+        withdrawalId: updated.id,
+        amount: Number(updated.amount),
+        method: updated.method,
+        userId: updated.userId,
         providerRef: parsed.data.providerRef ?? null,
       });
     } catch (err) {

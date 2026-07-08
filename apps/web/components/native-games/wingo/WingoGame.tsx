@@ -359,7 +359,7 @@ export function WingoGame() {
             </p>
             <div className="mt-2 flex gap-1.5 overflow-x-auto scrollbar-none">
               {st.data?.results?.length ? (
-                st.data.results.slice(0, 10).map((r) => <WingoBall key={r.periodNumber} n={r.result} size={26} asBadge />)
+                st.data.results.slice(0, 10).map((r) => <WingoBall key={r.periodNumber} n={r.result} size={26} asBadge className="shrink-0" />)
               ) : (
                 <span className="text-xs text-white/40">{bn ? 'ফলাফলের অপেক্ষায়' : 'Waiting for results'}</span>
               )}

@@ -23,6 +23,7 @@ import {
   Zap,
   Activity,
   Dice5,
+  Medal,
   Gauge,
   Fish,
   Languages,
@@ -41,9 +42,14 @@ interface Item {
   key: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
+  // Optional full dictionary path for the label. Defaults to drawer.<key>.
+  // WinGo + Leaderboard reuse the shared nav.* keys so their labels stay in
+  // step with the desktop sidebar.
+  i18nKey?: string;
 }
 
 const MAIN: Item[] = [
+  { key: 'leaderboard', href: '/leaderboard', icon: Medal, i18nKey: 'nav.leaderboard' },
   { key: 'promotion', href: '/promotions', icon: Gift },
   { key: 'rewards', href: '/rewards', icon: Trophy },
   // VIP Club. The desktop CategoryNav (hidden lg:block) carries this link,
@@ -60,6 +66,7 @@ const GAMES: Item[] = [
   // until real custom games launch. The admin tooling at
   // /admin/native-games remains available so the operator can flip
   // native_games_public_enabled=true once games are ready.
+  { key: 'wingo', href: '/games/wingo', icon: Dice5, i18nKey: 'nav.wingo' },
   { key: 'slots', href: '/slots', icon: Cherry },
   { key: 'casino', href: '/live-casino', icon: Tv2 },
   { key: 'crash', href: '/games/provider?category=crash', icon: Zap },
@@ -392,7 +399,7 @@ function DrawerLink({ item, t, pathname, onClose }: { item: Item; t: (k: string)
       <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-brand-yellow-500/10 text-brand-yellow-700">
         <Icon className="h-3.5 w-3.5" />
       </span>
-      <span>{t(`drawer.${item.key}`)}</span>
+      <span>{t(item.i18nKey ?? `drawer.${item.key}`)}</span>
     </Link>
   );
 }

@@ -13,7 +13,7 @@ import { requireActiveUser } from '@/lib/auth/rbac';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 import { rateLimit } from '@/lib/auth/rate-limit';
 import { runPromotionClaim } from '@/lib/promotions/claim';
-import { notifyPromotionClaim } from '@/lib/notifications/notify';
+import { notifyPromotionClaim, notifyAdminsPromotionClaimed } from '@/lib/notifications/notify';
 
 export async function POST(_req: NextRequest, { params }: { params: { id: string } }) {
   return withAuth(async () => {
@@ -55,6 +55,11 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
     // branch already short-circuited).
     try {
       await notifyPromotionClaim({
+        userId: session.sub,
+        promotionName: result.ruleName,
+        amount: typeof result.amount === 'number' ? result.amount : null,
+      });
+      await notifyAdminsPromotionClaimed({
         userId: session.sub,
         promotionName: result.ruleName,
         amount: typeof result.amount === 'number' ? result.amount : null,
