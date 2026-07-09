@@ -38,13 +38,25 @@ export function WingoTimer({ ms, locked }: { ms: number; locked: boolean }) {
   const [d0, d1, d2, d3] = digits(ms);
   const urgent = !locked && ms <= 10_000;
 
-  // Final-seconds countdown beep. Gated on the shared sound consent
-  // (admin master toggle, user mute, reduced motion) via the sound
-  // context's canPlay, and on a real user gesture so autoplay policy is
-  // satisfied. Tones are generated with the Web Audio API so no asset is
-  // needed. See lib/sounds/tone.ts.
+  // Final-seconds countdown beep. This is the one cue that should be
+  // audible out of the box, so it deliberately does NOT ride the shared
+  // canPlay gate (that stays muted until a gesture and needs the admin
+  // sound-map enabled). The tone pipeline in lib/sounds/tone.ts is
+  // independent of the HTMLAudio sound map, so it plays without
+  // map.enabled. We gate only on reduced-motion and an explicit user
+  // mute (default ON): the header SoundToggle writes
+  // pasha9:sounds_muted = "1" when the player turns sound off, which is
+  // the exact key we read here. The AudioContext is still primed on the
+  // first user gesture below so autoplay policy is satisfied.
   const soundCtx = useSoundContext();
-  const canBeep = soundCtx?.canPlay === true;
+  const reduced = soundCtx?.reduced === true;
+  const explicitlyMuted =
+    typeof window !== 'undefined' &&
+    window.localStorage.getItem('pasha9:sounds_muted') === '1';
+  // Also respect an explicit admin master mute (site sounds turned off);
+  // it defaults on, so the beep still plays by default.
+  const adminOff = soundCtx?.map?.enabled === false;
+  const canBeep = !reduced && !explicitlyMuted && !adminOff;
   const defaultVolume = soundCtx?.map?.defaultVolume ?? 0.7;
   const lastBeepSecRef = useRef<number | null>(null);
   const prevLockedRef = useRef<boolean>(locked);

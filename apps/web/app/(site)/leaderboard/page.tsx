@@ -73,6 +73,42 @@ interface AuthShape {
   user?: { username?: string };
 }
 
+// Recent-winners shape (mirrors /api/winners/recent). When no tournament is
+// active we derive an always-populated Top Winners board from this feed so
+// the page never shows an empty box. Display only, no money logic.
+interface Winner {
+  id: string;
+  handle: string;
+  kind: 'wingo' | 'tournament';
+  mode: string | null;
+  rank: number | null;
+  amount: number;
+  at: string;
+}
+
+function modeLabel(mode: string | null, bn: boolean): string {
+  switch (mode) {
+    case 'wingo_30s':
+      return 'WinGo 30s';
+    case 'wingo_1m':
+      return 'WinGo 1m';
+    case 'wingo_3m':
+      return 'WinGo 3m';
+    case 'wingo_5m':
+      return 'WinGo 5m';
+    default:
+      return bn ? 'উইনগো' : 'WinGo';
+  }
+}
+
+// First initials of a masked handle, for the Top Winners avatars.
+function initials(handle: string): string {
+  const t = handle.trim();
+  if (!t) return '?';
+  const letters = t.replace(/[^a-zA-Z0-9]/g, '');
+  return (letters.slice(0, 2) || t.slice(0, 1)).toUpperCase();
+}
+
 type Remaining = { d: number; h: number; m: number; s: number; done: boolean };
 
 function computeRemaining(endsAt: string): Remaining {
@@ -108,6 +144,8 @@ export default function LeaderboardPage() {
   const bn = lang === 'bn';
 
   const [tournament, setTournament] = useState<Tournament | null>(null);
+  const [winners, setWinners] = useState<Winner[]>([]);
+  const [winnersLoaded, setWinnersLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [authed, setAuthed] = useState(false);
   const [now, setNow] = useState<number>(() => Date.now());
@@ -126,6 +164,30 @@ export default function LeaderboardPage() {
     }
   }, []);
 
+  // Recent winners power the always-populated Top Winners board shown when no
+  // tournament is active. Read-only display data; never moves money.
+  const loadWinners = useCallback(async () => {
+    try {
+      const res = await fetch('/api/winners/recent', { cache: 'no-store' });
+      if (!res.ok) return;
+      const data = await res.json().catch(() => null);
+      if (Array.isArray(data?.winners)) setWinners(data.winners as Winner[]);
+    } catch {
+      // best-effort: keep the last good snapshot on a transient failure
+    } finally {
+      setWinnersLoaded(true);
+    }
+  }, []);
+
+  // Top Winners: highest single wins first, ranked. Keeps the page full and
+  // premium even between tournaments.
+  const topWinners = useMemo(() => {
+    return [...winners]
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 10)
+      .map((w, i) => ({ ...w, rank: i + 1 }));
+  }, [winners]);
+
   // Initial auth check (to distinguish "signed in but not ranked" from a
   // guest) and the first standings load.
   useEffect(() => {
@@ -139,19 +201,21 @@ export default function LeaderboardPage() {
         if (alive) setAuthed(false);
       });
     load();
+    loadWinners();
     return () => {
       alive = false;
     };
-  }, [load]);
+  }, [load, loadWinners]);
 
-  // Poll standings every ~15s while the tab is visible.
+  // Poll standings + winners every ~15s while the tab is visible.
   useEffect(() => {
     const id = setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
       load();
+      loadWinners();
     }, POLL_MS);
     return () => clearInterval(id);
-  }, [load]);
+  }, [load, loadWinners]);
 
   // 1s tick drives the countdown without re-fetching.
   useEffect(() => {
@@ -178,66 +242,46 @@ export default function LeaderboardPage() {
 
       {loading ? (
         <BoardSkeleton />
-      ) : !tournament ? (
-        <EmptyState bn={bn} />
       ) : (
-        <div className="space-y-5">
-          {/* Hero: name, status, countdown */}
-          <section className="relative overflow-hidden rounded-2xl border border-gold-500/25 bg-[radial-gradient(120%_140%_at_15%_0%,#16110a_0%,#0b0e14_55%,#070a0f_100%)] px-5 py-6 shadow-[0_18px_44px_-24px_rgba(0,0,0,0.8)]">
-            <div
-              aria-hidden
-              className="pointer-events-none absolute -right-10 -top-16 h-56 w-56 rounded-full bg-[radial-gradient(circle,rgba(245,208,97,0.22),transparent_65%)] motion-safe:animate-floaty"
-            />
-            <div className="relative">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-gold-500/40 bg-gold-500/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-gold-300">
-                <Trophy className="h-3.5 w-3.5" />
-                {bn ? 'উইনগো টুর্নামেন্ট' : 'WinGo Tournament'}
-              </span>
-              <h1 className="mt-3 font-en text-2xl font-extrabold leading-tight text-ink-hi md:text-3xl">{name}</h1>
-              <p className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-mid">
-                <span className="inline-flex items-center gap-1">
-                  <Users className="h-3.5 w-3.5 text-gold-300/80" />
-                  {tournament.participants} {bn ? 'জন অংশগ্রহণকারী' : 'players in'}
+        <div className="dark-island space-y-5">
+          {/* Premium trophy hero: always present so the page reads as a proper
+              Leaderboard header, never an empty box. */}
+          <LeaderboardHero tournament={tournament} name={name} remaining={remaining} bn={bn} />
+
+          {tournament ? (
+            <>
+              {/* Your position (or a play CTA) */}
+              {me ? (
+                <YourPosition me={me} bn={bn} />
+              ) : showPlayCta ? (
+                <PlayCta authed={authed} bn={bn} />
+              ) : null}
+
+              {/* Prize table */}
+              {tournament.prizes.length > 0 ? <PrizeTable prizes={tournament.prizes} bn={bn} /> : null}
+
+              {/* Standings */}
+              <StandingsTable rows={tournament.standings} bn={bn} />
+
+              {/* Tiebreak transparency */}
+              <p className="flex items-start gap-2 rounded-xl border border-white/5 bg-white/[0.02] px-4 py-3 text-[11px] leading-relaxed text-ink-lo">
+                <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gold-300/70" />
+                <span>
+                  {bn
+                    ? 'র‍্যাঙ্কিং মোট বাজির (WinGo) পরিমাণ অনুসারে। সমান স্কোর হলে যিনি আগে খেলা শুরু করেছেন তিনি এগিয়ে থাকেন। টুর্নামেন্ট শেষ হলে পুরস্কার স্বয়ংক্রিয়ভাবে বিজয়ীর মূল ব্যালেন্সে যোগ হয়।'
+                    : 'Ranking is by total WinGo wagered. Ties are broken by earliest activity first, so the player who started earlier ranks higher. Prizes are paid automatically to each winner main balance when the tournament ends.'}
                 </span>
-                {tournament.turnoverX > 0 ? (
-                  <span className="inline-flex items-center gap-1">
-                    <Coins className="h-3.5 w-3.5 text-gold-300/80" />
-                    {tournament.turnoverX}x {bn ? 'টার্নওভার' : 'turnover'}
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1">
-                    <Coins className="h-3.5 w-3.5 text-neon/80" />
-                    {bn ? 'বিশুদ্ধ ক্যাশ পুরস্কার' : 'Pure cash prizes'}
-                  </span>
-                )}
               </p>
-
-              <Countdown remaining={remaining} bn={bn} />
-            </div>
-          </section>
-
-          {/* Your position (or a play CTA) */}
-          {me ? (
-            <YourPosition me={me} bn={bn} />
-          ) : showPlayCta ? (
-            <PlayCta authed={authed} bn={bn} />
-          ) : null}
-
-          {/* Prize table */}
-          {tournament.prizes.length > 0 ? <PrizeTable prizes={tournament.prizes} bn={bn} /> : null}
-
-          {/* Standings */}
-          <StandingsTable rows={tournament.standings} bn={bn} />
-
-          {/* Tiebreak transparency */}
-          <p className="flex items-start gap-2 rounded-xl border border-white/5 bg-white/[0.02] px-4 py-3 text-[11px] leading-relaxed text-ink-lo">
-            <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gold-300/70" />
-            <span>
-              {bn
-                ? 'র‍্যাঙ্কিং মোট বাজির (WinGo) পরিমাণ অনুসারে। সমান স্কোর হলে যিনি আগে খেলা শুরু করেছেন তিনি এগিয়ে থাকেন। টুর্নামেন্ট শেষ হলে পুরস্কার স্বয়ংক্রিয়ভাবে বিজয়ীর মূল ব্যালেন্সে যোগ হয়।'
-                : 'Ranking is by total WinGo wagered. Ties are broken by earliest activity first, so the player who started earlier ranks higher. Prizes are paid automatically to each winner main balance when the tournament ends.'}
-            </span>
-          </p>
+            </>
+          ) : (
+            <>
+              {/* No tournament running: an always-populated Top Winners board
+                  derived from the live winners feed keeps the page full and
+                  premium instead of a bare empty state. */}
+              <TopWinnersBoard winners={topWinners} loaded={winnersLoaded} bn={bn} />
+              <NextTournamentTeaser authed={authed} bn={bn} />
+            </>
+          )}
         </div>
       )}
 
@@ -246,6 +290,225 @@ export default function LeaderboardPage() {
           tournament is active. */}
       <LiveWinnersFeed />
     </div>
+  );
+}
+
+// ---------- Leaderboard hero ----------
+
+function LeaderboardHero({
+  tournament,
+  name,
+  remaining,
+  bn,
+}: {
+  tournament: Tournament | null;
+  name: string;
+  remaining: Remaining | null;
+  bn: boolean;
+}) {
+  const active = Boolean(tournament);
+  return (
+    <section className="relative overflow-hidden rounded-2xl border border-gold-500/30 bg-[radial-gradient(130%_150%_at_15%_0%,#1b1206_0%,#0b0e14_55%,#05070b_100%)] px-5 py-7 shadow-[0_22px_54px_-26px_rgba(0,0,0,0.85)]">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -right-12 -top-16 h-60 w-60 rounded-full bg-[radial-gradient(circle,rgba(245,208,97,0.24),transparent_65%)] motion-safe:animate-floaty"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -left-12 bottom-[-35%] h-52 w-52 rounded-full bg-[radial-gradient(circle,rgba(54,255,154,0.10),transparent_70%)]"
+      />
+      <div className="relative flex flex-col items-center text-center">
+        {/* Trophy medallion with a soft breathing glow ring */}
+        <div className="relative flex h-20 w-20 items-center justify-center rounded-2xl bg-grad-gold text-[#2a1c00] shadow-[0_12px_32px_-8px_rgba(245,208,97,0.65),inset_0_1px_0_rgba(255,255,255,0.6)]">
+          <span
+            aria-hidden
+            className="pointer-events-none absolute -inset-1.5 rounded-[20px] ring-2 ring-gold-300/40 motion-safe:animate-pulseGlow"
+          />
+          <Trophy className="h-10 w-10" />
+        </div>
+
+        <span className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-gold-500/40 bg-gold-500/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-gold-300">
+          {active ? <Trophy className="h-3.5 w-3.5" /> : <Sparkles className="h-3.5 w-3.5" />}
+          {active ? (bn ? 'উইনগো টুর্নামেন্ট' : 'WinGo Tournament') : bn ? 'লিডারবোর্ড' : 'Leaderboard'}
+        </span>
+
+        <h1 className="mt-3 font-en text-2xl font-black leading-tight text-ink-hi md:text-3xl">
+          {active ? name : bn ? 'লিডারবোর্ড' : 'Leaderboard'}
+        </h1>
+
+        {active ? (
+          <>
+            <p className="mt-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-ink-mid">
+              <span className="inline-flex items-center gap-1">
+                <Users className="h-3.5 w-3.5 text-gold-300/80" />
+                {tournament!.participants} {bn ? 'জন অংশগ্রহণকারী' : 'players in'}
+              </span>
+              {tournament!.turnoverX > 0 ? (
+                <span className="inline-flex items-center gap-1">
+                  <Coins className="h-3.5 w-3.5 text-gold-300/80" />
+                  {tournament!.turnoverX}x {bn ? 'টার্নওভার' : 'turnover'}
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1">
+                  <Coins className="h-3.5 w-3.5 text-neon/80" />
+                  {bn ? 'বিশুদ্ধ ক্যাশ পুরস্কার' : 'Pure cash prizes'}
+                </span>
+              )}
+            </p>
+            <div className="w-full">
+              <Countdown remaining={remaining} bn={bn} />
+            </div>
+          </>
+        ) : (
+          <p className="mt-2 max-w-xs text-sm text-ink-mid">
+            {bn
+              ? 'WinGo খেলুন, র‍্যাঙ্কে উঠুন এবং সত্যিকারের ক্যাশ পুরস্কার জিতুন। নিচে এই মুহূর্তের সেরা বিজয়ীরা।'
+              : "Play WinGo, climb the ranks and win real cash. Below are this session's top winners."}
+          </p>
+        )}
+      </div>
+    </section>
+  );
+}
+
+// ---------- Top winners board (shown when no tournament is active) ----------
+
+function TopWinnersBoard({
+  winners,
+  loaded,
+  bn,
+}: {
+  winners: Array<Winner & { rank: number }>;
+  loaded: boolean;
+  bn: boolean;
+}) {
+  return (
+    <section className="overflow-hidden rounded-2xl border border-gold-500/20 bg-[#0b0e14]">
+      <div className="flex items-center justify-between gap-3 border-b border-white/5 px-4 py-3">
+        <h2 className="inline-flex items-center gap-2 font-en text-sm font-extrabold text-ink-hi">
+          <Crown className="h-4 w-4 text-gold-300" />
+          {bn ? 'সেরা বিজয়ী' : 'Top winners'}
+        </h2>
+        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-ink-lo">
+          <span className="h-1.5 w-1.5 rounded-full bg-neon motion-safe:animate-pulseGlow" aria-hidden />
+          {bn ? 'লাইভ' : 'Live'}
+        </span>
+      </div>
+
+      {!loaded ? (
+        <ul className="divide-y divide-white/5" role="status" aria-label={bn ? 'লোড হচ্ছে' : 'Loading'}>
+          {[0, 1, 2, 3, 4].map((i) => (
+            <li key={i} className="flex items-center gap-3 px-4 py-3">
+              <div className="h-7 w-7 shrink-0 animate-pulse rounded-lg bg-white/[0.05]" />
+              <div className="h-9 w-9 shrink-0 animate-pulse rounded-full bg-white/[0.05]" />
+              <div className="flex-1 space-y-1.5">
+                <div className="h-3 w-24 animate-pulse rounded bg-white/[0.05]" />
+                <div className="h-2.5 w-16 animate-pulse rounded bg-white/[0.04]" />
+              </div>
+              <div className="h-4 w-14 animate-pulse rounded bg-white/[0.05]" />
+            </li>
+          ))}
+        </ul>
+      ) : winners.length === 0 ? (
+        <div className="flex flex-col items-center gap-3 px-6 py-10 text-center">
+          <Crown className="h-8 w-8 text-gold-300" aria-hidden />
+          <p className="font-en text-sm font-extrabold text-ink-hi">
+            {bn ? 'প্রথম বিজয়ী হোন' : 'Be the first winner'}
+          </p>
+          <p className="max-w-xs text-xs text-ink-lo">
+            {bn
+              ? 'এখনও কোনো বিজয়ী নেই। WinGo খেলুন এবং এই তালিকায় আপনার নাম তুলুন।'
+              : 'No winners yet. Play WinGo and put your name at the top of this board.'}
+          </p>
+          <Link
+            href="/games/wingo"
+            className="mt-1 inline-flex items-center gap-2 rounded-xl bg-gradient-to-b from-gold-300 to-gold-500 px-5 py-2.5 font-en text-sm font-bold text-black shadow-lg shadow-gold-500/20 transition active:scale-95"
+          >
+            {bn ? 'WinGo খেলুন' : 'Play WinGo'}
+          </Link>
+        </div>
+      ) : (
+        <ul className="divide-y divide-white/5">
+          {winners.map((w) => {
+            const tint = rankTint(w.rank);
+            const isTournament = w.kind === 'tournament';
+            return (
+              <li key={w.id} className="flex items-center gap-3 px-4 py-3">
+                <span
+                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-xs font-black tabular-nums ring-1 ${tint.ring} ${tint.bg} ${tint.text}`}
+                >
+                  {w.rank <= 3 ? <Crown className="h-3.5 w-3.5" /> : w.rank}
+                </span>
+                <span
+                  aria-hidden
+                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full font-en text-xs font-black ${
+                    isTournament ? 'bg-gold-500/15 text-gold-300' : 'bg-neon/10 text-neon'
+                  }`}
+                >
+                  {initials(w.handle)}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-en text-[15px] font-extrabold leading-tight text-ink-hi">
+                    {w.handle}
+                  </p>
+                  <p className="mt-0.5 truncate text-[11px] font-medium text-ink-mid">
+                    {isTournament
+                      ? bn
+                        ? 'টুর্নামেন্ট পুরস্কার'
+                        : 'Tournament prize'
+                      : modeLabel(w.mode, bn)}
+                  </p>
+                </div>
+                <span
+                  className={`shrink-0 rounded-lg px-2.5 py-1.5 font-en text-sm font-black tabular-nums ${
+                    isTournament ? 'bg-gold-500/15 text-gold-300' : 'bg-neon/10 text-neon'
+                  }`}
+                >
+                  {formatBDT(w.amount)}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+// ---------- Next-tournament teaser (shown when no tournament is active) ----------
+
+function NextTournamentTeaser({ authed, bn }: { authed: boolean; bn: boolean }) {
+  return (
+    <section className="relative overflow-hidden rounded-2xl border border-gold-500/25 bg-[linear-gradient(135deg,#161008_0%,#0a0d13_60%)] px-5 py-5">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -right-10 -top-12 h-40 w-40 rounded-full bg-[radial-gradient(circle,rgba(245,208,97,0.16),transparent_65%)]"
+      />
+      <div className="relative flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gold-500/12 text-gold-300 ring-1 ring-gold-300/40">
+            <Timer className="h-5 w-5" />
+          </div>
+          <div className="min-w-0">
+            <p className="font-en text-sm font-extrabold text-ink-hi">
+              {bn ? 'পরবর্তী টুর্নামেন্ট শীঘ্রই' : 'Next tournament soon'}
+            </p>
+            <p className="mt-0.5 text-xs text-ink-mid">
+              {bn
+                ? 'এখনই WinGo খেলে টার্নওভার গড়ে তুলুন, শুরু হলেই শীর্ষে থাকুন।'
+                : 'Build turnover on WinGo now so you start on top when the next one opens.'}
+            </p>
+          </div>
+        </div>
+        <Link
+          href={authed ? '/games/wingo' : '/?login=1'}
+          className="inline-flex h-11 w-full shrink-0 items-center justify-center gap-1.5 rounded-xl bg-grad-gold px-5 text-sm font-extrabold uppercase tracking-wider text-[#2a1c00] shadow-[inset_0_1px_0_rgba(255,255,255,0.5)] transition-transform duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-300 motion-safe:active:scale-95 sm:w-auto"
+        >
+          {authed ? (bn ? 'WinGo খেলুন' : 'Play WinGo') : bn ? 'লগইন করে খেলুন' : 'Sign in to play'}
+          <ArrowRight className="h-4 w-4" />
+        </Link>
+      </div>
+    </section>
   );
 }
 
@@ -455,39 +718,6 @@ function StandingsTable({ rows, bn }: { rows: StandingRow[]; bn: boolean }) {
           })}
         </ul>
       )}
-    </section>
-  );
-}
-
-// ---------- Empty state ----------
-
-function EmptyState({ bn }: { bn: boolean }) {
-  return (
-    <section className="relative overflow-hidden rounded-2xl border border-gold-500/20 bg-[radial-gradient(120%_140%_at_15%_0%,#16110a_0%,#0b0e14_55%,#070a0f_100%)] px-6 py-12 text-center">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -right-10 -top-14 h-52 w-52 rounded-full bg-[radial-gradient(circle,rgba(245,208,97,0.18),transparent_65%)]"
-      />
-      <div className="relative mx-auto flex max-w-sm flex-col items-center">
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-gold-500/30 bg-gold-500/10 text-gold-300">
-          <Trophy className="h-8 w-8" />
-        </div>
-        <h1 className="mt-4 font-en text-xl font-extrabold text-ink-hi">
-          {bn ? 'এখন কোনো সক্রিয় টুর্নামেন্ট নেই' : 'No active tournament'}
-        </h1>
-        <p className="mt-2 text-sm text-ink-mid">
-          {bn
-            ? 'নতুন WinGo টুর্নামেন্ট শীঘ্রই আসছে। ততক্ষণে WinGo খেলুন এবং প্রস্তুত থাকুন।'
-            : 'A new WinGo tournament is coming soon. Play WinGo in the meantime and be ready to climb.'}
-        </p>
-        <Link
-          href="/games/wingo"
-          className="mt-5 inline-flex h-11 items-center gap-1.5 rounded-xl bg-grad-gold px-5 text-sm font-extrabold uppercase tracking-wider text-[#2a1c00] shadow-[inset_0_1px_0_rgba(255,255,255,0.5)] transition-transform duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-300 motion-safe:active:scale-95"
-        >
-          {bn ? 'WinGo খেলুন' : 'Play WinGo'}
-          <ArrowRight className="h-4 w-4" />
-        </Link>
-      </div>
     </section>
   );
 }

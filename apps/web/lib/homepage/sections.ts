@@ -27,6 +27,7 @@
 
 import { db } from '@/lib/db/client';
 import { isNativeGamesPublic } from '@/lib/native-games/flag';
+import { isWingoEnabled } from '@/lib/wingo/flag';
 
 export interface HomeSectionGame {
   key: string;
@@ -360,6 +361,33 @@ function syntheticHotSection(games: HomeSectionGame[]): HomeSection {
   };
 }
 
+// Synthetic Hot Games entry for Pasha WinGo. WinGo is a round-based
+// native game behind its own wingo_enabled flag (lib/wingo/flag.ts),
+// separate from the external catalog and the native-games public flag,
+// so it is injected here rather than curated through
+// HomepageFeaturedGame. It renders through the existing native Link
+// path in HomeDbGameSection (a Link to /games/wingo with the amber Play
+// pill). With no image upload it falls back to the CategoryHeroArt
+// artwork like any other card, so the strip stays visually consistent.
+function wingoHotCard(): HomeSectionGame {
+  return {
+    key: 'native:wingo',
+    source: 'native',
+    providerKey: null,
+    providerName: 'Pasha Originals',
+    gameUid: null,
+    gameCode: 'wingo',
+    displayName: 'Pasha WinGo',
+    category: null,
+    imageUrl: null,
+    brandName: null,
+    isHot: true,
+    isJackpot: false,
+    minBet: null,
+    href: '/games/wingo',
+  };
+}
+
 // Pull the admin-uploaded iconImageUrl out of PublicSection.meta. The
 // meta column is free-form Json; the value is stored as a plain
 // /uploads/categories/<file> URL or any absolute https URL.
@@ -432,6 +460,10 @@ export async function buildHomeSections(): Promise<HomeSectionsBundle> {
   // Snapshot the native flag once so every per-section decision sees
   // the same value, even if an admin toggles it mid-assembly.
   const nativePublic = await isNativeGamesPublic();
+  // WinGo has its own gate, independent of the native-games public flag.
+  // When it is on we prepend a synthetic Pasha WinGo card to the Hot
+  // Games strip so the round-based game is reachable from the homepage.
+  const wingoEnabled = await isWingoEnabled();
   const featured = await loadFeaturedGames(nativePublic);
   const featuredGames = featured.games;
   const curatedCount = featured.curatedCount;
@@ -532,6 +564,22 @@ export async function buildHomeSections(): Promise<HomeSectionsBundle> {
         });
         sections[hotIdx] = { ...row, isVisible: true, games: hotGames };
       }
+    }
+  }
+
+  // Prepend the Pasha WinGo card to Hot Games when the game is enabled.
+  // Done after the curation force-block so WinGo always leads the strip.
+  // If the homepage_hot row is missing entirely we synthesise it so the
+  // card still reaches the visitor, and we force the section visible so
+  // an operator who hid Hot Games does not also hide WinGo.
+  if (wingoEnabled) {
+    const card = wingoHotCard();
+    const hotIdx = sections.findIndex((s) => s.key === 'homepage_hot');
+    if (hotIdx === -1) {
+      sections.unshift(syntheticHotSection([card]));
+    } else {
+      const row = sections[hotIdx];
+      sections[hotIdx] = { ...row, isVisible: true, games: [card, ...row.games] };
     }
   }
 

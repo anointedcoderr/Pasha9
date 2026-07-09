@@ -290,6 +290,48 @@ body.theme-light .from-neon\/05 { --tw-gradient-from: rgba(255, 204, 0, 0.18) va
 body.theme-admin input[type="checkbox"].accent-neon,
 body.theme-light input[type="checkbox"].accent-neon { accent-color: #1E73E8; }
 
+/* ---------------------------------------------------------------------------
+ * Dark island override.
+ *
+ * A handful of public-site surfaces are deliberately DARK cards living inside
+ * the light shell: the leaderboard boards and the recent-winners feed. The
+ * theme-light remaps above turn the legacy ink / accent utility classes to
+ * DARK values, which makes the card text render dark-on-dark and nearly
+ * invisible. Any element wrapped in a `.dark-island` opts back into the bright
+ * dark-theme palette, so its usernames, amounts and meta read clearly again.
+ * Strictly scoped to `.dark-island` so every light surface elsewhere on the
+ * public site is untouched.
+ * ------------------------------------------------------------------------ */
+body.theme-light .dark-island .text-ink-hi { color: #f4fff7; }
+body.theme-light .dark-island .text-ink-mid { color: #bcd9c6; }
+body.theme-light .dark-island .text-ink-lo { color: #9fb4a8; }
+body.theme-light .dark-island .text-ink-mute { color: #7d938a; }
+body.theme-light .dark-island .text-neon { color: #36ff9a; }
+body.theme-light .dark-island .text-gold-300 { color: #f5d061; }
+body.theme-light .dark-island .text-gold-400 { color: #eec24a; }
+body.theme-light .dark-island .text-gold-500 { color: #e2b13a; }
+body.theme-light .dark-island .text-signal-danger { color: #ff6b6b; }
+body.theme-light .dark-island .text-signal-warn { color: #ffc857; }
+body.theme-light .dark-island .text-signal-ok { color: #36ff9a; }
+
+/* Accent surfaces (green / gold pills, chips) restored on the island so the
+ * amount pills read as brand green / gold rather than the light-theme tints. */
+body.theme-light .dark-island .bg-neon\/05 { background-color: rgba(54, 255, 154, 0.05); }
+body.theme-light .dark-island .bg-neon\/08 { background-color: rgba(54, 255, 154, 0.08); }
+body.theme-light .dark-island .bg-neon\/10 { background-color: rgba(54, 255, 154, 0.10); }
+body.theme-light .dark-island .bg-neon\/15 { background-color: rgba(54, 255, 154, 0.15); }
+body.theme-light .dark-island .bg-gold-500\/5 { background-color: rgba(245, 208, 97, 0.06); }
+body.theme-light .dark-island .bg-gold-500\/10 { background-color: rgba(245, 208, 97, 0.10); }
+body.theme-light .dark-island .bg-gold-500\/15 { background-color: rgba(245, 208, 97, 0.15); }
+
+/* Neon-tinted borders restored to green on the island (theme-light greys
+ * them out, which reads as a dead line on the dark card). */
+body.theme-light .dark-island .border-neon\/10,
+body.theme-light .dark-island .border-neon\/15,
+body.theme-light .dark-island .border-neon\/20,
+body.theme-light .dark-island .border-neon\/25,
+body.theme-light .dark-island .border-neon\/30 { border-color: rgba(54, 255, 154, 0.30); }
+
 @layer components {
   /* Brand buttons (light theme primary + secondary) */
   .btn-yellow {

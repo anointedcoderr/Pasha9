@@ -103,7 +103,7 @@ export function LiveWinnersFeed({ compact = false }: { compact?: boolean }) {
   return (
     <section
       aria-label={bn ? 'সাম্প্রতিক বিজয়ী' : 'Recent winners'}
-      className="overflow-hidden rounded-2xl border border-gold-500/20 bg-[#0b0e14]"
+      className="dark-island overflow-hidden rounded-2xl border border-gold-500/20 bg-[#0b0e14]"
     >
       <div className="flex items-center justify-between gap-3 border-b border-white/5 px-4 py-3">
         <h2 className="inline-flex items-center gap-2 font-en text-sm font-extrabold text-ink-hi">
@@ -146,28 +146,38 @@ export function LiveWinnersFeed({ compact = false }: { compact?: boolean }) {
                 className={`flex items-center gap-3 px-4 py-3 ${fresh ? 'png-fade-up' : ''}`}
               >
                 <span
-                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ring-1 ${
+                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ring-1 ${
                     isTournament
                       ? 'bg-gold-500/12 text-gold-300 ring-gold-300/40'
                       : 'bg-neon/10 text-neon ring-neon/25'
                   }`}
                   aria-hidden
                 >
-                  {isTournament ? <Crown className="h-4 w-4" /> : <Trophy className="h-4 w-4" />}
+                  {isTournament ? <Crown className="h-5 w-5" /> : <Trophy className="h-5 w-5" />}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-bold text-ink-hi">{w.handle}</p>
-                  <p className="truncate text-[11px] text-ink-lo">
-                    {isTournament
-                      ? bn
-                        ? `টুর্নামেন্ট পুরস্কার${w.rank ? ` · ${w.rank} নং স্থান` : ''}`
-                        : `Tournament prize${w.rank ? ` · Rank ${w.rank}` : ''}`
-                      : modeLabel(w.mode)}
-                    {' · '}
-                    {relativeTime(w.at, lang)}
+                  <p className="truncate font-en text-[15px] font-extrabold leading-tight text-ink-hi">
+                    {w.handle}
+                  </p>
+                  <p className="mt-0.5 flex items-center gap-1.5 truncate text-[11px] font-medium">
+                    <span className="text-ink-mid">
+                      {isTournament
+                        ? bn
+                          ? `টুর্নামেন্ট পুরস্কার${w.rank ? ` · ${w.rank} নং` : ''}`
+                          : `Tournament prize${w.rank ? ` · Rank ${w.rank}` : ''}`
+                        : modeLabel(w.mode)}
+                    </span>
+                    <span aria-hidden className="text-ink-lo">
+                      ·
+                    </span>
+                    <span className="text-ink-lo">{relativeTime(w.at, lang)}</span>
                   </p>
                 </div>
-                <span className="shrink-0 rounded-lg bg-neon/10 px-2 py-1 font-en text-xs font-black tabular-nums text-neon">
+                <span
+                  className={`shrink-0 rounded-lg px-2.5 py-1.5 font-en text-sm font-black tabular-nums ${
+                    isTournament ? 'bg-gold-500/15 text-gold-300' : 'bg-neon/10 text-neon'
+                  }`}
+                >
                   {formatBDT(w.amount)}
                 </span>
               </li>

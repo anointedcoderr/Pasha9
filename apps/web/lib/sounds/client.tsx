@@ -56,7 +56,12 @@ const SoundContext = createContext<SoundContextValue | null>(null);
 
 export function SoundProvider({ children }: { children: ReactNode }) {
   const [map, setMap] = useState<SoundMap | null>(null);
-  const [userMuted, setUserMutedState] = useState<boolean>(true); // default muted before gesture
+  // Default UNMUTED. Browser autoplay policy still blocks playback until
+  // the first gesture (audio.play() rejects and is caught), so an
+  // unmuted default never causes surprise audio on load, and it keeps
+  // the header SoundToggle icon in agreement with the WinGo countdown
+  // beep, which plays by default unless pasha9:sounds_muted === "1".
+  const [userMuted, setUserMutedState] = useState<boolean>(false);
   // Notification sound defaults ON. Notifications are an explicit
   // user-requested channel (they granted permission), so the chime
   // is expected behaviour unless they opt out.
@@ -71,10 +76,10 @@ export function SoundProvider({ children }: { children: ReactNode }) {
     if (typeof window === 'undefined') return;
     try {
       const stored = window.localStorage.getItem(STORAGE_MUTED);
-      // Default: muted = true until the user opts in. This matches
-      // every modern browser autoplay policy and stops surprise
-      // audio on the first page load.
-      if (stored === '0') setUserMutedState(false);
+      // Default UNMUTED: only an explicit "1" (the player pressed mute
+      // via the header SoundToggle) mutes. Absent or "0" stays unmuted,
+      // which matches the WinGo countdown beep gate exactly.
+      if (stored === '1') setUserMutedState(true);
       const notifStored = window.localStorage.getItem(STORAGE_NOTIF_SOUND);
       if (notifStored === '0') setNotifSoundEnabledState(false);
       gestureSeenRef.current = window.localStorage.getItem(STORAGE_GESTURE) === '1';

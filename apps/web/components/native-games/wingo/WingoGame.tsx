@@ -315,13 +315,19 @@ export function WingoGame() {
         <div className="grid place-items-center rounded-2xl border border-white/10 bg-black/30 px-6 py-16 text-center">
           <WingoBall n={5} size={72} asBadge />
           <p className="mt-5 text-xs font-bold uppercase tracking-[0.22em] text-amber-200">
-            {bn ? 'শীঘ্রই আসছে' : 'Coming soon'}
+            {!gameEnabled
+              ? bn
+                ? 'গেম সাময়িকভাবে বন্ধ আছে'
+                : 'Game Temporarily Unavailable'
+              : bn
+                ? 'এই মোড বন্ধ আছে'
+                : 'This Mode Is Off'}
           </p>
           <p className="mt-2 max-w-sm text-sm text-white/80">
             {!gameEnabled
               ? bn
-                ? 'উইনগো এখন সাময়িকভাবে বন্ধ। অ্যাডমিন চালু করলে খেলা যাবে।'
-                : 'WinGo is temporarily switched off. It opens once an admin enables it.'
+                ? 'উইনগো এখন সাময়িকভাবে বন্ধ। অ্যাডমিন আবার চালু করলে খেলা যাবে।'
+                : 'WinGo is temporarily unavailable. It will return once an admin turns it back on.'
               : bn
                 ? 'এই মোডটি এখন বন্ধ। অন্য একটি মোড বেছে নিন।'
                 : 'This mode is switched off. Try another mode.'}
