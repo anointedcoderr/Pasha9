@@ -25,7 +25,6 @@ import {
 } from 'lucide-react';
 import { Logo } from './Logo';
 import { LanguageToggle } from './LanguageToggle';
-import { SoundToggle } from './SoundToggle';
 import { AuthModal } from './AuthModal';
 import { MobileDrawer } from './MobileDrawer';
 import { MobileTopBar } from './MobileTopBar';
@@ -224,11 +223,6 @@ export function Header() {
           <Logo tone="dark" size="md" />
 
           <div className="ml-auto flex min-h-[40px] items-center justify-end gap-1.5 sm:min-w-[200px] sm:gap-2">
-            {/* Sound mute control. Mounted here so players have a real
-                toggle for the WinGo countdown beep and premium cues; it
-                writes pasha9:sounds_muted which the beep gate reads.
-                Shown in every auth state, including the initial probe. */}
-            <SoundToggle variant="compact" />
             {!authLoaded ? (
               // Skeleton placeholder. Matches the visual footprint of
               // either auth state (guest or authed) so the right

@@ -4,14 +4,18 @@
 //
 // Public, read-only recent-winners feed for the live winners ticker.
 // Returns the most recent real wins, newest first, with a MASKED player
-// handle (no phone/email). Two sources are merged:
+// handle (no phone/email). EVERY individual winning event is its own row:
+// a player who won ten times appears ten times, one row per win with that
+// win's amount and time. There is no per-player grouping or dedup here.
+// Two sources are merged:
 //   - WON WingoBet rows (the payout credited to the player) with the
 //     WinGo mode and settlement time.
 //   - Paid TournamentPayout prizes (leaderboard cash prizes) with the
 //     finishing rank.
 // This path never moves money and performs only cheap indexed reads with
 // a small bounded limit. It never seeds fake entries: an empty database
-// returns an empty list.
+// returns an empty list. When the recent-winners section is turned off by
+// an admin it returns a disabled marker with an empty list.
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -19,6 +23,7 @@ export const revalidate = 0;
 import { db } from '@/lib/db/client';
 import { jsonOk } from '@/lib/auth/errors';
 import { maskHandle } from '@/lib/utils/mask';
+import { loadSectionFlags } from '@/lib/content/section-flags';
 
 const LIMIT = 20;
 
@@ -36,6 +41,11 @@ interface WinnerItem {
 }
 
 export async function GET() {
+  const flags = await loadSectionFlags();
+  if (!flags.recentWinners) {
+    return jsonOk({ enabled: false, winners: [] });
+  }
+
   // Pull a little extra from each source before merging so the newest
   // LIMIT rows across both are accurate.
   const [bets, prizes] = await Promise.all([
@@ -95,5 +105,5 @@ export async function GET() {
 
   items.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
 
-  return jsonOk({ winners: items.slice(0, LIMIT) });
+  return jsonOk({ enabled: true, winners: items.slice(0, LIMIT) });
 }

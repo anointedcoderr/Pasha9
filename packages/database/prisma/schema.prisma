@@ -3011,4 +3011,7 @@ model WingoBet {
   @@index([userId, createdAt])
   // Tournament leaderboard aggregation: sum stakes over a [start,end) window.
   @@index([createdAt])
+  // Recent-winners feed + 24h winnings leaderboard: WON bets newest first
+  // and summed over the last 24h. Backs the hot, 15s-polled read paths.
+  @@index([status, settledAt])
 }

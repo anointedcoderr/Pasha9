@@ -572,6 +572,8 @@ export default function AdminHomepageSectionsPage() {
 
       <WingoCardImagePanel />
 
+      <SiteSectionsPanel />
+
       <FeaturedPickerModal
         open={pickerOpen}
         onOpenChange={setPickerOpen}
@@ -788,6 +790,116 @@ function WingoCardImagePanel() {
             PNG, JPG or WEBP. Card is 4:3. Recommended: 1200 x 900. Changes go live on the next homepage load.
           </p>
         </div>
+      </div>
+    </Card>
+  );
+}
+
+// Site Sections: on/off toggles for the two display-only public sections
+// (24h winnings leaderboard and the recent-winners feed), backed by
+// SystemSetting through /api/admin/section-flags. Both default ON. Turning
+// one off hides its page/section and its nav entry on the public site and
+// makes the underlying public API return a disabled marker.
+interface SiteFlags {
+  leaderboard: boolean;
+  recentWinners: boolean;
+}
+
+function SiteSectionsPanel() {
+  const [flags, setFlags] = useState<SiteFlags | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [savingKey, setSavingKey] = useState<keyof SiteFlags | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await fetch('/api/admin/section-flags', { cache: 'no-store' });
+      const j = await r.json().catch(() => null);
+      if (!r.ok) throw new Error(j?.message ?? j?.code ?? 'Load failed');
+      setFlags(j.flags as SiteFlags);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Load failed');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const toggle = async (key: keyof SiteFlags) => {
+    if (!flags) return;
+    setSavingKey(key);
+    setErr(null);
+    const next = !flags[key];
+    try {
+      const r = await fetch('/api/admin/section-flags', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ [key]: next }),
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok) throw new Error(j?.message ?? j?.code ?? 'Save failed');
+      setFlags(j.flags as SiteFlags);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Save failed');
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
+  const items: Array<{ key: keyof SiteFlags; title: string; desc: string }> = [
+    {
+      key: 'leaderboard',
+      title: '24h Winnings Leaderboard',
+      desc: 'The /leaderboard page and its Sidebar + drawer nav entries. Off hides the page, hides the nav link, and returns a disabled marker from /api/leaderboard/daily.',
+    },
+    {
+      key: 'recentWinners',
+      title: 'Recent Winners feed',
+      desc: 'The live recent-winners feed (LiveWinnersFeed). Off hides the section and returns a disabled marker from /api/winners/recent.',
+    },
+  ];
+
+  return (
+    <Card padding="md">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">Site sections</p>
+          <h2 className="text-lg font-extrabold text-brand-ink">Leaderboard and Recent Winners</h2>
+          <p className="text-xs text-brand-inkMute">
+            Turn the public 24h winnings leaderboard and the recent-winners feed on or off. Display only, no money movement. Changes go live within a few seconds.
+          </p>
+        </div>
+        <Button variant="ghost" onClick={() => { void load(); }} loading={loading}>Refresh</Button>
+      </div>
+
+      {err ? <p className="mt-2 text-sm text-rose-300">{err}</p> : null}
+
+      <div className="mt-4 space-y-2">
+        {items.map(({ key, title, desc }) => {
+          const on = flags ? flags[key] : true;
+          return (
+            <div key={key} className="flex flex-wrap items-center gap-3 rounded-lg border border-brand-divider bg-brand-surface px-3 py-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-brand-ink">{title}</p>
+                <p className="mt-0.5 text-[11px] text-brand-inkMute">{desc}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => toggle(key)}
+                disabled={loading || savingKey === key || !flags}
+                className={cn(
+                  'inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider transition disabled:opacity-50',
+                  on ? 'border-emerald-400/60 bg-emerald-500/15 text-emerald-100' : 'border-brand-divider text-brand-inkMute',
+                )}
+              >
+                {on ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                {savingKey === key ? 'Saving...' : on ? 'On' : 'Off'}
+              </button>
+            </div>
+          );
+        })}
       </div>
     </Card>
   );

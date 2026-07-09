@@ -37,6 +37,7 @@ import {
 import { useT, useLang } from '@/lib/i18n/context';
 import { Logo } from './Logo';
 import { cn } from '@/lib/utils/cn';
+import { useSectionFlags } from '@/lib/content/use-section-flags';
 
 interface Item {
   key: string;
@@ -88,6 +89,10 @@ interface Props {
 export function MobileDrawer({ open, onClose, isLoggedIn, onRequestLogin, onRequestSignup, onLogout }: Props) {
   const t = useT();
   const { lang, setLang } = useLang();
+  const flags = useSectionFlags();
+  // Hide the Leaderboard entry from the Main group when an admin has
+  // turned the section off.
+  const mainItems = MAIN.filter((it) => (it.key === 'leaderboard' ? flags.leaderboard : true));
   const pathname = usePathname() ?? '';
   const [apkUrl, setApkUrl] = useState<string | null>(null);
   const drawerRef = useRef<HTMLElement | null>(null);
@@ -241,7 +246,7 @@ export function MobileDrawer({ open, onClose, isLoggedIn, onRequestLogin, onRequ
 
         <nav className="flex-1 overflow-y-auto px-3 py-4">
           <Section label={t('drawer.main')}>
-            {MAIN.map((item) => (
+            {mainItems.map((item) => (
               <DrawerLink key={item.key} item={item} t={t} pathname={pathname} onClose={onClose} />
             ))}
           </Section>

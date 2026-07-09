@@ -22,6 +22,7 @@ import {
   LifeBuoy,
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
+import { useSectionFlags } from '@/lib/content/use-section-flags';
 
 const items = [
   { key: 'home', href: ROUTES.home, icon: Home },
@@ -44,6 +45,9 @@ const items = [
 export function Sidebar({ collapsed }: { collapsed?: boolean }) {
   const t = useT();
   const pathname = usePathname();
+  const flags = useSectionFlags();
+  // Hide the Leaderboard entry when an admin has turned the section off.
+  const visibleItems = items.filter((it) => (it.key === 'leaderboard' ? flags.leaderboard : true));
 
   return (
     <aside
@@ -53,7 +57,7 @@ export function Sidebar({ collapsed }: { collapsed?: boolean }) {
       )}
     >
       <nav className="space-y-1">
-        {items.map(({ key, href, icon: Icon }) => {
+        {visibleItems.map(({ key, href, icon: Icon }) => {
           const active = pathname === href || (pathname ?? '').startsWith(href + '/');
           return (
             <Link
@@ -78,9 +82,11 @@ export function Sidebar({ collapsed }: { collapsed?: boolean }) {
 export function MobileSidebar({ items: navItems = items, onSelect }: { items?: typeof items; onSelect?: () => void }) {
   const t = useT();
   const pathname = usePathname();
+  const flags = useSectionFlags();
+  const visibleItems = navItems.filter((it) => (it.key === 'leaderboard' ? flags.leaderboard : true));
   return (
     <nav className="space-y-1">
-      {navItems.map(({ key, href, icon: Icon }) => {
+      {visibleItems.map(({ key, href, icon: Icon }) => {
         const active = pathname === href;
         return (
           <Link

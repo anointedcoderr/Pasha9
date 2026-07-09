@@ -51,6 +51,9 @@ export function LiveWinnersFeed({ compact = false }: { compact?: boolean }) {
 
   const [winners, setWinners] = useState<Winner[]>([]);
   const [loading, setLoading] = useState(true);
+  // When an admin turns the recent-winners section off the API returns a
+  // disabled marker; the whole feed then renders nothing.
+  const [disabled, setDisabled] = useState(false);
   // Track ids already shown so only genuinely new rows animate in. The
   // very first payload does not animate (it is not "new" to the viewer).
   const seenRef = useRef<Set<string> | null>(null);
@@ -61,6 +64,11 @@ export function LiveWinnersFeed({ compact = false }: { compact?: boolean }) {
       const res = await fetch('/api/winners/recent', { cache: 'no-store' });
       if (!res.ok) return;
       const data = await res.json().catch(() => null);
+      if (data?.enabled === false) {
+        setDisabled(true);
+        return;
+      }
+      setDisabled(false);
       const list: Winner[] = Array.isArray(data?.winners) ? (data.winners as Winner[]) : [];
 
       if (seenRef.current === null) {
@@ -99,6 +107,9 @@ export function LiveWinnersFeed({ compact = false }: { compact?: boolean }) {
   }, [load]);
 
   const rows = compact ? winners.slice(0, 6) : winners.slice(0, 20);
+
+  // Section turned off by an admin: render nothing at all.
+  if (disabled) return null;
 
   return (
     <section
