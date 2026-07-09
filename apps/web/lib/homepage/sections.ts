@@ -27,7 +27,7 @@
 
 import { db } from '@/lib/db/client';
 import { isNativeGamesPublic } from '@/lib/native-games/flag';
-import { isWingoEnabled } from '@/lib/wingo/flag';
+import { loadWingoSettings } from '@/lib/wingo/flag';
 
 export interface HomeSectionGame {
   key: string;
@@ -369,7 +369,7 @@ function syntheticHotSection(games: HomeSectionGame[]): HomeSection {
 // path in HomeDbGameSection (a Link to /games/wingo with the amber Play
 // pill). With no image upload it falls back to the CategoryHeroArt
 // artwork like any other card, so the strip stays visually consistent.
-function wingoHotCard(): HomeSectionGame {
+function wingoHotCard(imageUrl: string | null): HomeSectionGame {
   return {
     key: 'native:wingo',
     source: 'native',
@@ -379,7 +379,9 @@ function wingoHotCard(): HomeSectionGame {
     gameCode: 'wingo',
     displayName: 'Pasha WinGo',
     category: null,
-    imageUrl: null,
+    // Operator-managed card image (admin/homepage-sections). When null the
+    // renderer falls back to CategoryHeroArt like any other card.
+    imageUrl: imageUrl,
     brandName: null,
     isHot: true,
     isJackpot: false,
@@ -463,7 +465,8 @@ export async function buildHomeSections(): Promise<HomeSectionsBundle> {
   // WinGo has its own gate, independent of the native-games public flag.
   // When it is on we prepend a synthetic Pasha WinGo card to the Hot
   // Games strip so the round-based game is reachable from the homepage.
-  const wingoEnabled = await isWingoEnabled();
+  const wingoSettings = await loadWingoSettings();
+  const wingoEnabled = wingoSettings.enabled;
   const featured = await loadFeaturedGames(nativePublic);
   const featuredGames = featured.games;
   const curatedCount = featured.curatedCount;
@@ -573,7 +576,7 @@ export async function buildHomeSections(): Promise<HomeSectionsBundle> {
   // card still reaches the visitor, and we force the section visible so
   // an operator who hid Hot Games does not also hide WinGo.
   if (wingoEnabled) {
-    const card = wingoHotCard();
+    const card = wingoHotCard(wingoSettings.homepageImageUrl);
     const hotIdx = sections.findIndex((s) => s.key === 'homepage_hot');
     if (hotIdx === -1) {
       sections.unshift(syntheticHotSection([card]));

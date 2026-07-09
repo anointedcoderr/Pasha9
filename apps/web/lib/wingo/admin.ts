@@ -18,6 +18,7 @@ import {
   type WingoMode,
 } from './config';
 import { loadWingoSettings, type WingoSettings } from './flag';
+import { coerceWingoPaytable, type WingoPaytable } from './paytable';
 
 // Reveal the decrypted server seed ONLY for a settled round so an operator
 // (or the player they are auditing) can recompute the draw. A not-yet
@@ -112,6 +113,10 @@ export interface WingoAdminRoundRow {
   // Decrypted seed, exposed only on the round-detail view of a settled
   // round (null in the list view and for any not-yet-settled round).
   serverSeed: string | null;
+  // Payout multipliers frozen on the round at open, for the audit
+  // drill-in. Null in the list view; coerced (default on pre-feature
+  // rounds) in the round detail.
+  paytable: WingoPaytable | null;
   startsAt: string;
   betCloseAt: string;
   drawsAt: string;
@@ -173,6 +178,8 @@ export async function listRecentWingoRounds(opts: ListRoundsOpts = {}): Promise<
     serverSeedHash: r.serverSeedHash,
     // The list never reveals the seed; drill into the round detail for it.
     serverSeed: null,
+    // The frozen paytable is exposed only on the round detail below.
+    paytable: null,
     startsAt: r.startsAt.toISOString(),
     betCloseAt: r.betCloseAt.toISOString(),
     drawsAt: r.drawsAt.toISOString(),
@@ -221,6 +228,7 @@ export async function getWingoRoundDetail(roundId: string): Promise<WingoRoundDe
       totalPayout: true,
       serverSeed: true,
       serverSeedHash: true,
+      paytable: true,
       startsAt: true,
       betCloseAt: true,
       drawsAt: true,
@@ -268,6 +276,9 @@ export async function getWingoRoundDetail(roundId: string): Promise<WingoRoundDe
       totalPayout: Number(round.totalPayout),
       serverSeedHash: round.serverSeedHash,
       serverSeed: revealSeed(round.status, round.serverSeed),
+      // Coerce the frozen JSON to a full paytable (default on pre-feature
+      // rounds) so the drill-in always shows the rate the round paid at.
+      paytable: coerceWingoPaytable(round.paytable),
       startsAt: round.startsAt.toISOString(),
       betCloseAt: round.betCloseAt.toISOString(),
       drawsAt: round.drawsAt.toISOString(),

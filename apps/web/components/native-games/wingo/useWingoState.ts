@@ -19,6 +19,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { WingoMode } from '@/lib/wingo/config';
+import type { WingoPaytable } from '@/lib/wingo/paytable';
 
 export interface WingoResult {
   periodNumber: string;
@@ -46,6 +47,9 @@ export interface WingoStatePayload {
   mode: WingoMode;
   minStake: number;
   maxStake: number;
+  // The round's frozen payout multipliers (current live paytable in the
+  // disabled branch). Used to show the exact rate this round pays.
+  paytable?: WingoPaytable | null;
   serverTime: string;
   round: WingoRound | null;
   next: { periodNumber: string; startsAt: string; betCloseAt: string; drawsAt: string } | null;

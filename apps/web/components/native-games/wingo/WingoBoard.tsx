@@ -12,6 +12,7 @@ import { useState } from 'react';
 import { Shuffle } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { useLang } from '@/lib/i18n/context';
+import { getToneContext } from '@/lib/sounds/tone';
 import { COLOR_BUTTON, QUANTITY_CHIPS, pillShadow, type WingoColorSel } from './ui';
 import { WingoBall } from './WingoBall';
 import type { WingoSelection } from './WingoBetSheet';
@@ -30,6 +31,12 @@ export function WingoBoard({ locked, disabled, onPick }: Props) {
   const off = locked || disabled;
   const pick = (selection: WingoSelection) => {
     if (off) return;
+    // Prime (create + resume + iOS silent-unlock) the shared tone context
+    // synchronously inside this guaranteed board tap, so a bettor unlocks
+    // the countdown beep for the rest of the round even if they arrived
+    // straight on the WinGo page without an earlier gesture. Best effort;
+    // getToneContext never throws.
+    getToneContext();
     onPick(selection, qty);
   };
 

@@ -49,10 +49,13 @@ import {
 } from './config';
 import {
   payoutMultiplier,
+  coerceWingoPaytable,
   resultColorIdentity,
   resultSize,
   isValidSelection,
+  type WingoPaytable,
 } from './paytable';
+import { loadWingoPaytable } from './flag';
 
 // ---------- Errors surfaced to the route layer ----------
 
@@ -165,6 +168,13 @@ export async function ensureRound(window: RoundWindow): Promise<WingoRound> {
   if (existing) return existing;
 
   const serverSeed = generateServerSeed();
+  // Freeze the current live paytable onto the round at open, the same
+  // choke point that commits the seed. Read exactly once here; settlement
+  // reads this frozen copy, never the live setting, so an admin edit can
+  // never change what an already-placed bet pays. Never overwrites an
+  // existing round (the findUnique short-circuit above), so it is
+  // idempotent under concurrent openers.
+  const paytable = await loadWingoPaytable();
   try {
     return await db.wingoRound.create({
       data: {
@@ -176,6 +186,7 @@ export async function ensureRound(window: RoundWindow): Promise<WingoRound> {
         drawsAt: window.drawsAt,
         serverSeed: encryptString(serverSeed),
         serverSeedHash: hashServerSeed(serverSeed),
+        paytable: paytable as unknown as Prisma.InputJsonValue,
       },
     });
   } catch (err) {
@@ -428,6 +439,7 @@ async function drainPendingBets(
   result: number,
   periodNumber: string,
   now: Date,
+  paytable: WingoPaytable,
 ): Promise<void> {
   // Progress is guaranteed: every loop flips >= 1 bet out of PENDING (or a
   // concurrent caller already did), so the PENDING set strictly shrinks.
@@ -443,7 +455,7 @@ async function drainPendingBets(
     await db.$transaction(
       async (tx) => {
         for (const bet of batch) {
-          const mult = payoutMultiplier(bet.betType, bet.betValue, result);
+          const mult = payoutMultiplier(bet.betType, bet.betValue, result, paytable);
           const won = mult > 0;
           const payout = won ? dec(bet.betAmount).mul(mult).toDecimalPlaces(2) : dec(0);
 
@@ -585,7 +597,11 @@ export async function settleRound(roundId: string): Promise<SettleResult> {
   // its own short transaction and each bet flip is guarded, so a busy round
   // never times out and nothing is ever double-paid. Totals + the settled
   // status/timestamp are written only after no PENDING bet remains.
-  await drainPendingBets(roundId, drawn.result, drawn.periodNumber, now);
+  // Settle at the round's FROZEN paytable, never the live setting. A null
+  // (pre-feature round) coerces to the code default, which equals today's
+  // numbers, so historical rounds settle exactly as before.
+  const frozenPaytable = coerceWingoPaytable(drawn.paytable);
+  await drainPendingBets(roundId, drawn.result, drawn.periodNumber, now, frozenPaytable);
   const { settledNow } = await finalizeRoundTotals(roundId, now, { settle: true });
 
   const final = await db.wingoRound.findUnique({ where: { id: roundId } });
@@ -607,14 +623,15 @@ export async function sweepStrandedBets(opts?: { limit?: number }): Promise<numb
     },
     orderBy: { drawsAt: 'asc' },
     take: Math.min(Math.max(opts?.limit ?? 100, 1), 500),
-    select: { id: true, result: true, periodNumber: true },
+    select: { id: true, result: true, periodNumber: true, paytable: true },
   });
 
   let swept = 0;
   for (const r of rounds) {
     if (r.result === null) continue;
     const now = new Date();
-    await drainPendingBets(r.id, r.result, r.periodNumber, now);
+    // Stranded bets settle at the same frozen rate as the rest of the round.
+    await drainPendingBets(r.id, r.result, r.periodNumber, now, coerceWingoPaytable(r.paytable));
     // The round is already settled; only refresh its totals to fold in the
     // bets we just paid. No status flip needed.
     await finalizeRoundTotals(r.id, now, { settle: false });

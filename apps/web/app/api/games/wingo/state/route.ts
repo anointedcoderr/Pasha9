@@ -36,6 +36,7 @@ import { isWingoMode, type WingoMode } from '@/lib/wingo/config';
 import { ensureRounds, settleDueRounds, computeRoundWindow, roundWindowByIndex } from '@/lib/wingo/engine';
 import { getRecentResults, WINGO_HISTORY_LIMIT } from '@/lib/wingo/read';
 import { loadWingoSettings } from '@/lib/wingo/flag';
+import { coerceWingoPaytable } from '@/lib/wingo/paytable';
 
 function phaseFor(betCloseMs: number, drawMs: number, nowMs: number): { phase: 'open' | 'closed'; secondsRemaining: number } {
   if (nowMs < betCloseMs) {
@@ -64,6 +65,8 @@ export async function GET(req: NextRequest) {
       mode,
       minStake: settings.minStake,
       maxStake: settings.maxStake,
+      // Current live paytable so a disabled board can still render rates.
+      paytable: settings.paytable,
       serverTime: nowIso,
       round: null,
       next: null,
@@ -92,6 +95,9 @@ export async function GET(req: NextRequest) {
     mode,
     minStake: settings.minStake,
     maxStake: settings.maxStake,
+    // The board must show exactly what THIS round pays: its frozen
+    // paytable (coerced; pre-feature rounds fall back to the default).
+    paytable: coerceWingoPaytable(current.paytable),
     serverTime: nowIso,
     round: {
       roundId: current.id,

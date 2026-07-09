@@ -21,9 +21,10 @@ import {
   QUANTITY_CHIPS,
   COLOR_BUTTON,
   selectionLabel,
-  SELECTION_HEADLINE,
+  headlinesFromPaytable,
   type WingoBetType,
 } from './ui';
+import type { WingoPaytable } from '@/lib/wingo/paytable';
 import { WingoBall } from './WingoBall';
 
 // Persisted acceptance of the bet rules. Once the player agrees a single
@@ -62,6 +63,10 @@ interface Props {
   minStake: number;
   maxStake: number;
   balance: number | null;
+  // The round's frozen paytable so the headline rate + potential return
+  // match exactly what THIS round pays. Null before state loads (falls
+  // back to the code default).
+  paytable?: WingoPaytable | null;
   locked: boolean; // round no longer open for betting
   submitting: boolean;
   onClose: () => void;
@@ -85,7 +90,7 @@ function tintFor(sel: WingoSelection | null): { border: string; head: string } {
   return { border: 'border-amber-400/50', head: 'from-[#2a1810] to-[#120a06]' };
 }
 
-export function WingoBetSheet({ open, selection, initialQuantity = 1, minStake, maxStake, balance, locked, submitting, onClose, onConfirm }: Props) {
+export function WingoBetSheet({ open, selection, initialQuantity = 1, minStake, maxStake, balance, paytable, locked, submitting, onClose, onConfirm }: Props) {
   const { lang } = useLang();
   const bn = lang === 'bn';
 
@@ -112,7 +117,8 @@ export function WingoBetSheet({ open, selection, initialQuantity = 1, minStake, 
   const overBalance = balance != null && total > balance;
   const canConfirm = !locked && !submitting && agreed && !overMax && !underMin && total > 0 && !overBalance;
 
-  const headline = selection ? SELECTION_HEADLINE[selection.betType === 'number' ? 'number' : selection.selection] ?? 0 : 0;
+  const headlines = headlinesFromPaytable(paytable);
+  const headline = selection ? headlines[selection.betType === 'number' ? 'number' : selection.selection] ?? 0 : 0;
   const potential = total * headline;
 
   if (!selection) return null;

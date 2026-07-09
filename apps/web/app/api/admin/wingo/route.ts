@@ -24,6 +24,9 @@ import {
   setWingoEnabled,
   setWingoModeEnabled,
   setWingoStakeLimits,
+  setWingoPaytable,
+  setWingoHomepageImage,
+  WINGO_PAYOUT_MAX,
 } from '@/lib/wingo/flag';
 import { isWingoMode, type WingoMode } from '@/lib/wingo/config';
 
@@ -37,12 +40,30 @@ export async function GET() {
 
 const modeFlagsSchema = z.record(z.string(), z.boolean());
 
+// Every payout field: finite, >= 1, <= the payout ceiling. The setter
+// clamps again on write so a value that slips through still lands safe.
+const payoutField = z.number().finite().min(1).max(WINGO_PAYOUT_MAX);
+const paytableSchema = z.object({
+  colorGreen: payoutField,
+  colorRed: payoutField,
+  colorViolet: payoutField,
+  colorHalf: payoutField,
+  number: payoutField,
+  big: payoutField,
+  small: payoutField,
+});
+
 const patchSchema = z.object({
   enabled: z.boolean().optional(),
   // Map of wingo mode -> enabled. Only known modes are applied.
   modes: modeFlagsSchema.optional(),
   minStake: z.coerce.number().positive().max(100_000).optional(),
   maxStake: z.coerce.number().positive().max(100_000).optional(),
+  // Admin-editable payout multipliers (all fields required together).
+  paytable: paytableSchema.optional(),
+  // Homepage card image URL (an /uploads path or absolute URL), or null to
+  // clear it and fall back to generated art.
+  homepageImageUrl: z.string().trim().max(2048).nullable().optional(),
 });
 
 export async function PATCH(req: NextRequest) {
@@ -81,6 +102,14 @@ export async function PATCH(req: NextRequest) {
       }
     }
 
+    if (parsed.data.paytable) {
+      await setWingoPaytable(parsed.data.paytable);
+    }
+
+    if (parsed.data.homepageImageUrl !== undefined) {
+      await setWingoHomepageImage(parsed.data.homepageImageUrl);
+    }
+
     const after = await loadWingoSettings();
 
     await recordActivity({
@@ -94,12 +123,16 @@ export async function PATCH(req: NextRequest) {
           modes: before.modes,
           minStake: before.minStake,
           maxStake: before.maxStake,
+          paytable: before.paytable,
+          homepageImageUrl: before.homepageImageUrl,
         },
         after: {
           enabled: after.enabled,
           modes: after.modes,
           minStake: after.minStake,
           maxStake: after.maxStake,
+          paytable: after.paytable,
+          homepageImageUrl: after.homepageImageUrl,
         },
       },
     });

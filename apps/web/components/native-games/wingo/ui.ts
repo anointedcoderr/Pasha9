@@ -10,6 +10,7 @@
 //   1,3,7,9 = green     2,4,6,8 = red
 
 import type { Lang } from '@/lib/i18n/context';
+import { DEFAULT_WINGO_PAYTABLE, type WingoPaytable } from '@/lib/wingo/paytable';
 
 export type WingoColorId = 'red' | 'green' | 'red_violet' | 'green_violet';
 export type WingoSizeId = 'big' | 'small';
@@ -34,15 +35,23 @@ export function hasViolet(n: number): boolean {
   return n === 0 || n === 5;
 }
 
-// Headline multiplier shown on each selection button (best-case return).
-export const SELECTION_HEADLINE: Record<string, number> = {
-  green: 2,
-  red: 2,
-  violet: 4.5,
-  big: 2,
-  small: 2,
-  number: 9,
-};
+// Headline multiplier shown on each selection button (best-case return),
+// derived from the round's frozen paytable so the displayed rate always
+// matches what the round actually pays. Falls back to the code default
+// (todays numbers) on first render before state loads. Keyed by the
+// selection value the bet sheet uses: green / red / violet / big / small
+// and the special `number` key for any 0..9 digit bet.
+export function headlinesFromPaytable(pt?: WingoPaytable | null): Record<string, number> {
+  const p = pt ?? DEFAULT_WINGO_PAYTABLE;
+  return {
+    green: p.colorGreen,
+    red: p.colorRed,
+    violet: p.colorViolet,
+    big: p.big,
+    small: p.small,
+    number: p.number,
+  };
+}
 
 // ---------- Premium colour + material token layer ----------
 //

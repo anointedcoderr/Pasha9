@@ -2935,6 +2935,11 @@ model WingoRound {
   serverSeed     String    @db.Text
   // SHA-256 hex of the plaintext seed, public from round open.
   serverSeedHash String
+  // Payout multipliers frozen at round open (the same choke point that
+  // commits the seed). Settlement reads THIS, never the live setting, so
+  // an admin paytable edit can never change what an already-placed bet
+  // pays. Null on pre-feature rounds; those fall back to the code default.
+  paytable       Json?
   // Running audit aggregates over this round's bets.
   betCount       Int       @default(0)
   totalStake     Decimal   @default(0) @db.Decimal(14, 2)

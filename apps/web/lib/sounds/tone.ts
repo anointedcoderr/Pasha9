@@ -60,11 +60,50 @@ export interface ToneOptions {
   type?: OscillatorType;
 }
 
+// Re-arm the tone context after interruptions. iOS suspends the shared
+// AudioContext whenever the tab is backgrounded, the Control Center opens,
+// or a call comes in, and it will not resume on its own. This installs
+// PERSISTENT (not once) listeners so that the next visibility-restore or
+// user gesture after any such interruption resumes + re-unlocks the
+// context, instead of leaving every later beep silently dropped. Idempotent
+// and best effort: it never throws and installs its listeners at most once.
+let armed = false;
+export function armToneUnlock(): void {
+  if (typeof window === 'undefined' || armed) return;
+  armed = true;
+  try {
+    const resumeIfNeeded = () => {
+      // Only reach for the context when it exists and is not running, so a
+      // healthy running context is never disturbed.
+      if (ctx && ctx.state !== 'running') getToneContext();
+    };
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') resumeIfNeeded();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    // Persistent (not once): every gesture is a fresh chance to resume a
+    // context that iOS suspended while we were away.
+    window.addEventListener('pointerdown', resumeIfNeeded);
+    window.addEventListener('keydown', resumeIfNeeded);
+  } catch {
+    /* best effort */
+  }
+}
+
 // Play a single short tone. Uses a soft attack and exponential release so
 // the beep reads as a chime, not a click.
 export function playTone(opts?: ToneOptions): void {
   const ac = getToneContext();
-  if (!ac || ac.state !== 'running') return;
+  if (!ac) return;
+  // If the context is suspended (for example iOS just returned from the
+  // background), kick a resume and STILL schedule the oscillator. Web Audio
+  // permits scheduling on a suspended context; the note fires the instant
+  // the context resumes, so we do not silently drop the first post-resume
+  // beep. getToneContext already called resume() above; this is belt and
+  // braces and best effort.
+  if (ac.state !== 'running') {
+    try { void ac.resume(); } catch { /* best effort */ }
+  }
   try {
     const now = ac.currentTime;
     const dur = Math.max(0.02, (opts?.durationMs ?? 120) / 1000);

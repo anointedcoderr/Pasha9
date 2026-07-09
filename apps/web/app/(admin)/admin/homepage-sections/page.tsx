@@ -570,6 +570,8 @@ export default function AdminHomepageSectionsPage() {
         </div>
       </Card>
 
+      <WingoCardImagePanel />
+
       <FeaturedPickerModal
         open={pickerOpen}
         onOpenChange={setPickerOpen}
@@ -655,6 +657,139 @@ export default function AdminHomepageSectionsPage() {
         )}
       </Card>
     </div>
+  );
+}
+
+// Operator control for the Pasha WinGo Hot Games card image. WinGo is
+// injected into the strip separately from the curated featured list
+// (lib/homepage/sections.ts), so its image is managed here through the
+// admin/wingo settings, not the featured-game rows. Reuses the exact
+// upload flow the featured thumbnails use: POST /api/admin/uploads
+// (category games) then PATCH /api/admin/wingo { homepageImageUrl }.
+function WingoCardImagePanel() {
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await fetch('/api/admin/wingo', { cache: 'no-store' });
+      const j = await r.json().catch(() => null);
+      if (r.ok) setImageUrl(j?.settings?.homepageImageUrl ?? null);
+    } catch {
+      /* best-effort */
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const patchImage = useCallback(async (url: string | null) => {
+    const r = await fetch('/api/admin/wingo', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ homepageImageUrl: url }),
+    });
+    const j = await r.json().catch(() => null);
+    if (!r.ok) throw new Error(j?.message ?? j?.code ?? 'Save failed');
+  }, []);
+
+  const onUpload = async (file: File) => {
+    setBusy(true);
+    setErr(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('category', 'games');
+      const upRes = await fetch('/api/admin/uploads', { method: 'POST', body: fd });
+      const upData = await upRes.json().catch(() => null);
+      if (!upRes.ok) throw new Error(upData?.message ?? upData?.code ?? 'Upload failed');
+      const url = upData.url as string;
+      await patchImage(url);
+      setImageUrl(url);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Image save failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onReset = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      await patchImage(null);
+      setImageUrl(null);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Reset failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card padding="md">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">Pasha WinGo card image</p>
+          <h2 className="text-lg font-extrabold text-brand-ink">WinGo Hot Games thumbnail</h2>
+          <p className="text-xs text-brand-inkMute">
+            Shown on the WinGo card in the Hot Games strip when WinGo is enabled. Leave empty to use the generated artwork.
+          </p>
+        </div>
+      </div>
+
+      {err ? <p className="mt-2 text-sm text-rose-300">{err}</p> : null}
+
+      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-stretch">
+        <div className="relative h-[90px] w-[120px] shrink-0 overflow-hidden rounded-lg border border-brand-divider bg-brand-paper">
+          {imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={imageUrl} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-wider text-brand-inkMute">
+              {loading ? 'Loading...' : 'Generated art'}
+            </div>
+          )}
+          {imageUrl ? (
+            <span className="absolute right-0 top-0 inline-flex items-center rounded-bl-md bg-brand-yellow-500 px-1 text-[8px] font-bold text-brand-ink">CUSTOM</span>
+          ) : null}
+        </div>
+        <div className="flex flex-1 flex-col gap-2">
+          <div className="flex flex-wrap gap-2">
+            <label className={cn('inline-flex h-9 cursor-pointer items-center rounded-md border border-brand-divider bg-brand-paper px-3 text-xs font-semibold text-brand-ink hover:border-brand-yellow-500', busy && 'pointer-events-none opacity-60')}>
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = '';
+                  if (file) onUpload(file);
+                }}
+              />
+              {busy ? 'Uploading...' : imageUrl ? 'Change image' : 'Upload image'}
+            </label>
+            {imageUrl ? (
+              <button
+                type="button"
+                onClick={onReset}
+                disabled={busy}
+                className="inline-flex h-9 items-center rounded-md border border-brand-divider bg-brand-paper px-3 text-xs font-semibold text-rose-600 hover:border-rose-400 disabled:opacity-60"
+              >
+                Reset to generated art
+              </button>
+            ) : null}
+          </div>
+          <p className="text-[10px] text-brand-inkMute">
+            PNG, JPG or WEBP. Card is 4:3. Recommended: 1200 x 900. Changes go live on the next homepage load.
+          </p>
+        </div>
+      </div>
+    </Card>
   );
 }
 

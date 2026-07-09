@@ -14,6 +14,7 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { armToneUnlock, getToneContext } from '@/lib/sounds/tone';
 
 const STORAGE_MUTED = 'pasha9:sounds_muted';
 const STORAGE_GESTURE = 'pasha9:sounds_gesture';
@@ -112,15 +113,31 @@ export function SoundProvider({ children }: { children: ReactNode }) {
 
   // Mark gesture once the user has interacted at least once. After
   // that, audio.play() is allowed by every browser.
+  //
+  // This handler is mounted app-wide and fires on the FIRST pointerdown or
+  // keydown anywhere in the session (login, menu, an earlier SPA route). We
+  // piggyback the tone-context prime here so the shared Web Audio context is
+  // created + resumed + silent-unlocked from inside that real gesture. The
+  // (site) layout persists across SPA navigation, so a tap on any earlier
+  // page carries the iOS unlock into WinGo, letting the setInterval-driven
+  // countdown beep sound even for a player who only WATCHES the timer and
+  // never taps the WinGo page itself. Best effort: getToneContext never
+  // throws. We also arm the interruption re-unlock listeners once so beeps
+  // recover after backgrounding / Control Center / calls.
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    armToneUnlock();
     const mark = () => {
+      // Always prime the tone context on the gesture, even if the mark flag
+      // was already persisted from a prior session (localStorage survives
+      // but the AudioContext does not, so it must be re-created per load).
+      getToneContext();
       if (gestureSeenRef.current) return;
       gestureSeenRef.current = true;
       try { window.localStorage.setItem(STORAGE_GESTURE, '1'); } catch { /* swallow */ }
     };
-    window.addEventListener('pointerdown', mark, { once: true });
-    window.addEventListener('keydown', mark, { once: true });
+    window.addEventListener('pointerdown', mark);
+    window.addEventListener('keydown', mark);
     return () => {
       window.removeEventListener('pointerdown', mark);
       window.removeEventListener('keydown', mark);

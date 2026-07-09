@@ -43,20 +43,23 @@ export function WingoTimer({ ms, locked }: { ms: number; locked: boolean }) {
   // canPlay gate (that stays muted until a gesture and needs the admin
   // sound-map enabled). The tone pipeline in lib/sounds/tone.ts is
   // independent of the HTMLAudio sound map, so it plays without
-  // map.enabled. We gate only on reduced-motion and an explicit user
-  // mute (default ON): the header SoundToggle writes
-  // pasha9:sounds_muted = "1" when the player turns sound off, which is
-  // the exact key we read here. The AudioContext is still primed on the
-  // first user gesture below so autoplay policy is satisfied.
+  // map.enabled. We gate ONLY on an explicit user mute (default ON) and an
+  // explicit admin master-off. Sound is NOT motion, so the beep is
+  // deliberately decoupled from prefers-reduced-motion here: a player with
+  // iOS Reduce Motion on still hears the countdown (only the visual pulse
+  // respects reduced-motion, handled in CSS). The header SoundToggle
+  // writes pasha9:sounds_muted = "1" when the player turns sound off, which
+  // is the exact key we read here. The AudioContext is primed app-wide on
+  // the first user gesture (SoundProvider) and re-primed on the board tap,
+  // so autoplay policy is satisfied even for a player who only watches.
   const soundCtx = useSoundContext();
-  const reduced = soundCtx?.reduced === true;
   const explicitlyMuted =
     typeof window !== 'undefined' &&
     window.localStorage.getItem('pasha9:sounds_muted') === '1';
   // Also respect an explicit admin master mute (site sounds turned off);
   // it defaults on, so the beep still plays by default.
   const adminOff = soundCtx?.map?.enabled === false;
-  const canBeep = !reduced && !explicitlyMuted && !adminOff;
+  const canBeep = !explicitlyMuted && !adminOff;
   const defaultVolume = soundCtx?.map?.defaultVolume ?? 0.7;
   const lastBeepSecRef = useRef<number | null>(null);
   const prevLockedRef = useRef<boolean>(locked);

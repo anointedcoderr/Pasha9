@@ -45,15 +45,49 @@ interface ModeTotals {
   houseResult: number;
 }
 
+interface Paytable {
+  colorGreen: number;
+  colorRed: number;
+  colorViolet: number;
+  colorHalf: number;
+  number: number;
+  big: number;
+  small: number;
+}
+
 interface Overview {
   settings: {
     enabled: boolean;
     modes: Record<string, boolean>;
     minStake: number;
     maxStake: number;
+    paytable: Paytable;
+    homepageImageUrl: string | null;
   };
   modes: ModeTotals[];
 }
+
+// The bet-type rows of the editable paytable, in display order. `key`
+// maps to the Paytable field; `half` marks the special 1.5x color case.
+const PAYTABLE_FIELDS: Array<{ key: keyof Paytable; en: string; bn: string }> = [
+  { key: 'colorGreen', en: 'Green', bn: 'সবুজ' },
+  { key: 'colorRed', en: 'Red', bn: 'লাল' },
+  { key: 'colorViolet', en: 'Violet', bn: 'বেগুনি' },
+  { key: 'colorHalf', en: 'Color on 0 or 5 (half)', bn: '০ বা ৫-এ রঙ (হাফ)' },
+  { key: 'number', en: 'Number (exact)', bn: 'নম্বর (সঠিক)' },
+  { key: 'big', en: 'Big (5-9)', bn: 'বড় (৫-৯)' },
+  { key: 'small', en: 'Small (0-4)', bn: 'ছোট (০-৪)' },
+];
+
+const DEFAULT_PAYTABLE: Paytable = {
+  colorGreen: 2,
+  colorRed: 2,
+  colorViolet: 4.5,
+  colorHalf: 1.5,
+  number: 9,
+  big: 2,
+  small: 2,
+};
 
 interface RoundRow {
   id: string;
@@ -68,6 +102,7 @@ interface RoundRow {
   totalPayout: number;
   serverSeedHash: string;
   serverSeed?: string | null;
+  paytable?: Paytable | null;
   drawsAt: string;
   drawnAt: string | null;
   settledAt: string | null;
@@ -133,6 +168,12 @@ export default function AdminWingoPage() {
   const [modeFlags, setModeFlags] = useState<Record<string, boolean>>({});
   const [minStake, setMinStake] = useState('1');
   const [maxStake, setMaxStake] = useState('100000');
+  // Editable paytable, held as strings so the inputs stay controlled.
+  const [paytable, setPaytable] = useState<Record<keyof Paytable, string>>(() => {
+    const init = {} as Record<keyof Paytable, string>;
+    for (const f of PAYTABLE_FIELDS) init[f.key] = String(DEFAULT_PAYTABLE[f.key]);
+    return init;
+  });
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
 
@@ -150,6 +191,10 @@ export default function AdminWingoPage() {
     setModeFlags({ ...o.settings.modes });
     setMinStake(String(o.settings.minStake));
     setMaxStake(String(o.settings.maxStake));
+    const pt = o.settings.paytable ?? DEFAULT_PAYTABLE;
+    const next = {} as Record<keyof Paytable, string>;
+    for (const f of PAYTABLE_FIELDS) next[f.key] = String(pt[f.key] ?? DEFAULT_PAYTABLE[f.key]);
+    setPaytable(next);
   }, []);
 
   const load = useCallback(async () => {
@@ -216,6 +261,10 @@ export default function AdminWingoPage() {
           modes: modeFlags,
           minStake: Number(minStake),
           maxStake: Number(maxStake),
+          paytable: PAYTABLE_FIELDS.reduce((acc, f) => {
+            acc[f.key] = Number(paytable[f.key]);
+            return acc;
+          }, {} as Record<keyof Paytable, number>),
         }),
       });
       const j = await res.json().catch(() => null);
@@ -323,6 +372,31 @@ export default function AdminWingoPage() {
               </div>
               <p className="mt-2 text-[11px] text-ink-lo">
                 Clamped to the engine bounds (1 to 100000 BDT). Max applies to a bet line after the quantity chip. / ইঞ্জিন সীমার মধ্যে সীমাবদ্ধ (১ থেকে ১০০০০০ টাকা)।
+              </p>
+            </Card>
+
+            <Card padding="md" className="mb-4">
+              <p className="mb-1 text-sm font-semibold text-ink-hi">Paytable / পেআউট</p>
+              <p className="mb-3 text-xs text-ink-mid">
+                Total-return multiplier per winning bet type. A win pays stake times this number. / প্রতিটি জয়ী বাজির মোট রিটার্ন গুণিতক।
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {PAYTABLE_FIELDS.map((f) => (
+                  <Field key={f.key} label={`${f.en} / ${f.bn}`}>
+                    <input
+                      type="number"
+                      min={1}
+                      max={100}
+                      step="0.1"
+                      value={paytable[f.key]}
+                      onChange={(e) => setPaytable((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                      className="h-10 w-full rounded-lg border border-neon/15 bg-base-panel px-3 text-sm text-ink-hi focus:outline-none"
+                    />
+                  </Field>
+                ))}
+              </div>
+              <p className="mt-2 text-[11px] text-ink-lo">
+                The half rate applies only when the result is 0 or 5 (Red on 0, Green on 5). Each value is clamped to 1 to 100 and frozen onto every round at open, so an edit never changes payouts on already-placed bets. / হাফ রেট শুধু ফলাফল ০ বা ৫ হলে প্রযোজ্য (০-এ লাল, ৫-এ সবুজ)। প্রতিটি মান ১ থেকে ১০০-এর মধ্যে সীমাবদ্ধ এবং রাউন্ড শুরুতেই ফ্রিজ হয়, তাই আগে রাখা বাজিতে পরিবর্তন প্রভাব ফেলে না।
               </p>
             </Card>
 
@@ -477,6 +551,14 @@ export default function AdminWingoPage() {
                 Seed reveals once settled / সেটল হলে সিড প্রকাশ পাবে
               </p>
             )}
+            {detail.round.paytable ? (
+              <p className="mb-3 text-[10px] text-ink-lo">
+                Frozen paytable / ফ্রিজ করা পেআউট:{' '}
+                <span className="font-mono text-ink-mid">
+                  {PAYTABLE_FIELDS.map((f) => `${f.en} ${detail.round.paytable?.[f.key]}x`).join(' . ')}
+                </span>
+              </p>
+            ) : null}
             {detail.bets.length === 0 ? (
               <p className="rounded-lg border border-neon/10 bg-base-panel/60 p-4 text-sm text-ink-mid">No bets on this round. / এই রাউন্ডে কোনো বাজি নেই।</p>
             ) : (

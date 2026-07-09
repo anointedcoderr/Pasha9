@@ -439,6 +439,7 @@ export function WingoGame() {
         minStake={st.data?.minStake ?? 1}
         maxStake={st.data?.maxStake ?? 100_000}
         balance={balance}
+        paytable={st.data?.paytable ?? null}
         locked={locked}
         submitting={submitting}
         onClose={() => setSheetOpen(false)}
