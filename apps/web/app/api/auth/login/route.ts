@@ -111,7 +111,7 @@ export async function POST(req: NextRequest) {
   await revokeRefreshFromCurrentCookie();
 
   const perms = await loadEffectivePermissions(user.id);
-  await setAuthCookies(user.id, user.role.key, perms, {
+  const tokens = await setAuthCookies(user.id, user.role.key, perms, {
     ip,
     userAgent: getUserAgent(),
   });
@@ -133,6 +133,12 @@ export async function POST(req: NextRequest) {
     success: true, reason: 'ok', flags: score.flags,
   });
 
+  // Additive mobile contract: only when the request explicitly carries
+  // X-Client: mobile do we also return the access/refresh tokens in the
+  // body (native clients hold no cookies). Web requests get the exact
+  // same body as before - no tokens leak to non-mobile callers.
+  const isMobile = req.headers.get('x-client') === 'mobile';
+
   return jsonOk({
     user: {
       id: user.id,
@@ -142,5 +148,8 @@ export async function POST(req: NextRequest) {
       status: user.status,
     },
     flags: score.flags,
+    ...(isMobile
+      ? { token: tokens.token, refresh: tokens.refresh, expiresIn: tokens.expiresIn }
+      : {}),
   });
 }

@@ -38,7 +38,24 @@ function cookieOpts(): CookieOptions {
   return { secure: process.env.NODE_ENV === 'production' };
 }
 
-export async function setAuthCookies(userId: string, role: string, perms: string[], opts: { userAgent?: string; ip?: string } = {}) {
+/**
+ * The tokens minted for a session. Returned by setAuthCookies so the
+ * mobile login/register routes can hand the same access/refresh JWTs to
+ * a native client in the response body. Web callers simply ignore the
+ * return value and keep using the httpOnly cookies only.
+ *
+ * `refresh` is the combined "<refreshJwt>.<secret>" credential (the
+ * exact value stored in the pasha9_refresh cookie): the JWT carries the
+ * session id and the secret matches the DB session tokenHash, so the
+ * refresh endpoint can validate it against the tracked session row.
+ */
+export interface IssuedTokens {
+  token: string;
+  refresh: string;
+  expiresIn: number;
+}
+
+export async function setAuthCookies(userId: string, role: string, perms: string[], opts: { userAgent?: string; ip?: string } = {}): Promise<IssuedTokens> {
   const access = await signAccessToken({ sub: userId, role, perms });
   const refreshSecret = makeRefreshSecret();
   const session = await db.session.create({
@@ -51,6 +68,7 @@ export async function setAuthCookies(userId: string, role: string, perms: string
     },
   });
   const refresh = await signRefreshToken({ sub: userId, sid: session.id });
+  const combinedRefresh = refresh + '.' + refreshSecret;
 
   const jar = cookies();
   const { secure } = cookieOpts();
@@ -62,13 +80,15 @@ export async function setAuthCookies(userId: string, role: string, perms: string
     maxAge: ACCESS_MAX_AGE_SECONDS,
   });
   // Hold the raw secret alongside the session id so the refresh handler can find the row.
-  jar.set(REFRESH_COOKIE, refresh + '.' + refreshSecret, {
+  jar.set(REFRESH_COOKIE, combinedRefresh, {
     httpOnly: true,
     sameSite: 'lax',
     secure,
     path: '/',
     maxAge: REFRESH_MAX_AGE_SECONDS,
   });
+
+  return { token: access, refresh: combinedRefresh, expiresIn: ACCESS_MAX_AGE_SECONDS };
 }
 
 /**
@@ -114,7 +134,12 @@ export async function clearAuthCookies(opts: { revoke?: boolean } = { revoke: tr
   const refresh = jar.get(REFRESH_COOKIE)?.value;
 
   if (opts.revoke && refresh) {
-    const [, secret] = refresh.split('.', 2);
+    // The combined credential is <refreshJwt>.<secret> and the JWT itself
+    // contains dots, so the secret is the LAST segment (matching the other
+    // refresh helpers). split('.', 2) grabbed a JWT fragment instead, so this
+    // revoke never matched and web logout left the DB session live.
+    const split = refresh.split('.');
+    const secret = split[split.length - 1];
     if (secret) {
       try {
         await db.session.updateMany({
@@ -131,8 +156,28 @@ export async function clearAuthCookies(opts: { revoke?: boolean } = { revoke: tr
   jar.delete(REFRESH_COOKIE);
 }
 
+/**
+ * Read the raw access token from the request. The pasha9_session
+ * httpOnly cookie is preferred (web). When it is absent we fall back to
+ * an "Authorization: Bearer <token>" header so a native/mobile client
+ * that holds no cookies can present the same access JWT. The token is
+ * verified identically either way (same jwtVerify + JWT_ACCESS_SECRET),
+ * so Bearer is exactly as trusted as the cookie and no new way to forge
+ * a session is introduced.
+ */
+function readAccessToken(): string | undefined {
+  const cookieToken = cookies().get(ACCESS_COOKIE)?.value;
+  if (cookieToken) return cookieToken;
+  const auth = headers().get('authorization');
+  if (auth && auth.toLowerCase().startsWith('bearer ')) {
+    const bearer = auth.slice(7).trim();
+    if (bearer) return bearer;
+  }
+  return undefined;
+}
+
 export async function getSessionClaims(): Promise<AccessClaims | null> {
-  const token = cookies().get(ACCESS_COOKIE)?.value;
+  const token = readAccessToken();
   if (!token) return null;
   return verifyAccessToken(token);
 }
@@ -147,11 +192,19 @@ export async function getSessionClaims(): Promise<AccessClaims | null> {
  * Used by /api/auth/me and /api/auth/refresh so users do not get
  * bounced just because the short access cookie expired.
  */
-export async function refreshSession(): Promise<AccessClaims | null> {
-  const jar = cookies();
-  const raw = jar.get(REFRESH_COOKIE)?.value;
-  if (!raw) return null;
-
+/**
+ * Parse and validate a raw "<refreshJwt>.<secret>" refresh credential
+ * (the value held in the pasha9_refresh cookie, or handed to a mobile
+ * client) against the DB-tracked session row. Returns the live session
+ * + user when the credential verifies, is not revoked, is not expired,
+ * matches the stored tokenHash, and the user is not blocked. Returns
+ * null otherwise. This is the single source of refresh verification,
+ * shared by the cookie refresh path (web) and the mobile token refresh
+ * route so neither forks the security logic.
+ */
+async function resolveRefreshCredential(
+  raw: string,
+): Promise<{ session: NonNullable<Awaited<ReturnType<typeof db.session.findUnique>>>; secret: string } | null> {
   const split = raw.split('.');
   if (split.length < 2) return null;
   const secret = split[split.length - 1];
@@ -165,6 +218,18 @@ export async function refreshSession(): Promise<AccessClaims | null> {
   if (!session || session.revokedAt || session.expiresAt < new Date()) return null;
   if (session.tokenHash !== hashToken(secret)) return null;
   if (session.userId !== claims.sub) return null;
+
+  return { session, secret };
+}
+
+export async function refreshSession(): Promise<AccessClaims | null> {
+  const jar = cookies();
+  const raw = jar.get(REFRESH_COOKIE)?.value;
+  if (!raw) return null;
+
+  const resolved = await resolveRefreshCredential(raw);
+  if (!resolved) return null;
+  const { session } = resolved;
 
   const user = await db.user.findUnique({
     where: { id: session.userId },
@@ -196,6 +261,66 @@ export async function refreshSession(): Promise<AccessClaims | null> {
   });
 
   return { sub: user.id, role: user.role.key, perms } as AccessClaims;
+}
+
+/**
+ * Mobile refresh: validate a raw "<refreshJwt>.<secret>" credential
+ * against its DB session (same verification as the cookie path), then
+ * ROTATE the refresh secret in place and mint a fresh access + refresh
+ * pair. Rotating means the previous secret's hash no longer matches the
+ * session row, so the old refresh token can no longer mint tokens. The
+ * session id is preserved, so the DB-tracked session survives (logout /
+ * admin block / expiry still revoke it). Rotation is safe here because a
+ * native client refreshes serially, unlike the parallel web /me probes
+ * that forced the cookie path to stay non-rotating. Returns null on any
+ * invalid / expired / revoked / blocked case (the route maps that to
+ * 401). No new secret or trust path is introduced.
+ */
+export async function refreshMobileSession(raw: string): Promise<IssuedTokens | null> {
+  const resolved = await resolveRefreshCredential(raw);
+  if (!resolved) return null;
+  const { session } = resolved;
+
+  const user = await db.user.findUnique({
+    where: { id: session.userId },
+    include: { role: true },
+  });
+  if (!user || user.status === 'blocked') return null;
+
+  const perms = await loadEffectivePermissions(user.id);
+  const newSecret = makeRefreshSecret();
+  await db.session.update({
+    where: { id: session.id },
+    data: {
+      tokenHash: hashToken(newSecret),
+      expiresAt: new Date(Date.now() + REFRESH_MAX_AGE_SECONDS * 1000),
+    },
+  });
+
+  const access = await signAccessToken({ sub: user.id, role: user.role.key, perms });
+  const refreshJwt = await signRefreshToken({ sub: user.id, sid: session.id });
+  return { token: access, refresh: refreshJwt + '.' + newSecret, expiresIn: ACCESS_MAX_AGE_SECONDS };
+}
+
+/**
+ * Revoke the DB session row a raw "<refreshJwt>.<secret>" refresh
+ * credential points to. Used by mobile logout so a native client can
+ * invalidate its own refresh token server-side. Best-effort and never
+ * throws: an unmatched or malformed value simply revokes nothing.
+ */
+export async function revokeRefreshCredential(raw: string): Promise<void> {
+  const split = raw.split('.');
+  if (split.length < 2) return;
+  const secret = split[split.length - 1];
+  if (!secret) return;
+  try {
+    await db.session.updateMany({
+      where: { tokenHash: hashToken(secret), revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+  } catch {
+    // best-effort revoke; do not block logout
+  }
 }
 
 /**

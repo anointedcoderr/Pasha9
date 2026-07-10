@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
   await revokeRefreshFromCurrentCookie();
 
   const perms = await loadPermissionsForRole(role.id);
-  await setAuthCookies(user.id, user.role.key, perms, {
+  const tokens = await setAuthCookies(user.id, user.role.key, perms, {
     ip,
     userAgent: getUserAgent(),
   });
@@ -128,6 +128,11 @@ export async function POST(req: NextRequest) {
     console.error('[register] admin notify failed', err);
   }
 
+  // Additive mobile contract: only when X-Client: mobile is present do
+  // we also return the access/refresh tokens in the body. Web requests
+  // get the exact same 201 body as before.
+  const isMobile = req.headers.get('x-client') === 'mobile';
+
   return jsonOk({
     user: {
       id: user.id,
@@ -136,5 +141,8 @@ export async function POST(req: NextRequest) {
       referralCode: user.referralCode,
       role: user.role.key,
     },
+    ...(isMobile
+      ? { token: tokens.token, refresh: tokens.refresh, expiresIn: tokens.expiresIn }
+      : {}),
   }, 201);
 }
