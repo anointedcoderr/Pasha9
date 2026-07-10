@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "Pasha9",
+    "slug": "pasha9",
+    "scheme": "pasha9",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.pasha9.player"
+    },
+    "android": {
+      "package": "com.pasha9.player",
+      "edgeToEdgeEnabled": true
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store"
+    ],
+    "extra": {
+      "apiBaseUrl": "https://pasha9.com"
+    }
+  }
+}
