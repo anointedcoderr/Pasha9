@@ -40,9 +40,11 @@ export async function GET() {
 
 const modeFlagsSchema = z.record(z.string(), z.boolean());
 
-// Every payout field: finite, >= 1, <= the payout ceiling. The setter
-// clamps again on write so a value that slips through still lands safe.
-const payoutField = z.number().finite().min(1).max(WINGO_PAYOUT_MAX);
+// Every payout field: finite, >= 0, <= the payout ceiling. Values below 1
+// are allowed so the operator can set house-favorable rates (a total-return
+// multiplier under 1 pays a winner less than their stake; 0 pays nothing).
+// The setter clamps again on write so a value that slips through lands safe.
+const payoutField = z.number().finite().min(0).max(WINGO_PAYOUT_MAX);
 const paytableSchema = z.object({
   colorGreen: payoutField,
   colorRed: payoutField,

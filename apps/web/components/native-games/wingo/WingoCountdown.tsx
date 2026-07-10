@@ -62,7 +62,6 @@ export function WingoTimer({ ms, locked }: { ms: number; locked: boolean }) {
   const canBeep = !explicitlyMuted && !adminOff;
   const defaultVolume = soundCtx?.map?.defaultVolume ?? 0.7;
   const lastBeepSecRef = useRef<number | null>(null);
-  const prevLockedRef = useRef<boolean>(locked);
 
   // Prime (create + resume) the tone AudioContext on the first user
   // gesture so the later timer-driven beep is allowed to play.
@@ -78,25 +77,24 @@ export function WingoTimer({ ms, locked }: { ms: number; locked: boolean }) {
   }, []);
 
   useEffect(() => {
-    const wasLocked = prevLockedRef.current;
-    prevLockedRef.current = locked;
     if (!canBeep) { lastBeepSecRef.current = null; return; }
-    // Distinct higher final tone the moment betting locks.
-    if (!wasLocked && locked) {
-      playTone({ freq: 1320, durationMs: 240, volume: 0.32 * defaultVolume, type: 'triangle' });
-      lastBeepSecRef.current = null;
-      return;
-    }
-    if (!locked) {
-      const secs = Math.ceil(ms / 1000);
-      if (secs >= 1 && secs <= 5) {
-        // One beep per whole second; do not double-fire within a second.
-        if (lastBeepSecRef.current !== secs) {
-          lastBeepSecRef.current = secs;
-          playTone({ freq: 880, durationMs: 90, volume: 0.24 * defaultVolume });
-        }
-      } else {
-        lastBeepSecRef.current = null;
+    // Beep ONLY in the final five seconds before the round ENDS, i.e. the
+    // locked/drawing phase where `ms` is msToDraw counting 5 -> 0. The open
+    // betting countdown stays silent. One short beep per whole second at
+    // 5,4,3,2,1, then a distinct higher tone the instant the round draws.
+    if (!locked) { lastBeepSecRef.current = null; return; }
+    const secs = Math.ceil(ms / 1000);
+    if (secs >= 1 && secs <= 5) {
+      // One beep per whole second; do not double-fire within a second.
+      if (lastBeepSecRef.current !== secs) {
+        lastBeepSecRef.current = secs;
+        playTone({ freq: 880, durationMs: 90, volume: 0.24 * defaultVolume });
+      }
+    } else if (secs <= 0) {
+      // Final draw tone once, when the countdown reaches zero.
+      if (lastBeepSecRef.current !== 0) {
+        lastBeepSecRef.current = 0;
+        playTone({ freq: 1320, durationMs: 240, volume: 0.32 * defaultVolume, type: 'triangle' });
       }
     }
   }, [ms, locked, canBeep, defaultVolume]);

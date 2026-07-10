@@ -107,7 +107,10 @@ export function coerceWingoPaytable(raw: unknown): WingoPaytable {
   const o = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
   const field = (key: keyof WingoPaytable): number => {
     const v = Number(o[key]);
-    if (!Number.isFinite(v) || v < 1) return DEFAULT_WINGO_PAYTABLE[key];
+    // Floor at 0 (a negative or non-numeric field falls back to DEFAULT);
+    // values below 1 are allowed so the operator can set house-favorable
+    // rates. Cap at the ceiling so a corrupt row can never over-pay.
+    if (!Number.isFinite(v) || v < 0) return DEFAULT_WINGO_PAYTABLE[key];
     return Math.round(Math.min(v, WINGO_PAYOUT_CEILING) * 100) / 100;
   };
   return {

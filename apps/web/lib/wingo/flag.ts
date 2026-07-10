@@ -35,8 +35,11 @@ export const WINGO_MAX_STAKE_KEY = 'wingo_max_stake';
 // Admin-editable paytable, stored as a single JSON SystemSetting row and
 // frozen onto each round at open. Each field is clamped to [MIN, MAX] on
 // both read and write so a bad edit can never pay an unbounded multiple.
+// MIN is 0 so an operator has full control to set house-favorable rates
+// below 1 (a total-return multiplier under 1 means a winner gets back less
+// than their stake); 0 means that bet type pays nothing.
 export const WINGO_PAYTABLE_KEY = 'wingo_paytable';
-export const WINGO_PAYOUT_MIN = 1;
+export const WINGO_PAYOUT_MIN = 0;
 export const WINGO_PAYOUT_MAX = 100;
 
 // Optional operator-managed homepage card image for the Pasha WinGo Hot

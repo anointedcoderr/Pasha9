@@ -378,14 +378,14 @@ export default function AdminWingoPage() {
             <Card padding="md" className="mb-4">
               <p className="mb-1 text-sm font-semibold text-ink-hi">Paytable / পেআউট</p>
               <p className="mb-3 text-xs text-ink-mid">
-                Total-return multiplier per winning bet type. A win pays stake times this number. / প্রতিটি জয়ী বাজির মোট রিটার্ন গুণিতক।
+                Total-return multiplier per winning bet type: a win pays the stake times this number. Example: bet 100 at 2 returns 200, at 1.5 returns 150, at 0.5 returns 50. / প্রতিটি জয়ী বাজির মোট রিটার্ন গুণিতক: স্টেক গুণ এই সংখ্যা। যেমন ১০০ বাজি, ২ হলে ২০০, ১.৫ হলে ১৫০, ০.৫ হলে ৫০।
               </p>
               <div className="grid gap-3 sm:grid-cols-2">
                 {PAYTABLE_FIELDS.map((f) => (
                   <Field key={f.key} label={`${f.en} / ${f.bn}`}>
                     <input
                       type="number"
-                      min={1}
+                      min={0}
                       max={100}
                       step="0.1"
                       value={paytable[f.key]}
@@ -396,7 +396,7 @@ export default function AdminWingoPage() {
                 ))}
               </div>
               <p className="mt-2 text-[11px] text-ink-lo">
-                The half rate applies only when the result is 0 or 5 (Red on 0, Green on 5). Each value is clamped to 1 to 100 and frozen onto every round at open, so an edit never changes payouts on already-placed bets. / হাফ রেট শুধু ফলাফল ০ বা ৫ হলে প্রযোজ্য (০-এ লাল, ৫-এ সবুজ)। প্রতিটি মান ১ থেকে ১০০-এর মধ্যে সীমাবদ্ধ এবং রাউন্ড শুরুতেই ফ্রিজ হয়, তাই আগে রাখা বাজিতে পরিবর্তন প্রভাব ফেলে না।
+                The half rate applies only when the result is 0 or 5 (Red on 0, Green on 5). Each value can be 0 to 100 and is frozen onto every round when it opens, so a change applies to the next rounds, never to bets already placed. / হাফ রেট শুধু ফলাফল ০ বা ৫ হলে প্রযোজ্য (০-এ লাল, ৫-এ সবুজ)। প্রতিটি মান ০ থেকে ১০০ হতে পারে এবং রাউন্ড শুরুতেই ফ্রিজ হয়, তাই পরিবর্তন পরের রাউন্ডে প্রযোজ্য, আগে রাখা বাজিতে নয়।
               </p>
             </Card>
 
