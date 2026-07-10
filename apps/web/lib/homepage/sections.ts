@@ -27,7 +27,7 @@
 
 import { db } from '@/lib/db/client';
 import { isNativeGamesPublic } from '@/lib/native-games/flag';
-import { loadWingoSettings } from '@/lib/wingo/flag';
+import { loadWingoSettings, type WingoCardOverlays } from '@/lib/wingo/flag';
 
 export interface HomeSectionGame {
   key: string;
@@ -52,6 +52,9 @@ export interface HomeSectionGame {
   showPlayButton?: boolean;
   imageOnlyMode?: boolean;
   imageFitMode?: 'cover' | 'contain';
+  // Editable HOT badge text. Defaults to "HOT" in the renderer when unset;
+  // set on the WinGo card so an operator can rename the badge.
+  hotBadgeText?: string;
 }
 
 export interface HomeSection {
@@ -369,15 +372,18 @@ function syntheticHotSection(games: HomeSectionGame[]): HomeSection {
 // path in HomeDbGameSection (a Link to /games/wingo with the amber Play
 // pill). With no image upload it falls back to the CategoryHeroArt
 // artwork like any other card, so the strip stays visually consistent.
-function wingoHotCard(imageUrl: string | null): HomeSectionGame {
+function wingoHotCard(imageUrl: string | null, overlays: WingoCardOverlays): HomeSectionGame {
   return {
     key: 'native:wingo',
     source: 'native',
     providerKey: null,
-    providerName: 'Pasha Originals',
+    // Editable source label; maps to the provider-label pill (brandName is
+    // null on this card so the renderer uses providerName).
+    providerName: overlays.labelText,
     gameUid: null,
     gameCode: 'wingo',
-    displayName: 'Pasha WinGo',
+    // Editable card name.
+    displayName: overlays.nameText,
     category: null,
     // Operator-managed card image (admin/homepage-sections). When null the
     // renderer falls back to CategoryHeroArt like any other card.
@@ -387,6 +393,15 @@ function wingoHotCard(imageUrl: string | null): HomeSectionGame {
     isJackpot: false,
     minBet: null,
     href: '/games/wingo',
+    // Overlay visibility, driven by the admin config. imageOnly suppresses
+    // every overlay through the same HomeDbGameSection gating the featured
+    // cards use, leaving just the uploaded image.
+    showProviderLabel: overlays.showOriginalsLabel,
+    showGameName: overlays.showName,
+    showHotBadge: overlays.showHotBadge,
+    showPlayButton: overlays.showPlay,
+    imageOnlyMode: overlays.imageOnly,
+    hotBadgeText: overlays.hotText,
   };
 }
 
@@ -576,7 +591,7 @@ export async function buildHomeSections(): Promise<HomeSectionsBundle> {
   // card still reaches the visitor, and we force the section visible so
   // an operator who hid Hot Games does not also hide WinGo.
   if (wingoEnabled) {
-    const card = wingoHotCard(wingoSettings.homepageImageUrl);
+    const card = wingoHotCard(wingoSettings.homepageImageUrl, wingoSettings.cardOverlays);
     const hotIdx = sections.findIndex((s) => s.key === 'homepage_hot');
     if (hotIdx === -1) {
       sections.unshift(syntheticHotSection([card]));

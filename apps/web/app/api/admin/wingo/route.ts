@@ -26,6 +26,7 @@ import {
   setWingoStakeLimits,
   setWingoPaytable,
   setWingoHomepageImage,
+  setWingoCardOverlays,
   WINGO_PAYOUT_MAX,
 } from '@/lib/wingo/flag';
 import { isWingoMode, type WingoMode } from '@/lib/wingo/config';
@@ -66,6 +67,21 @@ const patchSchema = z.object({
   // Homepage card image URL (an /uploads path or absolute URL), or null to
   // clear it and fall back to generated art.
   homepageImageUrl: z.string().trim().max(2048).nullable().optional(),
+  // Display-only overlay config for the WinGo Hot Games card. Every field is
+  // optional and merged onto the current config; the setter re-validates and
+  // fills defaults, so a partial patch is safe.
+  cardOverlays: z
+    .object({
+      showPlay: z.boolean().optional(),
+      showName: z.boolean().optional(),
+      nameText: z.string().trim().max(40).optional(),
+      showHotBadge: z.boolean().optional(),
+      hotText: z.string().trim().max(16).optional(),
+      showOriginalsLabel: z.boolean().optional(),
+      labelText: z.string().trim().max(40).optional(),
+      imageOnly: z.boolean().optional(),
+    })
+    .optional(),
 });
 
 export async function PATCH(req: NextRequest) {
@@ -112,6 +128,12 @@ export async function PATCH(req: NextRequest) {
       await setWingoHomepageImage(parsed.data.homepageImageUrl);
     }
 
+    if (parsed.data.cardOverlays) {
+      // Merge the partial patch onto the current config so untouched fields
+      // are preserved; the setter re-validates and fills any gaps.
+      await setWingoCardOverlays({ ...before.cardOverlays, ...parsed.data.cardOverlays });
+    }
+
     const after = await loadWingoSettings();
 
     await recordActivity({
@@ -127,6 +149,7 @@ export async function PATCH(req: NextRequest) {
           maxStake: before.maxStake,
           paytable: before.paytable,
           homepageImageUrl: before.homepageImageUrl,
+          cardOverlays: before.cardOverlays,
         },
         after: {
           enabled: after.enabled,
@@ -135,6 +158,7 @@ export async function PATCH(req: NextRequest) {
           maxStake: after.maxStake,
           paytable: after.paytable,
           homepageImageUrl: after.homepageImageUrl,
+          cardOverlays: after.cardOverlays,
         },
       },
     });

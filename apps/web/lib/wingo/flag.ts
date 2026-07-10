@@ -46,6 +46,43 @@ export const WINGO_PAYOUT_MAX = 100;
 // Games card. String setting; empty / missing falls back to generated art.
 export const WINGO_HOMEPAGE_IMAGE_KEY = 'wingo_homepage_image';
 
+// Operator-managed overlay config for the Pasha WinGo Hot Games card,
+// stored as one JSON SystemSetting row. Parsed defensively (never throws)
+// so a missing / malformed row always yields the current default look:
+// name on, HOT on, Originals label on, PLAY on, image-only off. Mirrors
+// the featured-card overlay semantics (show/hide each overlay) and adds the
+// editable text the operator asked for. Display-only; no money path.
+export const WINGO_CARD_OVERLAYS_KEY = 'wingo_homepage_overlays';
+
+export interface WingoCardOverlays {
+  // Show / hide the amber PLAY pill.
+  showPlay: boolean;
+  // Show / hide the bottom game name, plus its editable text.
+  showName: boolean;
+  nameText: string;
+  // Show / hide the HOT badge, plus its editable text.
+  showHotBadge: boolean;
+  hotText: string;
+  // Show / hide the PASHA ORIGINALS / source label, plus its editable text.
+  showOriginalsLabel: boolean;
+  labelText: string;
+  // Master switch: when true the card shows ONLY the uploaded image with
+  // no overlays (mirrors the featured-card imageOnlyMode).
+  imageOnly: boolean;
+}
+
+// Defaults reproduce the card's current look exactly.
+export const DEFAULT_WINGO_CARD_OVERLAYS: WingoCardOverlays = {
+  showPlay: true,
+  showName: true,
+  nameText: 'Pasha WinGo',
+  showHotBadge: true,
+  hotText: 'HOT',
+  showOriginalsLabel: true,
+  labelText: 'Pasha Originals',
+  imageOnly: false,
+};
+
 export function wingoModeEnabledKey(mode: WingoMode): string {
   return `wingo_${mode}_enabled`;
 }
@@ -104,6 +141,47 @@ function parsePaytableValue(value: string | null | undefined): WingoPaytable {
   }
 }
 
+// Coerce any stored value (JSON boolean, or a 'true'/'1'/'on' string) into a
+// boolean, falling back when the input is unusable.
+function coerceOverlayBool(value: unknown, fallback: boolean): boolean {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') return truthy(value, fallback);
+  return fallback;
+}
+
+// Trim + length-cap an editable overlay string, falling back to the default
+// when the input is missing, non-string, or blank after trimming.
+function clampOverlayText(value: unknown, fallback: string, max: number): string {
+  if (typeof value !== 'string') return fallback;
+  const t = value.trim();
+  if (!t) return fallback;
+  return t.slice(0, max);
+}
+
+// Parse a stored JSON overlay value into a fully-defaulted WingoCardOverlays,
+// never throwing: a missing row or bad JSON returns the DEFAULT config so the
+// card always renders its current look.
+function parseWingoCardOverlays(value: string | null | undefined): WingoCardOverlays {
+  if (value == null) return { ...DEFAULT_WINGO_CARD_OVERLAYS };
+  let raw: unknown;
+  try {
+    raw = JSON.parse(value);
+  } catch {
+    return { ...DEFAULT_WINGO_CARD_OVERLAYS };
+  }
+  const o = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+  return {
+    showPlay: coerceOverlayBool(o.showPlay, DEFAULT_WINGO_CARD_OVERLAYS.showPlay),
+    showName: coerceOverlayBool(o.showName, DEFAULT_WINGO_CARD_OVERLAYS.showName),
+    nameText: clampOverlayText(o.nameText, DEFAULT_WINGO_CARD_OVERLAYS.nameText, 40),
+    showHotBadge: coerceOverlayBool(o.showHotBadge, DEFAULT_WINGO_CARD_OVERLAYS.showHotBadge),
+    hotText: clampOverlayText(o.hotText, DEFAULT_WINGO_CARD_OVERLAYS.hotText, 16),
+    showOriginalsLabel: coerceOverlayBool(o.showOriginalsLabel, DEFAULT_WINGO_CARD_OVERLAYS.showOriginalsLabel),
+    labelText: clampOverlayText(o.labelText, DEFAULT_WINGO_CARD_OVERLAYS.labelText, 40),
+    imageOnly: coerceOverlayBool(o.imageOnly, DEFAULT_WINGO_CARD_OVERLAYS.imageOnly),
+  };
+}
+
 export interface WingoSettings {
   enabled: boolean;
   modes: Record<WingoMode, boolean>;
@@ -113,6 +191,8 @@ export interface WingoSettings {
   paytable: WingoPaytable;
   // Operator homepage card image, or null to use generated art.
   homepageImageUrl: string | null;
+  // Operator overlay config for the WinGo Hot Games card (display-only).
+  cardOverlays: WingoCardOverlays;
 }
 
 // Batched read of every WinGo setting in one query. Route handlers call
@@ -124,6 +204,7 @@ export async function loadWingoSettings(): Promise<WingoSettings> {
     WINGO_MAX_STAKE_KEY,
     WINGO_PAYTABLE_KEY,
     WINGO_HOMEPAGE_IMAGE_KEY,
+    WINGO_CARD_OVERLAYS_KEY,
     ...WINGO_MODE_LIST.map((m) => wingoModeEnabledKey(m)),
   ];
   let rows: Array<{ key: string; value: string }> = [];
@@ -158,6 +239,7 @@ export async function loadWingoSettings(): Promise<WingoSettings> {
     maxStake,
     paytable: parsePaytableValue(map.get(WINGO_PAYTABLE_KEY)),
     homepageImageUrl: homepageImageRaw ? homepageImageRaw : null,
+    cardOverlays: parseWingoCardOverlays(map.get(WINGO_CARD_OVERLAYS_KEY)),
   };
 }
 
@@ -255,4 +337,18 @@ export async function setWingoHomepageImage(url: string | null): Promise<void> {
     return;
   }
   await upsertStringSetting(WINGO_HOMEPAGE_IMAGE_KEY, clean);
+}
+
+// Persist the WinGo card overlay config as one JSON row. The value is run
+// through the same defensive parser used on read, so a partial or malformed
+// input is normalised (defaults filled, text trimmed / capped) before it is
+// stored and can never persist an out-of-shape config.
+export async function setWingoCardOverlays(overlays: WingoCardOverlays): Promise<void> {
+  const clean = parseWingoCardOverlays(JSON.stringify(overlays));
+  const value = JSON.stringify(clean);
+  await db.systemSetting.upsert({
+    where: { key: WINGO_CARD_OVERLAYS_KEY },
+    update: { value, type: 'json', category: 'general' },
+    create: { key: WINGO_CARD_OVERLAYS_KEY, value, type: 'json', category: 'general' },
+  });
 }

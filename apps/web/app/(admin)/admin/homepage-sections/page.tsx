@@ -662,14 +662,60 @@ export default function AdminHomepageSectionsPage() {
   );
 }
 
+// Overlay config for the WinGo Hot Games card. Mirrors the featured-card
+// overlay fields and adds the editable label text the operator asked for.
+// Kept local (types only) so this client component never imports the
+// server-only wingo flag module.
+interface WingoOverlays {
+  showPlay: boolean;
+  showName: boolean;
+  nameText: string;
+  showHotBadge: boolean;
+  hotText: string;
+  showOriginalsLabel: boolean;
+  labelText: string;
+  imageOnly: boolean;
+}
+
+const WINGO_OVERLAY_DEFAULTS: WingoOverlays = {
+  showPlay: true,
+  showName: true,
+  nameText: 'Pasha WinGo',
+  showHotBadge: true,
+  hotText: 'HOT',
+  showOriginalsLabel: true,
+  labelText: 'Pasha Originals',
+  imageOnly: false,
+};
+
+function coerceWingoOverlays(raw: unknown): WingoOverlays {
+  const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const bool = (v: unknown, d: boolean) => (typeof v === 'boolean' ? v : d);
+  const text = (v: unknown, d: string) => (typeof v === 'string' && v.trim() ? v : d);
+  return {
+    showPlay: bool(o.showPlay, WINGO_OVERLAY_DEFAULTS.showPlay),
+    showName: bool(o.showName, WINGO_OVERLAY_DEFAULTS.showName),
+    nameText: text(o.nameText, WINGO_OVERLAY_DEFAULTS.nameText),
+    showHotBadge: bool(o.showHotBadge, WINGO_OVERLAY_DEFAULTS.showHotBadge),
+    hotText: text(o.hotText, WINGO_OVERLAY_DEFAULTS.hotText),
+    showOriginalsLabel: bool(o.showOriginalsLabel, WINGO_OVERLAY_DEFAULTS.showOriginalsLabel),
+    labelText: text(o.labelText, WINGO_OVERLAY_DEFAULTS.labelText),
+    imageOnly: bool(o.imageOnly, WINGO_OVERLAY_DEFAULTS.imageOnly),
+  };
+}
+
 // Operator control for the Pasha WinGo Hot Games card image. WinGo is
 // injected into the strip separately from the curated featured list
 // (lib/homepage/sections.ts), so its image is managed here through the
 // admin/wingo settings, not the featured-game rows. Reuses the exact
 // upload flow the featured thumbnails use: POST /api/admin/uploads
 // (category games) then PATCH /api/admin/wingo { homepageImageUrl }.
+// The same panel also carries the overlay controls (show/hide + editable
+// text for each overlay, and an image-only master), saved via PATCH
+// /api/admin/wingo { cardOverlays }.
 function WingoCardImagePanel() {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [overlays, setOverlays] = useState<WingoOverlays>(WINGO_OVERLAY_DEFAULTS);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -679,7 +725,10 @@ function WingoCardImagePanel() {
     try {
       const r = await fetch('/api/admin/wingo', { cache: 'no-store' });
       const j = await r.json().catch(() => null);
-      if (r.ok) setImageUrl(j?.settings?.homepageImageUrl ?? null);
+      if (r.ok) {
+        setImageUrl(j?.settings?.homepageImageUrl ?? null);
+        setOverlays(coerceWingoOverlays(j?.settings?.cardOverlays));
+      }
     } catch {
       /* best-effort */
     } finally {
@@ -698,6 +747,45 @@ function WingoCardImagePanel() {
     const j = await r.json().catch(() => null);
     if (!r.ok) throw new Error(j?.message ?? j?.code ?? 'Save failed');
   }, []);
+
+  // Persist the whole overlay config. The route merges partials, but we send
+  // the full object so the admin state and stored config stay in lockstep.
+  const saveOverlays = useCallback(async (next: WingoOverlays) => {
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await fetch('/api/admin/wingo', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ cardOverlays: next }),
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok) throw new Error(j?.message ?? j?.code ?? 'Save failed');
+      if (j?.settings?.cardOverlays) setOverlays(coerceWingoOverlays(j.settings.cardOverlays));
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Overlay save failed');
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  // Toggle one boolean overlay and persist immediately. The fetch runs
+  // outside the state updater (updaters must stay pure; a dev StrictMode
+  // double-invoke would otherwise fire two PATCHes).
+  const onOverlayToggle = useCallback((key: keyof WingoOverlays, value: boolean) => {
+    const next = { ...overlays, [key]: value };
+    setOverlays(next);
+    void saveOverlays(next);
+  }, [overlays, saveOverlays]);
+
+  // Edit one text field locally (onChange) then persist on blur so we do not
+  // PATCH on every keystroke.
+  const onOverlayText = useCallback((key: keyof WingoOverlays, value: string) => {
+    setOverlays((prev) => ({ ...prev, [key]: value }));
+  }, []);
+  const onOverlayTextCommit = useCallback(() => {
+    void saveOverlays(overlays);
+  }, [overlays, saveOverlays]);
 
   const onUpload = async (file: File) => {
     setBusy(true);
@@ -790,6 +878,123 @@ function WingoCardImagePanel() {
             PNG, JPG or WEBP. Card is 4:3. Recommended: 1200 x 900. Changes go live on the next homepage load.
           </p>
         </div>
+      </div>
+
+      {/* Overlay controls. Mirrors the featured-card OVERLAYS expander: a
+          toggle per overlay plus editable text for the name / HOT / label,
+          and an image-only master that hides everything but the image. */}
+      <div className="mt-5 border-t border-brand-divider pt-4">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">
+            Card overlays / কার্ড ওভারলে
+          </p>
+          {busy ? <span className="text-[10px] text-brand-inkMute">Saving...</span> : null}
+        </div>
+
+        <label className="mt-3 flex cursor-pointer items-start gap-2 rounded-md border border-brand-divider bg-brand-paper p-2.5">
+          <input
+            type="checkbox"
+            checked={overlays.imageOnly}
+            disabled={busy}
+            onChange={(e) => onOverlayToggle('imageOnly', e.target.checked)}
+            className="mt-0.5 h-4 w-4"
+          />
+          <span className="text-xs">
+            <span className="font-semibold text-brand-ink">Image only / শুধু ছবি</span>
+            <span className="block text-[10px] text-brand-inkMute">
+              Show only the uploaded image, hide every overlay below. / শুধু আপলোড করা ছবি দেখান, নিচের সব ওভারলে লুকান।
+            </span>
+          </span>
+        </label>
+
+        <div className={cn('mt-3 grid gap-3 sm:grid-cols-2', overlays.imageOnly && 'pointer-events-none opacity-50')}>
+          {/* PLAY button */}
+          <label className="flex items-center gap-2 rounded-md border border-brand-divider bg-brand-paper px-2.5 py-2 text-xs">
+            <input
+              type="checkbox"
+              checked={overlays.showPlay}
+              disabled={busy || overlays.imageOnly}
+              onChange={(e) => onOverlayToggle('showPlay', e.target.checked)}
+              className="h-4 w-4"
+            />
+            <span className="font-semibold text-brand-ink">PLAY button / প্লে বোতাম</span>
+          </label>
+
+          {/* Game name + editable text */}
+          <div className="rounded-md border border-brand-divider bg-brand-paper px-2.5 py-2">
+            <label className="flex items-center gap-2 text-xs">
+              <input
+                type="checkbox"
+                checked={overlays.showName}
+                disabled={busy || overlays.imageOnly}
+                onChange={(e) => onOverlayToggle('showName', e.target.checked)}
+                className="h-4 w-4"
+              />
+              <span className="font-semibold text-brand-ink">Game name / গেমের নাম</span>
+            </label>
+            <input
+              type="text"
+              value={overlays.nameText}
+              maxLength={40}
+              disabled={busy || overlays.imageOnly || !overlays.showName}
+              onChange={(e) => onOverlayText('nameText', e.target.value)}
+              onBlur={onOverlayTextCommit}
+              placeholder="Pasha WinGo"
+              className={cn(inputCls, 'mt-2 py-1.5 text-xs')}
+            />
+          </div>
+
+          {/* HOT badge + editable text */}
+          <div className="rounded-md border border-brand-divider bg-brand-paper px-2.5 py-2">
+            <label className="flex items-center gap-2 text-xs">
+              <input
+                type="checkbox"
+                checked={overlays.showHotBadge}
+                disabled={busy || overlays.imageOnly}
+                onChange={(e) => onOverlayToggle('showHotBadge', e.target.checked)}
+                className="h-4 w-4"
+              />
+              <span className="font-semibold text-brand-ink">HOT badge / হট ব্যাজ</span>
+            </label>
+            <input
+              type="text"
+              value={overlays.hotText}
+              maxLength={16}
+              disabled={busy || overlays.imageOnly || !overlays.showHotBadge}
+              onChange={(e) => onOverlayText('hotText', e.target.value)}
+              onBlur={onOverlayTextCommit}
+              placeholder="HOT"
+              className={cn(inputCls, 'mt-2 py-1.5 text-xs')}
+            />
+          </div>
+
+          {/* Originals / source label + editable text */}
+          <div className="rounded-md border border-brand-divider bg-brand-paper px-2.5 py-2">
+            <label className="flex items-center gap-2 text-xs">
+              <input
+                type="checkbox"
+                checked={overlays.showOriginalsLabel}
+                disabled={busy || overlays.imageOnly}
+                onChange={(e) => onOverlayToggle('showOriginalsLabel', e.target.checked)}
+                className="h-4 w-4"
+              />
+              <span className="font-semibold text-brand-ink">Originals label / অরিজিনালস লেবেল</span>
+            </label>
+            <input
+              type="text"
+              value={overlays.labelText}
+              maxLength={40}
+              disabled={busy || overlays.imageOnly || !overlays.showOriginalsLabel}
+              onChange={(e) => onOverlayText('labelText', e.target.value)}
+              onBlur={onOverlayTextCommit}
+              placeholder="Pasha Originals"
+              className={cn(inputCls, 'mt-2 py-1.5 text-xs')}
+            />
+          </div>
+        </div>
+        <p className="mt-2 text-[10px] text-brand-inkMute">
+          Display only. Changes go live on the next homepage load. / শুধু প্রদর্শন। পরবর্তী হোমপেজ লোডে পরিবর্তন কার্যকর হবে।
+        </p>
       </div>
     </Card>
   );
