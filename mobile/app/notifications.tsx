@@ -19,6 +19,7 @@ import {
   useMarkAllNotificationsRead,
   type AppNotification,
 } from '@/lib/api/account';
+import { mapNotificationLinkToRoute } from '@/lib/push/register';
 import { colors } from '@/lib/theme';
 import { cn } from '@/lib/cn';
 
@@ -51,9 +52,12 @@ export default function NotificationsScreen() {
 
   function onRowPress(n: AppNotification) {
     if (!n.readAt) markRead.mutate(n.recipientId);
-    // Only follow internal app paths; never open an external URL from here.
+    // Backend linkUrls are web paths (e.g. /dashboard/wallet, /support). Map
+    // them to the real mobile route, exactly like a tapped push notification
+    // does, so a deposit / withdrawal row never dead-ends on Unmatched Route.
+    // The mapper strips query strings and falls back to /notifications.
     if (n.linkUrl && n.linkUrl.startsWith('/')) {
-      router.push(n.linkUrl as never);
+      router.push(mapNotificationLinkToRoute(n.linkUrl) as never);
     }
   }
 

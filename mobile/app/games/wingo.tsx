@@ -164,12 +164,18 @@ export default function WingoScreen() {
   );
 
   // Any mutation of the slip invalidates the pending idempotency key: a
-  // different slip must never reuse a previous slip's key.
+  // different slip must never reuse a previous slip's key. But while a
+  // placement is IN FLIGHT the key must stay frozen: if an ambiguous failure
+  // (server debited, response lost) is retried, it must reuse the same key so
+  // the server dedupes it. So this bails during flight, and the slip-edit
+  // handlers below also bail, so the slip cannot change mid-placement.
   function resetIdem() {
+    if (submittingRef.current) return;
     idemRef.current = null;
   }
 
   function addLine(betType: WingoBetType, selection: string) {
+    if (submittingRef.current) return;
     if (!available || locked) return;
     if (!stakeValid) {
       setNotice({
@@ -200,12 +206,14 @@ export default function WingoScreen() {
   }
 
   function removeLine(key: string) {
+    if (submittingRef.current) return;
     resetIdem();
     setNotice(null);
     setSlip((prev) => prev.filter((l) => l.key !== key));
   }
 
   function clearSlip() {
+    if (submittingRef.current) return;
     resetIdem();
     setNotice(null);
     setSlip([]);
