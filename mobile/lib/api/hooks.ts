@@ -16,6 +16,7 @@
 
 import {
   keepPreviousData,
+  useInfiniteQuery,
   useMutation,
   useQuery,
   useQueryClient,
@@ -79,6 +80,16 @@ import {
   type PlaceCrashBetInput,
   type CrashBetResult,
 } from './native-games';
+import {
+  getProviders,
+  getProviderGames,
+  launchGame,
+  type LaunchGameInput,
+  type LaunchResult,
+  type Provider,
+  type ProviderGamesParams,
+  type ProviderGamesResult,
+} from './providers';
 import { useAuth } from '@/store/auth';
 
 // ---------------------------------------------------------------------------
@@ -101,6 +112,30 @@ export const wingoStateQueryKey = (mode: WingoMode) => ['wingo', 'state', mode] 
 export const wingoMyBetsQueryKey = (mode: WingoMode) => ['wingo', 'my-bets', mode] as const;
 
 export const nativeGameQueryKey = (code: NativeGameCode) => ['native-games', 'game', code] as const;
+
+export const providersQueryKey = ['providers', 'list'] as const;
+
+/**
+ * Query key for one provider-games page set. The filter object is part of the
+ * key so a filter change (search, category, brand, featured, jackpot, limit)
+ * mounts a fresh infinite query rather than appending onto the previous filter.
+ */
+export const providerGamesQueryKey = (
+  params: Omit<ProviderGamesParams, 'offset'>,
+) =>
+  [
+    'providers',
+    'games',
+    params.providerKey,
+    {
+      q: params.q?.trim() || '',
+      category: params.category || '',
+      brand: params.brand || '',
+      featured: !!params.featured,
+      jackpot: !!params.jackpot,
+      limit: params.limit ?? 30,
+    },
+  ] as const;
 
 // ---------------------------------------------------------------------------
 // Reads
@@ -382,5 +417,62 @@ export function useCrashBet() {
   return useMutation<CrashBetResult, unknown, PlaceCrashBetInput>({
     mutationFn: placeCrashBet,
     onSuccess: invalidateWallet,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Provider (aggregator) games (Phase 4): live catalog + in-app launch
+// ---------------------------------------------------------------------------
+
+/**
+ * The Live providers. Public read (no auth) so the lobby can pick the main
+ * provider and render its brand pills before the player signs in. Cached for a
+ * few minutes since the provider list only changes when an admin flips one Live.
+ */
+export function useProviders() {
+  return useQuery<Provider[]>({
+    queryKey: providersQueryKey,
+    queryFn: getProviders,
+    staleTime: 5 * 60_000,
+  });
+}
+
+/**
+ * Paginated provider-games read backed by an infinite query. The screen grows
+ * the list with fetchNextPage(); getNextPageParam advances the offset by the
+ * number of rows already loaded until it reaches counts.total. Every page also
+ * carries the whole-catalog counts (total, byCategory, byBrand) so the caller
+ * reads stable category/brand chips from pages[0]. Disabled until a providerKey
+ * is known, and public so the grid renders for a guest shell.
+ */
+export function useProviderGames(params: ProviderGamesParams) {
+  const limit = params.limit ?? 30;
+  return useInfiniteQuery<ProviderGamesResult>({
+    queryKey: providerGamesQueryKey(params),
+    queryFn: ({ pageParam }) =>
+      getProviderGames({ ...params, limit, offset: (pageParam as number) ?? 0 }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) => {
+      const loaded = allPages.reduce((n, p) => n + p.games.length, 0);
+      return loaded < lastPage.counts.total ? loaded : undefined;
+    },
+    enabled: !!params.providerKey,
+    staleTime: 60_000,
+    // Keep the current games mounted while a new filter's first page loads so
+    // the grid does not blank to skeletons on every chip tap.
+    placeholderData: keepPreviousData,
+  });
+}
+
+/**
+ * Open a provider game. Returns the resolved launch URL (or throws ApiError:
+ * 401 not signed in, 402 INSUFFICIENT_FUNDS with { balance, minBalance },
+ * 503 PROVIDER_INACTIVE, etc.). The launch itself moves no money, so it does
+ * not invalidate the wallet here; the shared launch handler refreshes the
+ * balance once the in-app browser closes (a play session may have settled bets).
+ */
+export function useLaunchGame() {
+  return useMutation<LaunchResult, unknown, LaunchGameInput>({
+    mutationFn: launchGame,
   });
 }
