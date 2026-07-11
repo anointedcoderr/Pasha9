@@ -16,6 +16,7 @@
     },
     "android": {
       "package": "com.pasha9.player",
+      "googleServicesFile": "./google-services.json",
       "edgeToEdgeEnabled": true,
       "permissions": [
         "android.permission.RECORD_AUDIO"
