@@ -32,8 +32,9 @@ const OS = Platform.OS === 'ios' ? 'iOS' : Platform.OS === 'android' ? 'Android'
  */
 export const USER_AGENT = `Pasha9Mobile/${APP_VERSION} (${OS})`;
 
-/** Secure-store keys for the persisted token pair. */
+/** Secure-store keys for the persisted token pair and the push token. */
 export const STORAGE_KEYS = {
   accessToken: 'pasha9.accessToken',
   refreshToken: 'pasha9.refreshToken',
+  pushToken: 'pasha9.pushToken',
 } as const;

@@ -17,6 +17,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from '@/store/auth';
+import { PushGate } from '@/components/PushGate';
 import { colors } from '@/lib/theme';
 
 const queryClient = new QueryClient({
@@ -32,6 +33,7 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
             <StatusBar style="dark" />
+            <PushGate />
             <AuthGate>
               <RootStack />
             </AuthGate>

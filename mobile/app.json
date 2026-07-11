@@ -31,7 +31,8 @@
           "photosPermission": "Pasha9 needs access to your photos so you can attach a payment screenshot as deposit proof."
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-notifications"
     ],
     "extra": {
       "apiBaseUrl": "https://pasha9.com"

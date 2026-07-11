@@ -29,6 +29,7 @@ import {
   registerAuthBridge,
   type TokenBundle,
 } from '@/lib/api/client';
+import { unregisterDeviceToken } from '@/lib/push/register';
 import {
   login as apiLogin,
   register as apiRegister,
@@ -178,6 +179,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async (): Promise<void> => {
     const refresh = refreshRef.current;
+    // Deactivate this device's push token while the bearer is still valid, so
+    // the DELETE authenticates. Best-effort: never blocks the sign-out.
+    try {
+      await unregisterDeviceToken();
+    } catch {
+      // Ignore: an unreachable server still tears the local session down.
+    }
     try {
       await apiLogout(refresh);
     } catch {

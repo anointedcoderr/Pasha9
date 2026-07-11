@@ -18,6 +18,7 @@
 
 import { db } from '@/lib/db/client';
 import { dispatchFcmToUsers } from '@/lib/push/fcm';
+import { dispatchExpoPushToUsers } from '@/lib/push/expo';
 import { dispatchPushToUsers } from '@/lib/push/dispatch';
 import { buildAdminTelegramMessage, sendTelegramAlert } from '@/lib/telegram/notify';
 
@@ -110,6 +111,21 @@ export async function notifyUser(opts: NotifyOpts): Promise<string | null> {
         deliveredAt: new Date(),
       },
     });
+
+    // Best-effort player mobile push (Expo). Not awaited so it never
+    // adds latency to the money flow that triggered this notification;
+    // this runs on the persistent PM2 node process so the floating
+    // promise completes. Errors are swallowed because the in-app bell
+    // row above is the guaranteed channel.
+    void dispatchExpoPushToUsers([opts.userId], {
+      title: opts.titleEn,
+      body: opts.bodyEn ?? null,
+      linkUrl: opts.linkUrl ?? null,
+      kind: opts.kind,
+      priority: opts.priority ?? 'normal',
+      notificationId: n.id,
+    }).catch((err) => console.error('[notify] expo push failed', opts.kind, err));
+
     return n.id;
   } catch (err) {
     console.error('[notify] failed', opts.kind, err);

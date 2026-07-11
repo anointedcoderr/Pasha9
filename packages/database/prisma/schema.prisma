@@ -242,6 +242,7 @@ model User {
   notificationsReceived NotificationRecipient[]
   pushSubscriptions     PushSubscription[]
   adminPushDevices      AdminPushDevice[]
+  playerPushDevices     PlayerPushDevice[]
   campaignsCreated      Campaign[]               @relation("CampaignsCreated")
   campaignRecipients    CampaignRecipient[]
   cashbackPayouts       CashbackPayout[]
@@ -1253,20 +1254,20 @@ model LotteryDrawResult {
 // second | third | special | consolation. Each ticket gets at most
 // ONE winning row (highest-paying tier wins).
 model LotteryWinning {
-  id           String    @id @default(cuid())
-  userId       String
-  resultId     String
+  id                String    @id @default(cuid())
+  userId            String
+  resultId          String
   // Unique so a ticket can never be paid twice, even if two scoring
   // passes race each other (settle vs score-orphans, double admin
   // click). NULLs are exempt (Postgres), which keeps legacy /
   // manual-award rows without a ticket reference valid.
-  ticketId     String?   @unique
-  ticketNumber String
-  prizeTier    String // first_exact | first_ibox | second | third | special | consolation
-  amount       Decimal   @db.Decimal(14, 2)
-  status       String    @default("credited") // pending_credit | credited | cancelled
-  createdAt    DateTime  @default(now())
-  creditedAt   DateTime?
+  ticketId          String?   @unique
+  ticketNumber      String
+  prizeTier         String // first_exact | first_ibox | second | third | special | consolation
+  amount            Decimal   @db.Decimal(14, 2)
+  status            String    @default("credited") // pending_credit | credited | cancelled
+  createdAt         DateTime  @default(now())
+  creditedAt        DateTime?
   // Set the first time the player closes the win celebration popup
   // (or when the win is already acknowledged). Server-side flag so
   // the popup stays suppressed across devices/sessions even if the
@@ -2573,6 +2574,32 @@ model AdminPushDevice {
   token         String    @unique
   userAgent     String?
   deviceLabel   String?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  lastSeenAt    DateTime  @default(now())
+  failedAt      DateTime?
+  failureReason String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isActive])
+}
+
+// Expo push token for a PLAYER's phone (the Pasha9 mobile app),
+// registered after login by mobile/lib/push. Kept deliberately separate
+// from the admin AdminPushDevice (browser FCM) and the web
+// PushSubscription (VAPID) so the player mobile-push channel is fully
+// independent and cannot disturb either existing path. The token is the
+// Expo push token (ExponentPushToken[...]); dispatch goes through Expo's
+// push service in lib/push/expo.ts. A user can register several devices;
+// token is the unique key so re-registering the same device upserts.
+model PlayerPushDevice {
+  id            String    @id @default(cuid())
+  userId        String
+  token         String    @unique
+  platform      String?
+  appVersion    String?
   isActive      Boolean   @default(true)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
