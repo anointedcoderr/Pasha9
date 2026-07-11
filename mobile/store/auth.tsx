@@ -49,6 +49,10 @@ export interface AuthContextValue {
   signIn: (input: LoginInput) => Promise<LoginResult>;
   register: (input: RegisterInput) => Promise<void>;
   signOut: () => Promise<void>;
+  /** Merge a partial update into the cached user (e.g. after a profile edit). */
+  patchUser: (partial: Partial<AuthUser>) => void;
+  /** Re-read the user from GET /api/auth/me and replace the cached copy. */
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -159,6 +163,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [persistTokens],
   );
 
+  // Merge a partial update into the cached user without a round trip. Used after
+  // a profile edit / avatar upload so the header and account screens reflect the
+  // change immediately. A no-op when there is no signed-in user.
+  const patchUser = useCallback((partial: Partial<AuthUser>): void => {
+    setUser((prev) => (prev ? { ...prev, ...partial } : prev));
+  }, []);
+
+  // Re-fetch the authoritative user from the backend and replace the cache.
+  const refreshUser = useCallback(async (): Promise<void> => {
+    const fresh = await getMe();
+    setUser(fresh);
+  }, []);
+
   const signOut = useCallback(async (): Promise<void> => {
     const refresh = refreshRef.current;
     try {
@@ -173,8 +190,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [clearTokens, queryClient]);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, status, signIn, register, signOut }),
-    [user, status, signIn, register, signOut],
+    () => ({ user, status, signIn, register, signOut, patchUser, refreshUser }),
+    [user, status, signIn, register, signOut, patchUser, refreshUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -30,19 +30,32 @@ import {
   mockBanners,
   mockCategories,
   mockHotGames,
-  mockWinners,
   mockPromotions,
 } from '@/lib/mock';
 import { formatBDT } from '@/lib/format';
 import { colors } from '@/lib/theme';
 import { useAuth } from '@/store/auth';
 import { useBalance } from '@/lib/api/hooks';
+import { useRecentWinners, winnerLabel, formatRelativeTime } from '@/lib/api/leaderboard';
 
 export default function HomeScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const { user } = useAuth();
   const { data: wallet } = useBalance();
+
+  // Live recent winners for the marquee. Hidden until real wins arrive, and
+  // when the backend turns the feed off.
+  const recentWinners = useRecentWinners();
+  const tickerWinners = (recentWinners.data?.enabled === false ? [] : recentWinners.data?.winners ?? []).map(
+    (w) => ({
+      id: w.id,
+      handle: w.handle,
+      game: winnerLabel(w),
+      amount: w.amount,
+      timeAgo: formatRelativeTime(w.at),
+    }),
+  );
 
   // 3-column game grid sizing (screen width minus Screen's px-4, minus gaps).
   const GAP = 8;
@@ -98,7 +111,7 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      <LiveWinnersTicker winners={mockWinners} />
+      {tickerWinners.length > 0 ? <LiveWinnersTicker winners={tickerWinners} /> : null}
 
       {/* Promotions teaser */}
       <View className="gap-3">

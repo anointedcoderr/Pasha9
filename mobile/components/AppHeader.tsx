@@ -6,14 +6,16 @@
 // avatar. Meant to be passed to <Screen header={<AppHeader />}> so it sits
 // just below the safe-area inset.
 //
-// Props (all optional, sensible mock defaults):
+// Props (all optional, sensible defaults):
 //   username         string    profile label / fallback avatar initial
 //   balance          number    wallet chip amount in BDT
 //   avatarUrl        string    profile image
-//   hasNotification  boolean   show the bell dot (default true)
+//   hasNotification  boolean   force the bell dot; when omitted it tracks the
+//                              live unread notification count
 //   showWallet       boolean   render the wallet chip (default true)
 //   onMenu / onBell / onWallet / onProfile  () => void  overrides; when
-//     omitted the wallet/profile taps route to /wallet and /profile.
+//     omitted the bell routes to /notifications and wallet/profile taps route
+//     to /wallet and /profile.
 
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
@@ -25,6 +27,7 @@ import { colors } from '@/lib/theme';
 import { cn } from '@/lib/cn';
 import { useAuth } from '@/store/auth';
 import { useBalance } from '@/lib/api/hooks';
+import { useNotifications } from '@/lib/api/account';
 
 export interface AppHeaderProps {
   username?: string;
@@ -43,7 +46,7 @@ export function AppHeader({
   username,
   balance,
   avatarUrl,
-  hasNotification = true,
+  hasNotification,
   showWallet = true,
   onMenu,
   onBell,
@@ -54,12 +57,15 @@ export function AppHeader({
   const router = useRouter();
   const [lang, setLang] = useState<'EN' | 'BN'>('EN');
 
-  // Live session + wallet. Props still win when explicitly passed.
+  // Live session + wallet + notifications. Props still win when explicitly passed.
   const { user } = useAuth();
   const { data: wallet } = useBalance();
+  const { data: notifications } = useNotifications();
   const shownUsername = username ?? user?.username ?? 'Player';
   const shownBalance = balance ?? wallet?.balance ?? 0;
   const shownAvatar = avatarUrl ?? user?.avatarUrl ?? undefined;
+  // The dot follows the live unread count unless a caller forces it via the prop.
+  const showDot = hasNotification ?? (notifications?.unreadCount ?? 0) > 0;
 
   return (
     <View
@@ -100,12 +106,12 @@ export function AppHeader({
 
         {/* Notifications bell */}
         <Pressable
-          onPress={onBell}
+          onPress={onBell ?? (() => router.push('/notifications'))}
           hitSlop={6}
           className="relative h-9 w-9 items-center justify-center rounded-xl active:bg-surfaceAlt"
         >
           <Ionicons name="notifications-outline" size={20} color={colors.ink} />
-          {hasNotification ? (
+          {showDot ? (
             <View className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full border border-paper bg-hot" />
           ) : null}
         </Pressable>
