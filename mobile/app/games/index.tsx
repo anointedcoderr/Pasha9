@@ -38,8 +38,8 @@ const CATEGORIES: Array<{ key: string; label: string; href: string }> = [
   { key: 'sportsbook', label: 'Sports', href: '/games/provider?category=sportsbook' },
 ];
 
-// In-house native games. WinGo and Spin route to their real screens; the
-// rest route to their wired native-game screens.
+// In-house native games. WinGo routes to its real screen; the rest route to
+// their wired native-game screens.
 interface Original {
   key: string;
   name: string;
@@ -51,7 +51,6 @@ interface Original {
 
 const ORIGINALS: Original[] = [
   { key: 'wingo', name: 'WinGo', icon: 'color-palette', grad: ['#ffe08a', '#f5b400', '#a15c0a'], route: '/games/wingo', tag: 'HOT' },
-  { key: 'spin', name: 'Lucky Spin', icon: 'sync', grad: ['#d29bff', '#a855f7', '#4f1687'], route: '/games/spin', tag: 'NEW' },
   { key: 'dice', name: 'Dice', icon: 'dice', grad: ['#7cc9ff', '#2f8fe0', '#0a4a8f'], route: '/games/dice' },
   { key: 'mines', name: 'Mines', icon: 'diamond', grad: ['#5cf3bf', '#13c98d', '#054f34'], route: '/games/mines' },
   { key: 'crash', name: 'Crash', icon: 'trending-up', grad: ['#ff8090', '#ec394d', '#6f0c1c'], route: '/games/crash' },

@@ -1,17 +1,29 @@
 // Built by Anointed Coder.
 //
-// Sports / Sportsbook landing: a sport category chip row (Football, Cricket,
-// Basketball, Tennis, eSports), a featured live matches list with odds
-// buttons and a live badge, and an upcoming matches list. Static, mock-like
-// local data; selecting a sport filters both lists. No real betting logic.
+// Sports / Sportsbook landing. A sport category chip row (Football, Cricket,
+// Basketball, Tennis, eSports) filters the REAL events feed from
+// GET /api/content/sports-events. Each event renders as a card (team A vs
+// team B, league, kickoff, a live/upcoming badge) with a single honest action
+// that opens the provider's real sportsbook deep link in an in-app browser,
+// gated on auth. No fabricated matches and no invented odds: the endpoint does
+// not return odds, so none are shown. Loading, error and empty states are all
+// truthful.
 
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
+import { useQueryClient } from '@tanstack/react-query';
 import { Screen, SectionHeader, Gradient, EmptyState } from '@/components/ui';
 import { gradients, colors } from '@/lib/theme';
 import { cn } from '@/lib/cn';
+import { titleCase } from '@/lib/format';
+import { ApiError } from '@/lib/api/client';
+import { balanceQueryKey, bonusesQueryKey } from '@/lib/api/hooks';
+import { useSportsEvents, type SportEvent } from '@/lib/api/sports';
+import { useAuth } from '@/store/auth';
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
@@ -21,6 +33,8 @@ interface Sport {
   icon: IconName;
 }
 
+// The chip keys match the backend `sportType` slugs so filtering is a direct
+// case-insensitive compare against the real events.
 const SPORTS: Sport[] = [
   { key: 'football', label: 'Football', icon: 'football' },
   { key: 'cricket', label: 'Cricket', icon: 'baseball' },
@@ -29,55 +43,99 @@ const SPORTS: Sport[] = [
   { key: 'esports', label: 'eSports', icon: 'game-controller' },
 ];
 
-interface Match {
-  id: string;
-  sport: string;
-  league: string;
-  home: string;
-  away: string;
-  live?: boolean;
-  clock?: string;
-  score?: string;
-  time?: string;
-  odds: { home: string; draw?: string; away: string };
+/** Format an ISO kickoff into a short, friendly local string. */
+function formatKickoff(iso: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  try {
+    return new Intl.DateTimeFormat('en-GB', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(d);
+  } catch {
+    return d.toISOString().slice(0, 16).replace('T', ' ');
+  }
 }
 
-const MATCHES: Match[] = [
-  // Football
-  { id: 'f1', sport: 'football', league: 'Premier League', home: 'Man City', away: 'Arsenal', live: true, clock: "58'", score: '2 - 1', odds: { home: '1.85', draw: '3.40', away: '4.20' } },
-  { id: 'f2', sport: 'football', league: 'La Liga', home: 'Real Madrid', away: 'Barcelona', live: true, clock: "71'", score: '1 - 1', odds: { home: '2.10', draw: '3.30', away: '3.50' } },
-  { id: 'f3', sport: 'football', league: 'Premier League', home: 'Liverpool', away: 'Chelsea', time: 'Today 21:00', odds: { home: '2.05', draw: '3.40', away: '3.60' } },
-  { id: 'f4', sport: 'football', league: 'Bundesliga', home: 'Bayern', away: 'Dortmund', time: 'Tomorrow 00:30', odds: { home: '1.70', draw: '3.90', away: '4.50' } },
-
-  // Cricket
-  { id: 'c1', sport: 'cricket', league: 'ODI Series', home: 'India', away: 'Australia', live: true, clock: '32.4 ov', score: '198 / 4', odds: { home: '1.65', away: '2.25' } },
-  { id: 'c2', sport: 'cricket', league: 'T20 International', home: 'Bangladesh', away: 'Pakistan', time: 'Today 19:30', odds: { home: '1.90', away: '1.95' } },
-  { id: 'c3', sport: 'cricket', league: 'Test Match', home: 'England', away: 'South Africa', time: 'Tomorrow 15:00', odds: { home: '1.80', away: '2.05' } },
-
-  // Basketball
-  { id: 'b1', sport: 'basketball', league: 'NBA', home: 'Lakers', away: 'Celtics', live: true, clock: 'Q3 04:12', score: '78 - 72', odds: { home: '1.75', away: '2.10' } },
-  { id: 'b2', sport: 'basketball', league: 'NBA', home: 'Warriors', away: 'Bucks', time: 'Today 23:00', odds: { home: '1.90', away: '1.95' } },
-  { id: 'b3', sport: 'basketball', league: 'EuroLeague', home: 'Barcelona', away: 'Real Madrid', time: 'Tomorrow 20:45', odds: { home: '2.20', away: '1.68' } },
-
-  // Tennis
-  { id: 't1', sport: 'tennis', league: 'ATP Masters', home: 'Alcaraz', away: 'Sinner', live: true, clock: 'Set 2', score: '6-4 3-2', odds: { home: '1.55', away: '2.45' } },
-  { id: 't2', sport: 'tennis', league: 'ATP 500', home: 'Djokovic', away: 'Medvedev', time: 'Tomorrow 18:00', odds: { home: '1.70', away: '2.15' } },
-
-  // eSports
-  { id: 'e1', sport: 'esports', league: 'LoL Worlds', home: 'T1', away: 'G2 Esports', live: true, clock: 'Game 2', score: '1 - 0', odds: { home: '1.60', away: '2.35' } },
-  { id: 'e2', sport: 'esports', league: 'CS2 Major', home: 'NAVI', away: 'FaZe Clan', time: 'Today 20:00', odds: { home: '1.85', away: '1.95' } },
-];
+/** A human status label for the non-live badge. */
+function statusLabel(status: string): string {
+  if (status === 'upcoming') return 'Upcoming';
+  return status ? titleCase(status) : 'Scheduled';
+}
 
 export default function SportsScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const { status } = useAuth();
   const [active, setActive] = useState('football');
 
-  const live = MATCHES.filter((m) => m.sport === active && m.live);
-  const upcoming = MATCHES.filter((m) => m.sport === active && !m.live);
+  const sportsQuery = useSportsEvents();
+  const events = sportsQuery.data ?? [];
+
+  // Real launch: gate on auth, then open the sportsbook deep link in an in-app
+  // browser (the same safe pattern the provider games use). A synchronous ref
+  // blocks a double-tap before the launching state lands.
+  const inFlight = useRef(false);
+  const [launchingId, setLaunchingId] = useState<string | null>(null);
+  const [launchError, setLaunchError] = useState<string | null>(null);
+
+  const openEvent = useCallback(
+    (event: SportEvent) => {
+      if (inFlight.current) return;
+      setLaunchError(null);
+
+      if (status !== 'authed') {
+        router.push('/auth/login');
+        return;
+      }
+      if (!event.deepLinkUrl) {
+        setLaunchError('This match cannot be opened right now. Please try again shortly.');
+        return;
+      }
+
+      inFlight.current = true;
+      setLaunchingId(event.id);
+      (async () => {
+        try {
+          await WebBrowser.openBrowserAsync(event.deepLinkUrl, {
+            enableBarCollapsing: true,
+            showTitle: true,
+          });
+          // Back from the sportsbook: a bet may have settled while it was open,
+          // so refresh the wallet reads the header + screens rely on.
+          queryClient.invalidateQueries({ queryKey: balanceQueryKey });
+          queryClient.invalidateQueries({ queryKey: bonusesQueryKey });
+        } catch {
+          setLaunchError('Could not open the sportsbook. Check your connection and try again.');
+        } finally {
+          inFlight.current = false;
+          setLaunchingId(null);
+        }
+      })();
+    },
+    [status, router, queryClient],
+  );
+
   const activeSport = SPORTS.find((s) => s.key === active);
+  const sportEvents = events.filter((e) => e.sportType.toLowerCase() === active);
+  const live = sportEvents.filter((e) => e.status === 'live');
+  const upcoming = sportEvents.filter((e) => e.status !== 'live');
+
+  // Surface the real backend message on error, but never leak a bare error code.
+  const friendlyError =
+    sportsQuery.error instanceof ApiError && /\s/.test(sportsQuery.error.message)
+      ? sportsQuery.error.message
+      : 'We could not load the matches. Please try again.';
 
   return (
-    <Screen header={<BackHeader title="Sports" subtitle="Live odds and fixtures" />} contentClassName="px-4 pt-4 gap-5">
+    <Screen
+      header={<BackHeader title="Sports" subtitle="Live and upcoming fixtures" />}
+      contentClassName="px-4 pt-4 gap-5"
+    >
       {/* Sport category chips */}
       <ScrollView
         horizontal
@@ -102,7 +160,8 @@ export default function SportsScreen() {
         })}
       </ScrollView>
 
-      {/* Featured banner */}
+      {/* Featured banner. Honest copy: the live count is real and no odds are
+          promised, since this feed does not carry odds. */}
       <View className="relative overflow-hidden rounded-2xl border border-gold-600/20">
         <Gradient colors={gradients.darkCard} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} radius={16} />
         <View className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-gold-500/20" />
@@ -112,121 +171,207 @@ export default function SportsScreen() {
             <Ionicons name={activeSport?.icon ?? 'football'} size={24} color={colors.ink} />
           </View>
           <View className="flex-1">
-            <Text className="text-base font-black text-white">{activeSport?.label} betting</Text>
+            <Text className="text-base font-black text-white">{activeSport?.label} matches</Text>
             <Text className="text-xs font-semibold text-white/60">
-              Live in-play odds, cash out and boosted markets.
+              Real fixtures. Open a match to place your bet.
             </Text>
           </View>
-          <View className="rounded-pill bg-newg/20 px-2.5 py-1">
-            <Text className="text-[11px] font-black" style={{ color: colors.neon }}>
-              {live.length} live
-            </Text>
-          </View>
+          {sportsQuery.isSuccess && live.length > 0 ? (
+            <View className="rounded-pill bg-newg/20 px-2.5 py-1">
+              <Text className="text-[11px] font-black" style={{ color: colors.neon }}>
+                {live.length} live
+              </Text>
+            </View>
+          ) : null}
         </View>
       </View>
 
-      {/* Live matches */}
-      <View className="gap-3">
-        <SectionHeader title="Live now" subtitle="In-play right now" icon="flash" />
-        {live.length > 0 ? (
-          <View className="gap-3">
-            {live.map((m) => (
-              <MatchCard key={m.id} match={m} />
-            ))}
-          </View>
-        ) : (
-          <EmptyState
-            icon="time-outline"
-            title="No live matches"
-            message={`No ${activeSport?.label} games are in-play. Check the upcoming fixtures below.`}
-          />
-        )}
-      </View>
+      {/* Launch failure banner (auth-gate routes away, so this is a real open
+          failure or a missing link). */}
+      {launchError ? (
+        <View className="flex-row items-center gap-2.5 rounded-2xl border border-hot/40 bg-hot/10 px-3.5 py-3">
+          <Ionicons name="alert-circle" size={18} color={colors.hot} />
+          <Text className="flex-1 text-xs font-medium text-ink">{launchError}</Text>
+          <Pressable onPress={() => setLaunchError(null)} hitSlop={8}>
+            <Ionicons name="close" size={16} color={colors.inkMute} />
+          </Pressable>
+        </View>
+      ) : null}
 
-      {/* Upcoming matches */}
-      <View className="gap-3">
-        <SectionHeader title="Upcoming" subtitle="Starting soon" icon="calendar" onAction={() => router.push('/games')} />
+      {/* Body: loading -> error -> empty -> content */}
+      {sportsQuery.isLoading ? (
         <View className="gap-3">
-          {upcoming.map((m) => (
-            <MatchCard key={m.id} match={m} />
+          {Array.from({ length: 4 }).map((_, i) => (
+            <View key={i} className="h-40 rounded-2xl border border-divider bg-surfaceAlt" />
           ))}
         </View>
-      </View>
+      ) : sportsQuery.isError ? (
+        <EmptyState
+          icon="cloud-offline-outline"
+          title="Could not load matches"
+          message={friendlyError}
+          actionLabel="Retry"
+          onAction={() => sportsQuery.refetch()}
+        />
+      ) : live.length === 0 && upcoming.length === 0 ? (
+        <EmptyState
+          icon="calendar-outline"
+          title="No matches scheduled right now"
+          message={`There are no ${activeSport?.label ?? ''} fixtures at the moment. Explore the full sportsbook instead.`}
+          actionLabel="Open sportsbook"
+          onAction={() => router.push('/games/provider?category=sportsbook')}
+        />
+      ) : (
+        <>
+          {live.length > 0 ? (
+            <View className="gap-3">
+              <SectionHeader title="Live now" subtitle="In-play right now" icon="flash" />
+              <View className="gap-3">
+                {live.map((e) => (
+                  <EventCard key={e.id} event={e} launching={launchingId === e.id} onBet={() => openEvent(e)} />
+                ))}
+              </View>
+            </View>
+          ) : null}
+
+          {upcoming.length > 0 ? (
+            <View className="gap-3">
+              <SectionHeader
+                title="Upcoming"
+                subtitle="Starting soon"
+                icon="calendar"
+                actionLabel="Full sportsbook"
+                onAction={() => router.push('/games/provider?category=sportsbook')}
+              />
+              <View className="gap-3">
+                {upcoming.map((e) => (
+                  <EventCard key={e.id} event={e} launching={launchingId === e.id} onBet={() => openEvent(e)} />
+                ))}
+              </View>
+            </View>
+          ) : null}
+        </>
+      )}
     </Screen>
   );
 }
 
-// A single match card: league + live/time meta, the two team rows, and a row
-// of odds buttons (1 / X / 2, with X omitted for two-way sports).
-function MatchCard({ match }: { match: Match }) {
+// A single real event card: league + status meta, the two team rows, kickoff
+// and provider meta, and one honest action that opens the sportsbook.
+function EventCard({
+  event,
+  launching,
+  onBet,
+}: {
+  event: SportEvent;
+  launching: boolean;
+  onBet: () => void;
+}) {
+  const isLive = event.status === 'live';
+  const kickoff = formatKickoff(event.startsAt);
+  const canBet = !!event.deepLinkUrl;
+
   return (
     <View className="overflow-hidden rounded-2xl border border-divider bg-paper shadow-sm shadow-black/5">
-      {/* Meta row */}
+      {/* Meta row: league + status */}
       <View className="flex-row items-center justify-between border-b border-divider px-3.5 py-2.5">
         <Text className="text-[11px] font-bold uppercase tracking-wider text-ink-mute" numberOfLines={1}>
-          {match.league}
+          {event.leagueNameEn || 'Match'}
         </Text>
-        {match.live ? (
+        {isLive ? (
           <View className="flex-row items-center gap-1.5 rounded-pill bg-hot/10 px-2 py-0.5">
             <View className="h-1.5 w-1.5 rounded-full bg-hot" />
-            <Text className="text-[10px] font-black uppercase tracking-wider text-hot">
-              Live {match.clock}
-            </Text>
+            <Text className="text-[10px] font-black uppercase tracking-wider text-hot">Live</Text>
           </View>
         ) : (
-          <View className="flex-row items-center gap-1">
-            <Ionicons name="time-outline" size={12} color={colors.inkMute} />
-            <Text className="text-[11px] font-bold text-ink-mute">{match.time}</Text>
+          <View className="flex-row items-center gap-1 rounded-pill bg-surfaceAlt px-2 py-0.5">
+            <Ionicons name="time-outline" size={11} color={colors.inkMute} />
+            <Text className="text-[10px] font-black uppercase tracking-wider text-ink-mute">
+              {statusLabel(event.status)}
+            </Text>
           </View>
         )}
       </View>
 
       {/* Teams */}
-      <View className="px-3.5 py-3">
-        <TeamRow name={match.home} score={match.score ? match.score.split(' ')[0] : undefined} live={match.live} />
-        <View className="my-1.5 h-px bg-divider" />
-        <TeamRow
-          name={match.away}
-          score={match.score ? match.score.split(' ').slice(-1)[0] : undefined}
-          live={match.live}
-        />
-      </View>
-
-      {/* Odds */}
-      <View className="flex-row gap-2 px-3.5 pb-3.5">
-        <OddsButton label="1" value={match.odds.home} />
-        {match.odds.draw ? <OddsButton label="X" value={match.odds.draw} /> : null}
-        <OddsButton label="2" value={match.odds.away} />
-      </View>
-    </View>
-  );
-}
-
-function TeamRow({ name, score, live }: { name: string; score?: string; live?: boolean }) {
-  return (
-    <View className="flex-row items-center justify-between">
-      <View className="flex-row items-center gap-2 flex-1 pr-2">
-        <View className="h-6 w-6 items-center justify-center rounded-md bg-surfaceAlt">
-          <Text className="text-[11px] font-black text-ink-soft">{name.slice(0, 1)}</Text>
+      <View className="gap-2.5 px-3.5 py-3">
+        <TeamRow name={event.teamAName} short={event.teamAShortName} logo={event.teamALogoUrl} />
+        <View className="flex-row items-center gap-2">
+          <View className="h-px flex-1 bg-divider" />
+          <Text className="text-[10px] font-black uppercase tracking-wider text-ink-mute">vs</Text>
+          <View className="h-px flex-1 bg-divider" />
         </View>
-        <Text className="flex-1 text-sm font-extrabold text-ink" numberOfLines={1}>
-          {name}
-        </Text>
+        <TeamRow name={event.teamBName} short={event.teamBShortName} logo={event.teamBLogoUrl} />
       </View>
-      {score ? (
-        <Text className={cn('text-base font-black tabular-nums', live ? 'text-hot' : 'text-ink')}>{score}</Text>
+
+      {/* Kickoff + provider meta */}
+      {kickoff || event.providerName ? (
+        <View className="flex-row items-center justify-between px-3.5 pb-1">
+          {kickoff ? (
+            <View className="flex-row items-center gap-1">
+              <Ionicons name="calendar-outline" size={12} color={colors.inkMute} />
+              <Text className="text-[11px] font-semibold text-ink-mute">{kickoff}</Text>
+            </View>
+          ) : (
+            <View />
+          )}
+          {event.providerName ? (
+            <Text className="text-[10px] font-semibold text-ink-mute" numberOfLines={1}>
+              {event.providerName}
+            </Text>
+          ) : null}
+        </View>
       ) : null}
+
+      {/* Action */}
+      <View className="px-3.5 pb-3.5 pt-2.5">
+        {canBet ? (
+          <Pressable
+            onPress={onBet}
+            disabled={launching}
+            className="relative flex-row items-center justify-center gap-1.5 overflow-hidden rounded-xl py-2.5 active:opacity-90"
+          >
+            <Gradient colors={gradients.gold} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} radius={12} />
+            <Ionicons name={launching ? 'hourglass' : 'open-outline'} size={15} color={colors.ink} />
+            <Text className="text-xs font-black uppercase tracking-wider text-ink">
+              {launching ? 'Opening...' : isLive ? 'Bet now' : 'Open'}
+            </Text>
+          </Pressable>
+        ) : (
+          <View className="flex-row items-center justify-center gap-1.5 rounded-xl border border-divider bg-surface py-2.5">
+            <Ionicons name="lock-closed-outline" size={14} color={colors.inkMute} />
+            <Text className="text-xs font-bold uppercase tracking-wider text-ink-mute">Not available yet</Text>
+          </View>
+        )}
+      </View>
     </View>
   );
 }
 
-// A tappable odds pill. Visual only: label (market) on top, decimal odd below.
-function OddsButton({ label, value }: { label: string; value: string }) {
+// One team row: crest (real logo, or the short-name initial as a fallback),
+// full name, and the short code.
+function TeamRow({ name, short, logo }: { name: string; short: string | null; logo: string | null }) {
+  const initial = (short || name || '?').trim().slice(0, 1).toUpperCase();
   return (
-    <Pressable className="flex-1 items-center rounded-xl border border-divider bg-surface py-2 active:border-gold-600 active:bg-gold-500/15">
-      <Text className="text-[10px] font-black uppercase tracking-wider text-ink-mute">{label}</Text>
-      <Text className="mt-0.5 text-sm font-black text-ink">{value}</Text>
-    </Pressable>
+    <View className="flex-row items-center gap-2.5">
+      <View className="h-8 w-8 items-center justify-center overflow-hidden rounded-lg bg-surfaceAlt">
+        {logo ? (
+          <Image
+            source={{ uri: logo }}
+            style={{ width: '100%', height: '100%' }}
+            contentFit="cover"
+            transition={150}
+            cachePolicy="memory-disk"
+          />
+        ) : (
+          <Text className="text-[11px] font-black text-ink-soft">{initial}</Text>
+        )}
+      </View>
+      <Text className="flex-1 text-sm font-extrabold text-ink" numberOfLines={1}>
+        {name || 'TBD'}
+      </Text>
+      {short ? <Text className="text-[11px] font-bold text-ink-mute">{short}</Text> : null}
+    </View>
   );
 }
 

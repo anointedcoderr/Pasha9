@@ -1,7 +1,7 @@
 // Built by Anointed Coder.
 //
 // Nested Stack for the Games hub. Declaring the sub-routes here keeps the
-// lobby, WinGo and Spin screens headerless and gives them clean stack
+// lobby and WinGo screens headerless and gives them clean stack
 // transitions WITHOUT touching the root app/_layout.tsx. The root layout
 // already registers `games` as a single stack entry; this nested navigator
 // owns everything under /games.
@@ -19,7 +19,6 @@ export default function GamesLayout() {
     >
       <Stack.Screen name="index" />
       <Stack.Screen name="wingo" options={{ contentStyle: { backgroundColor: colors.darkbg } }} />
-      <Stack.Screen name="spin" options={{ contentStyle: { backgroundColor: colors.darkbg } }} />
     </Stack>
   );
 }
