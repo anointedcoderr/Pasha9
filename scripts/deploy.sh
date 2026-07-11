@@ -42,6 +42,24 @@ pnpm install --frozen-lockfile --prod=false
 echo "==> sync database schema (this project uses prisma db push, not"
 echo "    migrations: the lone init migration is a stale baseline, so"
 echo "    migrate deploy was a no-op. db push is additive + safe here)."
+# db push connects to Postgres, so it needs DATABASE_URL in THIS shell. PM2
+# injects it into the running app, but an interactive deploy shell does not
+# have it, and prisma run from packages/database does not auto-load the app
+# env. Load it from the app env file so db push never dies with P1012
+# "Environment variable not found: DATABASE_URL".
+if [ -z "${DATABASE_URL:-}" ]; then
+  for envf in .env .env.production apps/web/.env apps/web/.env.production; do
+    if [ -f "$envf" ] && grep -q '^DATABASE_URL=' "$envf"; then
+      export DATABASE_URL="$(grep -m1 '^DATABASE_URL=' "$envf" | cut -d= -f2-)"
+      echo "==> loaded DATABASE_URL from $envf"
+      break
+    fi
+  done
+fi
+if [ -z "${DATABASE_URL:-}" ]; then
+  echo "!! DATABASE_URL not found in .env / .env.production. Set it, then re-run." >&2
+  exit 1
+fi
 pnpm --filter "$DB_FILTER" exec prisma generate
 pnpm --filter "$DB_FILTER" exec prisma db push
 
