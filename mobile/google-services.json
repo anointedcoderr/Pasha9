@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "177196389168",
+    "project_id": "pasha9-c61fd",
+    "storage_bucket": "pasha9-c61fd.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:177196389168:android:7528de45eab70e424e6ef5",
+        "android_client_info": {
+          "package_name": "com.pasha9.player"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCz_F-TvQ4gYKlRWCeU3WaqgEdJVApxsBM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
