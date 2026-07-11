@@ -16,7 +16,10 @@
     },
     "android": {
       "package": "com.pasha9.player",
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -35,7 +38,12 @@
       "expo-notifications"
     ],
     "extra": {
-      "apiBaseUrl": "https://pasha9.com"
-    }
+      "apiBaseUrl": "https://pasha9.com",
+      "router": {},
+      "eas": {
+        "projectId": "13996c0f-e7a6-4168-bba8-04ef13dbd5ca"
+      }
+    },
+    "owner": "anointedcoder"
   }
 }
