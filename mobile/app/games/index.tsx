@@ -16,6 +16,8 @@ import { Screen, SectionHeader, GameTile, ChipToggle, TextField, Pill, Gradient,
 import { AppHeader } from '@/components/AppHeader';
 import { mockHotGames } from '@/lib/mock';
 import { colors, gradients } from '@/lib/theme';
+import { useWingoState } from '@/lib/api/hooks';
+import { cn } from '@/lib/cn';
 import { WingoBall } from './_components/WingoBall';
 
 type IconName = keyof typeof Ionicons.glyphMap;
@@ -62,6 +64,13 @@ export default function GamesLobby() {
   const [category, setCategory] = useState('hot');
   const [query, setQuery] = useState('');
 
+  // Surface the real WinGo gate: if the game (or the 30s mode) is off, the
+  // lobby greylists the WinGo surfaces instead of routing into a dead board.
+  // While the state is still loading we stay optimistic so the card never
+  // flashes disabled. Other tiles are provider-wired in a later phase.
+  const wingoState = useWingoState('wingo_30s', false);
+  const wingoDisabled = !!wingoState.data && (!wingoState.data.enabled || !wingoState.data.modeEnabled);
+
   const GAP = 8;
   // Screen content uses px-4 (32) side padding; 3-col grid for both the
   // originals and the provider tiles.
@@ -83,7 +92,11 @@ export default function GamesLobby() {
       {/* Prominent Pasha WinGo hero card */}
       <Pressable
         onPress={() => router.push('/games/wingo')}
-        className="relative overflow-hidden rounded-2xl border border-gold-600/30 active:opacity-90"
+        disabled={wingoDisabled}
+        className={cn(
+          'relative overflow-hidden rounded-2xl border border-gold-600/30',
+          wingoDisabled ? 'opacity-60' : 'active:opacity-90',
+        )}
       >
         <Gradient colors={gradients.darkPanel} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} radius={16} />
         <View
@@ -95,17 +108,26 @@ export default function GamesLobby() {
           <View className="min-w-0 flex-1">
             <View className="flex-row items-center gap-2">
               <Badge label="ORIGINAL" variant="gold" />
-              <Badge label="LIVE" variant="new" />
+              <Badge label={wingoDisabled ? 'PAUSED' : 'LIVE'} variant={wingoDisabled ? 'neutral' : 'new'} />
             </View>
             <Text className="mt-2 text-lg font-black text-white">Pasha WinGo</Text>
             <Text className="mt-0.5 text-xs text-dink-mid">
-              Predict the colour and number. New round every 30 seconds.
+              {wingoDisabled
+                ? 'Temporarily unavailable. Please check back shortly.'
+                : 'Predict the colour and number. New round every 30 seconds.'}
             </Text>
-            <View className="mt-3 flex-row items-center gap-2 self-start overflow-hidden rounded-pill px-4 py-2">
-              <Gradient colors={gradients.gold} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} radius={999} />
-              <Text className="text-xs font-black uppercase tracking-wider text-ink">Play now</Text>
-              <Ionicons name="arrow-forward" size={13} color={colors.ink} />
-            </View>
+            {wingoDisabled ? (
+              <View className="mt-3 flex-row items-center gap-1.5 self-start rounded-pill border border-white/15 bg-white/5 px-4 py-2">
+                <Ionicons name="pause-circle" size={13} color={colors.dinkLo} />
+                <Text className="text-xs font-black uppercase tracking-wider text-dink-lo">Unavailable</Text>
+              </View>
+            ) : (
+              <View className="mt-3 flex-row items-center gap-2 self-start overflow-hidden rounded-pill px-4 py-2">
+                <Gradient colors={gradients.gold} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} radius={999} />
+                <Text className="text-xs font-black uppercase tracking-wider text-ink">Play now</Text>
+                <Ionicons name="arrow-forward" size={13} color={colors.ink} />
+              </View>
+            )}
           </View>
           <View className="flex-row items-center gap-1.5">
             {[7, 5, 2].map((n, i) => (
@@ -121,35 +143,46 @@ export default function GamesLobby() {
       <View className="gap-3">
         <SectionHeader title="Pasha Originals" subtitle="In-house native games" icon="sparkles" />
         <View className="flex-row flex-wrap justify-between">
-          {ORIGINALS.map((g) => (
-            <Pressable
-              key={g.key}
-              onPress={() => router.push(g.route as never)}
-              style={{ width: tileW, marginBottom: 12 }}
-              className="overflow-hidden rounded-2xl border border-white/10 active:opacity-90"
-            >
-              <View style={{ height: tileW * 0.82 }} className="relative items-center justify-center overflow-hidden">
-                <Gradient colors={g.grad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} radius={16} />
-                <View
-                  pointerEvents="none"
-                  className="absolute inset-x-0 top-0 h-1/2"
-                  style={{ backgroundColor: 'rgba(255,255,255,0.18)' }}
-                />
-                <Ionicons name={g.icon} size={32} color="#ffffff" />
-                {g.tag ? (
-                  <View className="absolute left-1.5 top-1.5">
-                    <Badge label={g.tag} variant={g.tag === 'HOT' ? 'hot' : 'new'} />
-                  </View>
-                ) : null}
-              </View>
-              <View className="bg-darkbg px-2 py-2">
-                <Text className="text-xs font-bold text-white" numberOfLines={1}>
-                  {g.name}
-                </Text>
-                <Text className="text-[10px] text-dink-lo">Pasha Originals</Text>
-              </View>
-            </Pressable>
-          ))}
+          {ORIGINALS.map((g) => {
+            const tileDisabled = g.key === 'wingo' && wingoDisabled;
+            return (
+              <Pressable
+                key={g.key}
+                onPress={() => router.push(g.route as never)}
+                disabled={tileDisabled}
+                style={{ width: tileW, marginBottom: 12 }}
+                className={cn(
+                  'overflow-hidden rounded-2xl border border-white/10',
+                  tileDisabled ? 'opacity-50' : 'active:opacity-90',
+                )}
+              >
+                <View style={{ height: tileW * 0.82 }} className="relative items-center justify-center overflow-hidden">
+                  <Gradient colors={g.grad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} radius={16} />
+                  <View
+                    pointerEvents="none"
+                    className="absolute inset-x-0 top-0 h-1/2"
+                    style={{ backgroundColor: 'rgba(255,255,255,0.18)' }}
+                  />
+                  <Ionicons name={g.icon} size={32} color="#ffffff" />
+                  {tileDisabled ? (
+                    <View className="absolute left-1.5 top-1.5">
+                      <Badge label="PAUSED" variant="neutral" />
+                    </View>
+                  ) : g.tag ? (
+                    <View className="absolute left-1.5 top-1.5">
+                      <Badge label={g.tag} variant={g.tag === 'HOT' ? 'hot' : 'new'} />
+                    </View>
+                  ) : null}
+                </View>
+                <View className="bg-darkbg px-2 py-2">
+                  <Text className="text-xs font-bold text-white" numberOfLines={1}>
+                    {g.name}
+                  </Text>
+                  <Text className="text-[10px] text-dink-lo">Pasha Originals</Text>
+                </View>
+              </Pressable>
+            );
+          })}
         </View>
       </View>
 

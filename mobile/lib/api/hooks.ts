@@ -43,6 +43,16 @@ import {
   type WithdrawalLimits,
   type WithdrawalResult,
 } from './wallet';
+import {
+  getWingoState,
+  getWingoMyBets,
+  placeWingoBet,
+  type PlaceWingoBetInput,
+  type PlaceWingoBetResult,
+  type WingoMode,
+  type WingoMyBetsPage,
+  type WingoState,
+} from './wingo';
 import { useAuth } from '@/store/auth';
 
 // ---------------------------------------------------------------------------
@@ -60,6 +70,9 @@ export const transactionsQueryKey = (type?: TransactionType | null, take?: numbe
 
 export const depositPreviewQueryKey = (amount: number, promotionId?: string | null) =>
   ['wallet', 'deposit-preview', amount, promotionId ?? null] as const;
+
+export const wingoStateQueryKey = (mode: WingoMode) => ['wingo', 'state', mode] as const;
+export const wingoMyBetsQueryKey = (mode: WingoMode) => ['wingo', 'my-bets', mode] as const;
 
 // ---------------------------------------------------------------------------
 // Reads
@@ -184,5 +197,64 @@ export function useCreateWithdrawal() {
   return useMutation<WithdrawalResult, unknown, CreateWithdrawalInput>({
     mutationFn: createWithdrawal,
     onSuccess: invalidate,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// WinGo (Phase 3): live rounds + real betting
+// ---------------------------------------------------------------------------
+
+/**
+ * Live WinGo state for one mode. Polls every ~1500ms while the screen is
+ * mounted so the countdown, phase and results stay current (the server settles
+ * due rounds on read, so the poll also drives settlement). Public read: it runs
+ * without auth so the board renders before the player signs in.
+ */
+export function useWingoState(mode: WingoMode, poll = true) {
+  return useQuery<WingoState>({
+    queryKey: wingoStateQueryKey(mode),
+    queryFn: () => getWingoState(mode),
+    // The game screen polls every 1.5s for the live round; a caller that only
+    // needs the enabled flag (the lobby, to gate a card) passes poll=false and
+    // reads a briefly-cached value instead of hammering the endpoint.
+    refetchInterval: poll ? 1500 : false,
+    staleTime: poll ? 0 : 60_000,
+    // Keep the previous mode's board on screen while a tab switch loads, so
+    // the layout does not blank between modes.
+    placeholderData: keepPreviousData,
+  });
+}
+
+/**
+ * The player's WinGo bet history for a mode, newest first. Gated on auth and
+ * polled modestly so a PENDING bet flips to WON/LOST shortly after its draw
+ * without a manual refresh.
+ */
+export function useWingoMyBets(mode: WingoMode) {
+  const { status } = useAuth();
+  return useQuery<WingoMyBetsPage>({
+    queryKey: wingoMyBetsQueryKey(mode),
+    queryFn: () => getWingoMyBets({ mode, limit: 30 }),
+    enabled: status === 'authed',
+    refetchInterval: 5000,
+    staleTime: 2000,
+  });
+}
+
+/**
+ * Place a WinGo bet slip. On success invalidate the wallet balance (real debit),
+ * this mode's my-bets feed (the new rows) and the live state (round window may
+ * have advanced), so every surface reflects the placement.
+ */
+export function usePlaceWingoBet() {
+  const queryClient = useQueryClient();
+  const invalidateWallet = useInvalidateWallet();
+  return useMutation<PlaceWingoBetResult, unknown, PlaceWingoBetInput>({
+    mutationFn: placeWingoBet,
+    onSuccess: (result) => {
+      invalidateWallet();
+      queryClient.invalidateQueries({ queryKey: wingoMyBetsQueryKey(result.mode) });
+      queryClient.invalidateQueries({ queryKey: wingoStateQueryKey(result.mode) });
+    },
   });
 }

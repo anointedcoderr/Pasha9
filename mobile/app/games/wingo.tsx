@@ -1,82 +1,45 @@
 // Built by Anointed Coder.
 //
-// Pasha WinGo game screen. Static UI that mirrors the web WinGo board:
-//   four mode tabs (30s / 1m / 3m / 5m) -> a round card (recent-result
-//   mini balls, period number, a live mm:ss countdown, Open/Locked pill)
-//   -> the betting board (Green / Violet / Red, the glossy 0-9 ball grid,
-//   Random + X1..X100 multiplier chips, a Big / Small bar) -> the lower
-//   Game history / Chart / My history tabs with sample rows.
+// Pasha WinGo game screen, wired to LIVE rounds and REAL betting. The premium
+// layout is unchanged from the static mock; only the data source is now live:
+//   four mode tabs -> a round card driven by the server round window (real
+//   period number, a countdown derived from betCloseAt/drawsAt and resynced on
+//   every poll, recent-result balls, an Open/Locked pill from the real phase)
+//   -> a betting board (Green/Violet/Red, the 0-9 ball grid, Big/Small, Random,
+//   X1..X100) that builds a bet slip -> a Place Bet action that debits the real
+//   wallet through usePlaceWingoBet -> the Game history / Chart / My history
+//   tabs backed by live results and the player's real bets.
 //
-// Presentation only: the countdown ticks for life, but there is no betting
-// logic. All figures come from the local mock arrays below.
+// Real money is wagered here, so placement is guarded three ways: a synchronous
+// in-flight ref against a double-tap, a stable idempotency key reused on retry
+// so the server never double-debits, and a disabled Place Bet while the round is
+// locked or the stake is out of range (the server enforces the same rules).
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
-import { Screen, ChipToggle, Gradient } from '@/components/ui';
+import { Screen, ChipToggle, Gradient, TextField } from '@/components/ui';
 import { formatBDT } from '@/lib/format';
 import { colors } from '@/lib/theme';
 import { cn } from '@/lib/cn';
-import { mockWallet } from '@/lib/mock';
+import { ApiError } from '@/lib/api/client';
+import { useBalance, useWingoState, useWingoMyBets, usePlaceWingoBet } from '@/lib/api/hooks';
+import {
+  WINGO_MODES,
+  newIdempotencyKey,
+  type WingoBetType,
+  type WingoMode,
+  type WingoMyBet,
+  type WingoPaytable,
+  type WingoResult,
+} from '@/lib/api/wingo';
 import { WingoBall, colorOf, sizeOf } from './_components/WingoBall';
 
-// ---------- Mock data ----------
-
-const MODES = [
-  { key: 'wingo_30s', label: '30s' },
-  { key: 'wingo_1m', label: '1m' },
-  { key: 'wingo_3m', label: '3m' },
-  { key: 'wingo_5m', label: '5m' },
-];
-
-const MODE_SECONDS: Record<string, number> = {
-  wingo_30s: 30,
-  wingo_1m: 60,
-  wingo_3m: 180,
-  wingo_5m: 300,
-};
+const MODE_TABS = WINGO_MODES.map((m) => ({ key: m.key, label: m.label }));
 
 const MULTIPLIERS = [1, 5, 10, 20, 50, 100];
-
-interface Draw {
-  period: string;
-  n: number;
-}
-
-const HISTORY: Draw[] = [
-  { period: '20260710104219', n: 7 },
-  { period: '20260710104218', n: 2 },
-  { period: '20260710104217', n: 5 },
-  { period: '20260710104216', n: 9 },
-  { period: '20260710104215', n: 0 },
-  { period: '20260710104214', n: 4 },
-  { period: '20260710104213', n: 3 },
-  { period: '20260710104212', n: 8 },
-  { period: '20260710104211', n: 1 },
-  { period: '20260710104210', n: 6 },
-];
-
-interface MyBet {
-  id: string;
-  label: string;
-  n?: number;
-  period: string;
-  amount: number;
-  status: 'WON' | 'LOST' | 'PENDING';
-  payout?: number;
-}
-
-const MY_BETS: MyBet[] = [
-  { id: 'b1', label: 'Green', period: '20260710104219', amount: 50, status: 'WON', payout: 96 },
-  { id: 'b2', label: 'Number 7', n: 7, period: '20260710104219', amount: 20, status: 'WON', payout: 180 },
-  { id: 'b3', label: 'Big', period: '20260710104218', amount: 100, status: 'LOST' },
-  { id: 'b4', label: 'Violet', period: '20260710104217', amount: 10, status: 'PENDING' },
-  { id: 'b5', label: 'Small', period: '20260710104216', amount: 30, status: 'WON', payout: 57 },
-];
-
-const CURRENT_PERIOD = '20260710104220';
 
 // Glossy button gradients (top -> bottom), matching the web colour system.
 const GRAD = {
@@ -89,147 +52,411 @@ const GRAD = {
 
 type Tab = 'game' | 'chart' | 'mine';
 
+// One line staged in the bet slip. Snapshots the stake + quantity active when
+// the pick was added so later edits to the controls never mutate a staged line.
+interface SlipLine {
+  key: string;
+  betType: WingoBetType;
+  selection: string;
+  label: string;
+  stake: number;
+  quantity: number;
+}
+
+interface Notice {
+  type: 'success' | 'error';
+  text: string;
+}
+
+function betLabel(betType: WingoBetType, selection: string): string {
+  if (betType === 'color') return selection.charAt(0).toUpperCase() + selection.slice(1);
+  if (betType === 'size') return selection === 'big' ? 'Big' : 'Small';
+  return `Number ${selection}`;
+}
+
+let slipSeq = 0;
+
 export default function WingoScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
 
-  const [mode, setMode] = useState('wingo_30s');
+  const [mode, setMode] = useState<WingoMode>('wingo_30s');
   const [multiplier, setMultiplier] = useState(1);
   const [tab, setTab] = useState<Tab>('game');
-  const [remaining, setRemaining] = useState(MODE_SECONDS.wingo_30s);
+  const [stakeText, setStakeText] = useState('');
+  const [slip, setSlip] = useState<SlipLine[]>([]);
+  const [notice, setNotice] = useState<Notice | null>(null);
 
-  // Live countdown. Resets to the mode length when it reaches zero; no bets
-  // are actually placed, this only gives the round card a sense of life.
-  useEffect(() => {
-    setRemaining(MODE_SECONDS[mode]);
-  }, [mode]);
+  // Live data.
+  const stateQuery = useWingoState(mode);
+  const myBetsQuery = useWingoMyBets(mode);
+  const placeMutation = usePlaceWingoBet();
+  const balanceQuery = useBalance();
 
+  const state = stateQuery.data;
+  const round = state?.round ?? null;
+  const paytable = state?.paytable;
+  const available = !!state && state.enabled && state.modeEnabled;
+  const minStake = state?.minStake ?? 1;
+  const maxStake = state?.maxStake ?? 100_000;
+  const balance = balanceQuery.data?.balance ?? 0;
+
+  // Synchronous guards for the money path. The idempotency key is minted once
+  // per slip submission and reused on every retry of the SAME slip, so a
+  // network-ambiguous retry maps to one server placement, not two debits. Any
+  // edit to the slip clears it so a changed slip gets a fresh key.
+  const submittingRef = useRef(false);
+  const idemRef = useRef<string | null>(null);
+
+  // Seed the stake field with the live minimum the first time it arrives.
   useEffect(() => {
-    const id = setInterval(() => {
-      setRemaining((s) => (s <= 1 ? MODE_SECONDS[mode] : s - 1));
-    }, 1000);
+    if (state && stakeText === '') setStakeText(String(state.minStake));
+  }, [state, stakeText]);
+
+  // Local clock so the countdown ticks between polls. Each poll refreshes the
+  // round window and the server-time anchor, so the ticking value resyncs.
+  const [clock, setClock] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setClock(Date.now()), 500);
     return () => clearInterval(id);
-  }, [mode]);
+  }, []);
 
-  const locked = remaining <= 5;
-  const mm = String(Math.floor(remaining / 60)).padStart(2, '0');
-  const ss = String(remaining % 60).padStart(2, '0');
+  // Server-vs-device clock skew, measured at the moment this state was fetched,
+  // so the countdown is anchored to the server clock, not the phone's.
+  const serverOffset = useMemo(() => {
+    if (!state?.serverTime || !stateQuery.dataUpdatedAt) return 0;
+    const parsed = Date.parse(state.serverTime);
+    return Number.isFinite(parsed) ? parsed - stateQuery.dataUpdatedAt : 0;
+  }, [state?.serverTime, stateQuery.dataUpdatedAt]);
 
-  // 0-9 ball grid: 5 columns inside a padded panel. Content padding px-3
-  // (24) then the panel p-4 (32); size the balls so five fit per row.
+  const effNow = clock + serverOffset;
+  const betCloseMs = round ? Date.parse(round.betCloseAt) : 0;
+  const drawMs = round ? Date.parse(round.drawsAt) : 0;
+  const isOpen = !!round && effNow < betCloseMs;
+  const target = isOpen ? betCloseMs : drawMs;
+  const secondsRemaining = round ? Math.max(0, Math.ceil((target - effNow) / 1000)) : 0;
+  const locked = !round || !isOpen;
+
+  const mm = String(Math.floor(secondsRemaining / 60)).padStart(2, '0');
+  const ss = String(secondsRemaining % 60).padStart(2, '0');
+
+  // 0-9 ball grid: five per row inside the padded panel.
   const ballSize = useMemo(() => {
     const inner = width - 24 - 32;
     return Math.min(58, Math.floor((inner - 10 * 4) / 5));
   }, [width]);
 
+  const stakeValue = Number(stakeText);
+  const stakeValid = Number.isFinite(stakeValue) && stakeValue >= minStake && stakeValue * multiplier <= maxStake;
+
+  const slipTotal = useMemo(() => slip.reduce((sum, l) => sum + l.stake * l.quantity, 0), [slip]);
+  const selectedNumbers = useMemo(
+    () => new Set(slip.filter((l) => l.betType === 'number').map((l) => l.selection)),
+    [slip],
+  );
+  const selectedColors = useMemo(
+    () => new Set(slip.filter((l) => l.betType === 'color').map((l) => l.selection)),
+    [slip],
+  );
+  const selectedSizes = useMemo(
+    () => new Set(slip.filter((l) => l.betType === 'size').map((l) => l.selection)),
+    [slip],
+  );
+
+  // Any mutation of the slip invalidates the pending idempotency key: a
+  // different slip must never reuse a previous slip's key.
+  function resetIdem() {
+    idemRef.current = null;
+  }
+
+  function addLine(betType: WingoBetType, selection: string) {
+    if (!available || locked) return;
+    if (!stakeValid) {
+      setNotice({
+        type: 'error',
+        text: `Enter a stake between ${formatBDT(minStake)} and ${formatBDT(Math.floor(maxStake / multiplier))} for X${multiplier}.`,
+      });
+      return;
+    }
+    setNotice(null);
+    resetIdem();
+    slipSeq += 1;
+    setSlip((prev) => [
+      ...prev,
+      {
+        key: `l${slipSeq}`,
+        betType,
+        selection,
+        label: betLabel(betType, selection),
+        stake: stakeValue,
+        quantity: multiplier,
+      },
+    ]);
+  }
+
+  function addRandom() {
+    const n = Math.floor(Math.random() * 10);
+    addLine('number', String(n));
+  }
+
+  function removeLine(key: string) {
+    resetIdem();
+    setNotice(null);
+    setSlip((prev) => prev.filter((l) => l.key !== key));
+  }
+
+  function clearSlip() {
+    resetIdem();
+    setNotice(null);
+    setSlip([]);
+  }
+
+  // Fail-open on an unresolved balance so the button is not transiently greyed
+  // while the balance re-loads after a placement; the server still enforces
+  // INSUFFICIENT_FUNDS. Re-validate every staged line against the CURRENT
+  // min/max so a slip staged before an admin limit change is blocked here too.
+  const insufficient = balanceQuery.isSuccess && slipTotal > balance;
+  const slipWithinLimits = slip.every(
+    (l) => l.stake >= minStake && l.stake * l.quantity <= maxStake,
+  );
+  const canPlace =
+    available && !locked && slip.length > 0 && !insufficient && slipWithinLimits && !placeMutation.isPending;
+
+  async function handlePlace() {
+    // Synchronous double-submit guard: a second tap before the request resolves
+    // is dropped, so one slip never debits twice from a fast double-press.
+    if (submittingRef.current || !canPlace) return;
+    submittingRef.current = true;
+    try {
+      if (!idemRef.current) idemRef.current = newIdempotencyKey();
+      const res = await placeMutation.mutateAsync({
+        mode,
+        lines: slip.map((l) => ({
+          betType: l.betType,
+          selection: l.selection,
+          stake: l.stake,
+          quantity: l.quantity,
+        })),
+        idempotencyKey: idemRef.current,
+      });
+      // Success: clear the slip and retire the key so the next slip is fresh.
+      setSlip([]);
+      idemRef.current = null;
+      setNotice({
+        type: 'success',
+        text: res.reused
+          ? `Already placed on period ${res.periodNumber}.`
+          : `Bet placed on period ${res.periodNumber}. Stake ${formatBDT(res.totalStake)}.`,
+      });
+    } catch (err) {
+      // Surface the backend's bilingual message (insufficient funds, bet
+      // closed, disabled, rate limited). Keep the slip AND the key so a retry
+      // of the same slip reuses the key and cannot double-debit.
+      const text =
+        err instanceof ApiError
+          ? err.message
+          : 'Could not place your bet. Check your connection and try again.';
+      setNotice({ type: 'error', text });
+    } finally {
+      submittingRef.current = false;
+    }
+  }
+
   return (
     <Screen
       className="!bg-darkbg"
-      header={<GameHeader onBack={() => router.back()} />}
+      header={<GameHeader onBack={() => router.back()} balance={balance} />}
       contentClassName="px-3 pt-3 gap-4"
     >
       <StatusBar style="light" />
 
       {/* Mode tabs */}
-      <ChipToggle options={MODES} value={mode} onChange={setMode} scroll />
+      <ChipToggle
+        options={MODE_TABS}
+        value={mode}
+        onChange={(k) => {
+          setMode(k as WingoMode);
+          clearSlip();
+        }}
+        scroll
+      />
 
-      {/* Round card */}
-      <View className="relative overflow-hidden rounded-2xl border border-gold-600/25">
-        <Gradient colors={['#2a1608', '#1a0d18', '#05060a']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} radius={16} />
-        <View
-          pointerEvents="none"
-          className="absolute -right-8 -top-10 h-40 w-40 rounded-full"
-          style={{ backgroundColor: 'rgba(255,213,84,0.15)' }}
-        />
-        <View className="flex-row items-start justify-between gap-3 p-4">
-          {/* Left: recent balls + period */}
-          <View className="min-w-0 flex-1">
-            <Text className="text-[10px] font-bold uppercase tracking-widest text-gold-300">Recent results</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ gap: 6, paddingVertical: 8 }}
-            >
-              {HISTORY.map((d) => (
-                <WingoBall key={d.period} n={d.n} size={26} />
-              ))}
-            </ScrollView>
-            <Text className="mt-1 text-[10px] font-bold uppercase tracking-wider text-dink-lo">Period</Text>
-            <Text className="font-mono text-sm font-bold text-white">{CURRENT_PERIOD}</Text>
+      {!state ? (
+        <LoadingBoard />
+      ) : !available ? (
+        <UnavailableBoard />
+      ) : (
+        <>
+          {/* Round card */}
+          <View className="relative overflow-hidden rounded-2xl border border-gold-600/25">
+            <Gradient colors={['#2a1608', '#1a0d18', '#05060a']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} radius={16} />
+            <View
+              pointerEvents="none"
+              className="absolute -right-8 -top-10 h-40 w-40 rounded-full"
+              style={{ backgroundColor: 'rgba(255,213,84,0.15)' }}
+            />
+            <View className="flex-row items-start justify-between gap-3 p-4">
+              {/* Left: recent balls + period */}
+              <View className="min-w-0 flex-1">
+                <Text className="text-[10px] font-bold uppercase tracking-widest text-gold-300">Recent results</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{ gap: 6, paddingVertical: 8 }}
+                >
+                  {state.results.length > 0 ? (
+                    state.results.map((d) => <WingoBall key={d.periodNumber} n={d.result} size={26} />)
+                  ) : (
+                    <Text className="py-1.5 text-xs text-dink-lo">No results yet</Text>
+                  )}
+                </ScrollView>
+                <Text className="mt-1 text-[10px] font-bold uppercase tracking-wider text-dink-lo">Period</Text>
+                <Text className="font-mono text-sm font-bold text-white">
+                  {round?.periodNumber ?? '--'}
+                </Text>
+              </View>
+
+              {/* Right: countdown + status */}
+              <View className="shrink-0 items-end">
+                <Text className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-dink-lo">
+                  {locked ? 'Draw in' : 'Bet closes in'}
+                </Text>
+                <View className="flex-row items-center gap-1">
+                  <DigitCell ch={mm[0]} locked={locked} />
+                  <DigitCell ch={mm[1]} locked={locked} />
+                  <Text className={cn('px-0.5 text-lg font-black', locked ? 'text-hot' : 'text-gold-300')}>:</Text>
+                  <DigitCell ch={ss[0]} locked={locked} />
+                  <DigitCell ch={ss[1]} locked={locked} />
+                </View>
+                <View className="mt-2 flex-row items-center gap-1.5 rounded-pill border border-white/10 bg-black/40 px-2.5 py-1">
+                  <View
+                    className={cn('h-2 w-2 rounded-full', locked ? 'bg-hot' : 'bg-newg')}
+                    style={{ shadowColor: locked ? colors.hot : colors.newg, shadowOpacity: 0.8, shadowRadius: 4 }}
+                  />
+                  <Text className={cn('text-[10px] font-bold uppercase tracking-wider', locked ? 'text-hot' : 'text-newg')}>
+                    {locked ? 'Locked' : 'Open'}
+                  </Text>
+                </View>
+              </View>
+            </View>
           </View>
 
-          {/* Right: countdown + status */}
-          <View className="shrink-0 items-end">
-            <Text className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-dink-lo">
-              {locked ? 'Draw in' : 'Bet closes in'}
+          {/* Stake + multiplier controls */}
+          <View className="gap-3 rounded-2xl border border-white/10 bg-black/30 p-3">
+            <View className="flex-row items-end gap-2">
+              <View className="flex-1">
+                <StakeField value={stakeText} onChange={(t) => setStakeText(t.replace(/[^0-9]/g, ''))} />
+              </View>
+              <Pressable
+                onPress={addRandom}
+                className="h-11 flex-row items-center gap-1.5 rounded-xl border border-gold-300/40 bg-gold-500/10 px-3.5 active:opacity-80"
+              >
+                <Ionicons name="shuffle" size={15} color={colors.gold300} />
+                <Text className="text-xs font-black uppercase tracking-wider text-gold-300">Random</Text>
+              </Pressable>
+            </View>
+            <View className="flex-row flex-wrap items-center gap-2">
+              {MULTIPLIERS.map((q) => {
+                const active = q === multiplier;
+                return (
+                  <Pressable
+                    key={q}
+                    onPress={() => setMultiplier(q)}
+                    className={cn(
+                      'h-10 min-w-[46px] items-center justify-center rounded-xl border px-2 active:opacity-80',
+                      active ? 'border-gold-300 bg-gold-500/20' : 'border-white/15 bg-white/5',
+                    )}
+                  >
+                    <Text className={cn('text-xs font-bold', active ? 'text-gold-300' : 'text-dink-mid')}>X{q}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Text className="text-[10px] text-dink-lo">
+              Stake {formatBDT(minStake)} - {formatBDT(maxStake)} per line. Tap a colour, number or size to add it.
             </Text>
-            <View className="flex-row items-center gap-1">
-              <DigitCell ch={mm[0]} locked={locked} />
-              <DigitCell ch={mm[1]} locked={locked} />
-              <Text className={cn('px-0.5 text-lg font-black', locked ? 'text-hot' : 'text-gold-300')}>:</Text>
-              <DigitCell ch={ss[0]} locked={locked} />
-              <DigitCell ch={ss[1]} locked={locked} />
+          </View>
+
+          {/* Board: colour buttons */}
+          <View className="flex-row gap-2.5">
+            <GlossyBar
+              label="Green"
+              sub={paytable ? `X${fmtMult(paytable.colorGreen)}` : undefined}
+              grad={GRAD.green}
+              selected={selectedColors.has('green')}
+              onPress={() => addLine('color', 'green')}
+            />
+            <GlossyBar
+              label="Violet"
+              sub={paytable ? `X${fmtMult(paytable.colorViolet)}` : undefined}
+              grad={GRAD.violet}
+              selected={selectedColors.has('violet')}
+              onPress={() => addLine('color', 'violet')}
+            />
+            <GlossyBar
+              label="Red"
+              sub={paytable ? `X${fmtMult(paytable.colorRed)}` : undefined}
+              grad={GRAD.red}
+              selected={selectedColors.has('red')}
+              onPress={() => addLine('color', 'red')}
+            />
+          </View>
+
+          {/* Board: 0-9 glossy balls */}
+          <View className="relative overflow-hidden rounded-2xl border border-white/10 bg-black/30 p-4">
+            <View className="mb-2 flex-row items-center justify-between">
+              <Text className="text-[10px] font-bold uppercase tracking-widest text-gold-300/70">Select a number</Text>
+              {paytable ? (
+                <Text className="text-[10px] font-bold text-dink-lo">Exact number pays X{fmtMult(paytable.number)}</Text>
+              ) : null}
             </View>
-            <View className="mt-2 flex-row items-center gap-1.5 rounded-pill border border-white/10 bg-black/40 px-2.5 py-1">
-              <View
-                className={cn('h-2 w-2 rounded-full', locked ? 'bg-hot' : 'bg-newg')}
-                style={{ shadowColor: locked ? colors.hot : colors.newg, shadowOpacity: 0.8, shadowRadius: 4 }}
-              />
-              <Text className={cn('text-[10px] font-bold uppercase tracking-wider', locked ? 'text-hot' : 'text-newg')}>
-                {locked ? 'Locked' : 'Open'}
-              </Text>
+            <View className="flex-row flex-wrap justify-between" style={{ rowGap: 14 }}>
+              {Array.from({ length: 10 }, (_, n) => (
+                <WingoBall
+                  key={n}
+                  n={n}
+                  size={ballSize}
+                  selected={selectedNumbers.has(String(n))}
+                  onPress={() => addLine('number', String(n))}
+                />
+              ))}
             </View>
           </View>
-        </View>
-      </View>
 
-      {/* Board: colour buttons */}
-      <View className="flex-row gap-2.5">
-        <GlossyBar label="Green" grad={GRAD.green} />
-        <GlossyBar label="Violet" grad={GRAD.violet} />
-        <GlossyBar label="Red" grad={GRAD.red} />
-      </View>
+          {/* Big / Small bar */}
+          <View className="flex-row gap-2.5">
+            <GlossyBar
+              label="Big 5-9"
+              sub={paytable ? `X${fmtMult(paytable.big)}` : undefined}
+              grad={GRAD.big}
+              textColor="#3a1f00"
+              selected={selectedSizes.has('big')}
+              onPress={() => addLine('size', 'big')}
+            />
+            <GlossyBar
+              label="Small 0-4"
+              sub={paytable ? `X${fmtMult(paytable.small)}` : undefined}
+              grad={GRAD.small}
+              selected={selectedSizes.has('small')}
+              onPress={() => addLine('size', 'small')}
+            />
+          </View>
 
-      {/* Board: 0-9 glossy balls */}
-      <View className="relative overflow-hidden rounded-2xl border border-white/10 bg-black/30 p-4">
-        <View className="flex-row flex-wrap justify-between" style={{ rowGap: 14 }}>
-          {Array.from({ length: 10 }, (_, n) => (
-            <WingoBall key={n} n={n} size={ballSize} onPress={() => {}} />
-          ))}
-        </View>
-      </View>
-
-      {/* Random + multiplier chips */}
-      <View className="flex-row flex-wrap items-center gap-2">
-        <Pressable
-          className="h-11 flex-row items-center gap-1.5 rounded-xl border border-gold-300/40 bg-gold-500/10 px-3.5 active:opacity-80"
-          onPress={() => {}}
-        >
-          <Ionicons name="shuffle" size={15} color={colors.gold300} />
-          <Text className="text-xs font-black uppercase tracking-wider text-gold-300">Random</Text>
-        </Pressable>
-        {MULTIPLIERS.map((q) => {
-          const active = q === multiplier;
-          return (
-            <Pressable
-              key={q}
-              onPress={() => setMultiplier(q)}
-              className={cn(
-                'h-11 min-w-[46px] items-center justify-center rounded-xl border px-2 active:opacity-80',
-                active ? 'border-gold-300 bg-gold-500/20' : 'border-white/15 bg-white/5',
-              )}
-            >
-              <Text className={cn('text-xs font-bold', active ? 'text-gold-300' : 'text-dink-mid')}>X{q}</Text>
-            </Pressable>
-          );
-        })}
-      </View>
-
-      {/* Big / Small bar */}
-      <View className="flex-row gap-2.5">
-        <GlossyBar label="Big 5-9" grad={GRAD.big} textColor="#3a1f00" />
-        <GlossyBar label="Small 0-4" grad={GRAD.small} />
-      </View>
+          {/* Bet slip */}
+          <BetSlip
+            slip={slip}
+            total={slipTotal}
+            locked={locked}
+            insufficient={insufficient}
+            notice={notice}
+            placing={placeMutation.isPending}
+            canPlace={canPlace}
+            onRemove={removeLine}
+            onClear={clearSlip}
+            onPlace={handlePlace}
+          />
+        </>
+      )}
 
       {/* Lower history tabs */}
       <View className="rounded-2xl border border-white/10 bg-black/35 p-3">
@@ -239,17 +466,24 @@ export default function WingoScreen() {
           <TabButton label="My history" icon="person" active={tab === 'mine'} onPress={() => setTab('mine')} />
         </View>
 
-        {tab === 'game' ? <GameHistory /> : null}
-        {tab === 'chart' ? <Chart /> : null}
-        {tab === 'mine' ? <MyHistory /> : null}
+        {tab === 'game' ? <GameHistory results={state?.results ?? []} /> : null}
+        {tab === 'chart' ? <Chart results={state?.results ?? []} /> : null}
+        {tab === 'mine' ? (
+          <MyHistory bets={myBetsQuery.data?.bets ?? []} loading={myBetsQuery.isLoading} />
+        ) : null}
       </View>
     </Screen>
   );
 }
 
+// A multiplier can be fractional (1.5x half case). Trim a trailing .0.
+function fmtMult(v: number): string {
+  return Number.isInteger(v) ? String(v) : String(Math.round(v * 100) / 100);
+}
+
 // ---------- Header ----------
 
-function GameHeader({ onBack }: { onBack: () => void }) {
+function GameHeader({ onBack, balance }: { onBack: () => void; balance: number }) {
   return (
     <View className="flex-row items-center justify-between border-b border-white/10 bg-darkbg px-3 py-2.5">
       <View className="flex-row items-center gap-2">
@@ -265,7 +499,7 @@ function GameHeader({ onBack }: { onBack: () => void }) {
       <View className="flex-row items-center gap-2">
         <View className="flex-row items-center gap-1.5 rounded-pill border border-gold-600/40 bg-gold-500/15 px-2.5 py-1.5">
           <Ionicons name="wallet" size={13} color={colors.gold300} />
-          <Text className="text-[11px] font-black text-white">{formatBDT(mockWallet.balance)}</Text>
+          <Text className="text-[11px] font-black text-white">{formatBDT(balance)}</Text>
         </View>
         <View className="flex-row items-center gap-1 rounded-pill border border-newg/40 bg-newg/10 px-2 py-1.5">
           <Ionicons name="shield-checkmark" size={12} color={colors.neon} />
@@ -276,7 +510,49 @@ function GameHeader({ onBack }: { onBack: () => void }) {
   );
 }
 
+// ---------- Loading + unavailable ----------
+
+function LoadingBoard() {
+  return (
+    <View className="items-center justify-center rounded-2xl border border-white/10 bg-black/30 py-16">
+      <Ionicons name="hourglass-outline" size={30} color={colors.gold300} />
+      <Text className="mt-3 text-sm font-bold text-dink-mid">Loading live round...</Text>
+      <Text className="mt-1 text-xs text-dink-lo">লাইভ রাউন্ড লোড হচ্ছে...</Text>
+    </View>
+  );
+}
+
+function UnavailableBoard() {
+  return (
+    <View className="items-center justify-center rounded-2xl border border-gold-600/25 bg-black/30 px-6 py-14">
+      <View className="h-16 w-16 items-center justify-center rounded-full bg-gold-500/15">
+        <Ionicons name="pause-circle" size={30} color={colors.gold300} />
+      </View>
+      <Text className="mt-4 text-center text-base font-black text-white">WinGo is temporarily unavailable</Text>
+      <Text className="mt-1.5 text-center text-sm text-dink-mid">উইনগো সাময়িকভাবে বন্ধ আছে</Text>
+      <Text className="mt-3 max-w-[280px] text-center text-xs text-dink-lo">
+        This game mode is paused right now. Please check back again shortly.
+      </Text>
+    </View>
+  );
+}
+
 // ---------- Pieces ----------
+
+function StakeField({ value, onChange }: { value: string; onChange: (t: string) => void }) {
+  return (
+    <View>
+      <Text className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-dink-lo">Stake per line (BDT)</Text>
+      <TextField
+        icon="cash"
+        placeholder="Amount"
+        value={value}
+        onChangeText={onChange}
+        keyboardType="number-pad"
+      />
+    </View>
+  );
+}
 
 function DigitCell({ ch, locked }: { ch: string; locked: boolean }) {
   return (
@@ -293,17 +569,26 @@ function DigitCell({ ch, locked }: { ch: string; locked: boolean }) {
 
 function GlossyBar({
   label,
+  sub,
   grad,
   textColor = '#ffffff',
+  selected = false,
+  onPress,
 }: {
   label: string;
+  sub?: string;
   grad: readonly string[];
   textColor?: string;
+  selected?: boolean;
+  onPress?: () => void;
 }) {
   return (
     <Pressable
-      onPress={() => {}}
-      className="relative h-14 flex-1 items-center justify-center overflow-hidden rounded-2xl active:opacity-90"
+      onPress={onPress}
+      className={cn(
+        'relative h-14 flex-1 items-center justify-center overflow-hidden rounded-2xl active:opacity-90',
+        selected && 'border-2 border-gold-300',
+      )}
     >
       <Gradient colors={grad} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} radius={16} />
       <View
@@ -314,7 +599,140 @@ function GlossyBar({
       <Text style={{ color: textColor }} className="text-base font-black uppercase tracking-wider">
         {label}
       </Text>
+      {sub ? (
+        <Text style={{ color: textColor }} className="text-[10px] font-bold opacity-80">
+          {sub}
+        </Text>
+      ) : null}
+      {selected ? (
+        <View className="absolute right-1.5 top-1.5 h-4 w-4 items-center justify-center rounded-full bg-gold-300">
+          <Ionicons name="checkmark" size={11} color="#3a2800" />
+        </View>
+      ) : null}
     </Pressable>
+  );
+}
+
+// ---------- Bet slip ----------
+
+function BetSlip({
+  slip,
+  total,
+  locked,
+  insufficient,
+  notice,
+  placing,
+  canPlace,
+  onRemove,
+  onClear,
+  onPlace,
+}: {
+  slip: SlipLine[];
+  total: number;
+  locked: boolean;
+  insufficient: boolean;
+  notice: Notice | null;
+  placing: boolean;
+  canPlace: boolean;
+  onRemove: (key: string) => void;
+  onClear: () => void;
+  onPlace: () => void;
+}) {
+  const hasLines = slip.length > 0;
+  return (
+    <View className="gap-3 rounded-2xl border border-gold-600/25 bg-black/40 p-3">
+      <View className="flex-row items-center justify-between">
+        <Text className="text-[11px] font-bold uppercase tracking-widest text-gold-300">Bet slip</Text>
+        {hasLines ? (
+          <Pressable onPress={onClear} hitSlop={6} className="flex-row items-center gap-1 active:opacity-70">
+            <Ionicons name="trash" size={13} color={colors.dinkLo} />
+            <Text className="text-[11px] font-bold text-dink-lo">Clear</Text>
+          </Pressable>
+        ) : null}
+      </View>
+
+      {hasLines ? (
+        <View className="gap-1.5">
+          {slip.map((l) => (
+            <View
+              key={l.key}
+              className="flex-row items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2"
+            >
+              {l.betType === 'number' ? (
+                <WingoBall n={Number(l.selection)} size={26} />
+              ) : (
+                <View className="h-6 w-6 items-center justify-center rounded-full border border-white/15 bg-white/10">
+                  <Text className="text-[9px] font-black uppercase text-white">{l.label.slice(0, 2)}</Text>
+                </View>
+              )}
+              <View className="min-w-0 flex-1">
+                <Text className="text-xs font-bold text-white" numberOfLines={1}>
+                  {l.label}
+                </Text>
+                <Text className="text-[10px] text-dink-lo">
+                  {formatBDT(l.stake)} x{l.quantity}
+                </Text>
+              </View>
+              <Text className="text-xs font-bold text-dink-mid">{formatBDT(l.stake * l.quantity)}</Text>
+              <Pressable onPress={() => onRemove(l.key)} hitSlop={6} className="active:opacity-70">
+                <Ionicons name="close-circle" size={18} color={colors.dinkLo} />
+              </Pressable>
+            </View>
+          ))}
+        </View>
+      ) : (
+        <Text className="py-1 text-xs text-dink-lo">No picks yet. Tap a colour, number or size to stake it.</Text>
+      )}
+
+      {notice ? (
+        <View
+          className={cn(
+            'flex-row items-center gap-2 rounded-xl border px-3 py-2',
+            notice.type === 'success' ? 'border-newg/40 bg-newg/10' : 'border-hot/40 bg-hot/10',
+          )}
+        >
+          <Ionicons
+            name={notice.type === 'success' ? 'checkmark-circle' : 'alert-circle'}
+            size={15}
+            color={notice.type === 'success' ? colors.newg : colors.hot}
+          />
+          <Text className={cn('flex-1 text-xs font-medium', notice.type === 'success' ? 'text-newg' : 'text-hot')}>
+            {notice.text}
+          </Text>
+        </View>
+      ) : null}
+
+      {hasLines ? (
+        <View className="flex-row items-center justify-between">
+          <View>
+            <Text className="text-[10px] font-bold uppercase tracking-wider text-dink-lo">Total stake</Text>
+            <Text className="text-base font-black text-white">{formatBDT(total)}</Text>
+          </View>
+          <Pressable
+            onPress={onPlace}
+            disabled={!canPlace}
+            className={cn(
+              'h-12 items-center justify-center overflow-hidden rounded-pill px-8',
+              canPlace ? 'active:opacity-90' : 'opacity-50',
+            )}
+          >
+            <Gradient colors={['#FFE066', '#FFCC00', '#F5B400']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} radius={999} />
+            <View className="flex-row items-center gap-2">
+              <Ionicons name={placing ? 'hourglass' : 'rocket'} size={16} color={colors.ink} />
+              <Text className="text-sm font-black uppercase tracking-wider text-ink">
+                {placing ? 'Placing...' : locked ? 'Round locked' : 'Place bet'}
+              </Text>
+            </View>
+          </Pressable>
+        </View>
+      ) : null}
+
+      {insufficient && hasLines ? (
+        <Text className="text-[11px] font-medium text-hot">
+          Total exceeds your balance. Lower the stake or deposit to continue.
+        </Text>
+      ) : null}
+    </View>
   );
 }
 
@@ -350,7 +768,14 @@ function TabButton({
 
 // ---------- Game history tab ----------
 
-function GameHistory() {
+function GameHistory({ results }: { results: WingoResult[] }) {
+  if (results.length === 0) {
+    return (
+      <View className="items-center justify-center rounded-2xl border border-white/10 bg-black/25 py-10">
+        <Text className="text-xs text-dink-lo">No results yet for this mode.</Text>
+      </View>
+    );
+  }
   return (
     <View className="overflow-hidden rounded-2xl border border-white/10 bg-black/25">
       <View className="flex-row items-center border-b border-white/10 px-4 py-2.5">
@@ -358,21 +783,21 @@ function GameHistory() {
         <Text className="w-12 text-center text-[10px] font-bold uppercase tracking-widest text-gold-300/60">No.</Text>
         <Text className="w-20 text-right text-[10px] font-bold uppercase tracking-widest text-gold-300/60">Result</Text>
       </View>
-      {HISTORY.map((d, i) => (
+      {results.map((d, i) => (
         <View
-          key={d.period}
+          key={d.periodNumber}
           className={cn(
             'flex-row items-center px-4 py-2.5',
             i % 2 === 1 && 'bg-white/[0.02]',
-            i < HISTORY.length - 1 && 'border-b border-white/[0.06]',
+            i < results.length - 1 && 'border-b border-white/[0.06]',
           )}
         >
-          <Text className="flex-1 font-mono text-xs text-dink-mid">{d.period}</Text>
+          <Text className="flex-1 font-mono text-xs text-dink-mid">{d.periodNumber}</Text>
           <View className="w-12 items-center">
-            <WingoBall n={d.n} size={30} />
+            <WingoBall n={d.result} size={30} />
           </View>
           <View className="w-20 flex-row items-center justify-end gap-1.5">
-            <SizePill n={d.n} />
+            <SizePill n={d.result} />
           </View>
         </View>
       ))}
@@ -382,23 +807,31 @@ function GameHistory() {
 
 // ---------- Chart tab ----------
 
-function Chart() {
+function Chart({ results }: { results: WingoResult[] }) {
   const stats = useMemo(() => {
     let big = 0;
     let small = 0;
     let red = 0;
     let green = 0;
     let violet = 0;
-    for (const d of HISTORY) {
-      if (sizeOf(d.n) === 'big') big++;
+    for (const d of results) {
+      if (sizeOf(d.result) === 'big') big++;
       else small++;
-      const id = colorOf(d.n);
+      const id = colorOf(d.result);
       if (id === 'red' || id === 'red_violet') red++;
       if (id === 'green' || id === 'green_violet') green++;
       if (id === 'red_violet' || id === 'green_violet') violet++;
     }
-    return { big, small, red, green, violet, total: HISTORY.length };
-  }, []);
+    return { big, small, red, green, violet, total: results.length };
+  }, [results]);
+
+  if (results.length === 0) {
+    return (
+      <View className="items-center justify-center rounded-2xl border border-white/10 bg-black/25 py-10">
+        <Text className="text-xs text-dink-lo">No data to chart yet.</Text>
+      </View>
+    );
+  }
 
   return (
     <View className="gap-2.5">
@@ -415,8 +848,8 @@ function Chart() {
       <View className="rounded-2xl border border-white/10 bg-black/25 p-3">
         <Text className="mb-3 text-[11px] font-bold uppercase tracking-widest text-gold-300/70">Number trend</Text>
         <View className="flex-row flex-wrap justify-between" style={{ rowGap: 10 }}>
-          {HISTORY.map((d) => (
-            <WingoBall key={d.period} n={d.n} size={26} />
+          {results.map((d) => (
+            <WingoBall key={d.periodNumber} n={d.result} size={26} />
           ))}
         </View>
       </View>
@@ -461,36 +894,62 @@ function StatCard({
 
 // ---------- My history tab ----------
 
-function MyHistory() {
+function MyHistory({ bets, loading }: { bets: WingoMyBet[]; loading: boolean }) {
+  if (loading && bets.length === 0) {
+    return (
+      <View className="items-center justify-center rounded-2xl border border-white/10 bg-black/25 py-10">
+        <Text className="text-xs text-dink-lo">Loading your bets...</Text>
+      </View>
+    );
+  }
+  if (bets.length === 0) {
+    return (
+      <View className="items-center justify-center rounded-2xl border border-white/10 bg-black/25 py-10">
+        <Text className="text-xs text-dink-lo">You have not placed any WinGo bets yet.</Text>
+      </View>
+    );
+  }
   return (
     <View className="gap-2">
-      {MY_BETS.map((b) => {
-        const won = b.status === 'WON';
-        const pending = b.status === 'PENDING';
+      {bets.map((b) => {
+        const status = String(b.status).toUpperCase();
+        const won = status === 'WON';
+        const pending = status === 'PENDING';
+        const refunded = status === 'REFUNDED';
+        const isNumber = b.betType === 'number';
         return (
           <View key={b.id} className="flex-row items-center gap-3 rounded-xl border border-white/10 bg-black/30 p-3">
-            {b.n != null ? (
-              <WingoBall n={b.n} size={34} />
+            {isNumber ? (
+              <WingoBall n={Number(b.selection)} size={34} />
             ) : (
               <View className="h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-white/10">
-                <Text className="text-[10px] font-black uppercase text-white">{b.label.slice(0, 3)}</Text>
+                <Text className="text-[10px] font-black uppercase text-white">
+                  {betLabel(b.betType as WingoBetType, b.selection).slice(0, 3)}
+                </Text>
               </View>
             )}
             <View className="min-w-0 flex-1">
               <Text className="text-xs font-bold text-white" numberOfLines={1}>
-                {b.label}
+                {betLabel(b.betType as WingoBetType, b.selection)}
+                {b.quantity > 1 ? <Text className="text-dink-lo"> x{b.quantity}</Text> : null}
               </Text>
-              <Text className="font-mono text-[10px] text-dink-lo">{b.period}</Text>
+              <Text className="font-mono text-[10px] text-dink-lo">{b.periodNumber}</Text>
             </View>
             <View className="items-end">
-              <Text className="text-xs font-bold text-dink-mid">{formatBDT(b.amount)}</Text>
+              <Text className="text-xs font-bold text-dink-mid">{formatBDT(b.betAmount)}</Text>
               <Text
                 className={cn(
                   'text-[11px] font-black uppercase tracking-wider',
-                  won ? 'text-newg' : pending ? 'text-gold-300' : 'text-hot',
+                  won ? 'text-newg' : pending ? 'text-gold-300' : refunded ? 'text-dink-mid' : 'text-hot',
                 )}
               >
-                {pending ? 'Pending' : won ? `+${formatBDT(b.payout ?? 0)}` : 'Lost'}
+                {pending
+                  ? 'Pending'
+                  : won
+                    ? `+${formatBDT(b.payoutAmount)}`
+                    : refunded
+                      ? 'Refunded'
+                      : 'Lost'}
               </Text>
             </View>
           </View>
