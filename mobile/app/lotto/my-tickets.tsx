@@ -1,56 +1,111 @@
 // Built by Anointed Coder.
 //
-// My Tickets: a stack screen listing the player's lotto tickets. Each row
-// shows the draw, the chosen numbers as chips, the buy date and a status
-// pill (open / won / lost). Falls back to an empty state when the list is
-// empty. Ticket data is local mock; the draw names mirror mockLottoDraws.
+// My Tickets, wired to the live backend. Reads the player's real lottery
+// tickets from GET /api/lotto/me (tickets[]). Each row shows the draw, the
+// ticket number, how it was earned (deposit vs granted), the issue date and a
+// status pill (active / won / lost / void). A ticket is "active" while its
+// draw has not been settled. Loading / error / empty states are all handled.
 
-import { Pressable, Text, View } from 'react-native';
+import { useCallback, useState } from 'react';
+import { RefreshControl, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Screen, Badge, EmptyState, type BadgeVariant } from '@/components/ui';
+import { StackScreenHeader } from '@/components/StackScreenHeader';
+import { useLottoMe, type LottoTicket } from '@/lib/api/lotto';
+import { ApiError } from '@/lib/api/client';
 import { colors } from '@/lib/theme';
 
-type TicketStatus = 'open' | 'won' | 'lost';
-
-interface Ticket {
-  id: string;
-  draw: string;
-  numbers: number[];
-  boughtAt: string;
-  status: TicketStatus;
+function formatDate(iso: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
-const TICKETS: Ticket[] = [
-  { id: 'PL-90231', draw: 'Mega Friday', numbers: [4, 11, 23, 27, 38, 45], boughtAt: '10 Jul, 09:12', status: 'open' },
-  { id: 'PL-90188', draw: 'Super Six', numbers: [2, 9, 17, 30, 33, 41], boughtAt: '09 Jul, 21:40', status: 'open' },
-  { id: 'PL-89904', draw: 'Daily Dhamaka', numbers: [7, 14, 19, 22, 36, 48], boughtAt: '08 Jul, 17:05', status: 'won' },
-  { id: 'PL-89710', draw: 'Flash Hourly', numbers: [1, 5, 12, 25, 39, 44], boughtAt: '08 Jul, 13:02', status: 'lost' },
-  { id: 'PL-89522', draw: 'Daily Dhamaka', numbers: [3, 8, 16, 21, 34, 49], boughtAt: '07 Jul, 18:30', status: 'lost' },
-];
+// A ticket is active while its draw has not been settled. Map the raw ticket
+// status + draw settlement into a single display pill.
+function ticketPill(t: LottoTicket): { label: string; variant: BadgeVariant } {
+  if (t.status === 'won') return { label: 'WON', variant: 'new' };
+  if (t.status === 'void') return { label: 'VOID', variant: 'neutral' };
+  if (t.status === 'lost') return { label: 'LOST', variant: 'neutral' };
+  const settled = t.draw?.settledAt != null;
+  if (settled) return { label: 'SETTLED', variant: 'neutral' };
+  return { label: 'ACTIVE', variant: 'blue' };
+}
 
-const STATUS: Record<TicketStatus, { label: string; variant: BadgeVariant }> = {
-  open: { label: 'OPEN', variant: 'blue' },
-  won: { label: 'WON', variant: 'new' },
-  lost: { label: 'LOST', variant: 'neutral' },
-};
+function sourceLabel(source: string | null): string {
+  if (source === 'deposit') return 'From deposit';
+  if (source === 'admin' || source === 'grant') return 'Bonus ticket';
+  return 'Ticket';
+}
 
 export default function MyTicketsScreen() {
   const router = useRouter();
+  const meQuery = useLottoMe();
+  const tickets = meQuery.data?.tickets ?? [];
+
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await meQuery.refetch();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [meQuery]);
+
+  if (meQuery.isLoading) {
+    return (
+      <Screen header={<StackScreenHeader title="My Tickets" />} contentClassName="px-4 pt-3 gap-3">
+        {[0, 1, 2].map((i) => (
+          <View key={i} className="h-24 rounded-2xl border border-divider bg-surfaceAlt/40" />
+        ))}
+      </Screen>
+    );
+  }
+
+  if (meQuery.isError) {
+    const msg =
+      meQuery.error instanceof ApiError ? meQuery.error.message : 'We could not load your tickets.';
+    return (
+      <Screen header={<StackScreenHeader title="My Tickets" />} contentClassName="px-4 pt-3 gap-3">
+        <EmptyState
+          icon="alert-circle-outline"
+          title="Could not load tickets"
+          message={msg}
+          actionLabel="Try again"
+          onAction={() => meQuery.refetch()}
+        />
+      </Screen>
+    );
+  }
 
   return (
-    <Screen header={<BackHeader title="My Tickets" />} contentClassName="px-4 pt-3 gap-3">
-      {TICKETS.length === 0 ? (
+    <Screen
+      header={<StackScreenHeader title="My Tickets" />}
+      contentClassName="px-4 pt-3 gap-3"
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.gold600} />
+      }
+    >
+      {tickets.length === 0 ? (
         <EmptyState
           icon="ticket-outline"
           title="No tickets yet"
-          message="Pick your numbers on the Lotto screen to enter the next draw."
-          actionLabel="Buy a ticket"
-          onAction={() => router.push('/lotto')}
+          message="Tickets are issued automatically from your approved deposits. Make a deposit to enter the next draw."
+          actionLabel="Go to Lotto"
+          onAction={() => router.replace('/lotto')}
         />
       ) : (
-        TICKETS.map((t) => {
-          const s = STATUS[t.status];
+        tickets.map((t) => {
+          const s = ticketPill(t);
+          const drawName = t.draw?.name ?? 'Daily Draw';
           return (
             <View
               key={t.id}
@@ -62,9 +117,9 @@ export default function MyTicketsScreen() {
                     <Ionicons name="ticket" size={16} color={colors.gold700} />
                   </View>
                   <View>
-                    <Text className="text-sm font-extrabold text-ink">{t.draw}</Text>
+                    <Text className="text-sm font-extrabold text-ink">{drawName}</Text>
                     <Text className="text-[11px] text-ink-mute">
-                      #{t.id} - {t.boughtAt}
+                      {sourceLabel(t.source)} - {formatDate(t.generatedAt)}
                     </Text>
                   </View>
                 </View>
@@ -72,12 +127,12 @@ export default function MyTicketsScreen() {
               </View>
 
               <View className="mt-3 flex-row flex-wrap gap-1.5">
-                {t.numbers.map((n) => (
+                {t.number.split('').map((digit, idx) => (
                   <View
-                    key={n}
-                    className="h-8 w-8 items-center justify-center rounded-full border border-gold-600/30 bg-gold-500/10"
+                    key={`${t.id}-${idx}`}
+                    className="h-9 w-9 items-center justify-center rounded-full border border-gold-600/30 bg-gold-500/10"
                   >
-                    <Text className="text-xs font-black text-ink">{n}</Text>
+                    <Text className="text-sm font-black text-ink">{digit}</Text>
                   </View>
                 ))}
               </View>
@@ -86,21 +141,5 @@ export default function MyTicketsScreen() {
         })
       )}
     </Screen>
-  );
-}
-
-function BackHeader({ title }: { title: string }) {
-  const router = useRouter();
-  return (
-    <View className="flex-row items-center gap-2 border-b border-divider bg-paper px-3 py-2.5">
-      <Pressable
-        onPress={() => router.back()}
-        hitSlop={8}
-        className="h-9 w-9 items-center justify-center rounded-xl active:bg-surfaceAlt"
-      >
-        <Ionicons name="chevron-back" size={22} color={colors.ink} />
-      </Pressable>
-      <Text className="text-lg font-black text-ink">{title}</Text>
-    </View>
   );
 }

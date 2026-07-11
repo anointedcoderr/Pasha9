@@ -1,47 +1,132 @@
 // Built by Anointed Coder.
 //
-// Betting Pass: a season header with a level + XP progress bar, then a
-// vertical track of reward tiers. Each tier is a node on a connected rail
-// with a reward card to the right; unlocked-but-unclaimed tiers show a Claim
-// button, claimed tiers show a check, locked tiers show a lock. Static mock.
+// Betting Pass, wired to the live backend. A season header with the player's
+// current tier + a points progress bar toward the next tier, then a vertical
+// rail of reward tiers read from GET /api/betting-pass/me. Each unlocked,
+// unclaimed tier shows a Claim button that POSTs /api/betting-pass/claim/[id]
+// (real credit: coins -> bonus balance, freebet/bonus -> locked balance);
+// claimed tiers show a check, locked tiers a lock. When the operator has the
+// pass disabled the whole claim surface is switched off with a notice. Claims
+// are double-submit guarded and invalidate the wallet balance + bonuses, then
+// refetch the pass so the ladder and points update. Loading / error / empty
+// states included.
 
-import { Text, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { ActivityIndicator, RefreshControl, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Screen, Gradient, Badge, PrimaryButton } from '@/components/ui';
+import { Screen, Gradient, Badge, PrimaryButton, EmptyState } from '@/components/ui';
 import { AppHeader } from '@/components/AppHeader';
 import { gradients, colors } from '@/lib/theme';
+import { formatBDT, titleCase } from '@/lib/format';
+import { ApiError } from '@/lib/api/client';
+import {
+  useBettingPassMe,
+  useClaimBettingPassTier,
+  type BettingPassTier,
+  type RewardKind,
+} from '@/lib/api/betting-pass';
 
-type TierState = 'claimed' | 'unlocked' | 'locked';
+type IconName = keyof typeof Ionicons.glyphMap;
 
-interface Tier {
-  level: number;
-  reward: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  xp: number;
-  state: TierState;
+function rewardIcon(kind: RewardKind): IconName {
+  switch (kind) {
+    case 'coins':
+      return 'cash';
+    case 'freebet':
+      return 'ticket';
+    case 'bonus':
+      return 'gift';
+    case 'physical':
+      return 'cube';
+    default:
+      return 'gift';
+  }
 }
 
-const SEASON = {
-  name: 'Season 4',
-  level: 3,
-  xp: 2450,
-  nextXp: 3000,
-};
-
-const TIERS: Tier[] = [
-  { level: 1, reward: 'BDT 50 Free Bet', icon: 'cash', xp: 500, state: 'claimed' },
-  { level: 2, reward: '20 Free Spins', icon: 'sync', xp: 1200, state: 'claimed' },
-  { level: 3, reward: 'BDT 150 Bonus', icon: 'gift', xp: 2000, state: 'unlocked' },
-  { level: 4, reward: 'Mystery Box', icon: 'cube', xp: 3000, state: 'locked' },
-  { level: 5, reward: 'BDT 500 Cashback', icon: 'wallet', xp: 4200, state: 'locked' },
-  { level: 6, reward: 'Grand Reward', icon: 'diamond', xp: 6000, state: 'locked' },
-];
+/** A short reward line under the tier name, e.g. "BDT 150 bonus". */
+function rewardLine(tier: BettingPassTier): string {
+  switch (tier.rewardKind) {
+    case 'coins':
+      return `${formatBDT(tier.rewardAmount)} bonus coins`;
+    case 'freebet':
+      return `${formatBDT(tier.rewardAmount)} free bet`;
+    case 'bonus':
+      return tier.turnoverX > 0
+        ? `${formatBDT(tier.rewardAmount)} bonus • ${tier.turnoverX}x turnover`
+        : `${formatBDT(tier.rewardAmount)} bonus`;
+    case 'physical':
+      return 'Physical reward';
+    default:
+      return tier.rewardAmount > 0 ? formatBDT(tier.rewardAmount) : 'Reward';
+  }
+}
 
 export default function BettingPassScreen() {
-  const pct = Math.min(100, Math.round((SEASON.xp / SEASON.nextXp) * 100));
+  const query = useBettingPassMe();
+  const claim = useClaimBettingPassTier();
+
+  // Which tier is currently being claimed (drives that row's spinner) and the
+  // synchronous guard against a double tap in the same tick (the disabled prop
+  // only updates on the next render, so two taps could both fire a claim).
+  const [claimingId, setClaimingId] = useState<string | null>(null);
+  const [claimError, setClaimError] = useState<string | null>(null);
+  const submittingRef = useRef(false);
+
+  async function onClaim(tier: BettingPassTier) {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setClaimingId(tier.id);
+    setClaimError(null);
+    try {
+      await claim.mutateAsync(tier.id);
+    } catch (err) {
+      setClaimError(err instanceof ApiError ? err.message : 'Could not claim this reward. Please try again.');
+    } finally {
+      submittingRef.current = false;
+      setClaimingId(null);
+    }
+  }
+
+  const refreshControl = (
+    <RefreshControl refreshing={query.isRefetching && !query.isLoading} onRefresh={() => query.refetch()} tintColor={colors.gold600} />
+  );
+
+  // ---- Loading -------------------------------------------------------------
+  if (query.isLoading) {
+    return (
+      <Screen header={<AppHeader />} contentClassName="px-4 pt-3 gap-4">
+        <View className="h-40 rounded-2xl border border-divider bg-surfaceAlt" />
+        {[0, 1, 2, 3].map((i) => (
+          <View key={i} className="h-20 rounded-2xl border border-divider bg-surfaceAlt" />
+        ))}
+      </Screen>
+    );
+  }
+
+  // ---- Error ---------------------------------------------------------------
+  if (query.isError || !query.data) {
+    return (
+      <Screen header={<AppHeader />} contentClassName="px-4 pt-3">
+        <EmptyState
+          icon="cloud-offline"
+          title="Could not load your Betting Pass"
+          message="Something went wrong reaching the season. Pull to refresh or try again."
+          actionLabel="Try again"
+          onAction={() => query.refetch()}
+        />
+      </Screen>
+    );
+  }
+
+  const { enabled, seasonKey, progress, ladder } = query.data;
+  const seasonName = titleCase(seasonKey);
+  const level = progress.currentTier;
+  const pointsTotal = progress.pointsTotal;
+  const nextReq = progress.nextTierRequirement;
+  const pct = nextReq && nextReq > 0 ? Math.min(100, Math.round((pointsTotal / nextReq) * 100)) : 100;
 
   return (
-    <Screen header={<AppHeader />} contentClassName="px-4 pt-3 gap-4">
+    <Screen header={<AppHeader />} contentClassName="px-4 pt-3 gap-4" refreshControl={refreshControl}>
       {/* Season header */}
       <View className="relative overflow-hidden rounded-2xl border border-gold-600/20">
         <Gradient colors={gradients.darkCard} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} radius={16} />
@@ -53,20 +138,25 @@ export default function BettingPassScreen() {
               <Text className="text-[10px] font-bold uppercase tracking-widest text-white/55">
                 Betting Pass
               </Text>
-              <Text className="text-xl font-black text-white">{SEASON.name}</Text>
+              <Text className="text-xl font-black text-white">{seasonName}</Text>
+              {progress.currentTierName ? (
+                <Text className="mt-0.5 text-[11px] font-semibold text-white/60">{progress.currentTierName}</Text>
+              ) : null}
             </View>
             <View className="h-12 w-12 items-center justify-center overflow-hidden rounded-2xl">
               <Gradient colors={gradients.gold} radius={16} />
-              <Text className="text-lg font-black text-ink">{SEASON.level}</Text>
+              <Text className="text-lg font-black text-ink">{level}</Text>
             </View>
           </View>
 
-          {/* XP bar */}
+          {/* Points bar */}
           <View className="mt-4">
             <View className="mb-1.5 flex-row items-center justify-between">
-              <Text className="text-[11px] font-bold text-white/70">Level {SEASON.level}</Text>
+              <Text className="text-[11px] font-bold text-white/70">Tier {level}</Text>
               <Text className="text-[11px] font-bold text-white/70">
-                {SEASON.xp.toLocaleString()} / {SEASON.nextXp.toLocaleString()} XP
+                {nextReq && nextReq > 0
+                  ? `${pointsTotal.toLocaleString('en-US')} / ${nextReq.toLocaleString('en-US')} pts`
+                  : `${pointsTotal.toLocaleString('en-US')} pts`}
               </Text>
             </View>
             <View className="h-2.5 overflow-hidden rounded-full bg-white/10">
@@ -75,26 +165,83 @@ export default function BettingPassScreen() {
               </View>
             </View>
             <Text className="mt-1.5 text-[11px] text-white/50">
-              {SEASON.nextXp - SEASON.xp} XP to Level {SEASON.level + 1}
+              {progress.nextTierName && progress.pointsToNextTier > 0
+                ? `${progress.pointsToNextTier.toLocaleString('en-US')} pts to ${progress.nextTierName}`
+                : 'Top tier reached'}
             </Text>
           </View>
         </View>
       </View>
 
+      {/* Disabled notice */}
+      {!enabled ? (
+        <View className="flex-row items-start gap-2.5 rounded-2xl border border-gold-600/30 bg-gold-500/10 p-3.5">
+          <Ionicons name="lock-closed" size={18} color={colors.gold700} />
+          <View className="flex-1">
+            <Text className="text-sm font-extrabold text-ink">Betting Pass is paused</Text>
+            <Text className="mt-0.5 text-[12px] leading-5 text-ink-mute">
+              The season pass is not accepting claims right now. Your points are safe and rewards can be claimed once it reopens.
+            </Text>
+          </View>
+        </View>
+      ) : null}
+
+      {/* Claim error banner */}
+      {claimError ? (
+        <View className="flex-row items-start gap-2 rounded-xl border border-hot/30 bg-hot/10 px-3 py-2.5">
+          <Ionicons name="alert-circle" size={16} color={colors.hot} />
+          <Text className="flex-1 text-xs font-medium text-hot">{claimError}</Text>
+        </View>
+      ) : null}
+
       {/* Reward track */}
-      <View>
-        {TIERS.map((t, i) => (
-          <TierRow key={t.level} tier={t} isFirst={i === 0} isLast={i === TIERS.length - 1} />
-        ))}
-      </View>
+      {ladder.length === 0 ? (
+        <EmptyState
+          icon="trophy-outline"
+          title="No reward tiers yet"
+          message="The operator has not published any Betting Pass tiers for this season. Check back soon."
+        />
+      ) : (
+        <View>
+          {ladder.map((t, i) => (
+            <TierRow
+              key={t.id}
+              tier={t}
+              isFirst={i === 0}
+              isLast={i === ladder.length - 1}
+              enabled={enabled}
+              claiming={claimingId === t.id}
+              disabledAll={claimingId !== null}
+              onClaim={() => onClaim(t)}
+            />
+          ))}
+        </View>
+      )}
     </Screen>
   );
 }
 
-function TierRow({ tier, isFirst, isLast }: { tier: Tier; isFirst: boolean; isLast: boolean }) {
-  const claimed = tier.state === 'claimed';
-  const unlocked = tier.state === 'unlocked';
-  const locked = tier.state === 'locked';
+function TierRow({
+  tier,
+  isFirst,
+  isLast,
+  enabled,
+  claiming,
+  disabledAll,
+  onClaim,
+}: {
+  tier: BettingPassTier;
+  isFirst: boolean;
+  isLast: boolean;
+  enabled: boolean;
+  claiming: boolean;
+  disabledAll: boolean;
+  onClaim: () => void;
+}) {
+  const claimed = tier.claimed;
+  const claimable = enabled && tier.claimable && !claimed;
+  const locked = !tier.unlocked && !claimed;
+  const icon = rewardIcon(tier.rewardKind);
 
   return (
     <View className="flex-row items-stretch gap-3">
@@ -107,15 +254,15 @@ function TierRow({ tier, isFirst, isLast }: { tier: Tier; isFirst: boolean; isLa
             'mt-4 h-9 w-9 items-center justify-center rounded-full border-2 ' +
             (claimed
               ? 'border-gold-600 bg-gold-500'
-              : unlocked
+              : claimable
                 ? 'border-gold-600 bg-gold-500/15'
                 : 'border-divider bg-surfaceAlt')
           }
         >
           <Ionicons
-            name={claimed ? 'checkmark' : locked ? 'lock-closed' : tier.icon}
+            name={claimed ? 'checkmark' : locked ? 'lock-closed' : icon}
             size={16}
-            color={claimed ? colors.ink : unlocked ? colors.gold700 : colors.inkMute}
+            color={claimed ? colors.ink : claimable ? colors.gold700 : colors.inkMute}
           />
         </View>
       </View>
@@ -124,9 +271,7 @@ function TierRow({ tier, isFirst, isLast }: { tier: Tier; isFirst: boolean; isLa
       <View
         className={
           'mb-3 flex-1 flex-row items-center gap-3 rounded-2xl border p-3.5 ' +
-          (locked
-            ? 'border-divider bg-surface'
-            : 'border-divider bg-paper shadow-sm shadow-black/5')
+          (locked ? 'border-divider bg-surface' : 'border-divider bg-paper shadow-sm shadow-black/5')
         }
       >
         <View
@@ -135,23 +280,35 @@ function TierRow({ tier, isFirst, isLast }: { tier: Tier; isFirst: boolean; isLa
             (locked ? 'bg-surfaceAlt' : 'bg-gold-500/15')
           }
         >
-          <Ionicons name={tier.icon} size={20} color={locked ? colors.inkMute : colors.gold700} />
+          <Ionicons name={icon} size={20} color={locked ? colors.inkMute : colors.gold700} />
         </View>
 
         <View className="flex-1">
           <View className="flex-row items-center gap-2">
-            <Text className={'text-sm font-extrabold ' + (locked ? 'text-ink-mute' : 'text-ink')}>
-              {tier.reward}
+            <Text
+              className={'text-sm font-extrabold ' + (locked ? 'text-ink-mute' : 'text-ink')}
+              numberOfLines={1}
+            >
+              {tier.nameEn}
             </Text>
             {claimed ? <Badge label="CLAIMED" variant="new" /> : null}
           </View>
-          <Text className="mt-0.5 text-[11px] text-ink-mute">
-            Level {tier.level} - {tier.xp.toLocaleString()} XP
+          <Text className="mt-0.5 text-[11px] text-ink-mute" numberOfLines={1}>
+            {rewardLine(tier)}
+          </Text>
+          <Text className="mt-0.5 text-[10px] font-semibold text-ink-mute">
+            Tier {tier.tier} • {tier.pointsRequired.toLocaleString('en-US')} pts
           </Text>
         </View>
 
-        {unlocked ? (
-          <PrimaryButton label="Claim" size="sm" />
+        {claimable ? (
+          claiming ? (
+            <View className="h-9 w-16 items-center justify-center">
+              <ActivityIndicator color={colors.gold700} size="small" />
+            </View>
+          ) : (
+            <PrimaryButton label="Claim" size="sm" onPress={onClaim} disabled={disabledAll} />
+          )
         ) : locked ? (
           <Ionicons name="lock-closed" size={16} color={colors.inkMute} />
         ) : null}
