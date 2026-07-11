@@ -53,6 +53,32 @@ import {
   type WingoMyBetsPage,
   type WingoState,
 } from './wingo';
+import {
+  getNativeGame,
+  createNativeSession,
+  placeDiceBet,
+  startMinesRound,
+  revealMinesTile,
+  cashoutMines,
+  placeKenoBet,
+  placeRouletteBet,
+  placeCrashBet,
+  type NativeGameCode,
+  type NativeGameView,
+  type NativeSession,
+  type PlaceDiceBetInput,
+  type DiceBetResult,
+  type StartMinesInput,
+  type MinesStartResult,
+  type MinesRevealResult,
+  type MinesCashoutResult,
+  type PlaceKenoBetInput,
+  type KenoBetResult,
+  type PlaceRouletteBetInput,
+  type RouletteBetResult,
+  type PlaceCrashBetInput,
+  type CrashBetResult,
+} from './native-games';
 import { useAuth } from '@/store/auth';
 
 // ---------------------------------------------------------------------------
@@ -73,6 +99,8 @@ export const depositPreviewQueryKey = (amount: number, promotionId?: string | nu
 
 export const wingoStateQueryKey = (mode: WingoMode) => ['wingo', 'state', mode] as const;
 export const wingoMyBetsQueryKey = (mode: WingoMode) => ['wingo', 'my-bets', mode] as const;
+
+export const nativeGameQueryKey = (code: NativeGameCode) => ['native-games', 'game', code] as const;
 
 // ---------------------------------------------------------------------------
 // Reads
@@ -256,5 +284,103 @@ export function usePlaceWingoBet() {
       queryClient.invalidateQueries({ queryKey: wingoMyBetsQueryKey(result.mode) });
       queryClient.invalidateQueries({ queryKey: wingoStateQueryKey(result.mode) });
     },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Native games (Phase 3b): dice, mines, keno, roulette, crash
+// ---------------------------------------------------------------------------
+
+/**
+ * Live per-game config for one native game. Public read (no auth) so the board
+ * renders before sign-in. Polled modestly so an admin flip of the global
+ * enabled flag or the per-game isActive flag reaches the screen without a
+ * manual refresh; the screen gates the whole bet surface on
+ * `enabled && game.isActive`.
+ */
+export function useNativeGame(code: NativeGameCode) {
+  return useQuery<NativeGameView>({
+    queryKey: nativeGameQueryKey(code),
+    queryFn: () => getNativeGame(code),
+    refetchInterval: 20_000,
+    staleTime: 10_000,
+  });
+}
+
+/**
+ * Open a fresh provably-fair session for a native game. Session creation moves
+ * no money, so it does not invalidate the wallet. The screen creates one session
+ * once the game is confirmed available and reuses it across bets.
+ */
+export function useCreateNativeSession(code: NativeGameCode) {
+  return useMutation<NativeSession, unknown, string | undefined>({
+    mutationFn: (clientSeed?: string) => createNativeSession(code, clientSeed),
+  });
+}
+
+/** Place a Dice bet; on success refresh the wallet (real settle moves balance). */
+export function useDiceBet() {
+  const invalidateWallet = useInvalidateWallet();
+  return useMutation<DiceBetResult, unknown, PlaceDiceBetInput>({
+    mutationFn: placeDiceBet,
+    onSuccess: invalidateWallet,
+  });
+}
+
+/** Start a Mines round; on success refresh the wallet (the bet debits). */
+export function useStartMines() {
+  const invalidateWallet = useInvalidateWallet();
+  return useMutation<MinesStartResult, unknown, StartMinesInput>({
+    mutationFn: startMinesRound,
+    onSuccess: invalidateWallet,
+  });
+}
+
+/**
+ * Reveal one Mines tile. A safe reveal moves no money; a mine hit settles the
+ * round as a loss (the bet was already debited at start). Invalidate the wallet
+ * regardless so the header balance stays authoritative.
+ */
+export function useMinesReveal() {
+  const invalidateWallet = useInvalidateWallet();
+  return useMutation<MinesRevealResult, unknown, { roundId: string; tile: number }>({
+    mutationFn: ({ roundId, tile }) => revealMinesTile(roundId, tile),
+    onSuccess: invalidateWallet,
+  });
+}
+
+/** Cash out a pending Mines round; on success refresh the wallet (credits the win). */
+export function useMinesCashout() {
+  const invalidateWallet = useInvalidateWallet();
+  return useMutation<MinesCashoutResult, unknown, { roundId: string }>({
+    mutationFn: ({ roundId }) => cashoutMines(roundId),
+    onSuccess: invalidateWallet,
+  });
+}
+
+/** Place a Keno bet; on success refresh the wallet. */
+export function useKenoBet() {
+  const invalidateWallet = useInvalidateWallet();
+  return useMutation<KenoBetResult, unknown, PlaceKenoBetInput>({
+    mutationFn: placeKenoBet,
+    onSuccess: invalidateWallet,
+  });
+}
+
+/** Place a Roulette bet; on success refresh the wallet. */
+export function useRouletteBet() {
+  const invalidateWallet = useInvalidateWallet();
+  return useMutation<RouletteBetResult, unknown, PlaceRouletteBetInput>({
+    mutationFn: placeRouletteBet,
+    onSuccess: invalidateWallet,
+  });
+}
+
+/** Place a Crash (single-shot auto cash out) bet; on success refresh the wallet. */
+export function useCrashBet() {
+  const invalidateWallet = useInvalidateWallet();
+  return useMutation<CrashBetResult, unknown, PlaceCrashBetInput>({
+    mutationFn: placeCrashBet,
+    onSuccess: invalidateWallet,
   });
 }
