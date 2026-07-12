@@ -68,7 +68,7 @@ const MAX_BYTES_BY_CATEGORY: Record<UploadCategory, number> = {
   banners_mobile: 3 * 1024 * 1024,
   games: 4 * 1024 * 1024,
   'payment-proofs': 8 * 1024 * 1024,
-  apk: 80 * 1024 * 1024,
+  apk: 90 * 1024 * 1024,
   branding: 2 * 1024 * 1024,
   categories: 1 * 1024 * 1024,
   jackpot: 2 * 1024 * 1024,
