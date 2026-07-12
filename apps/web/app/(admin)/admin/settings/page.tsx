@@ -45,7 +45,11 @@ const REWARD_COIN_KEYS = [
   'reward_coin_referred_first_deposit',
 ] as const;
 const SITE_KEYS = ['site_name'] as const;
-const ALL_KEYS = [...SUPPORT_KEYS, ...REFERRAL_KEYS, ...REWARD_COIN_KEYS, ...SITE_KEYS] as const;
+// APK download: apk_download_url drives the site home Download button
+// (AppDownloadSection hides itself until this is set); apk_version is
+// shown beside it.
+const APK_KEYS = ['apk_download_url', 'apk_version'] as const;
+const ALL_KEYS = [...SUPPORT_KEYS, ...REFERRAL_KEYS, ...REWARD_COIN_KEYS, ...SITE_KEYS, ...APK_KEYS] as const;
 
 type SettingKey = (typeof ALL_KEYS)[number];
 
@@ -70,6 +74,8 @@ export default function AdminSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [apkUploading, setApkUploading] = useState(false);
+  const [apkUploadError, setApkUploadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -97,6 +103,28 @@ export default function AdminSettingsPage() {
 
   const update = (key: SettingKey, value: string) => {
     setValues((prev) => ({ ...prev, [key]: value }));
+  };
+
+  // Uploads the picked APK to /uploads/apk via the shared upload endpoint and
+  // fills the download URL. The operator still presses Save Settings to
+  // publish it. Files above the server cap are rejected here, in which case
+  // the operator can host the file elsewhere and paste the URL instead.
+  const uploadApk = async (file: File) => {
+    setApkUploading(true);
+    setApkUploadError(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('category', 'apk');
+      const r = await fetch('/api/admin/uploads', { method: 'POST', body: fd });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j?.message ?? j?.code ?? 'Upload failed');
+      update('apk_download_url', String(j.url ?? ''));
+    } catch (e) {
+      setApkUploadError(e instanceof Error ? e.message : 'Upload failed');
+    } finally {
+      setApkUploading(false);
+    }
   };
 
   const save = async () => {
@@ -217,6 +245,40 @@ export default function AdminSettingsPage() {
               </FormField>
               <FormField label="Referred friend first-deposit coins" hint="Extra coin grant to the REFERRER specifically when the referred friend's first deposit is approved. 0 = disabled.">
                 <Input type="number" min={0} max={1_000_000} value={values.reward_coin_referred_first_deposit ?? '0'} onChange={(e) => update('reward_coin_referred_first_deposit', e.target.value)} placeholder="100" />
+              </FormField>
+            </div>
+          )}
+        </Card>
+      </div>
+
+      <div className="mt-6">
+        <Card padding="lg">
+          <CardHeader title="App Download (APK)" subtitle="Publish the Android app. Once a download URL is set, a Download button appears on the site home page. Update it here on every new build." />
+          {loading ? <p className="text-sm text-ink-mid">Loading...</p> : (
+            <div className="space-y-3">
+              <FormField label="Android APK file" hint="Choose the .apk from your computer (up to 80 MB). It uploads immediately, then press Save Settings below to publish. For a larger file, host it and paste the URL instead.">
+                <div className="flex flex-wrap items-center gap-3">
+                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-neon/20 bg-base-deep px-4 py-2 text-sm text-ink-hi hover:border-neon/40">
+                    <input
+                      type="file"
+                      accept=".apk,application/vnd.android.package-archive"
+                      className="hidden"
+                      disabled={apkUploading}
+                      onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadApk(f); e.target.value = ''; }}
+                    />
+                    {apkUploading ? 'Uploading...' : 'Choose APK'}
+                  </label>
+                  {values.apk_download_url ? (
+                    <a href={values.apk_download_url} target="_blank" rel="noreferrer" className="text-sm text-neon underline">Open current file</a>
+                  ) : <span className="text-xs text-ink-lo">No file set yet</span>}
+                </div>
+              </FormField>
+              {apkUploadError ? <p className="text-sm text-signal-danger">{apkUploadError}</p> : null}
+              <FormField label="Download URL" hint="Filled automatically when you upload above. You can also paste a full URL to an APK hosted elsewhere.">
+                <Input value={values.apk_download_url ?? ''} onChange={(e) => update('apk_download_url', e.target.value)} placeholder="/uploads/apk/pasha9.apk" />
+              </FormField>
+              <FormField label="Version (optional)" hint="Shown next to the download button, e.g. 1.0.0">
+                <Input value={values.apk_version ?? ''} onChange={(e) => update('apk_version', e.target.value)} placeholder="1.0.0" />
               </FormField>
             </div>
           )}
