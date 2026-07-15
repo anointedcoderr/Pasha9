@@ -15,6 +15,7 @@ import { View, Text, Pressable, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ChevronRight, Flag } from 'lucide-react-native';
 import { Gradient } from '@/components/ui';
+import { resolveHref } from '@/lib/nav';
 import { useGameLaunch } from '@/app/games/_components/useGameLaunch';
 import { GameLaunchNotice } from '@/app/games/_components/GameLaunchNotice';
 import { HomeGameTile, HomeLaunchContext } from './HomeGameTile';
@@ -59,7 +60,7 @@ export function SportsbookSection({ section }: { section: HomeSection }) {
           </View>
 
           <Pressable
-            onPress={() => router.push(section.href as never)}
+            onPress={() => router.push(resolveHref(section.href) as never)}
             className="h-9 flex-row items-center gap-1 rounded-full border border-brand-divider bg-brand-paper px-3 active:opacity-80"
           >
             <Text className="text-xs font-bold uppercase tracking-wider text-brand-ink">All sports</Text>

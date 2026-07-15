@@ -39,6 +39,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { Play, Sparkles } from 'lucide-react-native';
 import { Gradient } from '@/components/ui/Gradient';
 import { colors, gradients } from '@/lib/theme';
+import { resolveHref } from '@/lib/nav';
 import { useBanners, bannerImageUrl, type Banner } from '@/lib/api/home';
 
 const H_PAD = 16; // matches Screen's px-4 content padding
@@ -99,7 +100,7 @@ export function HomeHero() {
     const target = isVideo ? (b.videoUrl ?? b.link) : b.link;
     if (!target) return; // linkless image banner: no-op
     if (target.startsWith('/')) {
-      router.push(target as never);
+      router.push(resolveHref(target) as never);
       return;
     }
     WebBrowser.openBrowserAsync(target, { enableBarCollapsing: true, showTitle: true }).catch(() => {});

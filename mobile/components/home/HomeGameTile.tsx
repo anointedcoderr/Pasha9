@@ -27,6 +27,7 @@ import { useRouter } from 'expo-router';
 import { Play } from 'lucide-react-native';
 import { Gradient } from '@/components/ui';
 import { cn } from '@/lib/cn';
+import { resolveHref } from '@/lib/nav';
 import type { GameLaunch } from '@/app/games/_components/useGameLaunch';
 import type { HomeSectionGame } from '@/lib/api/homepage-types';
 
@@ -99,7 +100,7 @@ export function HomeGameTile({ game }: { game: HomeSectionGame }) {
       return;
     }
     // Native game: straight into the in-app route.
-    router.push((game.href ?? '/games') as never);
+    router.push(resolveHref(game.href) as never);
   };
 
   return (

@@ -19,6 +19,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { ArrowRight } from 'lucide-react-native';
 import { Gradient } from '@/components/ui';
 import { colors, gradients } from '@/lib/theme';
+import { resolveHref } from '@/lib/nav';
 import { usePromoPair, type PromoPairSlot } from '@/lib/api/homepage';
 
 // Prefer the English field, fall back to the Bangla field, then to the
@@ -155,7 +156,7 @@ function renderCard(
 // URL opens in the in-app browser. Mirrors the home banner-press pattern.
 function openHref(router: ReturnType<typeof useRouter>, href: string) {
   if (href.startsWith('/')) {
-    router.push(href as never);
+    router.push(resolveHref(href) as never);
     return;
   }
   WebBrowser.openBrowserAsync(href, { enableBarCollapsing: true, showTitle: true }).catch(() => {});
