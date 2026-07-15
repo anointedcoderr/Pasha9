@@ -36,7 +36,8 @@
         }
       ],
       "expo-web-browser",
-      "expo-notifications"
+      "expo-notifications",
+      "expo-font"
     ],
     "extra": {
       "apiBaseUrl": "https://pasha9.com",

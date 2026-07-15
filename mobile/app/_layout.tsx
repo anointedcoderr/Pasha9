@@ -16,6 +16,20 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useFonts } from 'expo-font';
+import {
+  Sora_400Regular,
+  Sora_500Medium,
+  Sora_600SemiBold,
+  Sora_700Bold,
+  Sora_800ExtraBold,
+} from '@expo-google-fonts/sora';
+import {
+  HindSiliguri_400Regular,
+  HindSiliguri_500Medium,
+  HindSiliguri_600SemiBold,
+  HindSiliguri_700Bold,
+} from '@expo-google-fonts/hind-siliguri';
 import { AuthProvider, useAuth } from '@/store/auth';
 import { PushGate } from '@/components/PushGate';
 import { colors } from '@/lib/theme';
@@ -27,6 +41,28 @@ const queryClient = new QueryClient({
 });
 
 export default function RootLayout() {
+  // Load the same faces the web uses: Sora (EN / numerals) + Hind Siliguri
+  // (BN). RN needs one file per weight, so every weight is registered here and
+  // exposed through the font-en / font-bn / font-display families in
+  // tailwind.config.js. Gate the whole tree until the fonts resolve so text
+  // never flashes in the System face first. On a font error we still render
+  // (fall back to System) rather than trap the user on a blank screen.
+  const [fontsLoaded, fontError] = useFonts({
+    Sora_400Regular,
+    Sora_500Medium,
+    Sora_600SemiBold,
+    Sora_700Bold,
+    Sora_800ExtraBold,
+    HindSiliguri_400Regular,
+    HindSiliguri_500Medium,
+    HindSiliguri_600SemiBold,
+    HindSiliguri_700Bold,
+  });
+
+  if (!fontsLoaded && !fontError) {
+    return null;
+  }
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
