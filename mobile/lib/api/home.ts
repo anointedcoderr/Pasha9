@@ -84,6 +84,8 @@ export interface Banner {
   imageUrl: string | null;
   /** Absolute poster still, used as the image for a video banner. */
   posterUrl: string | null;
+  /** Absolute video URL for a video banner, or null. Opened externally on tap. */
+  videoUrl: string | null;
   /** Tap target: an internal app path, an external URL, or null. */
   link: string | null;
   ctaLabel: string | null;
@@ -107,6 +109,7 @@ function mapBanner(r: Record<string, unknown>): Banner {
     mediaType: typeof r.mediaType === 'string' ? r.mediaType : 'image',
     imageUrl: absoluteMediaUrl(r.imageUrl as string | null),
     posterUrl: absoluteMediaUrl(r.posterUrl as string | null),
+    videoUrl: absoluteMediaUrl(r.videoUrl as string | null),
     link: str(r.link),
     ctaLabel: str(r.ctaLabel),
     accent: normalizeAccent(r.accent),

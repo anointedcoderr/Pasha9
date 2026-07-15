@@ -14,7 +14,7 @@ export default function TabsLayout() {
       screenOptions={{ headerShown: false }}
     >
       <Tabs.Screen name="index" options={{ title: 'Home' }} />
-      <Tabs.Screen name="promotions" options={{ title: 'Promotions' }} />
+      <Tabs.Screen name="promotions" options={{ title: 'Promotion' }} />
       <Tabs.Screen name="lotto" options={{ title: 'Lotto' }} />
       <Tabs.Screen name="betting-pass" options={{ title: 'Betting Pass' }} />
       <Tabs.Screen name="referral" options={{ title: 'Referral' }} />
