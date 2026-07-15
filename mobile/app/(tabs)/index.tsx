@@ -9,7 +9,9 @@
 // Render order, matching the web page exactly:
 //   HomeHero, WalletStrip, CategoryStrip, PromoTicker, JackpotStrip, the first
 //   three live game strips, the ambassador / video block, the remaining live
-//   strips, the custom blocks, PromoPair, then AppDownloadCta.
+//   strips, the custom blocks, then PromoPair. The web page's app-download
+//   section is intentionally dropped here: prompting a download inside the
+//   app itself makes no sense.
 //
 // A strip whose key is homepage_sportsbook renders the fixtures rail plus the
 // sportsbook section instead of a normal game grid, exactly like the web. The
@@ -31,7 +33,6 @@ import { SportsbookSection } from '@/components/home/SportsbookSection';
 import { HomepageVideoCarousel } from '@/components/home/HomepageVideoCarousel';
 import { AmbassadorVideoSection } from '@/components/home/AmbassadorVideoSection';
 import { PromoPair } from '@/components/home/PromoPair';
-import { AppDownloadCta } from '@/components/home/AppDownloadCta';
 import { useHomepageSections, useHomepageVideos } from '@/lib/api/homepage';
 import type { HomeBlock, HomeSection } from '@/lib/api/homepage-types';
 
@@ -136,8 +137,6 @@ export default function HomeScreen() {
       ))}
 
       <PromoPair />
-
-      <AppDownloadCta />
     </Screen>
   );
 }
