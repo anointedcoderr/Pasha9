@@ -15,11 +15,11 @@
 
 import { useState } from 'react';
 import { TextInput, View, Text, type KeyboardTypeOptions } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Icon } from './Icon';
 import { colors } from '@/lib/theme';
 import { cn } from '@/lib/cn';
 
-type IconName = keyof typeof Ionicons.glyphMap;
+type IconName = string;
 
 export interface TextFieldProps {
   label?: string;
@@ -61,7 +61,7 @@ export function TextField({
           !editable && 'bg-surfaceAlt opacity-70',
         )}
       >
-        {icon ? <Ionicons name={icon} size={18} color={colors.inkMute} /> : null}
+        {icon ? <Icon name={icon} size={18} color={colors.inkMute} /> : null}
         <TextInput
           className="flex-1 text-base text-ink"
           value={value}

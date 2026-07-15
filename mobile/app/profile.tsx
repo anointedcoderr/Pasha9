@@ -9,9 +9,9 @@
 import { useRef, useState } from 'react';
 import { Alert, Modal, Pressable, Text, View } from 'react-native';
 import { Image } from 'expo-image';
-import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Screen, StatRow, Gradient } from '@/components/ui';
+import { Icon } from '@/components/ui/Icon';
 import { StackScreenHeader } from '@/components/StackScreenHeader';
 import { gradients, colors } from '@/lib/theme';
 import { formatBDT } from '@/lib/format';
@@ -33,7 +33,7 @@ function messageFor(err: unknown, fallback: string): string {
   return err instanceof ApiError ? (err.message !== err.code ? err.message : fallback) : fallback;
 }
 
-type IconName = keyof typeof Ionicons.glyphMap;
+type IconName = string;
 type Tone = 'gold' | 'blue' | 'green' | 'violet' | 'neutral';
 
 interface SettingItem {
@@ -208,7 +208,7 @@ export default function ProfileScreen() {
               hitSlop={8}
               className="h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-white/5 active:opacity-80"
             >
-              <Ionicons name="create-outline" size={18} color={colors.gold300} />
+              <Icon name="create-outline" size={18} color={colors.gold300} />
             </Pressable>
           </View>
         </View>
@@ -249,7 +249,7 @@ export default function ProfileScreen() {
           signingOut && 'opacity-60',
         )}
       >
-        <Ionicons name="log-out-outline" size={18} color={colors.hot} />
+        <Icon name="log-out-outline" size={18} color={colors.hot} />
         <Text className="text-base font-extrabold" style={{ color: colors.hot }}>
           {signingOut ? 'Signing out...' : 'Log out'}
         </Text>
@@ -280,7 +280,7 @@ export default function ProfileScreen() {
                   onPress={() => pickLanguage(opt.code)}
                   className="flex-row items-center gap-3 rounded-xl px-3 py-3 active:bg-surface"
                 >
-                  <Ionicons
+                  <Icon
                     name={active ? 'radio-button-on' : 'radio-button-off'}
                     size={20}
                     color={active ? colors.gold700 : colors.inkMute}
@@ -318,7 +318,7 @@ function SettingRow({
       )}
     >
       <View className={cn('h-9 w-9 items-center justify-center rounded-xl', TONE_BG[item.tone])}>
-        <Ionicons name={item.icon} size={18} color={TONE_ICON[item.tone]} />
+        <Icon name={item.icon} size={18} color={TONE_ICON[item.tone]} />
       </View>
       <Text className="flex-1 text-sm font-bold text-ink" numberOfLines={1}>
         {item.label}
@@ -328,7 +328,7 @@ function SettingRow({
           {value}
         </Text>
       ) : null}
-      <Ionicons name="chevron-forward" size={16} color={colors.inkMute} />
+      <Icon name="chevron-forward" size={16} color={colors.inkMute} />
     </Pressable>
   );
 }
@@ -338,7 +338,7 @@ function VipBadge({ tier }: { tier: string }) {
   return (
     <View className="relative flex-row items-center gap-1 overflow-hidden rounded-pill px-2 py-0.5">
       <Gradient colors={gradients.gold} radius={999} />
-      <Ionicons name="diamond" size={10} color={colors.ink} />
+      <Icon name="diamond" size={10} color={colors.ink} />
       <Text className="text-[10px] font-black uppercase tracking-wider text-ink">{tier} VIP</Text>
     </View>
   );
@@ -348,7 +348,7 @@ function VipBadge({ tier }: { tier: string }) {
 function MemberPill() {
   return (
     <View className="flex-row items-center gap-1 rounded-pill border border-white/15 bg-white/10 px-2 py-0.5">
-      <Ionicons name="person" size={10} color={colors.gold300} />
+      <Icon name="person" size={10} color={colors.gold300} />
       <Text className="text-[10px] font-black uppercase tracking-wider text-white/80">Member</Text>
     </View>
   );

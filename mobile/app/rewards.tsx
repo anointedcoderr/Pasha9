@@ -23,7 +23,7 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Icon } from '@/components/ui/Icon';
 import {
   Screen,
   Gradient,
@@ -49,7 +49,7 @@ import {
 import { ApiError } from '@/lib/api/client';
 import { colors, gradients } from '@/lib/theme';
 
-type IconName = keyof typeof Ionicons.glyphMap;
+type IconName = string;
 
 const OPERATORS: { key: RechargeClaimBody['operator']; label: string }[] = [
   { key: 'gp', label: 'GP' },
@@ -223,7 +223,7 @@ export default function RewardsScreen() {
             <Text className="mt-0.5 text-[11px] text-white/45">Earn more by checking in and playing daily</Text>
           </View>
           <View className="h-14 w-14 items-center justify-center rounded-2xl border border-gold-500/40 bg-white/5">
-            <Ionicons name="star" size={26} color={colors.gold300} />
+            <Icon name="star" size={26} color={colors.gold300} />
           </View>
         </View>
       </View>
@@ -284,13 +284,13 @@ export default function RewardsScreen() {
                   className="rounded-2xl border border-divider bg-paper p-3.5 shadow-sm shadow-black/5"
                 >
                   <View className="h-10 w-10 items-center justify-center rounded-xl bg-gold-500/15">
-                    <Ionicons name={rewardIcon(item.rewardType)} size={20} color={colors.gold700} />
+                    <Icon name={rewardIcon(item.rewardType)} size={20} color={colors.gold700} />
                   </View>
                   <Text className="mt-2.5 text-sm font-extrabold text-ink" numberOfLines={1}>
                     {item.title}
                   </Text>
                   <View className="mt-1 flex-row items-center gap-1">
-                    <Ionicons name="star" size={12} color={colors.gold600} />
+                    <Icon name="star" size={12} color={colors.gold600} />
                     <Text className="text-xs font-bold text-ink-soft">
                       {item.cost.toLocaleString()} coins
                     </Text>
@@ -381,7 +381,7 @@ function CheckInCard({
                   (claimed ? 'bg-newg/15' : today ? 'bg-gold-500' : 'bg-surfaceAlt')
                 }
               >
-                <Ionicons
+                <Icon
                   name={claimed ? 'checkmark' : 'star'}
                   size={15}
                   color={claimed ? colors.newg : today ? colors.ink : colors.inkMute}
@@ -446,7 +446,7 @@ function SpinCard({
       <View className="relative p-4">
         <View className="flex-row items-center gap-3">
           <View className="h-14 w-14 items-center justify-center rounded-full border-2 border-white/40 bg-white/10">
-            <Ionicons name="disc" size={28} color="#FFFFFF" />
+            <Icon name="disc" size={28} color="#FFFFFF" />
           </View>
           <View className="flex-1">
             <View className="flex-row items-center gap-2">
@@ -569,12 +569,12 @@ function RedeemSheet({
               {item?.title ?? 'Redeem'}
             </Text>
             <Pressable onPress={close} hitSlop={8} className="h-9 w-9 items-center justify-center rounded-xl active:bg-surfaceAlt">
-              <Ionicons name="close" size={22} color={colors.ink} />
+              <Icon name="close" size={22} color={colors.ink} />
             </Pressable>
           </View>
 
           <View className="mb-3 flex-row items-center gap-1.5">
-            <Ionicons name="star" size={14} color={colors.gold600} />
+            <Icon name="star" size={14} color={colors.gold600} />
             <Text className="text-sm font-bold text-ink-soft">
               {item?.cost.toLocaleString()} coins
             </Text>

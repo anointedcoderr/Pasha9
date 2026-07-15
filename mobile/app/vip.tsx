@@ -12,7 +12,7 @@
 
 import { useMemo, useRef, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Icon } from '@/components/ui/Icon';
 import { Screen, Gradient, SectionHeader, EmptyState, PrimaryButton } from '@/components/ui';
 import { StackScreenHeader } from '@/components/StackScreenHeader';
 import { gradients, colors } from '@/lib/theme';
@@ -149,14 +149,14 @@ export default function VipScreen() {
         <View className="border-t border-divider bg-paper px-4 pb-7 pt-3">
           {applyError ? (
             <View className="mb-2 flex-row items-start gap-2 rounded-xl border border-hot/30 bg-hot/10 px-3 py-2">
-              <Ionicons name="alert-circle" size={16} color={colors.hot} />
+              <Icon name="alert-circle" size={16} color={colors.hot} />
               <Text className="flex-1 text-xs font-medium text-hot">{applyError}</Text>
             </View>
           ) : null}
 
           {pending || applied ? (
             <View className="flex-row items-center gap-2.5 rounded-xl border border-newg/30 bg-newg/10 px-3.5 py-3">
-              <Ionicons name="hourglass" size={18} color={colors.newg} />
+              <Icon name="hourglass" size={18} color={colors.newg} />
               <View className="flex-1">
                 <Text className="text-sm font-extrabold text-ink">Application pending</Text>
                 <Text className="text-[11px] text-ink-mute">
@@ -182,7 +182,7 @@ export default function VipScreen() {
           )}
           {showApply ? (
             <View className="mt-2 flex-row items-center justify-center gap-1.5">
-              <Ionicons name="shield-checkmark" size={12} color={colors.inkMute} />
+              <Icon name="shield-checkmark" size={12} color={colors.inkMute} />
               <Text className="text-[11px] text-ink-mute">Applications are reviewed by our VIP team</Text>
             </View>
           ) : null}
@@ -197,7 +197,7 @@ export default function VipScreen() {
         <View className="relative p-5">
           <View className="flex-row items-center justify-between">
             <View className="flex-row items-center gap-1.5 rounded-pill border border-gold-500/40 bg-gold-500/10 px-3 py-1">
-              <Ionicons name="diamond" size={12} color={colors.gold300} />
+              <Icon name="diamond" size={12} color={colors.gold300} />
               <Text className="text-[11px] font-black uppercase tracking-widest" style={{ color: colors.gold300 }}>
                 Your tier
               </Text>
@@ -217,7 +217,7 @@ export default function VipScreen() {
               style={{ borderWidth: 2, borderColor: currentTier?.badgeColor ?? colors.gold500 }}
             >
               <Gradient colors={gradients.gold} radius={16} />
-              <Ionicons name="diamond" size={26} color={colors.ink} />
+              <Icon name="diamond" size={26} color={colors.ink} />
             </View>
             <View className="flex-1">
               <Text className="text-2xl font-black text-white">{currentTier ? currentTier.name : 'Not a VIP yet'}</Text>
@@ -282,7 +282,7 @@ export default function VipScreen() {
                   className="h-12 w-12 items-center justify-center rounded-full"
                   style={{ backgroundColor: `${badge}22`, borderWidth: 2, borderColor: badge }}
                 >
-                  <Ionicons name={cleared ? 'checkmark' : 'diamond'} size={20} color={badge} />
+                  <Icon name={cleared ? 'checkmark' : 'diamond'} size={20} color={badge} />
                 </View>
                 <Text className="mt-2 text-sm font-black text-ink" numberOfLines={1}>
                   {tier.name}
@@ -335,7 +335,7 @@ export default function VipScreen() {
                 <View className="gap-2">
                   {selectedTier.perksEn.map((perk, i) => (
                     <View key={i} className="flex-row items-start gap-2">
-                      <Ionicons name="checkmark-circle" size={16} color={colors.newg} />
+                      <Icon name="checkmark-circle" size={16} color={colors.newg} />
                       <Text className="flex-1 text-[13px] leading-5 text-ink-soft">{perk}</Text>
                     </View>
                   ))}
@@ -349,11 +349,11 @@ export default function VipScreen() {
   );
 }
 
-function BenefitRow({ icon, label, value }: { icon: keyof typeof Ionicons.glyphMap; label: string; value: string }) {
+function BenefitRow({ icon, label, value }: { icon: string; label: string; value: string }) {
   return (
     <View className="flex-row items-center justify-between">
       <View className="flex-row items-center gap-2">
-        <Ionicons name={icon} size={16} color={colors.gold700} />
+        <Icon name={icon} size={16} color={colors.gold700} />
         <Text className="text-sm text-ink-mute">{label}</Text>
       </View>
       <Text className="text-sm font-black text-ink">{value}</Text>

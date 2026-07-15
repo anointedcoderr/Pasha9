@@ -15,7 +15,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Icon } from '@/components/ui/Icon';
 import { useRouter } from 'expo-router';
 import Svg, { Circle, Defs, Line, LinearGradient, Polygon, Polyline, Stop } from 'react-native-svg';
 import { Screen, Card } from '@/components/ui';
@@ -240,7 +240,7 @@ export default function CrashScreen() {
             <View className="flex-row items-center justify-between">
               <View className="flex-row items-center gap-2">
                 <View className="h-8 w-8 items-center justify-center rounded-lg bg-gold-500/15">
-                  <Ionicons name="rocket" size={16} color={colors.gold700} />
+                  <Icon name="rocket" size={16} color={colors.gold700} />
                 </View>
                 <View>
                   <Text className="text-xs font-bold text-ink">Auto Cash Out</Text>
@@ -314,7 +314,7 @@ function StepButton({ icon, onPress }: { icon: 'add' | 'remove'; onPress: () => 
       onPress={onPress}
       className="h-10 w-10 items-center justify-center rounded-xl border border-divider bg-surface active:opacity-80"
     >
-      <Ionicons name={icon} size={18} color={colors.ink} />
+      <Icon name={icon} size={18} color={colors.ink} />
     </Pressable>
   );
 }
@@ -339,7 +339,7 @@ function BetButton({
         disabled && 'opacity-50',
       )}
     >
-      <Ionicons name={pending ? 'hourglass' : 'rocket'} size={20} color={colors.ink} />
+      <Icon name={pending ? 'hourglass' : 'rocket'} size={20} color={colors.ink} />
       <Text className="text-base font-black uppercase tracking-wider text-ink">{label}</Text>
     </Pressable>
   );
@@ -356,7 +356,7 @@ function Notices({ notice, insufficient }: { notice: Notice | null; insufficient
             notice.type === 'success' ? 'border-newg/40 bg-newg/10' : 'border-hot/40 bg-hot/10',
           )}
         >
-          <Ionicons
+          <Icon
             name={notice.type === 'success' ? 'checkmark-circle' : 'alert-circle'}
             size={16}
             color={notice.type === 'success' ? colors.newg : colors.hot}
@@ -385,7 +385,7 @@ function GameTopBar({ title, subtitle, balance }: { title: string; subtitle?: st
           hitSlop={8}
           className="h-9 w-9 items-center justify-center rounded-xl active:bg-surfaceAlt"
         >
-          <Ionicons name="chevron-back" size={22} color={colors.ink} />
+          <Icon name="chevron-back" size={22} color={colors.ink} />
         </Pressable>
         <View>
           <Text className="text-base font-black tracking-tight text-ink">{title}</Text>
@@ -393,10 +393,10 @@ function GameTopBar({ title, subtitle, balance }: { title: string; subtitle?: st
         </View>
       </View>
       <View className="flex-row items-center gap-1 rounded-pill border border-gold-600/30 bg-gold-500/15 py-1.5 pl-2 pr-1.5">
-        <Ionicons name="wallet" size={14} color={colors.gold700} />
+        <Icon name="wallet" size={14} color={colors.gold700} />
         <Text className="text-[11px] font-black text-ink">{formatBDT(balance)}</Text>
         <View className="h-5 w-5 items-center justify-center rounded-full bg-gold-500">
-          <Ionicons name="add" size={14} color={colors.ink} />
+          <Icon name="add" size={14} color={colors.ink} />
         </View>
       </View>
     </View>
@@ -429,7 +429,7 @@ function BetControls({
           onPress={() => onChange(amount - step)}
           className="h-11 w-11 items-center justify-center rounded-xl border border-divider bg-surface active:opacity-80"
         >
-          <Ionicons name="remove" size={18} color={colors.ink} />
+          <Icon name="remove" size={18} color={colors.ink} />
         </Pressable>
         <View className="flex-1 flex-row items-center justify-center rounded-xl border border-divider bg-surface py-3">
           <Text className="text-lg font-black text-ink">{formatBDT(amount)}</Text>
@@ -438,7 +438,7 @@ function BetControls({
           onPress={() => onChange(amount + step)}
           className="h-11 w-11 items-center justify-center rounded-xl border border-divider bg-surface active:opacity-80"
         >
-          <Ionicons name="add" size={18} color={colors.ink} />
+          <Icon name="add" size={18} color={colors.ink} />
         </Pressable>
       </View>
       <View className="mt-2.5 flex-row gap-2">
@@ -492,7 +492,7 @@ function ResultsStrip({ items }: { items: HistoryItem[] }) {
 function LoadingBoard() {
   return (
     <View className="items-center justify-center rounded-2xl border border-divider bg-surface py-16">
-      <Ionicons name="hourglass-outline" size={30} color={colors.gold700} />
+      <Icon name="hourglass-outline" size={30} color={colors.gold700} />
       <Text className="mt-3 text-sm font-bold text-ink-soft">Loading game...</Text>
       <Text className="mt-1 text-xs text-ink-mute">গেম লোড হচ্ছে...</Text>
     </View>
@@ -503,7 +503,7 @@ function UnavailableBoard() {
   return (
     <View className="items-center justify-center rounded-2xl border border-gold-600/25 bg-surface px-6 py-14">
       <View className="h-16 w-16 items-center justify-center rounded-full bg-gold-500/15">
-        <Ionicons name="pause-circle" size={30} color={colors.gold700} />
+        <Icon name="pause-circle" size={30} color={colors.gold700} />
       </View>
       <Text className="mt-4 text-center text-base font-black text-ink">Coming soon</Text>
       <Text className="mt-1.5 text-center text-sm text-ink-soft">শীঘ্রই আসছে</Text>

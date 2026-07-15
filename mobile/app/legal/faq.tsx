@@ -5,8 +5,8 @@
 
 import { useState } from 'react';
 import { LayoutAnimation, Platform, Pressable, Text, UIManager, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@/components/ui';
+import { Icon } from '@/components/ui/Icon';
 import { colors } from '@/lib/theme';
 import { cn } from '@/lib/cn';
 import { LegalHeader } from './index';
@@ -91,7 +91,7 @@ export default function FaqScreen() {
                     open ? 'bg-gold-500' : 'bg-surfaceAlt',
                   )}
                 >
-                  <Ionicons
+                  <Icon
                     name={open ? 'remove' : 'add'}
                     size={18}
                     color={open ? colors.ink : colors.inkSoft}

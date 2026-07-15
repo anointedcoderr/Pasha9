@@ -9,15 +9,15 @@
 
 import { useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, Share, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { Screen, Gradient, StatRow, Badge, EmptyState, type BadgeVariant } from '@/components/ui';
+import { Icon } from '@/components/ui/Icon';
 import { AppHeader } from '@/components/AppHeader';
 import { ApiError } from '@/lib/api/client';
 import { useReferralOverview, useClaimReferral } from '@/lib/api/referral';
 import { formatBDT } from '@/lib/format';
 import { gradients, colors } from '@/lib/theme';
 
-const STEPS: { icon: keyof typeof Ionicons.glyphMap; title: string; body: string }[] = [
+const STEPS: { icon: string; title: string; body: string }[] = [
   { icon: 'share-social', title: 'Share your code', body: 'Send your referral code or link to friends.' },
   { icon: 'person-add', title: 'They join and deposit', body: 'Your friend signs up and makes a first deposit.' },
   { icon: 'cash', title: 'You both earn', body: 'Earn a commission on every active friend.' },
@@ -114,7 +114,7 @@ export default function ReferralScreen() {
             <Text className="text-2xl font-black tracking-widest" style={{ color: colors.gold300 }}>
               {d.referralCode || '--'}
             </Text>
-            <Ionicons name="qr-code-outline" size={22} color={colors.gold300} />
+            <Icon name="qr-code-outline" size={22} color={colors.gold300} />
           </View>
 
           <View className="mt-3 flex-row gap-2">
@@ -125,14 +125,14 @@ export default function ReferralScreen() {
               className="relative flex-1 flex-row items-center justify-center gap-2 overflow-hidden rounded-pill py-3 active:opacity-90"
             >
               <Gradient colors={gradients.gold} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} radius={999} />
-              <Ionicons name="share-social-outline" size={16} color={colors.ink} />
+              <Icon name="share-social-outline" size={16} color={colors.ink} />
               <Text className="text-sm font-extrabold text-ink">Share invite</Text>
             </Pressable>
             <Pressable
               onPress={() => onShare(d.referralCode)}
               className="flex-1 flex-row items-center justify-center gap-2 rounded-pill border border-white/15 bg-white/10 py-3 active:opacity-80"
             >
-              <Ionicons name="pricetag-outline" size={16} color={colors.gold300} />
+              <Icon name="pricetag-outline" size={16} color={colors.gold300} />
               <Text className="text-sm font-bold text-white">Share code</Text>
             </Pressable>
           </View>
@@ -174,7 +174,7 @@ export default function ReferralScreen() {
             <ActivityIndicator color={colors.ink} />
           ) : (
             <>
-              <Ionicons name="wallet-outline" size={16} color={colors.ink} />
+              <Icon name="wallet-outline" size={16} color={colors.ink} />
               <Text className="text-sm font-extrabold text-ink">
                 {claimable > 0 ? 'Claim to wallet' : 'Nothing to claim'}
               </Text>
@@ -211,7 +211,7 @@ export default function ReferralScreen() {
                 <Text className="text-sm font-bold text-ink">{step.title}</Text>
                 <Text className="text-[11px] text-ink-mute">{step.body}</Text>
               </View>
-              <Ionicons name={step.icon} size={18} color={colors.gold700} />
+              <Icon name={step.icon} size={18} color={colors.gold700} />
             </View>
           ))}
         </View>

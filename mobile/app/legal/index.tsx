@@ -5,13 +5,13 @@
 // of the app: an icon tile, a title, a short description, and a chevron.
 
 import { Pressable, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Screen, Card } from '@/components/ui';
+import { Icon } from '@/components/ui/Icon';
 import { colors } from '@/lib/theme';
 import { cn } from '@/lib/cn';
 
-type IconName = keyof typeof Ionicons.glyphMap;
+type IconName = string;
 
 interface HubLink {
   route: string;
@@ -82,7 +82,7 @@ export default function LegalHubScreen() {
           <Card key={l.route} padded={false} onPress={() => router.push(l.route)}>
             <View className="flex-row items-center gap-3 p-3.5">
               <View className={cn('h-11 w-11 items-center justify-center rounded-xl', l.tint)}>
-                <Ionicons name={l.icon} size={20} color={l.iconColor} />
+                <Icon name={l.icon} size={20} color={l.iconColor} />
               </View>
               <View className="flex-1">
                 <Text className="text-sm font-extrabold text-ink">{l.title}</Text>
@@ -90,7 +90,7 @@ export default function LegalHubScreen() {
                   {l.subtitle}
                 </Text>
               </View>
-              <Ionicons name="chevron-forward" size={18} color={colors.inkMute} />
+              <Icon name="chevron-forward" size={18} color={colors.inkMute} />
             </View>
           </Card>
         ))}
@@ -100,7 +100,7 @@ export default function LegalHubScreen() {
       <Card onPress={() => router.push('/legal/support')} className="border-gold-600/25 bg-gold-500/10">
         <View className="flex-row items-center gap-3">
           <View className="h-11 w-11 items-center justify-center rounded-xl bg-gold-500">
-            <Ionicons name="headset-outline" size={20} color={colors.ink} />
+            <Icon name="headset-outline" size={20} color={colors.ink} />
           </View>
           <View className="flex-1">
             <Text className="text-sm font-extrabold text-ink">Need a hand right now?</Text>
@@ -108,7 +108,7 @@ export default function LegalHubScreen() {
               Live chat and Telegram reply in minutes.
             </Text>
           </View>
-          <Ionicons name="chevron-forward" size={18} color={colors.gold700} />
+          <Icon name="chevron-forward" size={18} color={colors.gold700} />
         </View>
       </Card>
 
@@ -129,7 +129,7 @@ export function LegalHeader({ title }: { title: string }) {
         hitSlop={8}
         className="h-9 w-9 items-center justify-center rounded-xl active:bg-surfaceAlt"
       >
-        <Ionicons name="chevron-back" size={22} color={colors.ink} />
+        <Icon name="chevron-back" size={22} color={colors.ink} />
       </Pressable>
       <Text className="text-lg font-black text-ink" numberOfLines={1}>
         {title}

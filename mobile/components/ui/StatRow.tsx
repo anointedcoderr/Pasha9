@@ -17,11 +17,11 @@
 //   ]} />
 
 import { Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Icon } from './Icon';
 import { colors } from '@/lib/theme';
 import { cn } from '@/lib/cn';
 
-type IconName = keyof typeof Ionicons.glyphMap;
+type IconName = string;
 type ValueTone = 'ink' | 'gold' | 'green' | 'blue';
 
 export interface StatItem {
@@ -63,12 +63,9 @@ export function StatRow({ items, tone = 'light', className }: StatRowProps) {
           )}
         >
           {item.icon ? (
-            <Ionicons
-              name={item.icon}
-              size={16}
-              color={dark ? colors.gold300 : colors.gold600}
-              style={{ marginBottom: 2 }}
-            />
+            <View style={{ marginBottom: 2 }}>
+              <Icon name={item.icon} size={16} color={dark ? colors.gold300 : colors.gold600} />
+            </View>
           ) : null}
           <Text
             className="text-base font-black"

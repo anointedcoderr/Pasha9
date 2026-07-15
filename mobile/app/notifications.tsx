@@ -9,9 +9,9 @@
 // state, and pull-to-refresh are all handled.
 
 import { RefreshControl, Pressable, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Screen, EmptyState } from '@/components/ui';
+import { Icon } from '@/components/ui/Icon';
 import { StackScreenHeader } from '@/components/StackScreenHeader';
 import {
   useNotifications,
@@ -72,7 +72,7 @@ export default function NotificationsScreen() {
           markAll.isPending && 'opacity-60',
         )}
       >
-        <Ionicons name="checkmark-done" size={14} color={colors.gold700} />
+        <Icon name="checkmark-done" size={14} color={colors.gold700} />
         <Text className="text-[11px] font-bold text-gold-700">Mark all</Text>
       </Pressable>
     ) : undefined;
@@ -170,7 +170,7 @@ function NotificationRow({
           unread ? 'bg-gold-500/15' : 'bg-surfaceAlt',
         )}
       >
-        <Ionicons
+        <Icon
           name="notifications"
           size={18}
           color={unread ? colors.gold700 : colors.inkMute}

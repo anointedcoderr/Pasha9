@@ -11,7 +11,7 @@
 
 import { useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Icon } from '@/components/ui/Icon';
 import { useRouter } from 'expo-router';
 import {
   Screen,
@@ -31,7 +31,7 @@ import {
 import { formatBDT } from '@/lib/format';
 import { colors, gradients } from '@/lib/theme';
 
-const PERKS: { icon: keyof typeof Ionicons.glyphMap; label: string }[] = [
+const PERKS: { icon: string; label: string }[] = [
   { icon: 'cash-outline', label: 'Lifetime revenue share' },
   { icon: 'time-outline', label: 'Weekly on-time payouts' },
   { icon: 'stats-chart-outline', label: 'Real-time dashboard' },
@@ -96,7 +96,7 @@ function AffiliateBody({ data }: { data: AffiliateOverview }) {
             {PERKS.map((p) => (
               <View key={p.label} className="flex-row items-center gap-2">
                 <View className="h-6 w-6 items-center justify-center rounded-full bg-gold-500/20">
-                  <Ionicons name={p.icon} size={13} color={colors.gold300} />
+                  <Icon name={p.icon} size={13} color={colors.gold300} />
                 </View>
                 <Text className="text-[13px] font-medium text-white/85">{p.label}</Text>
               </View>
@@ -185,7 +185,7 @@ function PartnerDashboard({ data, onTerms }: { data: AffiliateOverview; onTerms:
         className="flex-row items-center justify-center gap-1.5 rounded-pill border border-divider bg-paper py-3 active:bg-surfaceAlt"
       >
         <Text className="text-sm font-bold text-ink-soft">Program terms</Text>
-        <Ionicons name="chevron-forward" size={14} color={colors.inkMute} />
+        <Icon name="chevron-forward" size={14} color={colors.inkMute} />
       </Pressable>
     </>
   );
@@ -195,7 +195,7 @@ function PendingCard({ data }: { data: AffiliateOverview }) {
   return (
     <View className="items-center rounded-2xl border border-divider bg-paper p-6 shadow-sm shadow-black/5">
       <View className="h-14 w-14 items-center justify-center rounded-2xl bg-gold-500/15">
-        <Ionicons name="hourglass-outline" size={26} color={colors.gold700} />
+        <Icon name="hourglass-outline" size={26} color={colors.gold700} />
       </View>
       <Text className="mt-3 text-center text-base font-extrabold text-ink">Application under review</Text>
       <Text className="mt-1 max-w-[280px] text-center text-sm text-ink-mute">
@@ -324,7 +324,7 @@ function BackHeader({ title }: { title: string }) {
         hitSlop={8}
         className="h-9 w-9 items-center justify-center rounded-xl active:bg-surfaceAlt"
       >
-        <Ionicons name="chevron-back" size={22} color={colors.ink} />
+        <Icon name="chevron-back" size={22} color={colors.ink} />
       </Pressable>
       <Text className="text-lg font-black text-ink">{title}</Text>
     </View>

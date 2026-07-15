@@ -10,7 +10,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Icon } from '@/components/ui/Icon';
 import { useRouter } from 'expo-router';
 import { Screen, Card, TextField, PrimaryButton, Gradient } from '@/components/ui';
 import { StackScreenHeader } from '@/components/StackScreenHeader';
@@ -27,7 +27,7 @@ import { formatBDT } from '@/lib/format';
 import { gradients, colors } from '@/lib/theme';
 import { cn } from '@/lib/cn';
 
-type IconName = keyof typeof Ionicons.glyphMap;
+type IconName = string;
 
 const QUICK_AMOUNTS = [500, 1000, 2000, 5000];
 
@@ -149,7 +149,7 @@ export default function WithdrawScreen() {
       >
         <Card className="items-center gap-3 py-8">
           <View className="h-16 w-16 items-center justify-center rounded-full bg-newg/15">
-            <Ionicons name="checkmark-circle" size={38} color={colors.newg} />
+            <Icon name="checkmark-circle" size={38} color={colors.newg} />
           </View>
           <Text className="text-center text-lg font-black text-ink">Withdrawal request submitted</Text>
           <Text className="max-w-[300px] text-center text-sm text-ink-mute">
@@ -182,7 +182,7 @@ export default function WithdrawScreen() {
         <View className="border-t border-divider bg-paper px-4 pb-7 pt-3">
           {submitError ? (
             <View className="mb-2 flex-row items-start gap-2 rounded-xl border border-hot/30 bg-hot/10 px-3 py-2">
-              <Ionicons name="alert-circle" size={16} color={colors.hot} />
+              <Icon name="alert-circle" size={16} color={colors.hot} />
               <Text className="flex-1 text-xs font-medium text-hot">{submitError}</Text>
             </View>
           ) : null}
@@ -195,7 +195,7 @@ export default function WithdrawScreen() {
             onPress={submit}
           />
           <View className="mt-2 flex-row items-center justify-center gap-1.5">
-            <Ionicons name="time-outline" size={12} color={colors.inkMute} />
+            <Icon name="time-outline" size={12} color={colors.inkMute} />
             <Text className="text-[11px] text-ink-mute">Payouts are reviewed before they clear</Text>
           </View>
         </View>
@@ -220,7 +220,7 @@ export default function WithdrawScreen() {
             ) : null}
           </View>
           <View className="h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/5">
-            <Ionicons name="cash-outline" size={22} color={colors.neon} />
+            <Icon name="cash-outline" size={22} color={colors.neon} />
           </View>
         </View>
       </View>
@@ -229,7 +229,7 @@ export default function WithdrawScreen() {
       {turnoverBlocked && eligibility ? (
         <View className="gap-2 rounded-2xl border-l-4 border-hot bg-hot/10 p-4">
           <View className="flex-row items-center gap-2">
-            <Ionicons name="alert-circle" size={18} color={colors.hot} />
+            <Icon name="alert-circle" size={18} color={colors.hot} />
             <Text className="flex-1 text-sm font-bold text-ink">Turnover not complete yet</Text>
           </View>
           <Text className="text-xs text-ink-soft">
@@ -255,7 +255,7 @@ export default function WithdrawScreen() {
           </View>
         ) : methodsQuery.isError ? (
           <Card className="flex-row items-center gap-2">
-            <Ionicons name="cloud-offline" size={18} color={colors.hot} />
+            <Icon name="cloud-offline" size={18} color={colors.hot} />
             <Text className="flex-1 text-sm text-ink-soft">Could not load payout methods.</Text>
             <Pressable onPress={() => methodsQuery.refetch()} hitSlop={8}>
               <Text className="text-sm font-bold text-gold-700">Retry</Text>
@@ -284,14 +284,14 @@ export default function WithdrawScreen() {
                     className="h-11 w-11 items-center justify-center rounded-xl"
                     style={{ backgroundColor: brand.color }}
                   >
-                    <Ionicons name={brand.icon} size={20} color="#FFFFFF" />
+                    <Icon name={brand.icon} size={20} color="#FFFFFF" />
                   </View>
                   <Text className="text-center text-xs font-extrabold text-ink" numberOfLines={1}>
                     {m.name}
                   </Text>
                   {active ? (
                     <View className="absolute right-2 top-2 h-4 w-4 items-center justify-center rounded-full bg-gold-500">
-                      <Ionicons name="checkmark" size={11} color={colors.ink} />
+                      <Icon name="checkmark" size={11} color={colors.ink} />
                     </View>
                   ) : null}
                 </Pressable>

@@ -11,12 +11,12 @@
 //   size    number          circle diameter in px (default 58)
 
 import { Pressable, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Icon } from './Icon';
 import { Gradient } from './Gradient';
 import { cn } from '@/lib/cn';
 import type { CategoryTone } from '@/lib/mock/categories';
 
-type IconName = keyof typeof Ionicons.glyphMap;
+type IconName = string;
 
 const TONE_GRADIENT: Record<CategoryTone, readonly string[]> = {
   gold: ['#FFE066', '#FFCC00', '#F5B400'],
@@ -52,7 +52,7 @@ export function CategoryCircle({
         className="relative items-center justify-center overflow-hidden"
       >
         <Gradient colors={TONE_GRADIENT[tone]} radius={size / 2} />
-        <Ionicons name={icon} size={size * 0.42} color="#FFFFFF" />
+        <Icon name={icon} size={size * 0.42} color="#FFFFFF" />
       </View>
       <Text className="mt-1.5 text-[11px] font-semibold text-ink-soft" numberOfLines={1}>
         {label}

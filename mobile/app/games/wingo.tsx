@@ -17,7 +17,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Icon } from '@/components/ui/Icon';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { Screen, ChipToggle, Gradient, TextField } from '@/components/ui';
@@ -359,7 +359,7 @@ export default function WingoScreen() {
                 onPress={addRandom}
                 className="h-11 flex-row items-center gap-1.5 rounded-xl border border-gold-300/40 bg-gold-500/10 px-3.5 active:opacity-80"
               >
-                <Ionicons name="shuffle" size={15} color={colors.gold300} />
+                <Icon name="shuffle" size={15} color={colors.gold300} />
                 <Text className="text-xs font-black uppercase tracking-wider text-gold-300">Random</Text>
               </Pressable>
             </View>
@@ -500,17 +500,17 @@ function GameHeader({ onBack, balance }: { onBack: () => void; balance: number }
           hitSlop={8}
           className="h-9 w-9 items-center justify-center rounded-xl active:bg-white/10"
         >
-          <Ionicons name="chevron-back" size={22} color="#ffffff" />
+          <Icon name="chevron-back" size={22} color="#ffffff" />
         </Pressable>
         <Text className="text-lg font-black text-white">Pasha WinGo</Text>
       </View>
       <View className="flex-row items-center gap-2">
         <View className="flex-row items-center gap-1.5 rounded-pill border border-gold-600/40 bg-gold-500/15 px-2.5 py-1.5">
-          <Ionicons name="wallet" size={13} color={colors.gold300} />
+          <Icon name="wallet" size={13} color={colors.gold300} />
           <Text className="text-[11px] font-black text-white">{formatBDT(balance)}</Text>
         </View>
         <View className="flex-row items-center gap-1 rounded-pill border border-newg/40 bg-newg/10 px-2 py-1.5">
-          <Ionicons name="shield-checkmark" size={12} color={colors.neon} />
+          <Icon name="shield-checkmark" size={12} color={colors.neon} />
           <Text className="text-[10px] font-bold uppercase text-white">Fair</Text>
         </View>
       </View>
@@ -523,7 +523,7 @@ function GameHeader({ onBack, balance }: { onBack: () => void; balance: number }
 function LoadingBoard() {
   return (
     <View className="items-center justify-center rounded-2xl border border-white/10 bg-black/30 py-16">
-      <Ionicons name="hourglass-outline" size={30} color={colors.gold300} />
+      <Icon name="hourglass-outline" size={30} color={colors.gold300} />
       <Text className="mt-3 text-sm font-bold text-dink-mid">Loading live round...</Text>
       <Text className="mt-1 text-xs text-dink-lo">লাইভ রাউন্ড লোড হচ্ছে...</Text>
     </View>
@@ -534,7 +534,7 @@ function UnavailableBoard() {
   return (
     <View className="items-center justify-center rounded-2xl border border-gold-600/25 bg-black/30 px-6 py-14">
       <View className="h-16 w-16 items-center justify-center rounded-full bg-gold-500/15">
-        <Ionicons name="pause-circle" size={30} color={colors.gold300} />
+        <Icon name="pause-circle" size={30} color={colors.gold300} />
       </View>
       <Text className="mt-4 text-center text-base font-black text-white">WinGo is temporarily unavailable</Text>
       <Text className="mt-1.5 text-center text-sm text-dink-mid">উইনগো সাময়িকভাবে বন্ধ আছে</Text>
@@ -614,7 +614,7 @@ function GlossyBar({
       ) : null}
       {selected ? (
         <View className="absolute right-1.5 top-1.5 h-4 w-4 items-center justify-center rounded-full bg-gold-300">
-          <Ionicons name="checkmark" size={11} color="#3a2800" />
+          <Icon name="checkmark" size={11} color="#3a2800" />
         </View>
       ) : null}
     </Pressable>
@@ -653,7 +653,7 @@ function BetSlip({
         <Text className="text-[11px] font-bold uppercase tracking-widest text-gold-300">Bet slip</Text>
         {hasLines ? (
           <Pressable onPress={onClear} hitSlop={6} className="flex-row items-center gap-1 active:opacity-70">
-            <Ionicons name="trash" size={13} color={colors.dinkLo} />
+            <Icon name="trash" size={13} color={colors.dinkLo} />
             <Text className="text-[11px] font-bold text-dink-lo">Clear</Text>
           </Pressable>
         ) : null}
@@ -683,7 +683,7 @@ function BetSlip({
               </View>
               <Text className="text-xs font-bold text-dink-mid">{formatBDT(l.stake * l.quantity)}</Text>
               <Pressable onPress={() => onRemove(l.key)} hitSlop={6} className="active:opacity-70">
-                <Ionicons name="close-circle" size={18} color={colors.dinkLo} />
+                <Icon name="close-circle" size={18} color={colors.dinkLo} />
               </Pressable>
             </View>
           ))}
@@ -699,7 +699,7 @@ function BetSlip({
             notice.type === 'success' ? 'border-newg/40 bg-newg/10' : 'border-hot/40 bg-hot/10',
           )}
         >
-          <Ionicons
+          <Icon
             name={notice.type === 'success' ? 'checkmark-circle' : 'alert-circle'}
             size={15}
             color={notice.type === 'success' ? colors.newg : colors.hot}
@@ -726,7 +726,7 @@ function BetSlip({
           >
             <Gradient colors={['#FFE066', '#FFCC00', '#F5B400']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} radius={999} />
             <View className="flex-row items-center gap-2">
-              <Ionicons name={placing ? 'hourglass' : 'rocket'} size={16} color={colors.ink} />
+              <Icon name={placing ? 'hourglass' : 'rocket'} size={16} color={colors.ink} />
               <Text className="text-sm font-black uppercase tracking-wider text-ink">
                 {placing ? 'Placing...' : locked ? 'Round locked' : 'Place bet'}
               </Text>
@@ -751,7 +751,7 @@ function TabButton({
   onPress,
 }: {
   label: string;
-  icon: keyof typeof Ionicons.glyphMap;
+  icon: string;
   active: boolean;
   onPress: () => void;
 }) {
@@ -763,7 +763,7 @@ function TabButton({
         active ? 'bg-gold-500/20' : '',
       )}
     >
-      <Ionicons name={icon} size={13} color={active ? colors.gold300 : colors.dinkLo} />
+      <Icon name={icon} size={13} color={active ? colors.gold300 : colors.dinkLo} />
       <Text
         className={cn('text-[11px] font-bold uppercase tracking-wide', active ? 'text-gold-300' : 'text-dink-lo')}
         numberOfLines={1}

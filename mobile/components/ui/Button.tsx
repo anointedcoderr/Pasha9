@@ -15,12 +15,12 @@
 //   className  string                     extra classes on the pressable
 
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Icon } from './Icon';
 import { Gradient } from './Gradient';
 import { gradients, colors } from '@/lib/theme';
 import { cn } from '@/lib/cn';
 
-type IconName = keyof typeof Ionicons.glyphMap;
+type IconName = string;
 
 export interface ButtonProps {
   label: string;
@@ -68,7 +68,7 @@ export function PrimaryButton({
         <ActivityIndicator color={colors.ink} />
       ) : (
         <View className="flex-row items-center gap-2">
-          {icon ? <Ionicons name={icon} size={s.icon} color={colors.ink} /> : null}
+          {icon ? <Icon name={icon} size={s.icon} color={colors.ink} /> : null}
           <Text className={cn('font-extrabold text-ink', s.text)}>{label}</Text>
         </View>
       )}
@@ -104,7 +104,7 @@ export function GhostButton({
         <ActivityIndicator color={colors.inkSoft} />
       ) : (
         <View className="flex-row items-center gap-2">
-          {icon ? <Ionicons name={icon} size={s.icon} color={colors.inkSoft} /> : null}
+          {icon ? <Icon name={icon} size={s.icon} color={colors.inkSoft} /> : null}
           <Text className={cn('font-bold text-ink-soft', s.text)}>{label}</Text>
         </View>
       )}

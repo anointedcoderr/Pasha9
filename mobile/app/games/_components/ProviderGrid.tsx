@@ -17,7 +17,7 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Icon } from '@/components/ui/Icon';
 import { useRouter } from 'expo-router';
 import { Screen, GameTile, ChipToggle, TextField, EmptyState } from '@/components/ui';
 import { formatBDT } from '@/lib/format';
@@ -283,7 +283,7 @@ export function ProviderGrid({
                   {gamesQuery.isFetchingNextPage ? (
                     <ActivityIndicator color={colors.gold700} size="small" />
                   ) : (
-                    <Ionicons name="chevron-down" size={16} color={colors.gold700} />
+                    <Icon name="chevron-down" size={16} color={colors.gold700} />
                   )}
                   <Text className="text-xs font-black uppercase tracking-wider text-gold-700">
                     {gamesQuery.isFetchingNextPage
@@ -310,7 +310,7 @@ function GridHeader({ title, count, balance }: { title: string; count: number; b
           hitSlop={8}
           className="h-9 w-9 items-center justify-center rounded-xl active:bg-surfaceAlt"
         >
-          <Ionicons name="chevron-back" size={22} color={colors.ink} />
+          <Icon name="chevron-back" size={22} color={colors.ink} />
         </Pressable>
         <View>
           <Text className="text-base font-black tracking-tight text-ink">{title}</Text>
@@ -321,10 +321,10 @@ function GridHeader({ title, count, balance }: { title: string; count: number; b
         onPress={() => router.push('/deposit')}
         className="flex-row items-center gap-1 rounded-pill border border-gold-600/30 bg-gold-500/15 py-1.5 pl-2 pr-1.5 active:opacity-90"
       >
-        <Ionicons name="wallet" size={14} color={colors.gold700} />
+        <Icon name="wallet" size={14} color={colors.gold700} />
         <Text className="text-[11px] font-black text-ink">{formatBDT(balance)}</Text>
         <View className="h-5 w-5 items-center justify-center rounded-full bg-gold-500">
-          <Ionicons name="add" size={14} color={colors.ink} />
+          <Icon name="add" size={14} color={colors.ink} />
         </View>
       </Pressable>
     </View>

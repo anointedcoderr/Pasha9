@@ -12,13 +12,13 @@
 //              shows a slim back header (default 'tab')
 
 import { Pressable, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Icon } from '@/components/ui/Icon';
 import { useRouter } from 'expo-router';
 import { Screen, EmptyState } from '@/components/ui';
 import { AppHeader } from '@/components/AppHeader';
 import { colors } from '@/lib/theme';
 
-type IconName = keyof typeof Ionicons.glyphMap;
+type IconName = string;
 
 export interface ComingSoonProps {
   title: string;
@@ -45,7 +45,7 @@ export function ComingSoon({
           hitSlop={8}
           className="h-9 w-9 items-center justify-center rounded-xl active:bg-surfaceAlt"
         >
-          <Ionicons name="chevron-back" size={22} color={colors.ink} />
+          <Icon name="chevron-back" size={22} color={colors.ink} />
         </Pressable>
         <Text className="text-lg font-black text-ink">{title}</Text>
       </View>

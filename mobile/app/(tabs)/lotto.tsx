@@ -12,9 +12,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Pressable, RefreshControl, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Screen, Gradient, Badge, PrimaryButton, EmptyState } from '@/components/ui';
+import { Icon } from '@/components/ui/Icon';
 import { AppHeader } from '@/components/AppHeader';
 import { useLottoMe, useTransferLotto, MIN_LOTTO_TRANSFER, type LottoMe } from '@/lib/api/lotto';
 import { ApiError } from '@/lib/api/client';
@@ -272,7 +272,7 @@ function ProgressCard({ me }: { me: LottoMe }) {
       <View className="mb-1 flex-row items-center justify-between">
         <Text className="text-base font-extrabold text-ink">Earn tickets</Text>
         <View className="flex-row items-center gap-1.5">
-          <Ionicons name="ticket" size={14} color={colors.gold700} />
+          <Icon name="ticket" size={14} color={colors.gold700} />
           <Text className="text-sm font-black text-gold-700">{earnedTickets}</Text>
         </View>
       </View>
@@ -321,7 +321,7 @@ function StatsGrid({ me }: { me: LottoMe }) {
           key={c.label}
           className="min-w-[45%] flex-1 rounded-2xl border border-divider bg-paper p-3.5 shadow-sm shadow-black/5"
         >
-          <Ionicons name={c.icon} size={18} color={colors.gold700} />
+          <Icon name={c.icon} size={18} color={colors.gold700} />
           <Text className="mt-2 text-lg font-black text-ink" numberOfLines={1}>
             {c.value}
           </Text>
@@ -336,7 +336,7 @@ function ComingSoonPick({ drawTimeLabel }: { drawTimeLabel: string }) {
   return (
     <View className="rounded-2xl border border-dashed border-gold-600/40 bg-gold-500/5 p-4">
       <View className="flex-row items-center gap-2">
-        <Ionicons name="color-wand-outline" size={18} color={colors.gold700} />
+        <Icon name="color-wand-outline" size={18} color={colors.gold700} />
         <Text className="text-sm font-extrabold text-ink">Pick your own numbers</Text>
         <Badge label="COMING SOON" variant="gold" />
       </View>
@@ -354,7 +354,7 @@ function LinkTile({
   hint,
   onPress,
 }: {
-  icon: keyof typeof Ionicons.glyphMap;
+  icon: string;
   label: string;
   hint: string;
   onPress: () => void;
@@ -365,7 +365,7 @@ function LinkTile({
       className="flex-1 flex-row items-center gap-3 rounded-2xl border border-divider bg-paper p-3.5 shadow-sm shadow-black/5 active:opacity-90"
     >
       <View className="h-10 w-10 items-center justify-center rounded-xl bg-gold-500/15">
-        <Ionicons name={icon} size={20} color={colors.gold700} />
+        <Icon name={icon} size={20} color={colors.gold700} />
       </View>
       <View className="flex-1">
         <Text className="text-sm font-extrabold text-ink" numberOfLines={1}>
@@ -375,7 +375,7 @@ function LinkTile({
           {hint}
         </Text>
       </View>
-      <Ionicons name="chevron-forward" size={16} color={colors.inkMute} />
+      <Icon name="chevron-forward" size={16} color={colors.inkMute} />
     </Pressable>
   );
 }

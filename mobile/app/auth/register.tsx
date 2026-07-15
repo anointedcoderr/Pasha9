@@ -16,9 +16,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { TextField, PrimaryButton, Gradient } from '@/components/ui';
+import { Icon } from '@/components/ui/Icon';
 import { gradients, colors } from '@/lib/theme';
 import { cn } from '@/lib/cn';
 import { useAuth } from '@/store/auth';
@@ -72,7 +72,7 @@ export default function RegisterScreen() {
           hitSlop={8}
           className="h-10 w-10 items-center justify-center rounded-xl bg-white/5 active:bg-white/10"
         >
-          <Ionicons name="chevron-down" size={22} color="#ffffff" />
+          <Icon name="chevron-down" size={22} color="#ffffff" />
         </Pressable>
         <Text className="text-sm font-black text-white">Create account</Text>
         <View className="h-10 w-10" />
@@ -96,7 +96,7 @@ export default function RegisterScreen() {
           <View className="items-center">
             <View className="h-12 w-12 items-center justify-center overflow-hidden rounded-2xl">
               <Gradient colors={gradients.gold} radius={14} />
-              <Ionicons name="diamond" size={22} color={colors.ink} />
+              <Icon name="diamond" size={22} color={colors.ink} />
             </View>
             <Text className="mt-2.5 text-3xl font-black tracking-tight text-white">
               Join Pasha<Text style={{ color: colors.gold400 }}>9</Text>
@@ -154,7 +154,7 @@ export default function RegisterScreen() {
                     agreed ? 'border-gold-600 bg-gold-500' : 'border-divider bg-paper',
                   )}
                 >
-                  {agreed ? <Ionicons name="checkmark" size={14} color={colors.ink} /> : null}
+                  {agreed ? <Icon name="checkmark" size={14} color={colors.ink} /> : null}
                 </View>
                 <Text className="flex-1 text-xs leading-5 text-ink-soft">
                   I confirm I am 18 or older and agree to the{' '}
@@ -177,7 +177,7 @@ export default function RegisterScreen() {
 
               {error ? (
                 <View className="flex-row items-start gap-2 rounded-xl border border-hot/30 bg-hot/10 px-3 py-2.5">
-                  <Ionicons name="alert-circle" size={16} color={colors.hot} />
+                  <Icon name="alert-circle" size={16} color={colors.hot} />
                   <Text className="flex-1 text-xs font-semibold" style={{ color: colors.hot }}>
                     {error}
                   </Text>
@@ -203,7 +203,7 @@ export default function RegisterScreen() {
           </View>
 
           <View className="mt-6 flex-row items-center justify-center gap-1.5">
-            <Ionicons name="shield-checkmark-outline" size={13} color={colors.dinkLo} />
+            <Icon name="shield-checkmark-outline" size={13} color={colors.dinkLo} />
             <Text className="text-[11px] text-dink-lo">
               Your details stay private. 18+ only.
             </Text>

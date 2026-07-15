@@ -11,7 +11,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Icon } from '@/components/ui/Icon';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { Screen, Card, TextField, PrimaryButton } from '@/components/ui';
@@ -28,7 +28,7 @@ import { formatBDT } from '@/lib/format';
 import { colors } from '@/lib/theme';
 import { cn } from '@/lib/cn';
 
-type IconName = keyof typeof Ionicons.glyphMap;
+type IconName = string;
 
 const MIN_DEPOSIT = 100;
 const MAX_DEPOSIT = 500_000;
@@ -187,7 +187,7 @@ export default function DepositScreen() {
       >
         <Card className="items-center gap-3 py-8">
           <View className="h-16 w-16 items-center justify-center rounded-full bg-newg/15">
-            <Ionicons name="checkmark-circle" size={38} color={colors.newg} />
+            <Icon name="checkmark-circle" size={38} color={colors.newg} />
           </View>
           <Text className="text-center text-lg font-black text-ink">Deposit request submitted</Text>
           <Text className="max-w-[300px] text-center text-sm text-ink-mute">
@@ -220,7 +220,7 @@ export default function DepositScreen() {
         <View className="border-t border-divider bg-paper px-4 pb-7 pt-3">
           {submitError ? (
             <View className="mb-2 flex-row items-start gap-2 rounded-xl border border-hot/30 bg-hot/10 px-3 py-2">
-              <Ionicons name="alert-circle" size={16} color={colors.hot} />
+              <Icon name="alert-circle" size={16} color={colors.hot} />
               <Text className="flex-1 text-xs font-medium text-hot">{submitError}</Text>
             </View>
           ) : null}
@@ -233,7 +233,7 @@ export default function DepositScreen() {
             onPress={submit}
           />
           <View className="mt-2 flex-row items-center justify-center gap-1.5">
-            <Ionicons name="shield-checkmark" size={12} color={colors.inkMute} />
+            <Icon name="shield-checkmark" size={12} color={colors.inkMute} />
             <Text className="text-[11px] text-ink-mute">Requests are reviewed before crediting</Text>
           </View>
         </View>
@@ -243,7 +243,7 @@ export default function DepositScreen() {
       <Card className="flex-row items-center justify-between">
         <View className="flex-row items-center gap-2.5">
           <View className="h-9 w-9 items-center justify-center rounded-xl bg-gold-500/15">
-            <Ionicons name="wallet" size={18} color={colors.gold700} />
+            <Icon name="wallet" size={18} color={colors.gold700} />
           </View>
           <Text className="text-xs font-bold uppercase tracking-wider text-ink-mute">Current balance</Text>
         </View>
@@ -261,7 +261,7 @@ export default function DepositScreen() {
           </View>
         ) : methodsQuery.isError ? (
           <Card className="flex-row items-center gap-2">
-            <Ionicons name="cloud-offline" size={18} color={colors.hot} />
+            <Icon name="cloud-offline" size={18} color={colors.hot} />
             <Text className="flex-1 text-sm text-ink-soft">Could not load payment methods.</Text>
             <Pressable onPress={() => methodsQuery.refetch()} hitSlop={8}>
               <Text className="text-sm font-bold text-gold-700">Retry</Text>
@@ -292,14 +292,14 @@ export default function DepositScreen() {
                     className="h-11 w-11 items-center justify-center rounded-xl"
                     style={{ backgroundColor: brand.color }}
                   >
-                    <Ionicons name={brand.icon} size={20} color="#FFFFFF" />
+                    <Icon name={brand.icon} size={20} color="#FFFFFF" />
                   </View>
                   <Text className="text-center text-xs font-extrabold text-ink" numberOfLines={1}>
                     {m.name}
                   </Text>
                   {active ? (
                     <View className="absolute right-2 top-2 h-4 w-4 items-center justify-center rounded-full bg-gold-500">
-                      <Ionicons name="checkmark" size={11} color={colors.ink} />
+                      <Icon name="checkmark" size={11} color={colors.ink} />
                     </View>
                   ) : null}
                 </Pressable>
@@ -375,12 +375,12 @@ export default function DepositScreen() {
         <Text className="text-xs font-bold text-ink-soft">Payment screenshot (optional)</Text>
         {proofUrl ? (
           <View className="flex-row items-center gap-2 rounded-xl border border-newg/30 bg-newg/10 px-3 py-3">
-            <Ionicons name="checkmark-circle" size={18} color={colors.newg} />
+            <Icon name="checkmark-circle" size={18} color={colors.newg} />
             <Text className="flex-1 text-sm font-medium text-ink-soft" numberOfLines={1}>
               {proofName ?? 'Screenshot attached'}
             </Text>
             <Pressable onPress={clearProof} hitSlop={8}>
-              <Ionicons name="close-circle" size={18} color={colors.inkMute} />
+              <Icon name="close-circle" size={18} color={colors.inkMute} />
             </Pressable>
           </View>
         ) : (
@@ -395,7 +395,7 @@ export default function DepositScreen() {
             {uploading ? (
               <ActivityIndicator color={colors.inkMute} size="small" />
             ) : (
-              <Ionicons name="cloud-upload-outline" size={18} color={colors.inkMute} />
+              <Icon name="cloud-upload-outline" size={18} color={colors.inkMute} />
             )}
             <Text className="text-sm text-ink-mute">
               {uploading ? 'Uploading...' : 'Attach a screenshot (PNG, JPG, WEBP)'}

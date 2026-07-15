@@ -11,7 +11,6 @@
 
 import { useCallback, useRef, useState } from 'react';
 import { Alert, RefreshControl, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import {
   Screen,
@@ -21,6 +20,7 @@ import {
   EmptyState,
   type BadgeVariant,
 } from '@/components/ui';
+import { Icon } from '@/components/ui/Icon';
 import { StackScreenHeader } from '@/components/StackScreenHeader';
 import { useLottoMe, useClaimWinning, type LottoWinning } from '@/lib/api/lotto';
 import { ApiError } from '@/lib/api/client';
@@ -156,7 +156,7 @@ export default function MyWinningsScreen() {
                 </Text>
               </View>
               <View className="h-14 w-14 items-center justify-center rounded-2xl border border-gold-500/40 bg-white/5">
-                <Ionicons name="trophy" size={26} color={colors.gold300} />
+                <Icon name="trophy" size={26} color={colors.gold300} />
               </View>
             </View>
           </View>
@@ -172,7 +172,7 @@ export default function MyWinningsScreen() {
               >
                 <View className="flex-row items-center gap-3">
                   <View className="h-10 w-10 items-center justify-center rounded-xl bg-newg/15">
-                    <Ionicons name="sparkles" size={18} color={colors.newg} />
+                    <Icon name="sparkles" size={18} color={colors.newg} />
                   </View>
                   <View className="flex-1">
                     <Text className="text-sm font-extrabold text-ink">{prettyTier(w.prizeTier)}</Text>

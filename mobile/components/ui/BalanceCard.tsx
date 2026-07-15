@@ -12,13 +12,13 @@
 //   className   string
 
 import { Pressable, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Icon } from './Icon';
 import { Gradient } from './Gradient';
 import { gradients, colors } from '@/lib/theme';
 import { formatBDT } from '@/lib/format';
 import { cn } from '@/lib/cn';
 
-type IconName = keyof typeof Ionicons.glyphMap;
+type IconName = string;
 
 export interface BalanceCardProps {
   username: string;
@@ -54,7 +54,7 @@ export function BalanceCard({
           <View className="flex-row items-start gap-3 flex-1">
             <View className="relative h-11 w-11 items-center justify-center overflow-hidden rounded-2xl">
               <Gradient colors={gradients.gold} radius={16} />
-              <Ionicons name="sparkles" size={20} color={colors.ink} />
+              <Icon name="sparkles" size={20} color={colors.ink} />
             </View>
             <View className="flex-1">
               <Text className="text-xs font-semibold text-white/70">
@@ -76,7 +76,7 @@ export function BalanceCard({
             className="relative h-11 w-11 items-center justify-center overflow-hidden rounded-full border border-gold-500/40 active:opacity-80"
           >
             <View className="absolute inset-0 bg-white/5" />
-            <Ionicons name="disc" size={22} color={colors.gold300} />
+            <Icon name="disc" size={22} color={colors.gold300} />
           </Pressable>
         </View>
 
@@ -108,7 +108,7 @@ function BalanceAction({
       className="relative flex-1 flex-row items-center justify-center gap-1.5 overflow-hidden rounded-lg py-2.5 active:opacity-90"
     >
       {active ? <Gradient colors={gradients.gold} radius={8} /> : null}
-      <Ionicons name={icon} size={15} color={active ? colors.ink : colors.gold300} />
+      <Icon name={icon} size={15} color={active ? colors.ink : colors.gold300} />
       <Text className={cn('text-xs font-bold', active ? 'text-ink' : 'text-white/85')}>{label}</Text>
     </Pressable>
   );

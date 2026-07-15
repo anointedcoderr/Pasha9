@@ -12,7 +12,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { Image } from 'expo-image';
-import { Ionicons } from '@expo/vector-icons';
+import { Icon } from '@/components/ui/Icon';
 import { useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useQueryClient } from '@tanstack/react-query';
@@ -25,7 +25,7 @@ import { balanceQueryKey, bonusesQueryKey } from '@/lib/api/hooks';
 import { useSportsEvents, type SportEvent } from '@/lib/api/sports';
 import { useAuth } from '@/store/auth';
 
-type IconName = keyof typeof Ionicons.glyphMap;
+type IconName = string;
 
 interface Sport {
   key: string;
@@ -153,7 +153,7 @@ export default function SportsScreen() {
                 on ? 'border-gold-600 bg-gold-500' : 'border-divider bg-paper',
               )}
             >
-              <Ionicons name={s.icon} size={15} color={on ? colors.ink : colors.inkMute} />
+              <Icon name={s.icon} size={15} color={on ? colors.ink : colors.inkMute} />
               <Text className={cn('text-xs font-bold', on ? 'text-ink' : 'text-ink-soft')}>{s.label}</Text>
             </Pressable>
           );
@@ -168,7 +168,7 @@ export default function SportsScreen() {
         <View className="relative flex-row items-center gap-3 p-4">
           <View className="relative h-12 w-12 items-center justify-center overflow-hidden rounded-2xl">
             <Gradient colors={gradients.gold} radius={16} />
-            <Ionicons name={activeSport?.icon ?? 'football'} size={24} color={colors.ink} />
+            <Icon name={activeSport?.icon ?? 'football'} size={24} color={colors.ink} />
           </View>
           <View className="flex-1">
             <Text className="text-base font-black text-white">{activeSport?.label} matches</Text>
@@ -190,10 +190,10 @@ export default function SportsScreen() {
           failure or a missing link). */}
       {launchError ? (
         <View className="flex-row items-center gap-2.5 rounded-2xl border border-hot/40 bg-hot/10 px-3.5 py-3">
-          <Ionicons name="alert-circle" size={18} color={colors.hot} />
+          <Icon name="alert-circle" size={18} color={colors.hot} />
           <Text className="flex-1 text-xs font-medium text-ink">{launchError}</Text>
           <Pressable onPress={() => setLaunchError(null)} hitSlop={8}>
-            <Ionicons name="close" size={16} color={colors.inkMute} />
+            <Icon name="close" size={16} color={colors.inkMute} />
           </Pressable>
         </View>
       ) : null}
@@ -285,7 +285,7 @@ function EventCard({
           </View>
         ) : (
           <View className="flex-row items-center gap-1 rounded-pill bg-surfaceAlt px-2 py-0.5">
-            <Ionicons name="time-outline" size={11} color={colors.inkMute} />
+            <Icon name="time-outline" size={11} color={colors.inkMute} />
             <Text className="text-[10px] font-black uppercase tracking-wider text-ink-mute">
               {statusLabel(event.status)}
             </Text>
@@ -309,7 +309,7 @@ function EventCard({
         <View className="flex-row items-center justify-between px-3.5 pb-1">
           {kickoff ? (
             <View className="flex-row items-center gap-1">
-              <Ionicons name="calendar-outline" size={12} color={colors.inkMute} />
+              <Icon name="calendar-outline" size={12} color={colors.inkMute} />
               <Text className="text-[11px] font-semibold text-ink-mute">{kickoff}</Text>
             </View>
           ) : (
@@ -332,14 +332,14 @@ function EventCard({
             className="relative flex-row items-center justify-center gap-1.5 overflow-hidden rounded-xl py-2.5 active:opacity-90"
           >
             <Gradient colors={gradients.gold} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} radius={12} />
-            <Ionicons name={launching ? 'hourglass' : 'open-outline'} size={15} color={colors.ink} />
+            <Icon name={launching ? 'hourglass' : 'open-outline'} size={15} color={colors.ink} />
             <Text className="text-xs font-black uppercase tracking-wider text-ink">
               {launching ? 'Opening...' : isLive ? 'Bet now' : 'Open'}
             </Text>
           </Pressable>
         ) : (
           <View className="flex-row items-center justify-center gap-1.5 rounded-xl border border-divider bg-surface py-2.5">
-            <Ionicons name="lock-closed-outline" size={14} color={colors.inkMute} />
+            <Icon name="lock-closed-outline" size={14} color={colors.inkMute} />
             <Text className="text-xs font-bold uppercase tracking-wider text-ink-mute">Not available yet</Text>
           </View>
         )}
@@ -385,7 +385,7 @@ function BackHeader({ title, subtitle }: { title: string; subtitle?: string }) {
         hitSlop={8}
         className="h-9 w-9 items-center justify-center rounded-xl active:bg-surfaceAlt"
       >
-        <Ionicons name="chevron-back" size={22} color={colors.ink} />
+        <Icon name="chevron-back" size={22} color={colors.ink} />
       </Pressable>
       <View className="flex-1">
         <Text className="text-lg font-black text-ink" numberOfLines={1}>

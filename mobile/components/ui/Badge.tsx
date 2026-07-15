@@ -8,7 +8,7 @@
 
 import type { ReactNode } from 'react';
 import { Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Icon } from './Icon';
 import { cn } from '@/lib/cn';
 import { colors } from '@/lib/theme';
 
@@ -46,7 +46,7 @@ export function Badge({ label, variant = 'neutral', className }: BadgeProps) {
   );
 }
 
-type IconName = keyof typeof Ionicons.glyphMap;
+type IconName = string;
 
 export interface PillProps {
   label?: string;
@@ -67,7 +67,7 @@ export function Pill({ label, icon, children, tone = 'light', className }: PillP
   const textClass = tone === 'dark' ? 'text-white' : 'text-ink-soft';
   return (
     <View className={cn('flex-row items-center gap-1 rounded-pill border px-2.5 py-1', toneClass, className)}>
-      {icon ? <Ionicons name={icon} size={13} color={iconColor} /> : null}
+      {icon ? <Icon name={icon} size={13} color={iconColor} /> : null}
       {label ? <Text className={cn('text-xs font-bold', textClass)}>{label}</Text> : null}
       {children}
     </View>

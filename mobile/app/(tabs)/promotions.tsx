@@ -15,7 +15,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 import { Image } from 'expo-image';
-import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import {
@@ -30,6 +29,7 @@ import {
   EmptyState,
 } from '@/components/ui';
 import { AppHeader } from '@/components/AppHeader';
+import { Icon } from '@/components/ui/Icon';
 import { ApiError } from '@/lib/api/client';
 import {
   usePromotions,
@@ -282,7 +282,7 @@ function PromoCard({
         </View>
 
         <View className="flex-row items-center gap-1.5">
-          <Ionicons name="shield-checkmark-outline" size={13} color={colors.inkMute} />
+          <Icon name="shield-checkmark-outline" size={13} color={colors.inkMute} />
           <Text className="flex-1 text-[11px] text-ink-mute" numberOfLines={2}>
             {terms}
           </Text>
@@ -290,7 +290,7 @@ function PromoCard({
 
         {promo.disabledReason ? (
           <View className="flex-row items-center gap-1.5">
-            <Ionicons name="alert-circle-outline" size={13} color={colors.hot} />
+            <Icon name="alert-circle-outline" size={13} color={colors.hot} />
             <Text className="flex-1 text-[11px] font-medium text-hot">
               {promo.disabledReason === 'config_error'
                 ? 'This offer is being updated. Check back soon.'

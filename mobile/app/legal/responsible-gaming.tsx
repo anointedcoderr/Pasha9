@@ -5,12 +5,12 @@
 
 import type { ReactNode } from 'react';
 import { Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { Screen, Card } from '@/components/ui';
+import { Icon } from '@/components/ui/Icon';
 import { colors } from '@/lib/theme';
 import { LegalHeader } from './index';
 
-type IconName = keyof typeof Ionicons.glyphMap;
+type IconName = string;
 
 const TOOLS: { icon: IconName; title: string; body: string }[] = [
   {
@@ -51,7 +51,7 @@ export default function ResponsibleGamingScreen() {
 
       <Card className="border-newg/25 bg-newg/10">
         <View className="flex-row gap-3">
-          <Ionicons name="heart-outline" size={20} color={colors.newg} />
+          <Icon name="heart-outline" size={20} color={colors.newg} />
           <Text className="flex-1 text-sm leading-6 text-ink-soft">
             Only play with money you can afford to set aside. If a session stops feeling fun,
             that is the right moment to take a break.
@@ -65,7 +65,7 @@ export default function ResponsibleGamingScreen() {
             <Card key={t.title} padded={false}>
               <View className="flex-row items-start gap-3 p-3.5">
                 <View className="h-10 w-10 items-center justify-center rounded-xl bg-gold-500/15">
-                  <Ionicons name={t.icon} size={19} color={colors.gold700} />
+                  <Icon name={t.icon} size={19} color={colors.gold700} />
                 </View>
                 <View className="flex-1">
                   <Text className="text-sm font-extrabold text-ink">{t.title}</Text>

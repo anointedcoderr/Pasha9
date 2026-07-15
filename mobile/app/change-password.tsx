@@ -9,9 +9,9 @@
 
 import { useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Screen, Card, TextField, PrimaryButton } from '@/components/ui';
+import { Icon } from '@/components/ui/Icon';
 import { StackScreenHeader } from '@/components/StackScreenHeader';
 import { useChangePassword } from '@/lib/api/account';
 import { ApiError } from '@/lib/api/client';
@@ -91,7 +91,7 @@ export default function ChangePasswordScreen() {
       >
         <Card className="items-center gap-3 py-8">
           <View className="h-16 w-16 items-center justify-center rounded-full bg-newg/15">
-            <Ionicons name="checkmark-circle" size={38} color={colors.newg} />
+            <Icon name="checkmark-circle" size={38} color={colors.newg} />
           </View>
           <Text className="text-center text-lg font-black text-ink">Password updated</Text>
           <Text className="max-w-[300px] text-center text-sm text-ink-mute">
@@ -113,7 +113,7 @@ export default function ChangePasswordScreen() {
         <View className="border-t border-divider bg-paper px-4 pb-7 pt-3">
           {submitError ? (
             <View className="mb-2 flex-row items-start gap-2 rounded-xl border border-hot/30 bg-hot/10 px-3 py-2">
-              <Ionicons name="alert-circle" size={16} color={colors.hot} />
+              <Icon name="alert-circle" size={16} color={colors.hot} />
               <Text className="flex-1 text-xs font-medium text-hot">{submitError}</Text>
             </View>
           ) : null}
@@ -169,7 +169,7 @@ export default function ChangePasswordScreen() {
       </View>
 
       <View className="flex-row items-center gap-2 rounded-xl border border-divider bg-paper px-3 py-2.5">
-        <Ionicons name="information-circle-outline" size={16} color={colors.inkMute} />
+        <Icon name="information-circle-outline" size={16} color={colors.inkMute} />
         <Text className="flex-1 text-[11px] text-ink-mute">
           Choose a password you do not use anywhere else.
         </Text>

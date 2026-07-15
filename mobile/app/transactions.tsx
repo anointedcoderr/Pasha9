@@ -9,7 +9,7 @@
 
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Icon } from '@/components/ui/Icon';
 import { useRouter } from 'expo-router';
 import { Screen, ChipToggle, EmptyState } from '@/components/ui';
 import { StackScreenHeader } from '@/components/StackScreenHeader';
@@ -23,7 +23,7 @@ import { formatBDT } from '@/lib/format';
 import { colors } from '@/lib/theme';
 import { cn } from '@/lib/cn';
 
-type IconName = keyof typeof Ionicons.glyphMap;
+type IconName = string;
 
 const TXN_META: Record<TransactionType, { label: string; icon: IconName; credit: boolean }> = {
   deposit: { label: 'Deposit', icon: 'arrow-down', credit: true },
@@ -151,7 +151,7 @@ export default function TransactionsScreen() {
               {query.isFetching ? (
                 <ActivityIndicator size="small" color={colors.inkMute} />
               ) : (
-                <Ionicons name="chevron-down" size={16} color={colors.inkSoft} />
+                <Icon name="chevron-down" size={16} color={colors.inkSoft} />
               )}
               <Text className="text-sm font-bold text-ink-soft">
                 {query.isFetching ? 'Loading...' : 'Load more'}
@@ -180,7 +180,7 @@ function TxnRow({ tx, first }: { tx: LedgerTransaction; first: boolean }) {
         className="h-10 w-10 items-center justify-center rounded-full"
         style={{ backgroundColor: isCredit ? 'rgba(35,194,107,0.12)' : 'rgba(255,78,58,0.10)' }}
       >
-        <Ionicons name={meta.icon} size={18} color={tint} />
+        <Icon name={meta.icon} size={18} color={tint} />
       </View>
 
       <View className="flex-1">

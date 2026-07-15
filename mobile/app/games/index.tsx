@@ -11,7 +11,7 @@
 // strip and the games grid are now wired to the live aggregator catalog.
 
 import { Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Icon } from '@/components/ui/Icon';
 import { useRouter } from 'expo-router';
 import { Screen, SectionHeader, GameTile, Pill, Gradient, Badge } from '@/components/ui';
 import { AppHeader } from '@/components/AppHeader';
@@ -24,7 +24,7 @@ import { WingoBall } from './_components/WingoBall';
 import { useGameLaunch } from './_components/useGameLaunch';
 import { GameLaunchNotice } from './_components/GameLaunchNotice';
 
-type IconName = keyof typeof Ionicons.glyphMap;
+type IconName = string;
 
 // Category chips route into the provider grid with a deep-link filter (web
 // parity). Hot maps to the featured flag; the rest to a category slug.
@@ -107,7 +107,7 @@ export default function GamesLobby() {
         onPress={() => router.push('/games/provider')}
         className="h-12 flex-row items-center gap-2 rounded-xl border border-divider bg-paper px-3 active:opacity-90"
       >
-        <Ionicons name="search" size={18} color={colors.inkMute} />
+        <Icon name="search" size={18} color={colors.inkMute} />
         <Text className="text-base text-ink-mute">Search games, providers</Text>
       </Pressable>
 
@@ -153,14 +153,14 @@ export default function GamesLobby() {
             </Text>
             {wingoDisabled ? (
               <View className="mt-3 flex-row items-center gap-1.5 self-start rounded-pill border border-white/15 bg-white/5 px-4 py-2">
-                <Ionicons name="pause-circle" size={13} color={colors.dinkLo} />
+                <Icon name="pause-circle" size={13} color={colors.dinkLo} />
                 <Text className="text-xs font-black uppercase tracking-wider text-dink-lo">Unavailable</Text>
               </View>
             ) : (
               <View className="mt-3 flex-row items-center gap-2 self-start overflow-hidden rounded-pill px-4 py-2">
                 <Gradient colors={gradients.gold} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} radius={999} />
                 <Text className="text-xs font-black uppercase tracking-wider text-ink">Play now</Text>
-                <Ionicons name="arrow-forward" size={13} color={colors.ink} />
+                <Icon name="arrow-forward" size={13} color={colors.ink} />
               </View>
             )}
           </View>
@@ -198,7 +198,7 @@ export default function GamesLobby() {
                     className="absolute inset-x-0 top-0 h-1/2"
                     style={{ backgroundColor: 'rgba(255,255,255,0.18)' }}
                   />
-                  <Ionicons name={g.icon} size={32} color="#ffffff" />
+                  <Icon name={g.icon} size={32} color="#ffffff" />
                   {tileDisabled ? (
                     <View className="absolute left-1.5 top-1.5">
                       <Badge label="PAUSED" variant="neutral" />
@@ -280,7 +280,7 @@ export default function GamesLobby() {
                     />
                     {busy ? (
                       <View className="absolute inset-x-0 top-0 aspect-square items-center justify-center rounded-2xl bg-black/45">
-                        <Ionicons name="hourglass" size={20} color={colors.gold500} />
+                        <Icon name="hourglass" size={20} color={colors.gold500} />
                       </View>
                     ) : null}
                   </View>
@@ -301,7 +301,7 @@ export default function GamesLobby() {
             <Text className="text-sm font-black text-ink">All Provider Games</Text>
             <Text className="text-[11px] text-ink-mute">Slots, live casino, table, fishing and more</Text>
           </View>
-          <Ionicons name="arrow-forward" size={18} color={colors.gold700} />
+          <Icon name="arrow-forward" size={18} color={colors.gold700} />
         </Pressable>
       ) : null}
     </Screen>

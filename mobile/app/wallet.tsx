@@ -8,7 +8,7 @@
 
 import { useCallback } from 'react';
 import { Pressable, RefreshControl, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Icon } from '@/components/ui/Icon';
 import { useRouter } from 'expo-router';
 import { Screen, Card, SectionHeader, Badge, Gradient } from '@/components/ui';
 import { StackScreenHeader } from '@/components/StackScreenHeader';
@@ -19,7 +19,7 @@ import { formatBDT } from '@/lib/format';
 import { gradients, colors } from '@/lib/theme';
 import { cn } from '@/lib/cn';
 
-type IconName = keyof typeof Ionicons.glyphMap;
+type IconName = string;
 
 const TXN_META: Record<TransactionType, { label: string; icon: IconName; credit: boolean }> = {
   deposit: { label: 'Deposit', icon: 'arrow-down', credit: true },
@@ -79,7 +79,7 @@ export default function WalletScreen() {
               hitSlop={6}
               className="h-9 w-9 items-center justify-center rounded-xl active:bg-surfaceAlt"
             >
-              <Ionicons name="receipt-outline" size={20} color={colors.ink} />
+              <Icon name="receipt-outline" size={20} color={colors.ink} />
             </Pressable>
           }
         />
@@ -184,7 +184,7 @@ export default function WalletScreen() {
             <View className="flex-row items-center justify-between">
               <View className="flex-row items-center gap-3 flex-1 pr-2">
                 <View className="h-10 w-10 items-center justify-center rounded-xl bg-gold-500/15">
-                  <Ionicons name="trophy" size={18} color={colors.gold700} />
+                  <Icon name="trophy" size={18} color={colors.gold700} />
                 </View>
                 <View className="flex-1">
                   <Text className="text-sm font-extrabold text-ink" numberOfLines={1}>
@@ -236,7 +236,7 @@ function SubStat({
 }) {
   return (
     <View className="flex-1 flex-row items-center gap-2.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5">
-      <Ionicons name={icon} size={16} color={tint} />
+      <Icon name={icon} size={16} color={tint} />
       <View className="flex-1">
         <Text className="text-[10px] font-bold uppercase tracking-wider text-white/50" numberOfLines={1}>
           {label}
@@ -267,7 +267,7 @@ function BalanceAction({
       className="relative flex-1 flex-row items-center justify-center gap-1.5 overflow-hidden rounded-lg py-2.5 active:opacity-90"
     >
       {active ? <Gradient colors={gradients.gold} radius={8} /> : null}
-      <Ionicons name={icon} size={15} color={active ? colors.ink : colors.gold300} />
+      <Icon name={icon} size={15} color={active ? colors.ink : colors.gold300} />
       <Text className={cn('text-xs font-bold', active ? 'text-ink' : 'text-white/85')}>{label}</Text>
     </Pressable>
   );
@@ -285,7 +285,7 @@ function PreviewRow({ tx, first }: { tx: LedgerTransaction; first: boolean }) {
         className="h-9 w-9 items-center justify-center rounded-full"
         style={{ backgroundColor: isCredit ? 'rgba(35,194,107,0.12)' : 'rgba(255,78,58,0.10)' }}
       >
-        <Ionicons name={meta.icon} size={16} color={tint} />
+        <Icon name={meta.icon} size={16} color={tint} />
       </View>
       <View className="flex-1">
         <Text className="text-sm font-bold text-ink" numberOfLines={1}>

@@ -17,9 +17,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { TextField, PrimaryButton, Gradient } from '@/components/ui';
+import { Icon } from '@/components/ui/Icon';
 import { gradients, colors } from '@/lib/theme';
 import { cn } from '@/lib/cn';
 import { useAuth } from '@/store/auth';
@@ -79,7 +79,7 @@ export default function LoginScreen() {
           hitSlop={8}
           className="h-10 w-10 items-center justify-center rounded-xl bg-white/5 active:bg-white/10"
         >
-          <Ionicons name="chevron-down" size={22} color="#ffffff" />
+          <Icon name="chevron-down" size={22} color="#ffffff" />
         </Pressable>
         <LangToggle value={lang} onChange={setLang} />
       </View>
@@ -102,7 +102,7 @@ export default function LoginScreen() {
           <View className="items-center">
             <View className="h-14 w-14 items-center justify-center overflow-hidden rounded-2xl">
               <Gradient colors={gradients.gold} radius={16} />
-              <Ionicons name="diamond" size={26} color={colors.ink} />
+              <Icon name="diamond" size={26} color={colors.ink} />
             </View>
             <Text className="mt-3 text-4xl font-black tracking-tight text-white">
               Pasha<Text style={{ color: colors.gold400 }}>9</Text>
@@ -141,7 +141,7 @@ export default function LoginScreen() {
 
               {error ? (
                 <View className="flex-row items-start gap-2 rounded-xl border border-hot/30 bg-hot/10 px-3 py-2.5">
-                  <Ionicons name="alert-circle" size={16} color={colors.hot} />
+                  <Icon name="alert-circle" size={16} color={colors.hot} />
                   <Text className="flex-1 text-xs font-semibold" style={{ color: colors.hot }}>
                     {error}
                   </Text>
@@ -169,7 +169,7 @@ export default function LoginScreen() {
           {/* Trust footer */}
           <View className="mt-6 items-center gap-2.5">
             <View className="flex-row items-center gap-1.5">
-              <Ionicons name="shield-checkmark-outline" size={13} color={colors.dinkLo} />
+              <Icon name="shield-checkmark-outline" size={13} color={colors.dinkLo} />
               <Text className="text-[11px] text-dink-lo">18+ only. Please play responsibly.</Text>
             </View>
             <View className="flex-row items-center gap-3">

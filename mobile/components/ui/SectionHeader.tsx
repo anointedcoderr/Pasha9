@@ -11,11 +11,11 @@
 //   onAction   () => void    tapping the action; when omitted no action shows
 
 import { Pressable, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Icon } from './Icon';
 import { cn } from '@/lib/cn';
 import { colors } from '@/lib/theme';
 
-type IconName = keyof typeof Ionicons.glyphMap;
+type IconName = string;
 
 export interface SectionHeaderProps {
   title: string;
@@ -39,7 +39,7 @@ export function SectionHeader({
       <View className="flex-row items-center gap-2 flex-1 pr-2">
         {icon ? (
           <View className="h-7 w-7 items-center justify-center rounded-lg bg-gold-500/15">
-            <Ionicons name={icon} size={16} color={colors.gold700} />
+            <Icon name={icon} size={16} color={colors.gold700} />
           </View>
         ) : null}
         <View className="flex-1">
@@ -57,7 +57,7 @@ export function SectionHeader({
       {onAction ? (
         <Pressable onPress={onAction} className="flex-row items-center gap-0.5 active:opacity-70">
           <Text className="text-xs font-bold text-blue-600">{actionLabel}</Text>
-          <Ionicons name="chevron-forward" size={14} color={colors.blue600} />
+          <Icon name="chevron-forward" size={14} color={colors.blue600} />
         </Pressable>
       ) : null}
     </View>

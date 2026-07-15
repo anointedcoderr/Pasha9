@@ -21,7 +21,7 @@ import {
   View,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { Ionicons } from '@expo/vector-icons';
+import { Icon } from './Icon';
 import { Gradient } from './Gradient';
 import { colors } from '@/lib/theme';
 import { cn } from '@/lib/cn';
@@ -106,7 +106,7 @@ export function HeroCarousel({ banners, onPress, height, className }: HeroCarous
                     style={{ backgroundColor: ACCENT[b.accent] }}
                   >
                     <Text className="text-xs font-extrabold text-ink">{b.ctaLabel}</Text>
-                    <Ionicons name="arrow-forward" size={13} color={colors.ink} />
+                    <Icon name="arrow-forward" size={13} color={colors.ink} />
                   </View>
                 </View>
               </View>

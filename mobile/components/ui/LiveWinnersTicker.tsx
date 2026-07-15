@@ -19,7 +19,7 @@ import Animated, {
   withRepeat,
   withTiming,
 } from 'react-native-reanimated';
-import { Ionicons } from '@expo/vector-icons';
+import { Icon } from './Icon';
 import { formatBDT } from '@/lib/format';
 import { colors } from '@/lib/theme';
 import { cn } from '@/lib/cn';
@@ -85,7 +85,7 @@ function WinnerRow({
     >
       {winners.map((w) => (
         <View key={w.id} className="mr-5 flex-row items-center gap-1.5">
-          <Ionicons name="trophy" size={13} color={colors.gold300} />
+          <Icon name="trophy" size={13} color={colors.gold300} />
           <Text className="text-xs font-bold text-white/90">{w.handle}</Text>
           <Text className="text-xs text-white/45">won</Text>
           <Text className="text-xs font-black" style={{ color: colors.gold300 }}>

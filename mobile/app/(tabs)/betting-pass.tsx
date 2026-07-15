@@ -13,8 +13,8 @@
 
 import { useRef, useState } from 'react';
 import { ActivityIndicator, RefreshControl, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { Screen, Gradient, Badge, PrimaryButton, EmptyState } from '@/components/ui';
+import { Icon } from '@/components/ui/Icon';
 import { AppHeader } from '@/components/AppHeader';
 import { gradients, colors } from '@/lib/theme';
 import { formatBDT, titleCase } from '@/lib/format';
@@ -26,7 +26,7 @@ import {
   type RewardKind,
 } from '@/lib/api/betting-pass';
 
-type IconName = keyof typeof Ionicons.glyphMap;
+type IconName = string;
 
 function rewardIcon(kind: RewardKind): IconName {
   switch (kind) {
@@ -176,7 +176,7 @@ export default function BettingPassScreen() {
       {/* Disabled notice */}
       {!enabled ? (
         <View className="flex-row items-start gap-2.5 rounded-2xl border border-gold-600/30 bg-gold-500/10 p-3.5">
-          <Ionicons name="lock-closed" size={18} color={colors.gold700} />
+          <Icon name="lock-closed" size={18} color={colors.gold700} />
           <View className="flex-1">
             <Text className="text-sm font-extrabold text-ink">Betting Pass is paused</Text>
             <Text className="mt-0.5 text-[12px] leading-5 text-ink-mute">
@@ -189,7 +189,7 @@ export default function BettingPassScreen() {
       {/* Claim error banner */}
       {claimError ? (
         <View className="flex-row items-start gap-2 rounded-xl border border-hot/30 bg-hot/10 px-3 py-2.5">
-          <Ionicons name="alert-circle" size={16} color={colors.hot} />
+          <Icon name="alert-circle" size={16} color={colors.hot} />
           <Text className="flex-1 text-xs font-medium text-hot">{claimError}</Text>
         </View>
       ) : null}
@@ -259,7 +259,7 @@ function TierRow({
                 : 'border-divider bg-surfaceAlt')
           }
         >
-          <Ionicons
+          <Icon
             name={claimed ? 'checkmark' : locked ? 'lock-closed' : icon}
             size={16}
             color={claimed ? colors.ink : claimable ? colors.gold700 : colors.inkMute}
@@ -280,7 +280,7 @@ function TierRow({
             (locked ? 'bg-surfaceAlt' : 'bg-gold-500/15')
           }
         >
-          <Ionicons name={icon} size={20} color={locked ? colors.inkMute : colors.gold700} />
+          <Icon name={icon} size={20} color={locked ? colors.inkMute : colors.gold700} />
         </View>
 
         <View className="flex-1">
@@ -310,7 +310,7 @@ function TierRow({
             <PrimaryButton label="Claim" size="sm" onPress={onClaim} disabled={disabledAll} />
           )
         ) : locked ? (
-          <Ionicons name="lock-closed" size={16} color={colors.inkMute} />
+          <Icon name="lock-closed" size={16} color={colors.inkMute} />
         ) : null}
       </View>
     </View>

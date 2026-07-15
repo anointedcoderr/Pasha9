@@ -11,10 +11,10 @@
 import { useMemo, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { Image } from 'expo-image';
-import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { Screen, TextField, PrimaryButton } from '@/components/ui';
+import { Icon } from '@/components/ui/Icon';
 import { StackScreenHeader } from '@/components/StackScreenHeader';
 import { useAuth } from '@/store/auth';
 import {
@@ -175,7 +175,7 @@ export default function EditProfileScreen() {
         <View className="border-t border-divider bg-paper px-4 pb-7 pt-3">
           {submitError ? (
             <View className="mb-2 flex-row items-start gap-2 rounded-xl border border-hot/30 bg-hot/10 px-3 py-2">
-              <Ionicons name="alert-circle" size={16} color={colors.hot} />
+              <Icon name="alert-circle" size={16} color={colors.hot} />
               <Text className="flex-1 text-xs font-medium text-hot">{submitError}</Text>
             </View>
           ) : null}
@@ -207,7 +207,7 @@ export default function EditProfileScreen() {
               </View>
             )}
             <View className="absolute bottom-0 right-0 h-8 w-8 items-center justify-center rounded-full border-2 border-paper bg-gold-500">
-              <Ionicons name={uploading ? 'hourglass' : 'camera'} size={15} color={colors.ink} />
+              <Icon name={uploading ? 'hourglass' : 'camera'} size={15} color={colors.ink} />
             </View>
           </View>
         </Pressable>
@@ -263,7 +263,7 @@ export default function EditProfileScreen() {
       </View>
 
       <View className="flex-row items-center gap-2 rounded-xl border border-divider bg-paper px-3 py-2.5">
-        <Ionicons name="shield-checkmark-outline" size={16} color={colors.inkMute} />
+        <Icon name="shield-checkmark-outline" size={16} color={colors.inkMute} />
         <Text className={cn('flex-1 text-[11px]', 'text-ink-mute')}>
           Your details are used to secure your account and process withdrawals.
         </Text>

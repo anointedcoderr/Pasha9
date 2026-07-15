@@ -8,9 +8,9 @@
 
 import { useCallback, useState } from 'react';
 import { RefreshControl, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Screen, Badge, EmptyState, type BadgeVariant } from '@/components/ui';
+import { Icon } from '@/components/ui/Icon';
 import { StackScreenHeader } from '@/components/StackScreenHeader';
 import { useLottoMe, type LottoTicket } from '@/lib/api/lotto';
 import { ApiError } from '@/lib/api/client';
@@ -114,7 +114,7 @@ export default function MyTicketsScreen() {
               <View className="flex-row items-center justify-between">
                 <View className="flex-row items-center gap-2">
                   <View className="h-8 w-8 items-center justify-center rounded-lg bg-gold-500/15">
-                    <Ionicons name="ticket" size={16} color={colors.gold700} />
+                    <Icon name="ticket" size={16} color={colors.gold700} />
                   </View>
                   <View>
                     <Text className="text-sm font-extrabold text-ink">{drawName}</Text>

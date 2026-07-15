@@ -14,7 +14,7 @@
 
 import type { ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Icon } from '@/components/ui/Icon';
 import { useRouter } from 'expo-router';
 import { colors } from '@/lib/theme';
 
@@ -34,7 +34,7 @@ export function StackScreenHeader({ title, subtitle, right, onBack }: StackScree
         hitSlop={8}
         className="h-9 w-9 items-center justify-center rounded-xl active:bg-surfaceAlt"
       >
-        <Ionicons name="chevron-back" size={22} color={colors.ink} />
+        <Icon name="chevron-back" size={22} color={colors.ink} />
       </Pressable>
       <View className="flex-1">
         <Text className="text-lg font-black text-ink" numberOfLines={1}>

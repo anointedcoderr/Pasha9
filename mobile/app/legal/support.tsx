@@ -11,9 +11,9 @@
 
 import { useMemo, useRef, useState } from 'react';
 import { Linking, Pressable, Text, TextInput, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Screen, Card, TextField, PrimaryButton } from '@/components/ui';
+import { Icon } from '@/components/ui/Icon';
 import { colors } from '@/lib/theme';
 import { cn } from '@/lib/cn';
 import { useAuth } from '@/store/auth';
@@ -25,7 +25,7 @@ import {
 import { ApiError } from '@/lib/api/client';
 import { LegalHeader } from './index';
 
-type IconName = keyof typeof Ionicons.glyphMap;
+type IconName = string;
 
 interface ChannelRow {
   key: string;
@@ -234,7 +234,7 @@ export default function SupportScreen() {
       <Card className="border-gold-600/25 bg-gold-500/10">
         <View className="flex-row items-center gap-3">
           <View className="h-10 w-10 items-center justify-center rounded-xl bg-gold-500">
-            <Ionicons name="time-outline" size={19} color={colors.ink} />
+            <Icon name="time-outline" size={19} color={colors.ink} />
           </View>
           <View className="flex-1">
             <Text className="text-sm font-extrabold text-ink">Around the clock</Text>
@@ -255,7 +255,7 @@ export default function SupportScreen() {
           </>
         ) : contactsQuery.isError ? (
           <Card className="flex-row items-center gap-2">
-            <Ionicons name="cloud-offline" size={18} color={colors.hot} />
+            <Icon name="cloud-offline" size={18} color={colors.hot} />
             <Text className="flex-1 text-sm text-ink-soft">
               {contactsQuery.error instanceof ApiError && contactsQuery.error.message !== contactsQuery.error.code
                 ? contactsQuery.error.message
@@ -276,7 +276,7 @@ export default function SupportScreen() {
             <Card key={c.key} padded={false} onPress={() => openChannel(c.url)}>
               <View className="flex-row items-center gap-3 p-3.5">
                 <View className={cn('h-11 w-11 items-center justify-center rounded-xl', c.tint)}>
-                  <Ionicons name={c.icon} size={21} color={c.iconColor} />
+                  <Icon name={c.icon} size={21} color={c.iconColor} />
                 </View>
                 <View className="flex-1">
                   <Text className="text-sm font-extrabold text-ink">{c.title}</Text>
@@ -285,7 +285,7 @@ export default function SupportScreen() {
                   </Text>
                   <Text className="mt-0.5 text-xs text-ink-mute">{c.meta}</Text>
                 </View>
-                <Ionicons name="chevron-forward" size={18} color={colors.inkMute} />
+                <Icon name="chevron-forward" size={18} color={colors.inkMute} />
               </View>
             </Card>
           ))
@@ -295,14 +295,14 @@ export default function SupportScreen() {
       {/* Send us a message */}
       <View className="gap-3">
         <View className="flex-row items-center gap-2">
-          <Ionicons name="chatbox-ellipses-outline" size={18} color={colors.gold700} />
+          <Icon name="chatbox-ellipses-outline" size={18} color={colors.gold700} />
           <Text className="text-base font-black text-ink">Send us a message</Text>
         </View>
 
         {sent ? (
           <Card className="items-center gap-3 border-newg/25 bg-newg/10 py-7">
             <View className="h-14 w-14 items-center justify-center rounded-full bg-newg/15">
-              <Ionicons name="checkmark-circle" size={34} color={colors.newg} />
+              <Icon name="checkmark-circle" size={34} color={colors.newg} />
             </View>
             <Text className="text-center text-base font-black text-ink">Ticket received, we will reply soon</Text>
             <Text className="max-w-[280px] text-center text-sm text-ink-mute">
@@ -377,7 +377,7 @@ export default function SupportScreen() {
 
             {submitError ? (
               <View className="flex-row items-start gap-2 rounded-xl border border-hot/30 bg-hot/10 px-3 py-2">
-                <Ionicons name="alert-circle" size={16} color={colors.hot} />
+                <Icon name="alert-circle" size={16} color={colors.hot} />
                 <Text className="flex-1 text-xs font-medium text-hot">{submitError}</Text>
               </View>
             ) : null}
@@ -405,7 +405,7 @@ export default function SupportScreen() {
           onPress={() => router.push('/legal/faq')}
           className="mt-3 flex-row items-center gap-1.5 self-start active:opacity-70"
         >
-          <Ionicons name="help-circle-outline" size={16} color={colors.blue600} />
+          <Icon name="help-circle-outline" size={16} color={colors.blue600} />
           <Text className="text-xs font-bold text-blue-600">Check the FAQ first</Text>
         </Pressable>
       </Card>

@@ -13,7 +13,7 @@
 
 import { Image } from 'expo-image';
 import { Pressable, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Icon } from './Icon';
 import { Badge } from './Badge';
 import { Gradient } from './Gradient';
 import { gradients, colors } from '@/lib/theme';
@@ -53,7 +53,7 @@ export function GameTile({ game, onPress, showProvider = true, className }: Game
         {/* Gold play button */}
         <View className="absolute bottom-1.5 right-1.5 h-8 w-8 items-center justify-center overflow-hidden rounded-full">
           <Gradient colors={gradients.gold} radius={999} />
-          <Ionicons name="play" size={16} color={colors.ink} />
+          <Icon name="play" size={16} color={colors.ink} />
         </View>
       </View>
 

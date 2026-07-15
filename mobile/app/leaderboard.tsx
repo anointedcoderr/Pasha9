@@ -8,7 +8,7 @@
 // empty and off states.
 
 import { Pressable, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Icon } from '@/components/ui/Icon';
 import { useRouter } from 'expo-router';
 import { Screen, Gradient, SectionHeader } from '@/components/ui';
 import { gradients, colors } from '@/lib/theme';
@@ -65,11 +65,11 @@ export default function LeaderboardScreen() {
         <View className="relative items-center px-5 py-7">
           <View className="relative h-20 w-20 items-center justify-center overflow-hidden rounded-2xl">
             <Gradient colors={gradients.gold} radius={16} />
-            <Ionicons name="trophy" size={40} color={colors.ink} />
+            <Icon name="trophy" size={40} color={colors.ink} />
           </View>
 
           <View className="mt-4 flex-row items-center gap-1.5 rounded-pill border border-gold-500/40 bg-gold-500/10 px-3 py-1">
-            <Ionicons name="flame" size={12} color={colors.gold300} />
+            <Icon name="flame" size={12} color={colors.gold300} />
             <Text className="text-[11px] font-black uppercase tracking-widest" style={{ color: colors.gold300 }}>
               24h Winnings
             </Text>
@@ -87,7 +87,7 @@ export default function LeaderboardScreen() {
               {rows.length > 0 ? (
                 <>
                   <Text className="text-white/30">|</Text>
-                  <Ionicons name="people" size={13} color={colors.dinkMid} />
+                  <Icon name="people" size={13} color={colors.dinkMid} />
                   <Text className="text-[11px] font-bold text-white/70">Top {rows.length} players</Text>
                 </>
               ) : null}
@@ -100,7 +100,7 @@ export default function LeaderboardScreen() {
       <View className="overflow-hidden rounded-2xl border border-gold-500/20 bg-darkbg">
         <View className="flex-row items-center justify-between border-b border-white/5 px-4 py-3">
           <View className="flex-row items-center gap-2">
-            <Ionicons name="podium" size={16} color={colors.gold300} />
+            <Icon name="podium" size={16} color={colors.gold300} />
             <Text className="text-sm font-extrabold text-white">Top winners</Text>
           </View>
           {!boardOff && !board.isError ? (
@@ -154,7 +154,7 @@ export default function LeaderboardScreen() {
                   {medal ? (
                     <View className="relative h-9 w-9 items-center justify-center overflow-hidden rounded-xl">
                       <Gradient colors={medal.grad} radius={12} />
-                      <Ionicons name="medal" size={18} color={colors.ink} />
+                      <Icon name="medal" size={18} color={colors.ink} />
                     </View>
                   ) : (
                     <View className="h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04]">
@@ -189,7 +189,7 @@ export default function LeaderboardScreen() {
             })}
 
             <View className="flex-row items-start gap-2 border-t border-white/5 bg-white/[0.02] px-4 py-3">
-              <Ionicons name="information-circle-outline" size={14} color={colors.gold300} style={{ marginTop: 1 }} />
+              <Icon name="information-circle-outline" size={14} color={colors.gold300} style={{ marginTop: 1 }} />
               <Text className="flex-1 text-[11px] leading-relaxed text-white/50">
                 Ranked by each player's total winnings over the last 24 hours. Every player appears once.
               </Text>
@@ -207,7 +207,7 @@ export default function LeaderboardScreen() {
               <FeedSkeleton />
             ) : feed.isError ? (
               <View className="flex-row items-center gap-2 px-3.5 py-4">
-                <Ionicons name="cloud-offline" size={18} color={colors.hot} />
+                <Icon name="cloud-offline" size={18} color={colors.hot} />
                 <Text className="flex-1 text-sm text-ink-soft">
                   {errorMessage(feed.error, 'Could not load recent winners.')}
                 </Text>
@@ -217,7 +217,7 @@ export default function LeaderboardScreen() {
               </View>
             ) : winners.length === 0 ? (
               <View className="items-center gap-1 px-6 py-8">
-                <Ionicons name="sparkles-outline" size={22} color={colors.gold700} />
+                <Icon name="sparkles-outline" size={22} color={colors.gold700} />
                 <Text className="text-sm font-extrabold text-ink">No recent winners yet</Text>
                 <Text className="text-center text-xs text-ink-mute">
                   Fresh wins will show up here as they happen.
@@ -232,7 +232,7 @@ export default function LeaderboardScreen() {
                     className={cn('flex-row items-center gap-3 px-3.5 py-3', i > 0 && 'border-t border-divider')}
                   >
                     <View className="h-9 w-9 items-center justify-center rounded-full bg-newg/12">
-                      <Ionicons name="cash" size={16} color={colors.newg} />
+                      <Icon name="cash" size={16} color={colors.newg} />
                     </View>
                     <View className="min-w-0 flex-1">
                       <Text className="text-sm font-extrabold text-ink" numberOfLines={1}>
@@ -264,7 +264,7 @@ export default function LeaderboardScreen() {
         className="relative flex-row items-center justify-center gap-2 overflow-hidden rounded-pill py-3.5 active:opacity-90"
       >
         <Gradient colors={gradients.gold} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} radius={999} />
-        <Ionicons name="game-controller" size={18} color={colors.ink} />
+        <Icon name="game-controller" size={18} color={colors.ink} />
         <Text className="text-base font-extrabold text-ink">Play and climb the ranks</Text>
       </Pressable>
     </Screen>
@@ -300,7 +300,7 @@ function BoardMessage({
   message,
   onRetry,
 }: {
-  icon: keyof typeof Ionicons.glyphMap;
+  icon: string;
   iconColor: string;
   title: string;
   message?: string;
@@ -309,7 +309,7 @@ function BoardMessage({
   return (
     <View className="items-center gap-2.5 px-6 py-10">
       <View className="h-12 w-12 items-center justify-center rounded-full bg-white/[0.06]">
-        <Ionicons name={icon} size={22} color={iconColor} />
+        <Icon name={icon} size={22} color={iconColor} />
       </View>
       <Text className="text-center text-sm font-extrabold text-white">{title}</Text>
       {message ? <Text className="max-w-[260px] text-center text-xs text-white/50">{message}</Text> : null}
@@ -359,7 +359,7 @@ function BackHeader({ title, subtitle }: { title: string; subtitle?: string }) {
         hitSlop={8}
         className="h-9 w-9 items-center justify-center rounded-xl active:bg-surfaceAlt"
       >
-        <Ionicons name="chevron-back" size={22} color={colors.ink} />
+        <Icon name="chevron-back" size={22} color={colors.ink} />
       </Pressable>
       <View className="flex-1">
         <Text className="text-lg font-black text-ink" numberOfLines={1}>

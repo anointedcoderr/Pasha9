@@ -47,3 +47,6 @@ export type { EmptyStateProps } from './EmptyState';
 
 export { Gradient } from './Gradient';
 export type { GradientProps } from './Gradient';
+
+export { Icon } from './Icon';
+export type { IconProps } from './Icon';
