@@ -8,32 +8,30 @@ import { BRAND } from '@/lib/constants/brand';
 import { FileKey2, Download, Send, MessageCircle, CheckCircle2, AlertTriangle } from 'lucide-react';
 
 const CHECKLIST = [
-  'Source code archive prepared',
-  'Database schema documented',
-  'API endpoint plan delivered',
+  'Complete monorepo source: web, admin, and the mobile app',
+  'Live web platform: Next.js, PostgreSQL, PM2, Nginx, Cloudflare',
+  'Admin panel controlling banners, games, promotions, payments and more',
+  'Native Android app (React Native and Expo), matching the website',
+  'Player push notifications wired end to end',
+  'One-command VPS deploy script (scripts/deploy.sh)',
+  'Prisma schema with the db push workflow',
+  'Nightly database and uploads backup',
   'Environment variables example file',
-  'Deployment guide for VPS',
-  'Backup and restore guide',
-  'Domain and DNS instructions',
-  'Frontend hosting setup (Vercel or VPS)',
-  'PostgreSQL instance configured',
-  'Storage and CDN setup',
-  'Game provider API ready connections',
-  'Payment gateway configuration placeholder',
-  'Android APK build with Capacitor',
-  'Admin and user test accounts',
-  'Final smoke testing report',
+  'Full handover document (docs/HANDOVER.md)',
+  'Deployment, backup, provider, and admin guides',
+  'Seeded super-admin account',
 ];
 
 const PENDING_FROM_CLIENT = [
-  'Final logo lockup and brand assets',
-  'Approved color refinements if any are needed',
-  'Real game provider API credentials',
-  'Selected payment gateway documentation',
-  'Approved KYC document list',
-  'Production VPS / Vercel access',
-  'Domain name and DNS access',
-  'Telegram and WhatsApp accounts for live support',
+  'Transfer the GitHub repo, Expo project, and Firebase project to the owner (docs/HANDOVER.md section 2)',
+  'Hand over the VPS, Cloudflare, and domain accounts, then rotate the server root password',
+  'Confirm SECRETS_KEY and CRON_SECRET are set in the server env',
+  'Enter live payment gateway credentials in Admin, Payments',
+  'Configure a live SMS or OTP provider in Admin, Notifications',
+  'Enter game provider API credentials in Admin, Providers',
+  'Rotate the Telegram bot token and the cron secret',
+  'Delete the test accounts pasha_m_test and pasha_tg_test',
+  'Publish the latest app build via Admin, Settings, App Download',
 ];
 
 export default function AdminHandoverPage() {
@@ -61,21 +59,21 @@ export default function AdminHandoverPage() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card padding="lg">
-          <CardHeader title="Handover Checklist" subtitle="Mark each item as Milestone 2 and 3 complete" />
+          <CardHeader title="Handover Checklist" subtitle="Delivered in this build" />
           <ul className="space-y-2">
-            {CHECKLIST.map((c, i) => (
+            {CHECKLIST.map((c) => (
               <li key={c} className="flex items-center gap-3 rounded-xl border border-neon/10 bg-base-deep/40 px-3 py-2 text-sm">
-                <span className={`flex h-6 w-6 items-center justify-center rounded-md ${i < 4 ? 'bg-neon/15 text-neon' : 'bg-base-elev text-ink-lo'}`}>
-                  {i < 4 ? <CheckCircle2 className="h-4 w-4" /> : i + 1}
+                <span className="flex h-6 w-6 items-center justify-center rounded-md bg-neon/15 text-neon">
+                  <CheckCircle2 className="h-4 w-4" />
                 </span>
-                <span className={i < 4 ? 'text-ink-hi' : 'text-ink-mid'}>{c}</span>
+                <span className="text-ink-hi">{c}</span>
               </li>
             ))}
           </ul>
         </Card>
 
         <Card padding="lg">
-          <CardHeader title="Pending from Client" subtitle="Items required before Milestone 2 and 3 wrap up" />
+          <CardHeader title="Pending at Handover" subtitle="Actions to complete the transfer and launch" />
           <ul className="space-y-2">
             {PENDING_FROM_CLIENT.map((p) => (
               <li key={p} className="flex items-start gap-3 rounded-xl border border-gold-500/20 bg-gold-500/5 px-3 py-2 text-sm">
