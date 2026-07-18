@@ -1,0 +1,32 @@
+# License and Ownership Notice
+
+Copyright (c) 2026 Anointed Coder. All rights reserved.
+Contact: info@anointedcoder.com
+
+## Authorship
+
+The Pasha9 platform in this repository was designed and built by the Anointed
+Coder team. Every source file carries a "Built by Anointed Coder" attribution,
+alongside THIRD_PARTY_NOTICES.md for the open components it builds on.
+
+## The operator's rights
+
+The Pasha9 operator who commissioned this build owns their running instance in
+full: the deployed platform, all of its data, its domain and accounts, its
+branding and content, and the copy of this source code delivered to them. The
+operator may run, modify, host, and maintain their instance freely, with no
+lock in and no ongoing dependency on Anointed Coder.
+
+## Anointed Coder's retained rights
+
+Anointed Coder remains the author of this codebase and retains the right to
+reuse the base template, its architecture, and its components for its own
+portfolio and for building future projects for other clients. This retained
+right does not extend to the operator's instance, data, branding, or content,
+which belong solely to the operator.
+
+## Scope
+
+This notice records the arrangement agreed between Anointed Coder and the
+operator. It is not an open-source license and grants the general public no
+rights to this code.
