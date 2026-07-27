@@ -61,6 +61,12 @@ const GROUPS: SettingGroupData[] = [
     ],
   },
   {
+    title: 'Rewards',
+    items: [
+      { key: 'rewards', icon: 'gift-outline', label: 'Rewards, check-in and spin', tone: 'gold', route: '/rewards' },
+    ],
+  },
+  {
     title: 'Preferences',
     items: [
       { key: 'language', icon: 'language-outline', label: 'Language', tone: 'gold' },

@@ -1,16 +1,18 @@
 // Built by Anointed Coder.
 //
-// Rewards hub, wired to the live backend. Reads the player's coin balance +
-// check-in + spin state from GET /api/rewards/me, the reward-store items from
-// GET /api/content/rewards, and the wheel description from
-// GET /api/content/spin-wheel. Three real actions, all guarded against
-// double-submit and all invalidating the wallet balance / bonuses on success
-// because reward coins live on Wallet.bonusBalance:
-//   - Daily check-in  POST /api/rewards/check-in   (credits coins, streak)
-//   - Spin the wheel  POST /api/rewards/spin        (spends coins / grants prize)
-//   - Redeem an item  POST /api/rewards/[id]/claim  (spends coins immediately)
-// The redeem sheet collects the operator/phone or delivery details the server
-// requires per RewardItem.rewardType.
+// Rewards hub, wired to the live backend and rebuilt to mirror the website
+// (apps/web/app/(site)/rewards). Reads coin balance + check-in + spin state
+// from GET /api/rewards/me, the reward-store items from GET /api/content/rewards,
+// and the wheel (tiers + segments) from GET /api/content/spin-wheel. Three real
+// actions, all guarded against double-submit and all invalidating the wallet
+// balance / bonuses on success because reward coins live on Wallet.bonusBalance:
+//   - Daily check-in  POST /api/rewards/check-in
+//   - Spin the wheel  POST /api/rewards/spin   (animated wheel + win modal)
+//   - Redeem an item  POST /api/rewards/[id]/claim
+// Parity with the site: gold hero, Store / Check-in / Spin tabs (deep-linkable
+// via ?tab=), a tier selector so every wheel is reachable (not just tier 1), the
+// animated SpinWheel, a win-celebration modal instead of a bare Alert, store
+// artwork, and EN/BN copy.
 
 import { useCallback, useMemo, useRef, useState } from 'react';
 import {
@@ -23,6 +25,8 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
+import { Image } from 'expo-image';
+import { useLocalSearchParams } from 'expo-router';
 import { Icon } from '@/components/ui/Icon';
 import {
   Screen,
@@ -35,6 +39,7 @@ import {
   ChipToggle,
 } from '@/components/ui';
 import { StackScreenHeader } from '@/components/StackScreenHeader';
+import { SpinWheel } from '@/components/rewards/SpinWheel';
 import {
   useRewardsMe,
   useRewardStore,
@@ -45,11 +50,16 @@ import {
   type RewardItem,
   type RedeemBody,
   type RechargeClaimBody,
+  type SpinResultPayload,
+  type SpinTier,
 } from '@/lib/api/rewards';
+import { absoluteMediaUrl } from '@/lib/api/home';
 import { ApiError } from '@/lib/api/client';
+import { useAppLang } from '@/lib/lang';
 import { colors, gradients } from '@/lib/theme';
 
 type IconName = string;
+type TabKey = 'spin' | 'checkin' | 'store';
 
 const OPERATORS: { key: RechargeClaimBody['operator']; label: string }[] = [
   { key: 'gp', label: 'GP' },
@@ -59,26 +69,30 @@ const OPERATORS: { key: RechargeClaimBody['operator']; label: string }[] = [
   { key: 'teletalk', label: 'Teletalk' },
 ];
 
-function payoutDescription(payoutType: string, payoutAmount: number): string {
+function payoutDescription(payoutType: string, payoutAmount: number, bn: boolean): string {
   switch (payoutType) {
     case 'coins':
-      return `${payoutAmount} coins`;
+      return bn ? `${payoutAmount} কয়েন` : `${payoutAmount} coins`;
     case 'bonus':
-      return `BDT ${payoutAmount} bonus`;
+      return bn ? `${payoutAmount} BDT বোনাস` : `BDT ${payoutAmount} bonus`;
     case 'cash':
-      return `BDT ${payoutAmount} cash`;
+      return bn ? `${payoutAmount} BDT ক্যাশ` : `BDT ${payoutAmount} cash`;
     case 'free_bet':
-      return `BDT ${payoutAmount} free bet`;
+      return bn ? `${payoutAmount} BDT ফ্রি বেট` : `BDT ${payoutAmount} free bet`;
     case 'loss':
     case 'nothing':
-      return 'no prize this time';
+      return bn ? 'এবার কোনো পুরস্কার নেই' : 'no prize this time';
     default:
-      return payoutAmount > 0 ? `${payoutAmount}` : 'a prize';
+      return payoutAmount > 0 ? `${payoutAmount}` : bn ? 'একটি পুরস্কার' : 'a prize';
   }
 }
 
 export default function RewardsScreen() {
   const { width } = useWindowDimensions();
+  const { lang } = useAppLang();
+  const bn = lang === 'bn';
+  const params = useLocalSearchParams<{ tab?: string }>();
+
   const meQuery = useRewardsMe();
   const storeQuery = useRewardStore();
   const wheelQuery = useSpinWheel();
@@ -87,6 +101,10 @@ export default function RewardsScreen() {
   const spin = useSpin();
 
   const me = meQuery.data;
+
+  const initialTab: TabKey =
+    params.tab === 'store' || params.tab === 'checkin' || params.tab === 'spin' ? params.tab : 'spin';
+  const [tab, setTab] = useState<TabKey>(initialTab);
 
   const [refreshing, setRefreshing] = useState(false);
   const onRefresh = useCallback(async () => {
@@ -98,8 +116,8 @@ export default function RewardsScreen() {
     }
   }, [meQuery, storeQuery, wheelQuery]);
 
-  // Guards: refs flip synchronously so a double-tap cannot fire twice before
-  // the disabled prop catches up on the next render.
+  // Guards flip synchronously so a double-tap cannot fire twice before the
+  // disabled prop catches up on the next render.
   const checkInGuard = useRef(false);
   const spinGuard = useRef(false);
 
@@ -108,51 +126,87 @@ export default function RewardsScreen() {
     checkInGuard.current = true;
     checkIn.mutate(undefined, {
       onSuccess: (res) => {
-        const bonus = res.isDay7 ? ' (day 7 bonus included!)' : '';
-        Alert.alert('Checked in', `+${res.coinsAwarded} coins - streak day ${res.streakDay}${bonus}`);
+        const bonus = res.isDay7 ? (bn ? ' (৭ম দিনের বোনাসসহ!)' : ' (day 7 bonus included!)') : '';
+        Alert.alert(
+          bn ? 'চেক-ইন সম্পন্ন' : 'Checked in',
+          `+${res.coinsAwarded} ${bn ? 'কয়েন - স্ট্রিক দিন' : 'coins - streak day'} ${res.streakDay}${bonus}`,
+        );
       },
       onError: (err) => {
-        const msg = err instanceof ApiError ? err.message : 'Check-in failed. Please try again.';
-        Alert.alert('Check-in failed', msg);
+        const msg = err instanceof ApiError ? err.message : bn ? 'চেক-ইন ব্যর্থ হয়েছে।' : 'Check-in failed. Please try again.';
+        Alert.alert(bn ? 'চেক-ইন ব্যর্থ' : 'Check-in failed', msg);
       },
       onSettled: () => {
         checkInGuard.current = false;
       },
     });
-  }, [checkIn]);
+  }, [checkIn, bn]);
 
-  // The spin control targets ONE wheel: the first configured tier, or the
-  // legacy untiered wheel when no tiers exist. Cost AND free-spin availability
-  // are both read from this same tier so the two can never disagree.
-  const selectedTier = useMemo(() => wheelQuery.data?.tiers?.[0] ?? null, [wheelQuery.data]);
+  // Tier selection. Every configured wheel is reachable (the old screen only
+  // ever spun tiers[0], so Grand/Supreme were unreachable). Falls back to the
+  // legacy untiered wheel when no tiers exist.
+  const tiers: SpinTier[] = wheelQuery.data?.tiers ?? [];
+  const [selectedTierKey, setSelectedTierKey] = useState<string | null>(null);
+  const selectedTier = useMemo(() => {
+    if (tiers.length === 0) return null;
+    return tiers.find((t) => t.key === selectedTierKey) ?? tiers[0];
+  }, [tiers, selectedTierKey]);
   const tierKey = selectedTier?.key;
+  const wheelSegments = useMemo(
+    () => selectedTier?.segments ?? wheelQuery.data?.segments ?? wheelQuery.data?.legacySegments ?? [],
+    [selectedTier, wheelQuery.data],
+  );
+
+  // Spin animation + result state.
+  const [spinning, setSpinning] = useState(false);
+  const [landingIndex, setLandingIndex] = useState<number | null>(null);
+  const pendingResult = useRef<SpinResultPayload | null>(null);
+  const [celebration, setCelebration] = useState<SpinResultPayload | null>(null);
 
   const onSpin = useCallback(() => {
-    if (spinGuard.current || spin.isPending) return;
+    if (spinGuard.current || spin.isPending || spinning) return;
     spinGuard.current = true;
+    pendingResult.current = null;
+    setCelebration(null);
     spin.mutate(tierKey, {
       onSuccess: (res) => {
-        Alert.alert(
-          res.payoutType === 'loss' || res.payoutType === 'nothing' ? 'So close!' : 'You won!',
-          `${res.segmentLabel} - ${payoutDescription(res.payoutType, res.payoutAmount)}.`,
-        );
+        // Land the wheel on the server-chosen wedge, then reveal the prize
+        // when the animation completes (onLandingComplete).
+        pendingResult.current = res;
+        setLandingIndex(res.segmentIndex);
+        setSpinning(true);
       },
       onError: (err) => {
-        const msg = err instanceof ApiError ? err.message : 'Spin failed. Please try again.';
-        Alert.alert('Spin failed', msg);
+        setSpinning(false);
+        const msg = err instanceof ApiError ? err.message : bn ? 'স্পিন ব্যর্থ হয়েছে।' : 'Spin failed. Please try again.';
+        Alert.alert(bn ? 'স্পিন ব্যর্থ' : 'Spin failed', msg);
       },
       onSettled: () => {
         spinGuard.current = false;
       },
     });
-  }, [spin, tierKey]);
+  }, [spin, tierKey, spinning, bn]);
+
+  const onLandingComplete = useCallback(() => {
+    setSpinning(false);
+    if (pendingResult.current) {
+      setCelebration(pendingResult.current);
+      pendingResult.current = null;
+    }
+  }, []);
+
+  const onSelectTier = useCallback((key: string) => {
+    setSelectedTierKey(key);
+    setLandingIndex(null);
+    pendingResult.current = null;
+  }, []);
 
   // Redeem sheet state.
   const [redeemItem, setRedeemItem] = useState<RewardItem | null>(null);
 
   if (meQuery.isLoading) {
     return (
-      <Screen header={<StackScreenHeader title="Rewards" />} contentClassName="px-4 pt-3 gap-4">
+      <Screen header={<StackScreenHeader title={bn ? 'রিওয়ার্ড' : 'Rewards'} />} contentClassName="px-4 pt-3 gap-4">
         <View className="h-28 rounded-2xl border border-divider bg-surfaceAlt/40" />
         <View className="h-36 rounded-2xl border border-divider bg-surfaceAlt/40" />
       </Screen>
@@ -161,14 +215,14 @@ export default function RewardsScreen() {
 
   if (meQuery.isError || !me) {
     const msg =
-      meQuery.error instanceof ApiError ? meQuery.error.message : 'We could not load your rewards.';
+      meQuery.error instanceof ApiError ? meQuery.error.message : bn ? 'রিওয়ার্ড লোড করা যায়নি।' : 'We could not load your rewards.';
     return (
-      <Screen header={<StackScreenHeader title="Rewards" />} contentClassName="px-4 pt-3 gap-4">
+      <Screen header={<StackScreenHeader title={bn ? 'রিওয়ার্ড' : 'Rewards'} />} contentClassName="px-4 pt-3 gap-4">
         <EmptyState
           icon="alert-circle-outline"
-          title="Rewards unavailable"
+          title={bn ? 'রিওয়ার্ড অনুপলব্ধ' : 'Rewards unavailable'}
           message={msg}
-          actionLabel="Try again"
+          actionLabel={bn ? 'আবার চেষ্টা করুন' : 'Try again'}
           onAction={() => meQuery.refetch()}
         />
       </Screen>
@@ -180,142 +234,293 @@ export default function RewardsScreen() {
 
   const spinCost = selectedTier?.costPerSpin ?? me.spin.config.costPerSpinCoins;
 
-  // Free-spin availability for THE SELECTED tier only. me.spin.freeSpinsRemaining
-  // is a cross-tier aggregate (every tier's granted spins plus the global daily
-  // allowance), so it can read > 0 while THIS wheel would still charge coins,
-  // which would label a paid spin "free". Derive it per tier the way the spin
-  // route does:
-  //   - granted spins are already bucketed by tier key on the server
-  //   - the daily allowance is this tier's own freeSpinsPerDay, capped by the
-  //     remaining global daily allowance the server reports
-  // The legacy untiered wheel (no selectedTier) has no granted spins and the
-  // route uses the global daily allowance directly, so both terms fall back to
-  // that.
+  // Free-spin availability for THE SELECTED tier. me.spin.freeSpinsRemaining is a
+  // cross-tier aggregate, so we derive the per-tier value the way the spin route
+  // does: this tier's daily allowance (capped by the remaining global daily
+  // allowance) plus this tier's granted spins.
   const tierAllowance = selectedTier?.freeSpinsPerDay ?? me.spin.config.freeSpinsPerDay;
   const grantedFreeForTier = tierKey ? me.spin.grantedFreeSpinsByTier[tierKey] ?? 0 : 0;
-  const freeSpins = Math.max(
-    0,
-    Math.min(me.spin.dailyFreeSpinsRemaining, tierAllowance) + grantedFreeForTier,
-  );
+  const freeSpins = Math.max(0, Math.min(me.spin.dailyFreeSpinsRemaining, tierAllowance) + grantedFreeForTier);
   const spinDisabled =
-    !me.spin.config.enabled || spin.isPending || (freeSpins <= 0 && me.coins < spinCost);
+    !me.spin.config.enabled ||
+    spin.isPending ||
+    spinning ||
+    wheelSegments.length === 0 ||
+    (freeSpins <= 0 && me.coins < spinCost);
+  const rewardsAvailable = storeQuery.data?.items.filter((i) => me.coins >= i.cost).length ?? 0;
+  const wheelSize = Math.min(width - 72, 320);
 
   return (
     <Screen
-      header={<StackScreenHeader title="Rewards" />}
+      header={<StackScreenHeader title={bn ? 'রিওয়ার্ড' : 'Rewards'} />}
       contentClassName="px-4 pt-3 gap-4"
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.gold600} />
       }
     >
-      {/* Coin balance */}
+      {/* Gold hero band */}
       <View className="relative overflow-hidden rounded-2xl border border-gold-600/20">
-        <Gradient colors={gradients.darkCard} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} radius={16} />
-        <View className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-gold-500/15" />
-        <View className="relative flex-row items-center justify-between p-4">
-          <View>
-            <Text className="text-[10px] font-bold uppercase tracking-widest text-white/55">
-              Reward coins
-            </Text>
-            <Text className="mt-1 text-3xl font-black" style={{ color: colors.gold300 }}>
-              {me.coins.toLocaleString()}
-            </Text>
-            <Text className="mt-0.5 text-[11px] text-white/45">Earn more by checking in and playing daily</Text>
-          </View>
-          <View className="h-14 w-14 items-center justify-center rounded-2xl border border-gold-500/40 bg-white/5">
-            <Icon name="star" size={26} color={colors.gold300} />
+        <Gradient colors={gradients.gold} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} radius={16} />
+        <View className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/20" />
+        <View className="relative p-4">
+          <Text className="text-[10px] font-black uppercase tracking-widest" style={{ color: '#7A4F00' }}>
+            {bn ? 'পাশা৯ রিওয়ার্ড' : 'Pasha9 Rewards'}
+          </Text>
+          <Text className="mt-1 text-2xl font-black" style={{ color: '#3A1F00' }}>
+            {bn ? 'খেলুন। কামান। জিতুন।' : 'Play. Earn. Win.'}
+          </Text>
+          <View className="mt-3 flex-row items-center gap-3">
+            <View className="h-12 w-12 items-center justify-center rounded-2xl border border-black/10 bg-white/30">
+              <Icon name="star" size={24} color="#7A4F00" />
+            </View>
+            <View className="flex-1">
+              <Text className="text-2xl font-black" style={{ color: '#3A1F00' }}>
+                {me.coins.toLocaleString()}
+              </Text>
+              <Text className="text-[11px] font-semibold" style={{ color: '#5A3A00' }}>
+                {bn
+                  ? `${freeSpins} ফ্রি স্পিন বাকি · ${rewardsAvailable} রিওয়ার্ড উপলব্ধ`
+                  : `${freeSpins} free spins left · ${rewardsAvailable} rewards available`}
+              </Text>
+            </View>
           </View>
         </View>
       </View>
 
-      {/* Daily check-in */}
-      <CheckInCard
-        dailyCoins={me.checkIn.config.dailyCoins}
-        streakBonusDay7={me.checkIn.config.streakBonusDay7}
-        streakDay={me.checkIn.streakDay}
-        claimedToday={me.checkIn.claimedToday}
-        enabled={me.checkIn.config.enabled}
-        busy={checkIn.isPending}
-        onCheckIn={onCheckIn}
-      />
-
-      {/* Spin the wheel */}
-      <SpinCard
-        enabled={me.spin.config.enabled}
-        freeSpins={freeSpins}
-        cost={spinCost}
-        coins={me.coins}
-        busy={spin.isPending}
-        disabled={spinDisabled}
-        onSpin={onSpin}
-      />
-
-      {/* Rewards store */}
-      <View className="gap-3">
-        <Text className="text-base font-extrabold text-ink">Rewards store</Text>
-        {storeQuery.isLoading ? (
-          <View className="h-40 rounded-2xl border border-divider bg-surfaceAlt/40" />
-        ) : storeQuery.isError ? (
-          <EmptyState
-            icon="alert-circle-outline"
-            title="Store unavailable"
-            message={
-              storeQuery.error instanceof ApiError
-                ? storeQuery.error.message
-                : 'We could not load the rewards store.'
-            }
-            actionLabel="Try again"
-            onAction={() => storeQuery.refetch()}
-          />
-        ) : (storeQuery.data?.items.length ?? 0) === 0 ? (
-          <EmptyState
-            icon="gift-outline"
-            title="No rewards yet"
-            message="New redeemable rewards will appear here soon."
-          />
-        ) : (
-          <View className="flex-row flex-wrap justify-between" style={{ rowGap: GAP }}>
-            {storeQuery.data!.items.map((item) => {
-              const affordable = me.coins >= item.cost;
-              return (
-                <View
-                  key={item.id}
-                  style={{ width: tileW }}
-                  className="rounded-2xl border border-divider bg-paper p-3.5 shadow-sm shadow-black/5"
-                >
-                  <View className="h-10 w-10 items-center justify-center rounded-xl bg-gold-500/15">
-                    <Icon name={rewardIcon(item.rewardType)} size={20} color={colors.gold700} />
-                  </View>
-                  <Text className="mt-2.5 text-sm font-extrabold text-ink" numberOfLines={1}>
-                    {item.title}
-                  </Text>
-                  <View className="mt-1 flex-row items-center gap-1">
-                    <Icon name="star" size={12} color={colors.gold600} />
-                    <Text className="text-xs font-bold text-ink-soft">
-                      {item.cost.toLocaleString()} coins
-                    </Text>
-                  </View>
-                  <PrimaryButton
-                    label={affordable ? 'Redeem' : 'Not enough'}
-                    size="sm"
-                    fullWidth
-                    disabled={!affordable}
-                    className="mt-3"
-                    onPress={() => setRedeemItem(item)}
-                  />
-                </View>
-              );
-            })}
-          </View>
-        )}
+      {/* Tabs */}
+      <View className="flex-row rounded-2xl border border-divider bg-surface p-1">
+        {(
+          [
+            { key: 'spin', label: bn ? 'স্পিন' : 'Spin', icon: 'disc' },
+            { key: 'checkin', label: bn ? 'চেক-ইন' : 'Check-in', icon: 'calendar' },
+            { key: 'store', label: bn ? 'স্টোর' : 'Store', icon: 'gift' },
+          ] as { key: TabKey; label: string; icon: string }[]
+        ).map((t) => {
+          const active = tab === t.key;
+          return (
+            <Pressable
+              key={t.key}
+              onPress={() => setTab(t.key)}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: active }}
+              className={'flex-1 flex-row items-center justify-center gap-1.5 rounded-xl py-2.5 ' + (active ? 'bg-paper shadow-sm shadow-black/5' : '')}
+            >
+              <Icon name={t.icon} size={15} color={active ? colors.gold700 : colors.inkMute} />
+              <Text className="text-[13px] font-bold" style={{ color: active ? colors.ink : colors.inkMute }}>
+                {t.label}
+              </Text>
+            </Pressable>
+          );
+        })}
       </View>
 
-      <RedeemSheet
-        item={redeemItem}
-        coins={me.coins}
-        onClose={() => setRedeemItem(null)}
-      />
+      {/* SPIN TAB */}
+      {tab === 'spin' ? (
+        !me.spin.config.enabled ? (
+          <EmptyState icon="pause-circle-outline" title={bn ? 'স্পিন সাময়িক বন্ধ' : 'Spin paused'} message={bn ? 'শীঘ্রই ফিরে আসুন।' : 'Please check back soon.'} />
+        ) : (
+          <View className="items-center gap-4 rounded-2xl border border-divider bg-paper p-4 shadow-sm shadow-black/5">
+            {tiers.length > 1 ? (
+              <ChipToggle
+                scroll
+                options={tiers.map((t) => ({ key: t.key, label: bn ? t.nameBn ?? t.nameEn : t.nameEn }))}
+                value={tierKey ?? tiers[0].key}
+                onChange={onSelectTier}
+              />
+            ) : null}
+
+            <SpinWheel
+              segments={wheelSegments.map((s) => ({ id: s.id, label: s.label, color: s.color }))}
+              spinning={spinning}
+              landingIndex={landingIndex}
+              onLandingComplete={onLandingComplete}
+              onSpinPress={onSpin}
+              size={wheelSize}
+              centerLabel={bn ? 'স্পিন' : 'SPIN'}
+              disabled={spinDisabled}
+            />
+
+            <View className="w-full flex-row items-center justify-center gap-2">
+              {freeSpins > 0 ? <Badge label={bn ? 'ফ্রি' : 'FREE'} variant="new" /> : null}
+              <Text className="text-xs font-semibold text-ink-soft">
+                {freeSpins > 0
+                  ? bn
+                    ? `${freeSpins}টি ফ্রি স্পিন বাকি`
+                    : `${freeSpins} free spins left`
+                  : bn
+                    ? `প্রতি স্পিন ${spinCost} কয়েন · আপনার ${me.coins.toLocaleString()}`
+                    : `${spinCost} coins per spin · you have ${me.coins.toLocaleString()}`}
+              </Text>
+            </View>
+
+            <PrimaryButton
+              label={
+                spinning
+                  ? bn
+                    ? 'ঘুরছে...'
+                    : 'Spinning...'
+                  : freeSpins > 0
+                    ? bn
+                      ? `ফ্রি স্পিন করুন (${freeSpins})`
+                      : `Spin free (${freeSpins} left)`
+                    : bn
+                      ? `${spinCost} কয়েনে স্পিন`
+                      : `Spin for ${spinCost} coins`
+              }
+              icon="sync"
+              fullWidth
+              loading={spinning || spin.isPending}
+              disabled={spinDisabled}
+              onPress={onSpin}
+            />
+          </View>
+        )
+      ) : null}
+
+      {/* CHECK-IN TAB */}
+      {tab === 'checkin' ? (
+        <CheckInCard
+          bn={bn}
+          dailyCoins={me.checkIn.config.dailyCoins}
+          streakBonusDay7={me.checkIn.config.streakBonusDay7}
+          streakDay={me.checkIn.streakDay}
+          claimedToday={me.checkIn.claimedToday}
+          enabled={me.checkIn.config.enabled}
+          busy={checkIn.isPending}
+          onCheckIn={onCheckIn}
+        />
+      ) : null}
+
+      {/* STORE TAB */}
+      {tab === 'store' ? (
+        <View className="gap-3">
+          <Text className="text-base font-extrabold text-ink">{bn ? 'রিওয়ার্ড স্টোর' : 'Rewards store'}</Text>
+          {storeQuery.isLoading ? (
+            <View className="h-40 rounded-2xl border border-divider bg-surfaceAlt/40" />
+          ) : storeQuery.isError ? (
+            <EmptyState
+              icon="alert-circle-outline"
+              title={bn ? 'স্টোর অনুপলব্ধ' : 'Store unavailable'}
+              message={storeQuery.error instanceof ApiError ? storeQuery.error.message : bn ? 'স্টোর লোড করা যায়নি।' : 'We could not load the rewards store.'}
+              actionLabel={bn ? 'আবার চেষ্টা করুন' : 'Try again'}
+              onAction={() => storeQuery.refetch()}
+            />
+          ) : (storeQuery.data?.items.length ?? 0) === 0 ? (
+            <EmptyState icon="gift-outline" title={bn ? 'এখনও কোনো রিওয়ার্ড নেই' : 'No rewards yet'} message={bn ? 'নতুন রিওয়ার্ড শীঘ্রই আসছে।' : 'New redeemable rewards will appear here soon.'} />
+          ) : (
+            <View className="flex-row flex-wrap justify-between" style={{ rowGap: GAP }}>
+              {storeQuery.data!.items.map((item) => (
+                <StoreTile
+                  key={item.id}
+                  bn={bn}
+                  item={item}
+                  width={tileW}
+                  affordable={me.coins >= item.cost}
+                  onPress={() => setRedeemItem(item)}
+                />
+              ))}
+            </View>
+          )}
+        </View>
+      ) : null}
+
+      <WinCelebration bn={bn} result={celebration} onClose={() => setCelebration(null)} />
+
+      <RedeemSheet bn={bn} item={redeemItem} coins={me.coins} onClose={() => setRedeemItem(null)} />
     </Screen>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Win-celebration modal (replaces the old Alert)
+// ---------------------------------------------------------------------------
+
+function WinCelebration({ bn, result, onClose }: { bn: boolean; result: SpinResultPayload | null; onClose: () => void }) {
+  const visible = result != null;
+  const won = result != null && result.payoutType !== 'loss' && result.payoutType !== 'nothing' && result.payoutAmount > 0;
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable className="flex-1 items-center justify-center bg-black/60 px-6" onPress={onClose}>
+        {/* Inner Pressable swallows the touch so tapping the card does not
+            dismiss the modal; only the backdrop or the button closes it. */}
+        <Pressable className="w-full max-w-sm overflow-hidden rounded-3xl border" style={{ borderColor: won ? colors.gold500 : colors.divider }} onPress={() => {}}>
+          <Gradient colors={won ? gradients.gold : gradients.darkCard} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} radius={24} />
+          <View className="relative items-center p-6">
+            <View
+              className="h-16 w-16 items-center justify-center rounded-full border"
+              style={{ borderColor: won ? '#B37F00' : 'rgba(255,255,255,0.25)', backgroundColor: won ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.08)' }}
+            >
+              <Icon name={won ? 'trophy' : 'refresh'} size={30} color={won ? '#7A4F00' : '#FFFFFF'} />
+            </View>
+            <Text className="mt-3 text-2xl font-black" style={{ color: won ? '#3A1F00' : '#FFFFFF' }}>
+              {won ? (bn ? 'অভিনন্দন!' : 'Congratulations!') : bn ? 'আরেকটু!' : 'So close!'}
+            </Text>
+            {result ? (
+              <>
+                <Text className="mt-1 text-base font-bold" style={{ color: won ? '#5A3A00' : 'rgba(255,255,255,0.85)' }}>
+                  {result.segmentLabel}
+                </Text>
+                <Text className="mt-0.5 text-sm font-semibold" style={{ color: won ? '#7A4F00' : 'rgba(255,255,255,0.7)' }}>
+                  {payoutDescription(result.payoutType, result.payoutAmount, bn)}
+                </Text>
+              </>
+            ) : null}
+            <PrimaryButton label={bn ? 'দারুণ' : 'Awesome'} fullWidth className="mt-5" onPress={onClose} />
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Store tile (with artwork parity)
+// ---------------------------------------------------------------------------
+
+function StoreTile({
+  bn,
+  item,
+  width,
+  affordable,
+  onPress,
+}: {
+  bn: boolean;
+  item: RewardItem;
+  width: number;
+  affordable: boolean;
+  onPress: () => void;
+}) {
+  const art = absoluteMediaUrl(item.bannerUrl ?? item.imageUrl);
+  const title = bn ? item.titleBn ?? item.title : item.title;
+  return (
+    <View style={{ width }} className="overflow-hidden rounded-2xl border border-divider bg-paper shadow-sm shadow-black/5">
+      {art ? (
+        <Image source={{ uri: art }} style={{ width: '100%', aspectRatio: 16 / 9 }} contentFit="cover" transition={150} />
+      ) : (
+        <View className="items-center justify-center bg-gold-500/10" style={{ width: '100%', aspectRatio: 16 / 9 }}>
+          <Icon name={rewardIcon(item.rewardType)} size={26} color={colors.gold700} />
+        </View>
+      )}
+      <View className="p-3">
+        <Text className="text-sm font-extrabold text-ink" numberOfLines={1}>
+          {title}
+        </Text>
+        <View className="mt-1 flex-row items-center gap-1">
+          <Icon name="star" size={12} color={colors.gold600} />
+          <Text className="text-xs font-bold text-ink-soft">
+            {item.cost.toLocaleString()} {bn ? 'কয়েন' : 'coins'}
+          </Text>
+        </View>
+        <PrimaryButton
+          label={affordable ? (bn ? 'রিডিম' : 'Redeem') : bn ? 'কয়েন কম' : 'Not enough'}
+          size="sm"
+          fullWidth
+          disabled={!affordable}
+          className="mt-3"
+          onPress={onPress}
+        />
+      </View>
+    </View>
   );
 }
 
@@ -324,6 +529,7 @@ export default function RewardsScreen() {
 // ---------------------------------------------------------------------------
 
 function CheckInCard({
+  bn,
   dailyCoins,
   streakBonusDay7,
   streakDay,
@@ -332,6 +538,7 @@ function CheckInCard({
   busy,
   onCheckIn,
 }: {
+  bn: boolean;
   dailyCoins: number;
   streakBonusDay7: number;
   streakDay: number;
@@ -340,22 +547,16 @@ function CheckInCard({
   busy: boolean;
   onCheckIn: () => void;
 }) {
-  // Day within the current 7-day cycle. Before today's claim the "today" cell
-  // is the next day; after claiming it is the day just claimed.
   const todayInCycle = claimedToday ? ((streakDay - 1) % 7) + 1 : (streakDay % 7) + 1;
   const days = Array.from({ length: 7 }, (_, i) => i + 1);
 
   return (
     <View className="rounded-2xl border border-divider bg-paper p-4 shadow-sm shadow-black/5">
       <View className="mb-3 flex-row items-center justify-between">
-        <Text className="text-base font-extrabold text-ink">Daily check-in</Text>
-        <Text className="text-[11px] font-bold text-gold-700">Streak: {streakDay} days</Text>
+        <Text className="text-base font-extrabold text-ink">{bn ? 'দৈনিক চেক-ইন' : 'Daily check-in'}</Text>
+        <Text className="text-[11px] font-bold text-gold-700">{bn ? `স্ট্রিক: ${streakDay} দিন` : `Streak: ${streakDay} days`}</Text>
       </View>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ gap: 8, paddingRight: 4 }}
-      >
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 4 }}>
         {days.map((day) => {
           const claimed = day < todayInCycle || (day === todayInCycle && claimedToday);
           const today = day === todayInCycle && !claimedToday;
@@ -365,15 +566,11 @@ function CheckInCard({
               key={day}
               className={
                 'w-16 items-center rounded-xl border py-3 ' +
-                (today
-                  ? 'border-gold-600 bg-gold-500/15'
-                  : claimed
-                    ? 'border-divider bg-surface'
-                    : 'border-divider bg-paper')
+                (today ? 'border-gold-600 bg-gold-500/15' : claimed ? 'border-divider bg-surface' : 'border-divider bg-paper')
               }
             >
               <Text className="text-[10px] font-bold uppercase tracking-wider text-ink-mute">
-                Day {day}
+                {bn ? `দিন ${day}` : `Day ${day}`}
               </Text>
               <View
                 className={
@@ -381,16 +578,9 @@ function CheckInCard({
                   (claimed ? 'bg-newg/15' : today ? 'bg-gold-500' : 'bg-surfaceAlt')
                 }
               >
-                <Icon
-                  name={claimed ? 'checkmark' : 'star'}
-                  size={15}
-                  color={claimed ? colors.newg : today ? colors.ink : colors.inkMute}
-                />
+                <Icon name={claimed ? 'checkmark' : 'star'} size={15} color={claimed ? colors.newg : today ? colors.ink : colors.inkMute} />
               </View>
-              <Text
-                className="text-[11px] font-black"
-                style={{ color: today ? colors.gold700 : colors.inkSoft }}
-              >
+              <Text className="text-[11px] font-black" style={{ color: today ? colors.gold700 : colors.inkSoft }}>
                 +{reward}
               </Text>
             </View>
@@ -398,7 +588,23 @@ function CheckInCard({
         })}
       </ScrollView>
       <PrimaryButton
-        label={!enabled ? 'Check-in paused' : claimedToday ? 'Checked in today' : busy ? 'Checking in...' : 'Check in today'}
+        label={
+          !enabled
+            ? bn
+              ? 'চেক-ইন বন্ধ'
+              : 'Check-in paused'
+            : claimedToday
+              ? bn
+                ? 'আজ চেক-ইন হয়েছে'
+                : 'Checked in today'
+              : busy
+                ? bn
+                  ? 'চেক-ইন হচ্ছে...'
+                  : 'Checking in...'
+                : bn
+                  ? 'আজ চেক-ইন করুন'
+                  : 'Check in today'
+        }
         icon="calendar"
         fullWidth
         className="mt-3"
@@ -411,78 +617,16 @@ function CheckInCard({
 }
 
 // ---------------------------------------------------------------------------
-// Spin
-// ---------------------------------------------------------------------------
-
-function SpinCard({
-  enabled,
-  freeSpins,
-  cost,
-  coins,
-  busy,
-  disabled,
-  onSpin,
-}: {
-  enabled: boolean;
-  freeSpins: number;
-  cost: number;
-  coins: number;
-  busy: boolean;
-  disabled: boolean;
-  onSpin: () => void;
-}) {
-  const usesFree = freeSpins > 0;
-  const label = !enabled
-    ? 'Spin paused'
-    : busy
-      ? 'Spinning...'
-      : usesFree
-        ? `Spin free (${freeSpins} left)`
-        : `Spin for ${cost} coins`;
-  return (
-    <View className="relative overflow-hidden rounded-2xl border border-gold-600/20">
-      <Gradient colors={gradients.hot} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} radius={16} />
-      <View className="absolute -left-6 -bottom-8 h-32 w-32 rounded-full bg-white/10" />
-      <View className="relative p-4">
-        <View className="flex-row items-center gap-3">
-          <View className="h-14 w-14 items-center justify-center rounded-full border-2 border-white/40 bg-white/10">
-            <Icon name="disc" size={28} color="#FFFFFF" />
-          </View>
-          <View className="flex-1">
-            <View className="flex-row items-center gap-2">
-              <Text className="text-base font-black text-white">Daily Spin</Text>
-              {usesFree ? <Badge label="FREE" variant="new" /> : null}
-            </View>
-            <Text className="mt-0.5 text-xs font-medium text-white/85">
-              {usesFree
-                ? 'Spin the wheel for a free reward'
-                : `Each spin costs ${cost} coins. You have ${coins.toLocaleString()}.`}
-            </Text>
-          </View>
-        </View>
-        <PrimaryButton
-          label={label}
-          icon="sync"
-          fullWidth
-          className="mt-3"
-          loading={busy}
-          disabled={disabled}
-          onPress={onSpin}
-        />
-      </View>
-    </View>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Redeem sheet (per-rewardType payload the server requires)
 // ---------------------------------------------------------------------------
 
 function RedeemSheet({
+  bn,
   item,
   coins,
   onClose,
 }: {
+  bn: boolean;
   item: RewardItem | null;
   coins: number;
   onClose: () => void;
@@ -514,18 +658,16 @@ function RedeemSheet({
     if (!item) return;
     if (guard.current || redeem.isPending) return;
 
-    // Client-side validation mirroring the server's zod schemas so the player
-    // gets an inline message instead of a round-trip 400.
     let body: RedeemBody;
     if (item.rewardType === 'recharge') {
       if (!/^0?1\d{9}$/.test(phone.trim())) {
-        Alert.alert('Check the number', 'Enter a valid Bangladeshi mobile number.');
+        Alert.alert(bn ? 'নম্বর দেখুন' : 'Check the number', bn ? 'একটি সঠিক বাংলাদেশি মোবাইল নম্বর দিন।' : 'Enter a valid Bangladeshi mobile number.');
         return;
       }
       body = { operator, phone: phone.trim() };
     } else if (item.rewardType === 'physical') {
       if (fullName.trim().length < 2 || phone.trim().length < 10 || address.trim().length < 5) {
-        Alert.alert('Delivery details', 'Please fill in your name, phone and full address.');
+        Alert.alert(bn ? 'ডেলিভারি তথ্য' : 'Delivery details', bn ? 'নাম, ফোন এবং সম্পূর্ণ ঠিকানা দিন।' : 'Please fill in your name, phone and full address.');
         return;
       }
       body = {
@@ -543,19 +685,22 @@ function RedeemSheet({
       { id: item.id, body },
       {
         onSuccess: () => {
-          Alert.alert('Reward requested', `${item.title} is being processed. We deducted ${item.cost} coins.`);
+          Alert.alert(
+            bn ? 'রিওয়ার্ড অনুরোধ করা হয়েছে' : 'Reward requested',
+            `${bn ? item.titleBn ?? item.title : item.title} ${bn ? 'প্রক্রিয়াধীন। কাটা হয়েছে' : 'is being processed. We deducted'} ${item.cost} ${bn ? 'কয়েন।' : 'coins.'}`,
+          );
           close();
         },
         onError: (err) => {
-          const msg = err instanceof ApiError ? err.message : 'Could not redeem this reward. Please try again.';
-          Alert.alert('Redeem failed', msg);
+          const msg = err instanceof ApiError ? err.message : bn ? 'রিডিম করা যায়নি।' : 'Could not redeem this reward. Please try again.';
+          Alert.alert(bn ? 'রিডিম ব্যর্থ' : 'Redeem failed', msg);
         },
         onSettled: () => {
           guard.current = false;
         },
       },
     );
-  }, [item, operator, phone, fullName, address, notes, redeem, close]);
+  }, [item, operator, phone, fullName, address, notes, redeem, close, bn]);
 
   const visible = item != null;
   const affordable = item ? coins >= item.cost : false;
@@ -566,7 +711,7 @@ function RedeemSheet({
         <View className="rounded-t-3xl border-t border-divider bg-paper px-4 pb-8 pt-4">
           <View className="mb-3 flex-row items-center justify-between">
             <Text className="text-lg font-black text-ink" numberOfLines={1}>
-              {item?.title ?? 'Redeem'}
+              {(bn ? item?.titleBn ?? item?.title : item?.title) ?? (bn ? 'রিডিম' : 'Redeem')}
             </Text>
             <Pressable onPress={close} hitSlop={8} className="h-9 w-9 items-center justify-center rounded-xl active:bg-surfaceAlt">
               <Icon name="close" size={22} color={colors.ink} />
@@ -576,19 +721,21 @@ function RedeemSheet({
           <View className="mb-3 flex-row items-center gap-1.5">
             <Icon name="star" size={14} color={colors.gold600} />
             <Text className="text-sm font-bold text-ink-soft">
-              {item?.cost.toLocaleString()} coins
+              {item?.cost.toLocaleString()} {bn ? 'কয়েন' : 'coins'}
             </Text>
-            <Text className="text-xs text-ink-mute">- you have {coins.toLocaleString()}</Text>
+            <Text className="text-xs text-ink-mute">
+              {bn ? `- আপনার ${coins.toLocaleString()}` : `- you have ${coins.toLocaleString()}`}
+            </Text>
           </View>
 
-          {item?.description ? (
-            <Text className="mb-3 text-xs text-ink-mute">{item.description}</Text>
+          {item?.description || item?.descriptionBn ? (
+            <Text className="mb-3 text-xs text-ink-mute">{bn ? item?.descriptionBn ?? item?.description : item?.description}</Text>
           ) : null}
 
           {item?.rewardType === 'recharge' ? (
             <View className="gap-3">
               <View>
-                <Text className="mb-1.5 text-xs font-bold text-ink-soft">Operator</Text>
+                <Text className="mb-1.5 text-xs font-bold text-ink-soft">{bn ? 'অপারেটর' : 'Operator'}</Text>
                 <ChipToggle
                   scroll
                   options={OPERATORS.map((o) => ({ key: o.key, label: o.label }))}
@@ -596,37 +743,26 @@ function RedeemSheet({
                   onChange={(k) => setOperator(k as RechargeClaimBody['operator'])}
                 />
               </View>
-              <TextField
-                label="Mobile number"
-                value={phone}
-                onChangeText={setPhone}
-                placeholder="01XXXXXXXXX"
-                keyboardType="phone-pad"
-              />
+              <TextField label={bn ? 'মোবাইল নম্বর' : 'Mobile number'} value={phone} onChangeText={setPhone} placeholder="01XXXXXXXXX" keyboardType="phone-pad" />
             </View>
           ) : item?.rewardType === 'physical' ? (
             <View className="gap-3">
-              <TextField label="Full name" value={fullName} onChangeText={setFullName} placeholder="Your name" />
-              <TextField
-                label="Phone"
-                value={phone}
-                onChangeText={setPhone}
-                placeholder="01XXXXXXXXX"
-                keyboardType="phone-pad"
-              />
-              <TextField label="Delivery address" value={address} onChangeText={setAddress} placeholder="House, road, area, district" />
-              <TextField label="Notes (optional)" value={notes} onChangeText={setNotes} placeholder="Anything we should know" />
+              <TextField label={bn ? 'পূর্ণ নাম' : 'Full name'} value={fullName} onChangeText={setFullName} placeholder={bn ? 'আপনার নাম' : 'Your name'} />
+              <TextField label={bn ? 'ফোন' : 'Phone'} value={phone} onChangeText={setPhone} placeholder="01XXXXXXXXX" keyboardType="phone-pad" />
+              <TextField label={bn ? 'ডেলিভারি ঠিকানা' : 'Delivery address'} value={address} onChangeText={setAddress} placeholder={bn ? 'বাসা, রোড, এলাকা, জেলা' : 'House, road, area, district'} />
+              <TextField label={bn ? 'নোট (ঐচ্ছিক)' : 'Notes (optional)'} value={notes} onChangeText={setNotes} placeholder={bn ? 'কিছু জানানোর থাকলে' : 'Anything we should know'} />
             </View>
           ) : (
             <Text className="text-xs text-ink-mute">
-              Confirm to redeem this reward. {item?.shortInstructionEn ?? ''}
+              {bn ? 'রিডিম নিশ্চিত করুন। ' : 'Confirm to redeem this reward. '}
+              {(bn ? item?.shortInstructionBn ?? item?.shortInstructionEn : item?.shortInstructionEn) ?? ''}
             </Text>
           )}
 
           <View className="mt-4 flex-row gap-3">
-            <GhostButton label="Cancel" className="flex-1" onPress={close} />
+            <GhostButton label={bn ? 'বাতিল' : 'Cancel'} className="flex-1" onPress={close} />
             <PrimaryButton
-              label={redeem.isPending ? 'Redeeming...' : 'Confirm redeem'}
+              label={redeem.isPending ? (bn ? 'রিডিম হচ্ছে...' : 'Redeeming...') : bn ? 'নিশ্চিত করুন' : 'Confirm redeem'}
               className="flex-1"
               loading={redeem.isPending}
               disabled={!affordable || redeem.isPending}
