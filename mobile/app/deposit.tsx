@@ -12,7 +12,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { Icon } from '@/components/ui/Icon';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { Screen, Card, TextField, PrimaryButton } from '@/components/ui';
 import { StackScreenHeader } from '@/components/StackScreenHeader';
@@ -47,6 +47,15 @@ function brandFor(name: string): { color: string; icon: IconName } {
 
 export default function DepositScreen() {
   const router = useRouter();
+  // A promotion's "Deposit to claim" hands us the suggested amount so the
+  // field is prefilled and the server's deposit preview applies the matching
+  // bonus. Without this the deposit-gated promo flow lost all context.
+  const params = useLocalSearchParams<{ amount?: string }>();
+  const prefillAmount = (() => {
+    const a = Number(params.amount);
+    return Number.isFinite(a) && a > 0 ? String(Math.floor(a)) : '';
+  })();
+
   const { data: bonuses } = useBonuses();
   const methodsQuery = usePaymentMethods();
   const createDeposit = useCreateDeposit();
@@ -54,7 +63,7 @@ export default function DepositScreen() {
   const methods = methodsQuery.data?.deposit ?? [];
 
   const [methodName, setMethodName] = useState<string>('');
-  const [amount, setAmount] = useState<string>('');
+  const [amount, setAmount] = useState<string>(prefillAmount);
   const [transactionId, setTransactionId] = useState<string>('');
   const [proofUrl, setProofUrl] = useState<string | null>(null);
   const [proofName, setProofName] = useState<string | null>(null);

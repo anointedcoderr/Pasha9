@@ -141,6 +141,44 @@ export function usePromotions() {
 }
 
 // ---------------------------------------------------------------------------
+// Promotion banners (GET /api/content/promotions/banners)
+// ---------------------------------------------------------------------------
+
+/** One promotion banner slide. imageUrl is a raw backend path; resolve with
+ *  absoluteMediaUrl before rendering. */
+export interface PromotionBanner {
+  id: string;
+  title: string;
+  titleBn: string | null;
+  subtitle: string;
+  subtitleBn: string | null;
+  imageUrl: string;
+  ctaUrl: string | null;
+}
+
+export async function getPromotionBanners(): Promise<PromotionBanner[]> {
+  const res = await api.get<{ ok: true; banners?: Array<Record<string, unknown>> }>(
+    '/api/content/promotions/banners',
+  );
+  const rows = Array.isArray(res.banners) ? res.banners : [];
+  return rows
+    .map((r) => ({
+      id: String(r.id ?? ''),
+      title: typeof r.titleEn === 'string' ? r.titleEn : '',
+      titleBn: str(r.titleBn),
+      subtitle: typeof r.subtitleEn === 'string' ? r.subtitleEn : '',
+      subtitleBn: str(r.subtitleBn),
+      imageUrl: typeof r.imageUrl === 'string' ? r.imageUrl : '',
+      ctaUrl: str(r.ctaUrl),
+    }))
+    .filter((b) => b.id.length > 0 && b.imageUrl.length > 0);
+}
+
+export function usePromotionBanners() {
+  return useQuery({ queryKey: ['promotions', 'banners'], queryFn: getPromotionBanners, staleTime: 60_000 });
+}
+
+// ---------------------------------------------------------------------------
 // Claim
 // ---------------------------------------------------------------------------
 
