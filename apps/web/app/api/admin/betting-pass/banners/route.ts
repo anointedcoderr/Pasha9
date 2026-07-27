@@ -22,6 +22,8 @@ const createSchema = z.object({
   ctaUrl: z.string().trim().max(600).optional().nullable(),
   sortOrder: z.coerce.number().int().min(0).max(9999).optional().default(0),
   isActive: z.boolean().optional().default(true),
+  showOverlay: z.boolean().optional().default(true),
+  overlayPosition: z.enum(['left', 'center', 'right']).optional().default('left'),
 });
 
 const reorderSchema = z.object({

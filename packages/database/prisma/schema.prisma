@@ -2365,6 +2365,12 @@ model BettingPassBanner {
   ctaUrl     String?
   sortOrder  Int      @default(0)
   isActive   Boolean  @default(true)
+  // Text-overlay controls. showOverlay=false renders the uploaded image
+  // clean (no tier badge / title / subtitle) so operator artwork is not
+  // covered; overlayPosition ('left' | 'center' | 'right') sets where the
+  // overlay sits when shown.
+  showOverlay     Boolean @default(true)
+  overlayPosition String  @default("left")
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 

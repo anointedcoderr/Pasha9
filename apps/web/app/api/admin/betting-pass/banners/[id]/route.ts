@@ -21,6 +21,8 @@ const patchSchema = z.object({
   ctaUrl: z.string().trim().max(600).optional().nullable(),
   sortOrder: z.coerce.number().int().min(0).max(9999).optional(),
   isActive: z.boolean().optional(),
+  showOverlay: z.boolean().optional(),
+  overlayPosition: z.enum(['left', 'center', 'right']).optional(),
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {

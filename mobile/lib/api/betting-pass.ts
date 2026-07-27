@@ -252,6 +252,7 @@ export interface BettingPassBanner {
   subtitleBn: string | null;
   imageUrl: string;
   ctaUrl: string | null;
+  showOverlay: boolean;
 }
 
 export async function getBettingPassBanners(): Promise<BettingPassBanner[]> {
@@ -268,6 +269,7 @@ export async function getBettingPassBanners(): Promise<BettingPassBanner[]> {
       subtitleBn: strOrNull(b.subtitleBn),
       imageUrl: str(b.imageUrl),
       ctaUrl: strOrNull(b.ctaUrl),
+      showOverlay: b.showOverlay !== false,
     }))
     .filter((b) => b.id.length > 0 && b.imageUrl.length > 0);
 }

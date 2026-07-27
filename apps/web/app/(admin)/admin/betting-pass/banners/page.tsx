@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/site/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { FormField, Input, Textarea } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
 import { Modal } from '@/components/ui/Modal';
 import { Switch } from '@/components/ui/Switch';
 import { Chip } from '@/components/ui/Chip';
@@ -24,6 +25,8 @@ interface BannerRow {
   ctaUrl: string | null;
   sortOrder: number;
   isActive: boolean;
+  showOverlay: boolean;
+  overlayPosition: string;
 }
 
 const NEW_BANNER: BannerRow = {
@@ -36,6 +39,8 @@ const NEW_BANNER: BannerRow = {
   ctaUrl: '',
   sortOrder: 0,
   isActive: true,
+  showOverlay: true,
+  overlayPosition: 'left',
 };
 
 export default function AdminBettingPassBannersPage() {
@@ -87,6 +92,8 @@ export default function AdminBettingPassBannersPage() {
       ctaUrl: editor.ctaUrl || null,
       sortOrder: editor.sortOrder,
       isActive: editor.isActive,
+      showOverlay: editor.showOverlay,
+      overlayPosition: editor.overlayPosition,
     };
     try {
       const res = isNew
@@ -309,6 +316,19 @@ export default function AdminBettingPassBannersPage() {
               constraintHint="PNG / JPG / WEBP, ~1200x420, max 4 MB"
               onChange={(url) => setEditor({ ...editor, imageUrl: url ?? '' })}
             />
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="flex items-center gap-2 text-sm text-ink-mid">
+                <Switch checked={editor.showOverlay} onChange={(v) => setEditor({ ...editor, showOverlay: Boolean(v) })} />
+                Show text overlay (badge, title, subtitle)
+              </label>
+              <FormField label="Overlay position" hint="Where the text sits. Turn the overlay off to show the uploaded image clean.">
+                <Select value={editor.overlayPosition} onChange={(e) => setEditor({ ...editor, overlayPosition: e.target.value })} disabled={!editor.showOverlay}>
+                  <option value="left">Left</option>
+                  <option value="center">Center</option>
+                  <option value="right">Right</option>
+                </Select>
+              </FormField>
+            </div>
             <label className="flex items-center gap-2 text-sm text-ink-mid">
               <Switch checked={editor.isActive} onChange={(v) => setEditor({ ...editor, isActive: Boolean(v) })} />
               Active

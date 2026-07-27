@@ -25,6 +25,8 @@ export interface BannerRow {
   subtitleBn: string | null;
   imageUrl: string | null;
   ctaUrl: string | null;
+  showOverlay?: boolean;
+  overlayPosition?: string;
 }
 
 const AUTO_ROTATE_MS = 5000;
@@ -69,6 +71,14 @@ export function BettingPassBannerSlider({ banners }: { banners: BannerRow[] }) {
   const title = bn && active.titleBn ? active.titleBn : active.titleEn;
   const subtitle = bn && active.subtitleBn ? active.subtitleBn : active.subtitleEn;
 
+  // Overlay controls (issue #1): when showOverlay is off the uploaded image
+  // renders clean, so the operator's own artwork is never covered by the
+  // badge/title. overlayPosition sets where the text sits when shown.
+  const showOverlay = active.showOverlay !== false;
+  const renderOverlay = showOverlay && Boolean(title?.trim() || subtitle?.trim());
+  const pos = active.overlayPosition ?? 'left';
+  const alignClass = pos === 'center' ? 'items-center text-center' : pos === 'right' ? 'items-end text-right' : 'items-start text-left';
+
   const inner = (
     <div
       ref={containerRef}
@@ -87,8 +97,8 @@ export function BettingPassBannerSlider({ banners }: { banners: BannerRow[] }) {
           className="absolute inset-0 h-full w-full object-cover"
         />
       ) : null}
-      {(title?.trim() || subtitle?.trim()) ? (
-        <div className="relative flex h-full min-h-[180px] flex-col justify-center gap-2 px-5 py-6 md:px-8">
+      {renderOverlay ? (
+        <div className={cn('relative flex h-full min-h-[180px] flex-col justify-center gap-2 px-5 py-6 md:px-8', alignClass)}>
           <p className="inline-flex w-max items-center gap-1.5 rounded-full bg-black/30 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-brand-yellow-300 shadow-sm">
             <Sparkles className="h-3 w-3" />
             {bn ? 'পাশা ৯ বেটিং পাস' : 'Pasha 9 Betting Pass'}

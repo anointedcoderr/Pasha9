@@ -26,6 +26,8 @@ export async function GET() {
       imageUrl: true,
       ctaUrl: true,
       sortOrder: true,
+      showOverlay: true,
+      overlayPosition: true,
     },
   });
   return jsonOk({ banners });

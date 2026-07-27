@@ -120,11 +120,12 @@ export default function BettingPassScreen() {
       .map((b, i) => {
         const uri = absoluteMediaUrl(b.imageUrl);
         if (!uri) return null;
+        // showOverlay off (issue #1): keep the artwork clean, no title/subtitle.
         return {
           id: b.id,
           imageUrl: uri,
-          title: (bn ? b.titleBn ?? b.title : b.title) || 'Betting Pass',
-          subtitle: bn ? b.subtitleBn ?? b.subtitle : b.subtitle,
+          title: b.showOverlay ? (bn ? b.titleBn ?? b.title : b.title) || 'Betting Pass' : '',
+          subtitle: b.showOverlay ? bn ? b.subtitleBn ?? b.subtitle : b.subtitle : '',
           ctaLabel: bn ? 'দেখুন' : 'View',
           accent: accents[i % accents.length],
         } as HeroBanner;
