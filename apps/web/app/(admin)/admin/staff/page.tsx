@@ -23,6 +23,7 @@ import { FormField, Input, Textarea } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Users, ShieldCheck, Plus, Pencil, Ban, Sparkles, KeyRound, RefreshCw, ListFilter } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
+import { PermissionPicker } from '@/components/admin/PermissionPicker';
 
 interface RoleSnapshot {
   id: string;
@@ -275,7 +276,7 @@ export default function AdminStaffPage() {
           <EditStaffPanel
             row={drawerStaff}
             roles={roles}
-            permissionsByGroup={permsByGroup}
+            permissions={permissions}
             onDone={(msg) => {
               setDrawerStaff(null);
               flashToast(msg);
@@ -298,16 +299,6 @@ function CreateStaffForm({ roles, permissions, onDone }: { roles: RoleSnapshot[]
   const [extras, setExtras] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-
-  const groups = useMemo(() => {
-    const map = new Map<string, PermissionRef[]>();
-    for (const p of permissions) {
-      const arr = map.get(p.group) ?? [];
-      arr.push(p);
-      map.set(p.group, arr);
-    }
-    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
-  }, [permissions]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -343,12 +334,6 @@ function CreateStaffForm({ roles, permissions, onDone }: { roles: RoleSnapshot[]
     }
   };
 
-  const toggle = (id: string) => {
-    const next = new Set(extras);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    setExtras(next);
-  };
-
   return (
     <form className="space-y-4" onSubmit={submit}>
       <div className="grid gap-3 md:grid-cols-2">
@@ -374,27 +359,10 @@ function CreateStaffForm({ roles, permissions, onDone }: { roles: RoleSnapshot[]
       </div>
 
       <div>
-        <p className="text-sm font-semibold text-ink-hi">Extra permissions <span className="text-xs text-ink-lo">(beyond the role baseline)</span></p>
-        <p className="mt-1 text-xs text-ink-mid">Use this to grant a single permission without changing the staff member&apos;s role.</p>
-        <div className="mt-3 grid gap-3 md:grid-cols-2">
-          {groups.map(([group, perms]) => (
-            <div key={group} className="rounded-lg border border-neon/10 bg-base-deep/40 p-3">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-gold-300">{group}</p>
-              <div className="mt-2 space-y-1.5">
-                {perms.map((p) => (
-                  <label key={p.id} className="flex items-start gap-2 text-xs text-ink-mid">
-                    <input
-                      type="checkbox"
-                      className="mt-0.5"
-                      checked={extras.has(p.id)}
-                      onChange={() => toggle(p.id)}
-                    />
-                    <span><code className="font-mono text-[11px] text-ink-hi">{p.key}</code> <span className="text-ink-lo">. {p.label}</span></span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          ))}
+        <p className="text-sm font-semibold text-ink-hi">Access by section <span className="text-xs text-ink-lo">(beyond the role baseline)</span></p>
+        <p className="mt-1 text-xs text-ink-mid">Pick the sections and actions this staff member should have. You choose clear names; the system keeps the technical codes.</p>
+        <div className="mt-3">
+          <PermissionPicker permissions={permissions} selected={extras} onChange={setExtras} />
         </div>
       </div>
 
@@ -411,13 +379,13 @@ function CreateStaffForm({ roles, permissions, onDone }: { roles: RoleSnapshot[]
 function EditStaffPanel({
   row,
   roles,
-  permissionsByGroup,
+  permissions,
   onDone,
   onClose,
 }: {
   row: StaffRow;
   roles: RoleSnapshot[];
-  permissionsByGroup: Array<[string, PermissionRef[]]>;
+  permissions: PermissionRef[];
   onDone: (msg: string) => void;
   onClose: () => void;
 }) {
@@ -428,12 +396,6 @@ function EditStaffPanel({
   const [extras, setExtras] = useState<Set<string>>(new Set(row.extraPermissions.map((p) => p.id)));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-
-  const toggle = (id: string) => {
-    const next = new Set(extras);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    setExtras(next);
-  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -505,27 +467,10 @@ function EditStaffPanel({
       </FormField>
 
       <div>
-        <p className="text-sm font-semibold text-ink-hi">Extra permissions <span className="text-xs text-ink-lo">(beyond the role baseline)</span></p>
-        <p className="mt-1 text-xs text-ink-mid">Effective permissions = role permissions UNION ticked here. Changes apply immediately - active sessions are revoked.</p>
-        <div className="mt-3 grid gap-3">
-          {permissionsByGroup.map(([group, perms]) => (
-            <div key={group} className="rounded-lg border border-neon/10 bg-base-deep/40 p-3">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-gold-300">{group}</p>
-              <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
-                {perms.map((p) => (
-                  <label key={p.id} className="flex items-start gap-2 text-xs text-ink-mid">
-                    <input
-                      type="checkbox"
-                      className="mt-0.5"
-                      checked={extras.has(p.id)}
-                      onChange={() => toggle(p.id)}
-                    />
-                    <span><code className="font-mono text-[11px] text-ink-hi">{p.key}</code></span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          ))}
+        <p className="text-sm font-semibold text-ink-hi">Access by section <span className="text-xs text-ink-lo">(beyond the role baseline)</span></p>
+        <p className="mt-1 text-xs text-ink-mid">Effective access = role baseline plus anything ticked here. Changes apply immediately and revoke active sessions.</p>
+        <div className="mt-3">
+          <PermissionPicker permissions={permissions} selected={extras} onChange={setExtras} />
         </div>
       </div>
 
