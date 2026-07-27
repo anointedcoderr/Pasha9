@@ -49,6 +49,26 @@ export async function GET() {
     const spinConfig = await loadSpinConfig();
     const freeSpinsToday = Math.max(0, (spinConfig.freeSpinsPerDay ?? 0) - (legacyFreeLog?.used ?? 0));
 
+    // Whether the check-in deposit gate is blocking this player right now:
+    // they finished a full cycle on their last check-in and have not made a
+    // qualifying deposit since. Drives the disabled state + message on the UI.
+    let depositRequiredForNextCycle = false;
+    if (checkInConfig.requireDepositPerCycle && lastClaim) {
+      const cyc = Math.max(1, Math.floor(checkInConfig.cycleLength || 7));
+      if (lastClaim.streakDay % cyc === 0) {
+        const dep = await db.deposit.findFirst({
+          where: {
+            userId,
+            status: 'approved',
+            createdAt: { gt: lastClaim.createdAt },
+            amount: { gte: checkInConfig.minDepositForNextCycle },
+          },
+          select: { id: true },
+        });
+        depositRequiredForNextCycle = !dep;
+      }
+    }
+
     // Sum available granted spins per tier key.
     const grantedFreeSpinsByTier: Record<string, number> = {};
     let grantedFreeSpinsTotal = 0;
@@ -65,6 +85,7 @@ export async function GET() {
         config: checkInConfig,
         claimedToday: todayCheckIns > 0,
         streakDay: lastClaim?.streakDay ?? 0,
+        depositRequiredForNextCycle,
       },
       spin: {
         config: spinConfig,

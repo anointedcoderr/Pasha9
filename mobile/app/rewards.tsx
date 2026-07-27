@@ -52,6 +52,7 @@ import {
   type RechargeClaimBody,
   type SpinResultPayload,
   type SpinTier,
+  type CheckInConfig,
 } from '@/lib/api/rewards';
 import { absoluteMediaUrl } from '@/lib/api/home';
 import { ApiError } from '@/lib/api/client';
@@ -381,11 +382,10 @@ export default function RewardsScreen() {
       {tab === 'checkin' ? (
         <CheckInCard
           bn={bn}
-          dailyCoins={me.checkIn.config.dailyCoins}
-          streakBonusDay7={me.checkIn.config.streakBonusDay7}
+          config={me.checkIn.config}
           streakDay={me.checkIn.streakDay}
           claimedToday={me.checkIn.claimedToday}
-          enabled={me.checkIn.config.enabled}
+          depositRequired={me.checkIn.depositRequiredForNextCycle}
           busy={checkIn.isPending}
           onCheckIn={onCheckIn}
         />
@@ -530,25 +530,51 @@ function StoreTile({
 
 function CheckInCard({
   bn,
-  dailyCoins,
-  streakBonusDay7,
+  config,
   streakDay,
   claimedToday,
-  enabled,
+  depositRequired,
   busy,
   onCheckIn,
 }: {
   bn: boolean;
-  dailyCoins: number;
-  streakBonusDay7: number;
+  config: CheckInConfig;
   streakDay: number;
   claimedToday: boolean;
-  enabled: boolean;
+  depositRequired: boolean;
   busy: boolean;
   onCheckIn: () => void;
 }) {
-  const todayInCycle = claimedToday ? ((streakDay - 1) % 7) + 1 : (streakDay % 7) + 1;
-  const days = Array.from({ length: 7 }, (_, i) => i + 1);
+  const enabled = config.enabled;
+  const cycleLength = Math.max(1, Math.min(60, Math.floor(config.cycleLength || 7)));
+  const perDay = Array.isArray(config.dayAmounts) && config.dayAmounts.length === cycleLength;
+  const todayInCycle = claimedToday ? ((streakDay - 1) % cycleLength) + 1 : (streakDay % cycleLength) + 1;
+  const days = Array.from({ length: cycleLength }, (_, i) => i + 1);
+  const rewardFor = (day: number) =>
+    perDay
+      ? Math.max(0, Math.floor(Number(config.dayAmounts[day - 1] ?? config.dailyCoins)))
+      : config.dailyCoins + (day === cycleLength ? config.streakBonusDay7 : 0);
+  const gateText = bn ? config.depositGateTextBn : config.depositGateTextEn;
+
+  const label = !enabled
+    ? bn
+      ? 'চেক-ইন বন্ধ'
+      : 'Check-in paused'
+    : depositRequired
+      ? bn
+        ? 'নতুন ডিপোজিট প্রয়োজন'
+        : 'New deposit required'
+      : claimedToday
+        ? bn
+          ? 'আজ চেক-ইন হয়েছে'
+          : 'Checked in today'
+        : busy
+          ? bn
+            ? 'চেক-ইন হচ্ছে...'
+            : 'Checking in...'
+          : bn
+            ? 'আজ চেক-ইন করুন'
+            : 'Check in today';
 
   return (
     <View className="rounded-2xl border border-divider bg-paper p-4 shadow-sm shadow-black/5">
@@ -560,7 +586,7 @@ function CheckInCard({
         {days.map((day) => {
           const claimed = day < todayInCycle || (day === todayInCycle && claimedToday);
           const today = day === todayInCycle && !claimedToday;
-          const reward = day === 7 ? dailyCoins + streakBonusDay7 : dailyCoins;
+          const reward = rewardFor(day);
           return (
             <View
               key={day}
@@ -587,29 +613,21 @@ function CheckInCard({
           );
         })}
       </ScrollView>
+
+      {depositRequired ? (
+        <View className="mt-3 flex-row items-start gap-2 rounded-xl border border-gold-600/30 bg-gold-500/10 p-3">
+          <Icon name="lock-closed" size={15} color={colors.gold700} />
+          <Text className="flex-1 text-[12px] leading-5 text-ink-soft">{gateText}</Text>
+        </View>
+      ) : null}
+
       <PrimaryButton
-        label={
-          !enabled
-            ? bn
-              ? 'চেক-ইন বন্ধ'
-              : 'Check-in paused'
-            : claimedToday
-              ? bn
-                ? 'আজ চেক-ইন হয়েছে'
-                : 'Checked in today'
-              : busy
-                ? bn
-                  ? 'চেক-ইন হচ্ছে...'
-                  : 'Checking in...'
-                : bn
-                  ? 'আজ চেক-ইন করুন'
-                  : 'Check in today'
-        }
+        label={label}
         icon="calendar"
         fullWidth
         className="mt-3"
         loading={busy}
-        disabled={!enabled || claimedToday || busy}
+        disabled={!enabled || claimedToday || busy || depositRequired}
         onPress={onCheckIn}
       />
     </View>

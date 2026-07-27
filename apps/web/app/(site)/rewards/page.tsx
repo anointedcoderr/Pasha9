@@ -54,6 +54,12 @@ interface CheckInConfig {
   streakBonusDay7: number;
   insufficientCoinsTextEn: string;
   insufficientCoinsTextBn: string;
+  cycleLength: number;
+  dayAmounts: number[];
+  requireDepositPerCycle: boolean;
+  minDepositForNextCycle: number;
+  depositGateTextEn: string;
+  depositGateTextBn: string;
 }
 
 interface SpinConfig {
@@ -71,7 +77,7 @@ interface PublicSpinTier extends SpinTierDef {
 
 interface RewardsMe {
   coins: number;
-  checkIn: { config: CheckInConfig; claimedToday: boolean; streakDay: number };
+  checkIn: { config: CheckInConfig; claimedToday: boolean; streakDay: number; depositRequiredForNextCycle: boolean };
   spin: {
     config: SpinConfig;
     freeSpinsRemaining: number;
@@ -512,24 +518,46 @@ export default function RewardsPage() {
               <h2 className="text-lg font-extrabold text-brand-ink">{bn ? (checkInCfg?.titleBn ?? 'ডেইলি চেক ইন') : (checkInCfg?.titleEn ?? 'Daily Check-in')}</h2>
               <p className="mt-1 text-sm text-brand-inkSoft">{bn ? (checkInCfg?.bodyBn ?? '') : (checkInCfg?.bodyEn ?? '')}</p>
 
-              <div className="mt-5 grid grid-cols-7 gap-2">
-                {Array.from({ length: 7 }).map((_, i) => {
-                  const day = i + 1;
-                  const done = (me?.checkIn.streakDay ?? 0) >= day;
-                  const bonus = day === 7 ? checkInCfg?.streakBonusDay7 ?? 0 : 0;
-                  return (
-                    <div key={i} className={cn('flex aspect-square flex-col items-center justify-center rounded-xl border text-xs font-semibold',
-                      done ? 'border-brand-yellow-500 bg-brand-yellow-500/10 text-brand-ink' : 'border-brand-divider bg-brand-surface text-brand-inkMute')}>
-                      <span>{bn ? `দিন ${day}` : `Day ${day}`}</span>
-                      {done ? <Check className="mt-1 h-3.5 w-3.5 text-brand-yellow-700" /> : <span className="mt-1 text-[10px]">+{(checkInCfg?.dailyCoins ?? 50) + bonus}</span>}
+              {(() => {
+                const cfg = checkInCfg;
+                const cycleLength = Math.max(1, Math.min(60, Math.floor(cfg?.cycleLength || 7)));
+                const dayAmounts = Array.isArray(cfg?.dayAmounts) ? cfg!.dayAmounts : [];
+                const perDay = dayAmounts.length === cycleLength;
+                const rewardFor = (day: number) =>
+                  perDay
+                    ? Math.max(0, Math.floor(Number(dayAmounts[day - 1] ?? (cfg?.dailyCoins ?? 50))))
+                    : (cfg?.dailyCoins ?? 50) + (day === cycleLength ? (cfg?.streakBonusDay7 ?? 0) : 0);
+                const streak = me?.checkIn.streakDay ?? 0;
+                const claimedToday = me?.checkIn.claimedToday ?? false;
+                const todayInCycle = claimedToday ? ((streak - 1) % cycleLength) + 1 : (streak % cycleLength) + 1;
+                const gated = me?.checkIn.depositRequiredForNextCycle ?? false;
+                const gateText = bn ? (cfg?.depositGateTextBn ?? '') : (cfg?.depositGateTextEn ?? '');
+                return (
+                  <>
+                    <div className="mt-5 grid grid-cols-7 gap-2">
+                      {Array.from({ length: cycleLength }).map((_, i) => {
+                        const day = i + 1;
+                        const done = day < todayInCycle || (day === todayInCycle && claimedToday);
+                        return (
+                          <div key={i} className={cn('flex aspect-square flex-col items-center justify-center rounded-xl border text-xs font-semibold',
+                            done ? 'border-brand-yellow-500 bg-brand-yellow-500/10 text-brand-ink' : 'border-brand-divider bg-brand-surface text-brand-inkMute')}>
+                            <span>{bn ? `দিন ${day}` : `Day ${day}`}</span>
+                            {done ? <Check className="mt-1 h-3.5 w-3.5 text-brand-yellow-700" /> : <span className="mt-1 text-[10px]">+{rewardFor(day)}</span>}
+                          </div>
+                        );
+                      })}
                     </div>
-                  );
-                })}
-              </div>
 
-              <button type="button" onClick={onCheckIn} disabled={me?.checkIn.claimedToday} className={cn('mt-5 inline-flex h-10 items-center rounded-lg px-5 text-sm font-semibold', me?.checkIn.claimedToday ? 'cursor-not-allowed bg-brand-surface text-brand-inkMute' : 'btn-yellow')}>
-                {me?.checkIn.claimedToday ? (bn ? 'আজকের চেক ইন সম্পন্ন' : 'Checked in today') : (bn ? 'চেক ইন করুন' : 'Check in today')}
-              </button>
+                    {gated ? (
+                      <p className="mt-4 rounded-lg border border-amber-300/60 bg-amber-50 px-3 py-2 text-xs text-amber-900">{gateText}</p>
+                    ) : null}
+
+                    <button type="button" onClick={onCheckIn} disabled={claimedToday || gated} className={cn('mt-5 inline-flex h-10 items-center rounded-lg px-5 text-sm font-semibold', (claimedToday || gated) ? 'cursor-not-allowed bg-brand-surface text-brand-inkMute' : 'btn-yellow')}>
+                      {gated ? (bn ? 'নতুন ডিপোজিট প্রয়োজন' : 'New deposit required') : claimedToday ? (bn ? 'আজকের চেক ইন সম্পন্ন' : 'Checked in today') : (bn ? 'চেক ইন করুন' : 'Check in today')}
+                    </button>
+                  </>
+                );
+              })()}
             </div>
           </div>
         </section>

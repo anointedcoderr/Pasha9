@@ -28,6 +28,12 @@ export interface CheckInConfig {
   streakBonusDay7: number;
   minDepositRequirement: number;
   minBetRequirement: number;
+  cycleLength: number;
+  dayAmounts: number[];
+  requireDepositPerCycle: boolean;
+  minDepositForNextCycle: number;
+  depositGateTextEn: string;
+  depositGateTextBn: string;
   [key: string]: unknown;
 }
 
@@ -44,6 +50,7 @@ export interface RewardsMe {
     config: CheckInConfig;
     claimedToday: boolean;
     streakDay: number;
+    depositRequiredForNextCycle: boolean;
   };
   spin: {
     config: SpinConfig;

@@ -20,6 +20,20 @@ export interface CheckInConfig {
   minBetRequirement: number;
   insufficientCoinsTextEn: string;
   insufficientCoinsTextBn: string;
+  // Configurable cycle. cycleLength is the number of days in one streak
+  // cycle (7 by default). dayAmounts, when it has exactly cycleLength
+  // entries, sets each day's coin reward individually; otherwise the
+  // engine falls back to the flat dailyCoins (+ streakBonusDay7 on the
+  // final day) so older configs keep working unchanged.
+  cycleLength: number;
+  dayAmounts: number[];
+  // Deposit gate: when requireDepositPerCycle is on, a player who has
+  // completed a full cycle must make a new approved deposit of at least
+  // minDepositForNextCycle before the next cycle's day 1 can be claimed.
+  requireDepositPerCycle: boolean;
+  minDepositForNextCycle: number;
+  depositGateTextEn: string;
+  depositGateTextBn: string;
 }
 
 export interface SpinConfig {
@@ -49,6 +63,12 @@ const DEFAULT_CHECK_IN: CheckInConfig = {
   minBetRequirement: 50,
   insufficientCoinsTextEn: 'You do not have enough coins to claim this reward.',
   insufficientCoinsTextBn: 'এই রিওয়ার্ড দাবি করার জন্য আপনার পর্যাপ্ত কয়েন নেই।',
+  cycleLength: 7,
+  dayAmounts: [],
+  requireDepositPerCycle: false,
+  minDepositForNextCycle: 0,
+  depositGateTextEn: 'Please make a new deposit to unlock the next Daily Check-in cycle.',
+  depositGateTextBn: 'পরবর্তী ডেইলি চেক-ইন সাইকেল আনলক করতে অনুগ্রহ করে একটি নতুন ডিপোজিট করুন।',
 };
 
 const DEFAULT_SPIN: SpinConfig = {

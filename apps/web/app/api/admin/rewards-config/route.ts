@@ -26,6 +26,12 @@ const patchSchema = z.object({
     minBetRequirement: z.coerce.number().min(0).max(10_000_000).optional(),
     insufficientCoinsTextEn: z.string().max(200).optional(),
     insufficientCoinsTextBn: z.string().max(200).optional(),
+    cycleLength: z.coerce.number().int().min(1).max(60).optional(),
+    dayAmounts: z.array(z.coerce.number().int().min(0).max(1_000_000)).max(60).optional(),
+    requireDepositPerCycle: z.boolean().optional(),
+    minDepositForNextCycle: z.coerce.number().min(0).max(10_000_000).optional(),
+    depositGateTextEn: z.string().max(300).optional(),
+    depositGateTextBn: z.string().max(300).optional(),
   }).partial().optional(),
   spin: z.object({
     enabled: z.boolean().optional(),

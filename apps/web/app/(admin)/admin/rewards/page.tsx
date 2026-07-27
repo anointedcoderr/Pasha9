@@ -167,6 +167,8 @@ export default function AdminRewardsPage() {
       {toast ? <Card padding="md" className="mb-4"><p className="text-sm text-signal-ok">{toast}</p></Card> : null}
       {error ? <Card padding="md" className="mb-4"><p className="text-sm text-signal-danger">{error}</p></Card> : null}
 
+      <CheckInConfigCard />
+
       {loading ? (
         <Card padding="lg">Loading...</Card>
       ) : items.length === 0 ? (
@@ -300,5 +302,175 @@ export default function AdminRewardsPage() {
         onConfirm={async () => { if (deleteTarget) await remove(deleteTarget); }}
       />
     </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Daily Check-in configuration (SystemSetting via /api/admin/rewards-config).
+// Cycle length, per-day coin amounts, the deposit-per-cycle gate, and the
+// lifetime activity gate. Uses rewards.write, same as this page.
+// ---------------------------------------------------------------------------
+
+interface CheckInCfg {
+  enabled: boolean;
+  dailyCoins: number;
+  streakBonusDay7: number;
+  cycleLength: number;
+  dayAmounts: number[];
+  requireDepositPerCycle: boolean;
+  minDepositForNextCycle: number;
+  minDepositRequirement: number;
+  minBetRequirement: number;
+  depositGateTextEn: string;
+  depositGateTextBn: string;
+}
+
+const CHECKIN_DEFAULTS: CheckInCfg = {
+  enabled: true,
+  dailyCoins: 50,
+  streakBonusDay7: 200,
+  cycleLength: 7,
+  dayAmounts: [],
+  requireDepositPerCycle: false,
+  minDepositForNextCycle: 0,
+  minDepositRequirement: 50,
+  minBetRequirement: 50,
+  depositGateTextEn: 'Please make a new deposit to unlock the next Daily Check-in cycle.',
+  depositGateTextBn: 'পরবর্তী ডেইলি চেক-ইন সাইকেল আনলক করতে অনুগ্রহ করে একটি নতুন ডিপোজিট করুন।',
+};
+
+function CheckInConfigCard() {
+  const [cfg, setCfg] = useState<CheckInCfg>(CHECKIN_DEFAULTS);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [perDay, setPerDay] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/admin/rewards-config', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!alive || !d?.checkIn) return;
+        const c = { ...CHECKIN_DEFAULTS, ...d.checkIn } as CheckInCfg;
+        setCfg(c);
+        setPerDay(Array.isArray(c.dayAmounts) && c.dayAmounts.length === (c.cycleLength || 7));
+      })
+      .catch(() => {})
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, []);
+
+  const set = <K extends keyof CheckInCfg>(k: K, v: CheckInCfg[K]) => setCfg((p) => ({ ...p, [k]: v }));
+
+  const cycle = Math.max(1, Math.min(60, cfg.cycleLength || 7));
+  const dayValue = (i: number) => cfg.dayAmounts[i] ?? cfg.dailyCoins;
+  const setDay = (i: number, v: number) => {
+    const arr = Array.from({ length: cycle }, (_, j) => cfg.dayAmounts[j] ?? cfg.dailyCoins);
+    arr[i] = Math.max(0, v);
+    set('dayAmounts', arr);
+  };
+
+  const save = async () => {
+    setSaving(true);
+    setMsg(null);
+    const dayAmounts = perDay
+      ? Array.from({ length: cycle }, (_, i) => Math.max(0, Math.floor(Number(cfg.dayAmounts[i] ?? cfg.dailyCoins))))
+      : [];
+    try {
+      const res = await fetch('/api/admin/rewards-config', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ checkIn: { ...cfg, cycleLength: cycle, dayAmounts } }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message ?? data?.code ?? 'Save failed');
+      setMsg({ ok: true, text: 'Daily check-in settings saved.' });
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof Error ? e.message : 'Save failed' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) return <Card padding="lg" className="mb-6"><p className="text-sm text-brand-inkMute">Loading check-in settings...</p></Card>;
+
+  const days = Array.from({ length: cycle }, (_, i) => i + 1);
+
+  return (
+    <Card padding="lg" className="mb-6">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-base font-extrabold text-brand-ink">Daily Check-in</h2>
+          <p className="text-sm text-brand-inkMute">Cycle length, per-day coins, and the deposit gate for the next cycle.</p>
+        </div>
+        <label className="flex items-center gap-2 text-xs font-semibold text-brand-inkSoft">
+          <Switch checked={cfg.enabled} onChange={() => set('enabled', !cfg.enabled)} />
+          {cfg.enabled ? 'Enabled' : 'Disabled'}
+        </label>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <FormField label="Cycle length (days)">
+          <Input type="number" min="1" max="60" value={String(cfg.cycleLength)} onChange={(e) => set('cycleLength', Math.max(1, Math.min(60, Number(e.target.value) || 7)))} />
+        </FormField>
+        <FormField label="Coins per day (flat)" hint="Used when per-day amounts are off.">
+          <Input type="number" min="0" value={String(cfg.dailyCoins)} onChange={(e) => set('dailyCoins', Math.max(0, Number(e.target.value) || 0))} />
+        </FormField>
+        <FormField label="End-of-cycle bonus" hint="Extra coins on the final day (flat mode).">
+          <Input type="number" min="0" value={String(cfg.streakBonusDay7)} onChange={(e) => set('streakBonusDay7', Math.max(0, Number(e.target.value) || 0))} />
+        </FormField>
+      </div>
+
+      <label className="mt-3 flex items-center gap-2 text-sm text-brand-inkSoft">
+        <Switch checked={perDay} onChange={() => setPerDay((v) => !v)} />
+        Set each day&apos;s coins individually
+      </label>
+
+      {perDay ? (
+        <div className="mt-3 grid gap-2 grid-cols-2 sm:grid-cols-4 lg:grid-cols-7">
+          {days.map((d, i) => (
+            <FormField key={d} label={`Day ${d}`}>
+              <Input type="number" min="0" value={String(dayValue(i))} onChange={(e) => setDay(i, Number(e.target.value) || 0)} />
+            </FormField>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="mt-4 rounded-xl border border-brand-divider bg-brand-surface p-3">
+        <label className="flex items-center gap-2 text-sm font-semibold text-brand-ink">
+          <Switch checked={cfg.requireDepositPerCycle} onChange={() => set('requireDepositPerCycle', !cfg.requireDepositPerCycle)} />
+          Require a new deposit to start each new cycle
+        </label>
+        {cfg.requireDepositPerCycle ? (
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            <FormField label="Minimum deposit to unlock next cycle (BDT)">
+              <Input type="number" min="0" value={String(cfg.minDepositForNextCycle)} onChange={(e) => set('minDepositForNextCycle', Math.max(0, Number(e.target.value) || 0))} />
+            </FormField>
+            <div className="hidden md:block" />
+            <FormField label="Locked message EN">
+              <Input value={cfg.depositGateTextEn} onChange={(e) => set('depositGateTextEn', e.target.value)} />
+            </FormField>
+            <FormField label="Locked message BN">
+              <Input value={cfg.depositGateTextBn} onChange={(e) => set('depositGateTextBn', e.target.value)} />
+            </FormField>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <FormField label="Activity gate: min deposit (BDT)" hint="Lifetime deposit OR bet needed to claim check-in.">
+          <Input type="number" min="0" value={String(cfg.minDepositRequirement)} onChange={(e) => set('minDepositRequirement', Math.max(0, Number(e.target.value) || 0))} />
+        </FormField>
+        <FormField label="Activity gate: min bet (BDT)">
+          <Input type="number" min="0" value={String(cfg.minBetRequirement)} onChange={(e) => set('minBetRequirement', Math.max(0, Number(e.target.value) || 0))} />
+        </FormField>
+      </div>
+
+      {msg ? <p className={`mt-3 text-sm ${msg.ok ? 'text-signal-ok' : 'text-signal-danger'}`}>{msg.text}</p> : null}
+      <div className="mt-4 flex justify-end">
+        <Button onClick={() => void save()} loading={saving}>Save check-in settings</Button>
+      </div>
+    </Card>
   );
 }

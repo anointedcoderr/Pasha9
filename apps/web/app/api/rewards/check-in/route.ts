@@ -62,8 +62,39 @@ export async function POST() {
     const yesterday = yesterdayKey();
     const yest = await db.dailyCheckInLog.findUnique({ where: { userId_day: { userId, day: yesterday } } });
     const streakDay = yest ? yest.streakDay + 1 : 1;
-    const isDay7 = streakDay > 0 && streakDay % 7 === 0;
-    const coinsAwarded = config.dailyCoins + (isDay7 ? config.streakBonusDay7 : 0);
+
+    // Configurable cycle. dayInCycle is 1..cycleLength; the cycle ends on
+    // the final day (where the old day-7 bonus used to land).
+    const cycleLength = Math.max(1, Math.floor(config.cycleLength || 7));
+    const dayInCycle = ((streakDay - 1) % cycleLength) + 1;
+    const isCycleEnd = dayInCycle === cycleLength;
+
+    // Deposit gate: when enabled, a player who completed a full cycle on
+    // their last check-in must make a new approved deposit (at least
+    // minDepositForNextCycle) before the next cycle's day 1 can be claimed.
+    if (config.requireDepositPerCycle) {
+      const lastLog = await db.dailyCheckInLog.findFirst({ where: { userId }, orderBy: { createdAt: 'desc' } });
+      if (lastLog && lastLog.streakDay % cycleLength === 0) {
+        const dep = await db.deposit.findFirst({
+          where: {
+            userId,
+            status: 'approved',
+            createdAt: { gt: lastLog.createdAt },
+            amount: { gte: config.minDepositForNextCycle },
+          },
+          select: { id: true },
+        });
+        if (!dep) return jsonError(403, 'DEPOSIT_REQUIRED', config.depositGateTextEn);
+      }
+    }
+
+    // Per-day reward when dayAmounts is configured for this cycle length,
+    // else the flat dailyCoins plus the end-of-cycle bonus.
+    const useDayAmounts = Array.isArray(config.dayAmounts) && config.dayAmounts.length === cycleLength;
+    const isDay7 = isCycleEnd;
+    const coinsAwarded = useDayAmounts
+      ? Math.max(0, Math.floor(Number(config.dayAmounts[dayInCycle - 1] ?? config.dailyCoins)))
+      : config.dailyCoins + (isCycleEnd ? config.streakBonusDay7 : 0);
 
     const claim = await db.$transaction(async (tx) => {
       const log = await tx.dailyCheckInLog.create({
