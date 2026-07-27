@@ -32,6 +32,7 @@ import {
 } from '@expo-google-fonts/hind-siliguri';
 import { AuthProvider, useAuth } from '@/store/auth';
 import { PushGate } from '@/components/PushGate';
+import { AppPopups } from '@/components/AppPopups';
 import { colors } from '@/lib/theme';
 
 const queryClient = new QueryClient({
@@ -72,6 +73,7 @@ export default function RootLayout() {
             <PushGate />
             <AuthGate>
               <RootStack />
+              <AppPopups />
             </AuthGate>
           </AuthProvider>
         </QueryClientProvider>
