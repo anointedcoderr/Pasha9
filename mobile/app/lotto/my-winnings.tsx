@@ -10,7 +10,7 @@
 // balance on success. Auto-credited wins show as already paid.
 
 import { useCallback, useRef, useState } from 'react';
-import { Alert, RefreshControl, Text, View } from 'react-native';
+import { Alert, Pressable, RefreshControl, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
   Screen,
@@ -54,7 +54,9 @@ export default function MyWinningsScreen() {
   const meQuery = useLottoMe();
   const claim = useClaimWinning();
   const winnings = meQuery.data?.winnings ?? [];
-  const totalWon = meQuery.data?.summary.wonLifetime ?? 0;
+  const summary = meQuery.data?.summary;
+  const totalWon = summary?.wonLifetime ?? 0;
+  const claimableTotal = winnings.filter((w) => w.status === 'pending_credit').reduce((s, w) => s + (w.amount || 0), 0);
 
   const [refreshing, setRefreshing] = useState(false);
   const onRefresh = useCallback(async () => {
@@ -139,18 +141,14 @@ export default function MyWinningsScreen() {
         />
       ) : (
         <>
-          {/* Total summary */}
+          {/* Hero total */}
           <View className="relative overflow-hidden rounded-2xl border border-gold-600/20">
             <Gradient colors={gradients.darkCard} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} radius={16} />
             <View className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-gold-500/15" />
             <View className="relative flex-row items-center justify-between p-4">
               <View>
-                <Text className="text-[10px] font-bold uppercase tracking-widest text-white/55">
-                  Total won
-                </Text>
-                <Text className="mt-1 text-3xl font-black" style={{ color: colors.gold300 }}>
-                  {formatBDT(totalWon)}
-                </Text>
+                <Text className="text-[10px] font-bold uppercase tracking-widest text-white/55">Total won</Text>
+                <Text className="mt-1 text-3xl font-black" style={{ color: colors.gold300 }}>{formatBDT(totalWon)}</Text>
                 <Text className="mt-0.5 text-[11px] text-white/45">
                   Across {winnings.length} winning {winnings.length === 1 ? 'ticket' : 'tickets'}
                 </Text>
@@ -160,6 +158,27 @@ export default function MyWinningsScreen() {
               </View>
             </View>
           </View>
+
+          {/* Summary tiles */}
+          <View className="flex-row flex-wrap gap-3">
+            <WinTile label="Claimable now" value={formatBDT(claimableTotal, false)} icon="gift" tone="green" />
+            <WinTile label="Wins" value={String(summary?.winningCount ?? winnings.length)} icon="sparkles" tone="gold" />
+            <WinTile label="Won today" value={formatBDT(summary?.wonToday ?? 0, false)} icon="calendar" tone="green" />
+            <WinTile label="Lifetime" value={formatBDT(totalWon, false)} icon="trophy" tone="gold" />
+          </View>
+
+          {/* Transfer link */}
+          <Pressable
+            onPress={() => router.push('/lotto')}
+            accessibilityRole="button"
+            className="flex-row items-center justify-between rounded-2xl border border-gold-600/25 bg-gold-500/10 px-4 py-3 active:opacity-90"
+          >
+            <View className="flex-row items-center gap-2">
+              <Icon name="swap-horizontal" size={16} color={colors.gold700} />
+              <Text className="text-sm font-bold text-ink">Transfer winnings to main wallet</Text>
+            </View>
+            <Icon name="chevron-forward" size={16} color={colors.gold700} />
+          </Pressable>
 
           {winnings.map((w) => {
             const s = payoutPill(w.status);
@@ -204,5 +223,22 @@ export default function MyWinningsScreen() {
         </>
       )}
     </Screen>
+  );
+}
+
+function WinTile({ label, value, icon, tone }: { label: string; value: string; icon: string; tone: 'gold' | 'green' }) {
+  const c = tone === 'gold' ? colors.gold700 : colors.newg;
+  return (
+    <View className="min-w-[45%] flex-1 rounded-2xl border border-divider bg-paper p-3.5 shadow-sm shadow-black/5">
+      <View className={'h-8 w-8 items-center justify-center rounded-lg ' + (tone === 'gold' ? 'bg-gold-500/15' : 'bg-newg/12')}>
+        <Icon name={icon} size={16} color={c} />
+      </View>
+      <Text className="mt-2 text-lg font-black text-ink" numberOfLines={1}>
+        {value}
+      </Text>
+      <Text className="text-[11px] font-bold uppercase tracking-wider text-ink-mute" numberOfLines={1}>
+        {label}
+      </Text>
+    </View>
   );
 }
