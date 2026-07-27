@@ -14,7 +14,7 @@
 // animated SpinWheel, a win-celebration modal instead of a bare Alert, store
 // artwork, and EN/BN copy.
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Modal,
@@ -86,6 +86,42 @@ function payoutDescription(payoutType: string, payoutAmount: number, bn: boolean
     default:
       return payoutAmount > 0 ? `${payoutAmount}` : bn ? 'একটি পুরস্কার' : 'a prize';
   }
+}
+
+function payoutUnit(payoutType: string, bn: boolean): string {
+  switch (payoutType) {
+    case 'coins':
+      return bn ? 'কয়েন' : 'coins';
+    case 'bonus':
+      return bn ? 'BDT বোনাস' : 'BDT bonus';
+    case 'cash':
+      return bn ? 'BDT ক্যাশ' : 'BDT cash';
+    case 'free_bet':
+      return bn ? 'BDT ফ্রি বেট' : 'BDT free bet';
+    default:
+      return '';
+  }
+}
+
+// Eases a number from 0 to `to` for the premium win reveal (issue #5).
+function CountUpText({ to, className, style }: { to: number; className?: string; style?: object }) {
+  const [val, setVal] = useState(0);
+  useEffect(() => {
+    let raf = 0;
+    const start = Date.now();
+    const step = () => {
+      const t = Math.min(1, (Date.now() - start) / 900);
+      setVal(Math.round(to * (1 - Math.pow(1 - t, 3))));
+      if (t < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [to]);
+  return (
+    <Text className={className} style={style}>
+      {val.toLocaleString()}
+    </Text>
+  );
 }
 
 export default function RewardsScreen() {
@@ -456,14 +492,22 @@ function WinCelebration({ bn, result, onClose }: { bn: boolean; result: SpinResu
               {won ? (bn ? 'অভিনন্দন!' : 'Congratulations!') : bn ? 'আরেকটু!' : 'So close!'}
             </Text>
             {result ? (
-              <>
-                <Text className="mt-1 text-base font-bold" style={{ color: won ? '#5A3A00' : 'rgba(255,255,255,0.85)' }}>
-                  {result.segmentLabel}
-                </Text>
-                <Text className="mt-0.5 text-sm font-semibold" style={{ color: won ? '#7A4F00' : 'rgba(255,255,255,0.7)' }}>
-                  {payoutDescription(result.payoutType, result.payoutAmount, bn)}
-                </Text>
-              </>
+              won ? (
+                <>
+                  <Text className="mt-1 text-base font-bold" style={{ color: '#5A3A00' }}>{result.segmentLabel}</Text>
+                  <View className="mt-1 flex-row items-baseline">
+                    <CountUpText to={result.payoutAmount} className="text-4xl font-black" style={{ color: '#3A1F00' }} />
+                    <Text className="ml-1.5 text-sm font-bold" style={{ color: '#7A4F00' }}>{payoutUnit(result.payoutType, bn)}</Text>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <Text className="mt-1 text-base font-bold" style={{ color: 'rgba(255,255,255,0.85)' }}>{result.segmentLabel}</Text>
+                  <Text className="mt-0.5 text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.7)' }}>
+                    {payoutDescription(result.payoutType, result.payoutAmount, bn)}
+                  </Text>
+                </>
+              )
             ) : null}
             <PrimaryButton label={bn ? 'দারুণ' : 'Awesome'} fullWidth className="mt-5" onPress={onClose} />
           </View>

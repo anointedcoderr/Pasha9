@@ -106,7 +106,9 @@ export function SpinWheel({ segments, spinning, landingIndex, onLandingComplete,
     for (let i = 0; i < BULB_COUNT; i += 1) {
       const angle = (i / BULB_COUNT) * 360;
       const p = polar(center, center, bulbR, angle);
-      arr.push({ cx: p.x, cy: p.y, delay: (i % 6) * 150 });
+      // Stagger the delay smoothly around the ring so the lights chase
+      // rather than blink in groups (premium redesign, issue #5).
+      arr.push({ cx: p.x, cy: p.y, delay: Math.round((i / BULB_COUNT) * 1400) });
     }
     return arr;
   }, [center, bulbR]);

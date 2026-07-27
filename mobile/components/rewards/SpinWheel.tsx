@@ -24,11 +24,17 @@ import Svg, {
 import Animated, {
   Easing,
   runOnJS,
+  useAnimatedProps,
   useAnimatedStyle,
   useSharedValue,
+  withRepeat,
   withTiming,
+  type SharedValue,
 } from 'react-native-reanimated';
 import { colors } from '@/lib/theme';
+
+// Animated SVG circle for the chasing rim lights.
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 export interface SpinWheelSegment {
   id: string;
@@ -74,6 +80,7 @@ export function SpinWheel({
   disabled,
 }: SpinWheelProps) {
   const rotation = useSharedValue(0);
+  const tick = useSharedValue(0);
   const [reduceMotion, setReduceMotion] = useState(false);
 
   useEffect(() => {
@@ -87,6 +94,17 @@ export function SpinWheel({
       sub?.remove?.();
     };
   }, []);
+
+  // Chasing rim lights: a phase value loops continuously and each bulb lights
+  // as the phase passes its index. Skipped under reduced-motion.
+  useEffect(() => {
+    if (reduceMotion) {
+      tick.value = 0;
+      return;
+    }
+    tick.value = withRepeat(withTiming(BULB_COUNT, { duration: 1400, easing: Easing.linear }), -1, false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reduceMotion]);
 
   const count = segments.length;
   const sliceDeg = count > 0 ? 360 / count : 0;
@@ -162,7 +180,7 @@ export function SpinWheel({
         </Defs>
         <Circle cx={center} cy={center} r={center - 4} fill="url(#rim)" />
         {bulbs.map((b, i) => (
-          <Circle key={i} cx={b.cx} cy={b.cy} r={4} fill={b.gold ? '#FFE9A8' : '#FFFFFF'} />
+          <AnimatedBulb key={i} cx={b.cx} cy={b.cy} gold={b.gold} index={i} tick={tick} />
         ))}
       </Svg>
 
@@ -264,4 +282,14 @@ export function SpinWheel({
       </Pressable>
     </View>
   );
+}
+
+// A single rim bulb that brightens as the chase phase passes its index.
+function AnimatedBulb({ cx, cy, gold, index, tick }: { cx: number; cy: number; gold: boolean; index: number; tick: SharedValue<number> }) {
+  const animatedProps = useAnimatedProps(() => {
+    const t = tick.value % BULB_COUNT;
+    const d = Math.min((index - t + BULB_COUNT) % BULB_COUNT, (t - index + BULB_COUNT) % BULB_COUNT);
+    return { opacity: d < 2.2 ? 1 : 0.35 };
+  });
+  return <AnimatedCircle cx={cx} cy={cy} r={4} fill={gold ? '#FFE9A8' : '#FFFFFF'} animatedProps={animatedProps} />;
 }
