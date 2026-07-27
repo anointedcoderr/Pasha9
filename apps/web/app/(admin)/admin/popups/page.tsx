@@ -1,12 +1,14 @@
 // Built by Anointed Coder.
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { PageHeader } from '@/components/site/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Switch } from '@/components/ui/Switch';
 import { FormField, Input, Textarea } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
+import { AdminMediaUpload } from '@/components/admin/AdminMediaUpload';
 import { Modal } from '@/components/ui/Modal';
 import { Megaphone, Plus, Pencil, Trash2 } from 'lucide-react';
 import { Chip } from '@/components/ui/Chip';
@@ -37,6 +39,11 @@ interface PopupRow {
   startAt?: string | null;
   endAt?: string | null;
   status: Status;
+  target: string;
+  targetUrl?: string | null;
+  frequency: string;
+  imageUrl?: string | null;
+  audioUrl?: string | null;
   createdAt: string;
 }
 
@@ -49,6 +56,11 @@ const NEW_POPUP: PopupRow = {
   startAt: '',
   endAt: '',
   status: 'active',
+  target: 'entry',
+  targetUrl: '',
+  frequency: 'always',
+  imageUrl: '',
+  audioUrl: '',
   createdAt: '',
 };
 
@@ -99,6 +111,11 @@ export default function AdminPopupsPage() {
       startAt: toIso(editor.startAt),
       endAt: toIso(editor.endAt),
       status: editor.status,
+      target: editor.target,
+      targetUrl: editor.targetUrl || null,
+      frequency: editor.frequency,
+      imageUrl: editor.imageUrl || null,
+      audioUrl: editor.audioUrl || null,
     };
     try {
       const res = editor.id
@@ -216,6 +233,45 @@ export default function AdminPopupsPage() {
                 <Input type="datetime-local" value={editor.endAt ?? ''} onChange={(e) => setEditor({ ...editor, endAt: e.target.value })} />
               </FormField>
             </div>
+
+            <div className="grid gap-3 md:grid-cols-2">
+              <FormField label="Show on" hint="Where or when the popup appears.">
+                <Select value={editor.target} onChange={(e) => setEditor({ ...editor, target: e.target.value })}>
+                  <option value="entry">Website entry (first visit)</option>
+                  <option value="homepage">Homepage</option>
+                  <option value="deposit_page">Deposit page</option>
+                  <option value="deposit_click">Deposit button clicked</option>
+                  <option value="withdrawal_page">Withdrawal page</option>
+                  <option value="auth_page">Register or Login page</option>
+                  <option value="all_pages">All pages</option>
+                  <option value="custom_url">Custom page / URL</option>
+                </Select>
+              </FormField>
+              <FormField label="Frequency" hint="How often a visitor sees it.">
+                <Select value={editor.frequency} onChange={(e) => setEditor({ ...editor, frequency: e.target.value })}>
+                  <option value="always">Every time</option>
+                  <option value="once_per_user">Once per user</option>
+                  <option value="once_per_session">Once per session</option>
+                  <option value="once_per_day">Once per day</option>
+                </Select>
+              </FormField>
+            </div>
+            {editor.target === 'custom_url' ? (
+              <FormField label="Custom page path" hint="e.g. /promotions or /games. Matches this path and anything under it.">
+                <Input value={editor.targetUrl ?? ''} onChange={(e) => setEditor({ ...editor, targetUrl: e.target.value })} placeholder="/promotions" />
+              </FormField>
+            ) : null}
+            <AdminMediaUpload
+              label="Popup image (optional)"
+              hint="Shown at the top of the popup."
+              value={editor.imageUrl}
+              category="promo_background"
+              constraintHint="PNG / JPG / WEBP, max 4 MB"
+              onChange={(url) => setEditor({ ...editor, imageUrl: url ?? '' })}
+            />
+            <FormField label="Voice / audio message (optional)" hint="A speaker icon on the popup plays this recording.">
+              <AudioUpload value={editor.audioUrl} onChange={(url) => setEditor({ ...editor, audioUrl: url ?? '' })} />
+            </FormField>
             {editorError ? <p className="text-sm text-signal-danger">{editorError}</p> : null}
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="ghost" type="button" onClick={() => { setEditor(null); setEditorError(null); }}>Cancel</Button>
@@ -236,5 +292,59 @@ export default function AdminPopupsPage() {
         onConfirm={async () => { if (deleteTarget) await remove(deleteTarget); }}
       />
     </>
+  );
+}
+
+// Small audio uploader for the popup voice message. Posts to the shared
+// uploads endpoint under the 'sounds' category and previews with a native
+// audio player.
+function AudioUpload({ value, onChange }: { value?: string | null; onChange: (url: string | null) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const upload = async (file: File) => {
+    setBusy(true);
+    setErr(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('category', 'sounds');
+      const res = await fetch('/api/admin/uploads', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message ?? data?.code ?? 'Upload failed');
+      onChange(String(data.url));
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Upload failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      {value ? (
+        <div className="flex items-center gap-2">
+          {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+          <audio controls src={value} className="h-9 w-full max-w-xs" />
+          <Button size="sm" variant="ghost" type="button" onClick={() => onChange(null)}>Remove</Button>
+        </div>
+      ) : null}
+      <input
+        ref={inputRef}
+        type="file"
+        accept="audio/*"
+        hidden
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) void upload(f);
+          e.target.value = '';
+        }}
+      />
+      <Button size="sm" variant="neon" type="button" loading={busy} onClick={() => inputRef.current?.click()}>
+        {value ? 'Replace audio' : 'Upload audio'}
+      </Button>
+      {err ? <p className="text-xs text-signal-danger">{err}</p> : null}
+    </div>
   );
 }

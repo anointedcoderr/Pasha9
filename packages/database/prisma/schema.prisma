@@ -633,6 +633,16 @@ model PopupAnnouncement {
   startAt   DateTime?
   endAt     DateTime?
   status    ContentStatus @default(active)
+  // Advanced targeting (#9). target: where/when it shows (entry, homepage,
+  // deposit_page, deposit_click, withdrawal_page, auth_page, all_pages,
+  // custom_url). targetUrl holds the path prefix when target = custom_url.
+  // frequency: always | once_per_user | once_per_session | once_per_day.
+  // imageUrl / audioUrl are the optional banner image and uploaded voice.
+  target    String        @default("entry")
+  targetUrl String?
+  frequency String        @default("always")
+  imageUrl  String?
+  audioUrl  String?
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
 

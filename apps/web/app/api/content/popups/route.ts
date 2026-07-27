@@ -9,7 +9,7 @@ export const revalidate = 30;
 
 export async function GET() {
   const now = new Date();
-  const popup = await db.popupAnnouncement.findFirst({
+  const popups = await db.popupAnnouncement.findMany({
     where: {
       status: 'active',
       OR: [
@@ -19,6 +19,20 @@ export async function GET() {
       ],
     },
     orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      title: true,
+      body: true,
+      ctaLabel: true,
+      ctaHref: true,
+      target: true,
+      targetUrl: true,
+      frequency: true,
+      imageUrl: true,
+      audioUrl: true,
+    },
   });
-  return jsonOk({ popup });
+  // `popups` is the targeting-aware list; `popup` stays for any older
+  // client that expected the single most-recent entry.
+  return jsonOk({ popups, popup: popups[0] ?? null });
 }

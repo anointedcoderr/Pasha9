@@ -8,6 +8,9 @@ import { db } from '@/lib/db/client';
 import { withAuth, ensurePermission, recordActivity } from '@/lib/auth/guard';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 
+const TARGETS = ['entry', 'homepage', 'deposit_page', 'deposit_click', 'withdrawal_page', 'auth_page', 'all_pages', 'custom_url'] as const;
+const FREQUENCIES = ['always', 'once_per_user', 'once_per_session', 'once_per_day'] as const;
+
 const baseSchema = z.object({
   title: z.string().min(1).max(120),
   body: z.string().min(1).max(2000),
@@ -16,6 +19,11 @@ const baseSchema = z.object({
   startAt: z.string().datetime().optional().nullable(),
   endAt: z.string().datetime().optional().nullable(),
   status: z.enum(['active', 'hidden', 'paused']).default('active'),
+  target: z.enum(TARGETS).default('entry'),
+  targetUrl: z.string().max(300).optional().nullable(),
+  frequency: z.enum(FREQUENCIES).default('always'),
+  imageUrl: z.string().max(600).optional().nullable(),
+  audioUrl: z.string().max(600).optional().nullable(),
 });
 
 export async function GET() {
