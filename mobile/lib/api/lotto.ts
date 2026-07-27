@@ -152,6 +152,102 @@ export function useLottoMe() {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Public results (GET /api/content/lotto/results) + banners (GET /api/lotto/banners)
+// ---------------------------------------------------------------------------
+
+/** One published draw result. winningNumber is the 1st prize; second / third /
+ *  specials / consolations come from the Babu-style extraNumbers blob. */
+export interface LottoResult {
+  id: string;
+  drawId: string;
+  drawName: string | null;
+  drawsAt: string | null;
+  winningNumber: string;
+  second: string | null;
+  third: string | null;
+  specials: string[];
+  consolations: string[];
+  publishedAt: string | null;
+}
+
+function strArray(v: unknown): string[] {
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x.length > 0) : [];
+}
+
+export async function getLottoResults(take = 60): Promise<LottoResult[]> {
+  const res = await api.get<{ ok: true; results?: Array<Record<string, unknown>> }>(
+    `/api/content/lotto/results?take=${take}`,
+  );
+  const rows = Array.isArray(res.results) ? res.results : [];
+  return rows
+    .map((r) => {
+      const extra = (r.extraNumbers ?? {}) as Record<string, unknown>;
+      return {
+        id: String(r.id ?? ''),
+        drawId: String(r.drawId ?? ''),
+        drawName: typeof r.drawName === 'string' ? r.drawName : null,
+        drawsAt: typeof r.drawsAt === 'string' ? r.drawsAt : null,
+        winningNumber: typeof r.winningNumber === 'string' ? r.winningNumber : '',
+        second: typeof extra.second === 'string' ? extra.second : null,
+        third: typeof extra.third === 'string' ? extra.third : null,
+        specials: strArray(extra.specials),
+        consolations: strArray(extra.consolations),
+        publishedAt: typeof r.publishedAt === 'string' ? r.publishedAt : null,
+      };
+    })
+    .filter((r) => r.id.length > 0);
+}
+
+export function useLottoResults() {
+  const { status } = useAuth();
+  return useQuery<LottoResult[]>({
+    queryKey: ['lotto', 'results'],
+    queryFn: () => getLottoResults(60),
+    enabled: status === 'authed',
+    staleTime: 30_000,
+  });
+}
+
+/** One lotto banner. imageUrl / posterUrl are raw backend paths; resolve with
+ *  absoluteMediaUrl before rendering. Video banners fall back to the poster
+ *  image (the app has no native video player wired for this surface yet). */
+export interface LottoBanner {
+  id: string;
+  kind: string;
+  imageUrl: string | null;
+  posterUrl: string | null;
+  title: string;
+  titleBn: string | null;
+  ctaUrl: string | null;
+}
+
+export async function getLottoBanners(): Promise<LottoBanner[]> {
+  const res = await api.get<{ ok: true; banners?: Array<Record<string, unknown>> }>('/api/lotto/banners');
+  const rows = Array.isArray(res.banners) ? res.banners : [];
+  return rows
+    .map((b) => ({
+      id: String(b.id ?? ''),
+      kind: typeof b.kind === 'string' ? b.kind : 'image',
+      imageUrl: typeof b.imageUrl === 'string' ? b.imageUrl : null,
+      posterUrl: typeof b.posterUrl === 'string' ? b.posterUrl : null,
+      title: typeof b.titleEn === 'string' ? b.titleEn : '',
+      titleBn: typeof b.titleBn === 'string' ? b.titleBn : null,
+      ctaUrl: typeof b.ctaUrl === 'string' ? b.ctaUrl : null,
+    }))
+    .filter((b) => b.id.length > 0 && (b.imageUrl != null || b.posterUrl != null));
+}
+
+export function useLottoBanners() {
+  const { status } = useAuth();
+  return useQuery<LottoBanner[]>({
+    queryKey: ['lotto', 'banners'],
+    queryFn: getLottoBanners,
+    enabled: status === 'authed',
+    staleTime: 60_000,
+  });
+}
+
 /**
  * Claim a single pending_credit winning. Real credit to Wallet.lottoBalance,
  * so on success we refresh the wallet balance + the lotto snapshot inline.
