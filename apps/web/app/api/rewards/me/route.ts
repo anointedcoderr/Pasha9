@@ -12,6 +12,7 @@ import { db } from '@/lib/db/client';
 import { withAuth, ensureUser } from '@/lib/auth/guard';
 import { jsonOk } from '@/lib/auth/errors';
 import { loadCheckInConfig, loadSpinConfig } from '@/lib/rewards/config';
+import { rewardDayKey, LEGACY_SPIN_TIER_KEY } from '@/lib/rewards/day';
 
 export async function GET() {
   return withAuth(async () => {
@@ -19,17 +20,18 @@ export async function GET() {
     const userId = session.sub;
 
     const now = new Date();
-    const [wallet, lastClaim, lastSpin, todayCheckIns, recentSpins, grants] = await Promise.all([
+    const today = rewardDayKey(now);
+    const [wallet, lastClaim, lastSpin, todayCheckIns, legacyFreeLog, grants] = await Promise.all([
       db.wallet.findUnique({ where: { userId }, select: { bonusBalance: true } }),
       db.dailyCheckInLog.findFirst({ where: { userId }, orderBy: { createdAt: 'desc' } }),
       db.spinResult.findFirst({ where: { userId }, orderBy: { createdAt: 'desc' } }),
-      db.dailyCheckInLog.count({ where: { userId, day: todayKey() } }),
-      db.spinResult.count({
-        where: {
-          userId,
-          createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
-          source: { in: ['free_daily', 'login'] },
-        },
+      db.dailyCheckInLog.count({ where: { userId, day: today } }),
+      // Legacy (untiered) wheel free-spin usage today, read from the same
+      // day-scoped ledger the spin engine enforces so the count shown to
+      // the player can never disagree with what is actually allowed.
+      db.dailyFreeSpinLog.findUnique({
+        where: { userId_tierKey_day: { userId, tierKey: LEGACY_SPIN_TIER_KEY, day: today } },
+        select: { used: true },
       }),
       // Available granted free spins (deposit-bonus etc), grouped per
       // wheel tier so the UI can fold them into each tier's counter.
@@ -45,7 +47,7 @@ export async function GET() {
 
     const checkInConfig = await loadCheckInConfig();
     const spinConfig = await loadSpinConfig();
-    const freeSpinsToday = Math.max(0, (spinConfig.freeSpinsPerDay ?? 0) - recentSpins);
+    const freeSpinsToday = Math.max(0, (spinConfig.freeSpinsPerDay ?? 0) - (legacyFreeLog?.used ?? 0));
 
     // Sum available granted spins per tier key.
     const grantedFreeSpinsByTier: Record<string, number> = {};
@@ -76,12 +78,4 @@ export async function GET() {
       },
     });
   });
-}
-
-function todayKey(): string {
-  const d = new Date();
-  const y = d.getUTCFullYear();
-  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(d.getUTCDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
 }

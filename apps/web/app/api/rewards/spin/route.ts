@@ -19,6 +19,7 @@ import { db } from '@/lib/db/client';
 import { withAuth, ensureUser, recordActivity } from '@/lib/auth/guard';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 import { loadSpinConfig } from '@/lib/rewards/config';
+import { rewardDayKey, LEGACY_SPIN_TIER_KEY } from '@/lib/rewards/day';
 import { rateLimit } from '@/lib/auth/rate-limit';
 import { pickSpinSegment } from '@/lib/spin/engine';
 
@@ -62,10 +63,17 @@ export async function POST(req: NextRequest) {
     });
     if (segments.length === 0) return jsonError(503, 'NO_SEGMENTS', 'Spin wheel is not configured. Ask an admin to add segments.');
 
-    const dayWindow = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const freeUsed = await db.spinResult.count({
-      where: { userId, source: 'free_daily', createdAt: { gte: dayWindow }, tierId: tier?.id ?? null },
+    // Daily free-spin allowance is tracked in DailyFreeSpinLog, a
+    // day-scoped counter (not a rolling 24h count of SpinResult rows),
+    // so it resets on the same UTC calendar boundary as daily check-in
+    // and is claimed atomically inside the transaction below.
+    const spinDay = rewardDayKey();
+    const spinTierKey = tier?.key ?? LEGACY_SPIN_TIER_KEY;
+    const freeLog = await db.dailyFreeSpinLog.findUnique({
+      where: { userId_tierKey_day: { userId, tierKey: spinTierKey, day: spinDay } },
+      select: { used: true },
     });
+    const freeUsed = freeLog?.used ?? 0;
     const freeCap = tier ? tier.freeSpinsPerDay : (config.freeSpinsPerDay ?? 0);
     const dailyFreeAvailable = Math.max(0, freeCap - freeUsed);
 
@@ -104,6 +112,16 @@ export async function POST(req: NextRequest) {
     } else if (grantedAvailable > 0) {
       cost = 0;
       source = 'free_grant';
+    }
+
+    // Close the "unlimited free wheel" hole: once the daily allowance
+    // and any granted spins are used up, a spin must be PAID for. If the
+    // wheel has no per-spin price configured (cost = 0) we stop here
+    // instead of handing out endless free manual spins - that is exactly
+    // the abuse the operator reported (players kept spinning after their
+    // free spins ran out).
+    if (source === 'manual' && cost <= 0) {
+      return jsonError(429, 'NO_FREE_SPINS', 'You have used all your free spins for today. Please come back tomorrow.');
     }
 
     // Pre-check balance for a user-friendly error before we run the
@@ -225,6 +243,28 @@ export async function POST(req: NextRequest) {
     let result: { spinRow: { id: string }; bonusGrantId: string | null };
     try {
       result = await db.$transaction(async (tx) => {
+      // Daily free-spin claim. Reserve exactly one slot from the
+      // day-scoped counter: the upsert creates the row on the first
+      // free spin of the day (used=1) or increments it, then we re-read
+      // and abort if the value ever exceeds the cap. Throwing rolls the
+      // transaction back, undoing the increment, so a free spin can
+      // never be granted beyond the daily allowance even if two spins
+      // race or the cap was lowered mid-day.
+      if (source === 'free_daily') {
+        await tx.dailyFreeSpinLog.upsert({
+          where: { userId_tierKey_day: { userId, tierKey: spinTierKey, day: spinDay } },
+          create: { userId, tierKey: spinTierKey, day: spinDay, used: 1 },
+          update: { used: { increment: 1 } },
+        });
+        const claimed = await tx.dailyFreeSpinLog.findUnique({
+          where: { userId_tierKey_day: { userId, tierKey: spinTierKey, day: spinDay } },
+          select: { used: true },
+        });
+        if (!claimed || claimed.used > freeCap) {
+          throw new Error('FREE_DAILY_EXHAUSTED');
+        }
+      }
+
       // Granted free-spin consumption. When this spin is paid by a
       // FreeSpinGrant we debit exactly one spin from the oldest
       // available grant for this tier. The decrement is guarded by a
@@ -427,6 +467,9 @@ export async function POST(req: NextRequest) {
       }
       if (e instanceof Error && e.message === 'FREE_GRANT_RACE') {
         return jsonError(409, 'FREE_GRANT_RACE', 'Another spin used your free spin. Try again.');
+      }
+      if (e instanceof Error && e.message === 'FREE_DAILY_EXHAUSTED') {
+        return jsonError(429, 'NO_FREE_SPINS', 'You have used all your free spins for today. Please come back tomorrow.');
       }
       throw e;
     }

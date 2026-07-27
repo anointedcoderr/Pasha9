@@ -42,6 +42,29 @@ const createSchema = z.object({
 
 const patchSchema = createSchema.partial();
 
+// Numeric payout types whose wedge label is expected to display the
+// prize amount to the player. For these, if the label contains a
+// number it MUST equal payoutAmount. This closes the "shows 10,
+// credits 300" defect at the source: the wheel and the win modal both
+// render the free-text label while the wallet is credited the separate
+// payoutAmount field, so nothing stopped an operator from setting a
+// label of "10" on a segment that pays 300. Flavour labels with no
+// number (e.g. "TRY AGAIN", "MYSTERY") and zero-amount consolation
+// wedges are exempt.
+const AMOUNT_LABEL_TYPES = new Set(['coins', 'bonus', 'cash', 'free_bet']);
+
+function labelPayoutMismatch(label: string, payoutType: string, payoutAmount: number): string | null {
+  if (!AMOUNT_LABEL_TYPES.has(payoutType)) return null;
+  if (!payoutAmount || payoutAmount <= 0) return null;
+  // Pull every run of digits from the label, ignoring thousands
+  // separators and spaces: "Win 1,000 Coins" -> [1000], "৳100" -> [100],
+  // "TRY AGAIN" -> [], "10" -> [10].
+  const nums = (label.replace(/[,\s]/g, '').match(/\d+/g) ?? []).map((n) => parseInt(n, 10));
+  if (nums.length === 0) return null;
+  if (nums.includes(payoutAmount)) return null;
+  return `The wedge label "${label}" shows a different number than the amount that will be credited (${payoutAmount}). Make the label match the payout amount, or remove the number from the label.`;
+}
+
 // Fields whose change should bump the parent tier's configVersion. Any
 // edit that could move the pre-spin eligible pool (weight, payout
 // amount/type, active flag, exclusion flag) qualifies; cosmetic edits
@@ -91,6 +114,8 @@ export async function POST(req: NextRequest) {
     const parsed = createSchema.safeParse(body);
     if (!parsed.success) return jsonError(400, 'VALIDATION', undefined, { issues: parsed.error.issues });
     const data = parsed.data;
+    const mismatch = labelPayoutMismatch(data.label, data.payoutType, data.payoutAmount);
+    if (mismatch) return jsonError(400, 'LABEL_PAYOUT_MISMATCH', mismatch);
     const now = new Date();
     const row = await db.spinSegment.create({
       data: {
@@ -144,6 +169,14 @@ export async function PATCH(req: NextRequest) {
     if (!existing) return jsonError(404, 'SEGMENT_NOT_FOUND');
 
     const data = parsed.data;
+    // Enforce label/payout consistency against the EFFECTIVE values
+    // after this partial edit is merged onto the existing row, so a
+    // label-only or amount-only edit cannot reintroduce a mismatch.
+    const effLabel = data.label ?? existing.label;
+    const effType = data.payoutType ?? existing.payoutType;
+    const effAmount = data.payoutAmount ?? existing.payoutAmount;
+    const patchMismatch = labelPayoutMismatch(effLabel, effType, effAmount);
+    if (patchMismatch) return jsonError(400, 'LABEL_PAYOUT_MISMATCH', patchMismatch);
     const now = new Date();
 
     // Detect exclude_from_wins flip. The admin UI requires a reason

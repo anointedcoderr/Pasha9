@@ -89,7 +89,22 @@ export function useAdminPermissions(): AdminAuth {
     listeners.add(setState);
     // Sync in case the module cache advanced between render and effect.
     setState(cached);
-    if (!cached.loaded && !retryTimer) kick();
+    if (!cached.loaded) {
+      if (!retryTimer) kick();
+    } else if (cached.role === '') {
+      // We are holding a definitive "no access" answer (loaded, empty
+      // role). That state is legitimately produced when /api/auth/me
+      // is called on the login page BEFORE the admin has signed in
+      // (a pre-auth 401 caches an empty role). After a successful
+      // login the app redirects with a CLIENT-SIDE navigation, so this
+      // module-scoped cache survives and a real super-admin would stay
+      // locked out of every permission-gated module until a hard
+      // reload. Drop back to a pending state and re-verify on mount so
+      // the true role loads without a false "Access Denied" flash.
+      cached = INITIAL;
+      setState(cached);
+      if (!retryTimer && !inFlight) kick();
+    }
     const onRefresh = () => {
       // Explicit refresh (login/logout/role change): reset the backoff
       // ladder and refetch even if a cached answer exists.

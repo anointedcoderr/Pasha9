@@ -251,6 +251,7 @@ model User {
   tournamentPayouts     TournamentPayout[]
   rewardClaims          RewardClaim[]
   dailyCheckIns         DailyCheckInLog[]
+  dailyFreeSpins        DailyFreeSpinLog[]
   spinResults           SpinResult[]
   wheelSpins            WheelSpin[]
   // Unified bonus redesign: free-spin grants issued to this user from
@@ -1347,6 +1348,29 @@ model DailyCheckInLog {
 
   @@unique([userId, day])
   @@index([userId, createdAt])
+}
+
+// Daily free-spin ledger. One row per (userId, tierKey, day) holding
+// how many free spins that user has consumed on that wheel today. This
+// is the single source of truth for the "N free spins per day" cap:
+// the spin engine claims a slot with a guarded increment inside its
+// transaction, so the allowance can never be exceeded even under
+// concurrent spins. tierKey is the wheel's key, or the legacy sentinel
+// for the untiered wheel (see lib/rewards/day.ts). day is UTC
+// YYYY-MM-DD, matching DailyCheckInLog.day so both reset together.
+model DailyFreeSpinLog {
+  id        String   @id @default(cuid())
+  userId    String
+  tierKey   String
+  day       String // YYYY-MM-DD in UTC
+  used      Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, tierKey, day])
+  @@index([userId, day])
 }
 
 // Spin wheel admin-configurable segments. Engine picks a segment by
