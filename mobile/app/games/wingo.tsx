@@ -16,7 +16,7 @@
 // locked or the stake is out of range (the server enforces the same rules).
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
+import { Modal, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 import { Icon } from '@/components/ui/Icon';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
@@ -68,6 +68,8 @@ interface Notice {
   text: string;
 }
 
+type WinCeleb = { periodNumber: string; amount: number; result: number; lineCount: number };
+
 function betLabel(betType: WingoBetType, selection: string): string {
   if (betType === 'color') return selection.charAt(0).toUpperCase() + selection.slice(1);
   if (betType === 'size') return selection === 'big' ? 'Big' : 'Small';
@@ -86,6 +88,7 @@ export default function WingoScreen() {
   const [stakeText, setStakeText] = useState('');
   const [slip, setSlip] = useState<SlipLine[]>([]);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [winCeleb, setWinCeleb] = useState<WinCeleb | null>(null);
 
   // Live data.
   const stateQuery = useWingoState(mode);
@@ -112,6 +115,29 @@ export default function WingoScreen() {
   useEffect(() => {
     if (state && stakeText === '') setStakeText(String(state.minStake));
   }, [state, stakeText]);
+
+  // Win celebration (#7): when a new result settles, refetch the player's bets
+  // and, if any won on that period, reveal the branded congratulations popup.
+  const lastResultRef = useRef<string | null>(null);
+  useEffect(() => {
+    const top = state?.results?.[0];
+    if (!top) return;
+    if (lastResultRef.current === null) {
+      lastResultRef.current = top.periodNumber;
+      return;
+    }
+    if (lastResultRef.current === top.periodNumber) return;
+    lastResultRef.current = top.periodNumber;
+    myBetsQuery
+      .refetch()
+      .then((res) => {
+        const wins = (res.data?.bets ?? []).filter((b) => b.periodNumber === top.periodNumber && b.status === 'WON');
+        const amount = wins.reduce((s, b) => s + (b.payoutAmount || 0), 0);
+        if (amount > 0) setWinCeleb({ periodNumber: top.periodNumber, amount, result: top.result, lineCount: wins.length });
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state?.results]);
 
   // Local clock so the countdown ticks between polls. Each poll refreshes the
   // round window and the server-time anchor, so the ticking value resyncs.
@@ -480,7 +506,92 @@ export default function WingoScreen() {
           <MyHistory bets={myBetsQuery.data?.bets ?? []} loading={myBetsQuery.isLoading} />
         ) : null}
       </View>
+
+      <WinCelebration win={winCeleb} onClose={() => setWinCeleb(null)} />
     </Screen>
+  );
+}
+
+// ---------- Win celebration (#7) ----------
+
+function WinCelebration({ win, onClose }: { win: WinCeleb | null; onClose: () => void }) {
+  const [shown, setShown] = useState(0);
+  const [secs, setSecs] = useState(10);
+
+  useEffect(() => {
+    if (!win) {
+      setShown(0);
+      return;
+    }
+    let raf = 0;
+    const start = Date.now();
+    const to = win.amount;
+    const step = () => {
+      const t = Math.min(1, (Date.now() - start) / 800);
+      setShown(Math.round(to * (1 - Math.pow(1 - t, 3))));
+      if (t < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [win]);
+
+  useEffect(() => {
+    if (!win) return;
+    setSecs(10);
+    const id = setInterval(() => setSecs((s) => Math.max(0, s - 1)), 1000);
+    return () => clearInterval(id);
+  }, [win]);
+  useEffect(() => {
+    if (win && secs === 0) onClose();
+  }, [win, secs, onClose]);
+
+  if (!win) return null;
+  const isBig = win.result >= 5;
+  const sizeName = isBig ? 'Big' : 'Small';
+  const colorName =
+    win.result === 0 ? 'Red Violet' : win.result === 5 ? 'Green Violet' : win.result % 2 === 0 ? 'Red' : 'Green';
+
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <View className="flex-1 items-center justify-center bg-black/70 px-6">
+        <View className="w-full max-w-sm overflow-hidden rounded-3xl border border-gold-500/40">
+          <Gradient colors={['#5a3a1d', '#2a1a10']} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} radius={24} />
+          <View className="relative items-center p-6">
+            <Pressable onPress={onClose} hitSlop={8} accessibilityRole="button" accessibilityLabel="Close" className="absolute right-3 top-3">
+              <Icon name="close" size={22} color={colors.gold300} />
+            </Pressable>
+            <Text className="text-2xl font-black uppercase" style={{ color: colors.gold300, letterSpacing: 1 }}>
+              Congratulations!
+            </Text>
+            <View className="mt-4 flex-row items-center gap-3">
+              <WingoBall n={win.result} size={60} />
+              <View className="gap-1.5">
+                <View className="rounded-full px-2.5 py-1" style={{ backgroundColor: 'rgba(255,255,255,0.12)' }}>
+                  <Text className="text-[11px] font-bold text-white">{colorName}</Text>
+                </View>
+                <View className="rounded-full px-2.5 py-1" style={{ backgroundColor: isBig ? 'rgba(245,180,0,0.92)' : 'rgba(47,143,224,0.92)' }}>
+                  <Text className="text-[11px] font-bold" style={{ color: isBig ? '#3a2800' : '#FFFFFF' }}>{sizeName}</Text>
+                </View>
+              </View>
+            </View>
+            <Text className="mt-5 text-[10px] font-bold uppercase tracking-widest" style={{ color: 'rgba(255,224,138,0.7)' }}>
+              You won
+            </Text>
+            <Text className="mt-1 text-4xl font-black" style={{ color: colors.gold300 }}>
+              {formatBDT(shown)}
+            </Text>
+            <Text className="mt-2 text-xs" style={{ color: 'rgba(255,224,138,0.75)' }}>
+              Period {win.periodNumber}
+              {win.lineCount > 1 ? ` · ${win.lineCount} lines` : ''}
+            </Text>
+            <Pressable onPress={onClose} className="mt-6 h-11 w-full items-center justify-center rounded-xl" style={{ backgroundColor: colors.gold500 }}>
+              <Text className="text-sm font-black uppercase" style={{ color: '#3a1f00' }}>Awesome</Text>
+            </Pressable>
+            <Text className="mt-3 text-[11px]" style={{ color: 'rgba(255,224,138,0.5)' }}>Closing in {secs}s</Text>
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 }
 

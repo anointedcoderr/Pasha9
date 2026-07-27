@@ -214,7 +214,7 @@ export function WingoGame() {
         setNextBefore(data?.nextBefore ?? null);
         const wins = rows.filter((b) => b.periodNumber === top.periodNumber && b.status === 'WON');
         const amount = wins.reduce((s, b) => s + Number(b.payoutAmount), 0);
-        if (amount > 0) pendingWinRef.current = { periodNumber: top.periodNumber, amount, lineCount: wins.length };
+        if (amount > 0) pendingWinRef.current = { periodNumber: top.periodNumber, amount, lineCount: wins.length, result: top.result };
         refreshBalance();
         if (typeof window !== 'undefined') window.dispatchEvent(new Event('pasha9:wallet-refresh'));
       } catch {
