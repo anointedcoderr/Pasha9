@@ -238,6 +238,50 @@ export function useBettingPassMe() {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Banners (GET /api/content/betting-pass/banners)
+// ---------------------------------------------------------------------------
+
+/** One Betting Pass banner. imageUrl is a raw backend path; resolve with
+ *  absoluteMediaUrl before rendering. */
+export interface BettingPassBanner {
+  id: string;
+  title: string;
+  titleBn: string | null;
+  subtitle: string;
+  subtitleBn: string | null;
+  imageUrl: string;
+  ctaUrl: string | null;
+}
+
+export async function getBettingPassBanners(): Promise<BettingPassBanner[]> {
+  const res = await api.get<{ ok: true; banners?: Array<Record<string, unknown>> }>(
+    '/api/content/betting-pass/banners',
+  );
+  const rows = Array.isArray(res.banners) ? res.banners : [];
+  return rows
+    .map((b) => ({
+      id: String(b.id ?? ''),
+      title: str(b.titleEn),
+      titleBn: strOrNull(b.titleBn),
+      subtitle: str(b.subtitleEn),
+      subtitleBn: strOrNull(b.subtitleBn),
+      imageUrl: str(b.imageUrl),
+      ctaUrl: strOrNull(b.ctaUrl),
+    }))
+    .filter((b) => b.id.length > 0 && b.imageUrl.length > 0);
+}
+
+export function useBettingPassBanners() {
+  const { status } = useAuth();
+  return useQuery<BettingPassBanner[]>({
+    queryKey: ['betting-pass', 'banners'],
+    queryFn: getBettingPassBanners,
+    enabled: status === 'authed',
+    staleTime: 60_000,
+  });
+}
+
 /**
  * Claim a betting-pass tier. On success (real credit) invalidate the wallet
  * balance + bonuses reads and refetch the pass so the ladder flips the tier to
