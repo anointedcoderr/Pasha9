@@ -19,6 +19,24 @@ import { api } from './client';
 import { useAuth } from '@/store/auth';
 
 // ---------------------------------------------------------------------------
+// Free-spin allowance helpers (mirror apps/web/lib/rewards/free-spins.ts).
+// A negative daily allowance is the "unlimited" sentinel: off = 0, a fixed
+// number, or unlimited = -1. Kept here so the rewards screen renders and
+// gates spins consistently with the web build.
+// ---------------------------------------------------------------------------
+
+export const UNLIMITED_FREE_SPINS = -1;
+
+export function isUnlimitedFreeSpins(value: number | null | undefined): boolean {
+  return typeof value === 'number' && value < 0;
+}
+
+export function formatFreeSpins(value: number | null | undefined, bn: boolean): string {
+  if (isUnlimitedFreeSpins(value)) return bn ? 'সীমাহীন' : 'Unlimited';
+  return String(Math.max(0, Math.floor(Number(value) || 0)));
+}
+
+// ---------------------------------------------------------------------------
 // Types (GET /api/rewards/me)
 // ---------------------------------------------------------------------------
 

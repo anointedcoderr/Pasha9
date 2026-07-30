@@ -13,7 +13,8 @@ import { AdminMediaUpload } from '@/components/admin/AdminMediaUpload';
 import { Switch } from '@/components/ui/Switch';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
-import { Trophy, Pencil, Trash2, Plus } from 'lucide-react';
+import { formatFreeSpins, freeSpinMode, freeSpinValue, isUnlimitedFreeSpins, type FreeSpinMode } from '@/lib/rewards/free-spins';
+import { Trophy, Pencil, Trash2, Plus, Disc3 } from 'lucide-react';
 
 type Accent = 'yellow' | 'blue' | 'red' | 'green';
 type Status = 'active' | 'hidden' | 'paused';
@@ -168,6 +169,7 @@ export default function AdminRewardsPage() {
       {error ? <Card padding="md" className="mb-4"><p className="text-sm text-signal-danger">{error}</p></Card> : null}
 
       <CheckInConfigCard />
+      <SpinConfigCard />
 
       {loading ? (
         <Card padding="lg">Loading...</Card>
@@ -470,6 +472,163 @@ function CheckInConfigCard() {
       {msg ? <p className={`mt-3 text-sm ${msg.ok ? 'text-signal-ok' : 'text-signal-danger'}`}>{msg.text}</p> : null}
       <div className="mt-4 flex justify-end">
         <Button onClick={() => void save()} loading={saving}>Save check-in settings</Button>
+      </div>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Lucky Spin configuration (SystemSetting via /api/admin/rewards-config).
+// Global spin economy: on/off, title, cost per spin, daily free-spin
+// allowance (off / fixed / unlimited), default turnover, and the rules
+// copy. These values drive the legacy single-wheel fallback. The live
+// tiered wheels override cost + free spins per tier in /admin/spin-tiers.
+// ---------------------------------------------------------------------------
+
+interface SpinCfg {
+  enabled: boolean;
+  titleEn: string;
+  titleBn: string;
+  costPerSpinCoins: number;
+  freeSpinsPerDay: number;
+  defaultTurnoverX: number;
+  rulesEn: string;
+  rulesBn: string;
+}
+
+const SPIN_DEFAULTS: SpinCfg = {
+  enabled: true,
+  titleEn: 'Lucky Spin',
+  titleBn: 'লাকি স্পিন',
+  costPerSpinCoins: 100,
+  freeSpinsPerDay: 3,
+  defaultTurnoverX: 3,
+  rulesEn: '',
+  rulesBn: '',
+};
+
+function SpinConfigCard() {
+  const [cfg, setCfg] = useState<SpinCfg>(SPIN_DEFAULTS);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/admin/rewards-config', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!alive || !d?.spin) return;
+        setCfg({ ...SPIN_DEFAULTS, ...d.spin } as SpinCfg);
+      })
+      .catch(() => {})
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, []);
+
+  const set = <K extends keyof SpinCfg>(k: K, v: SpinCfg[K]) => setCfg((p) => ({ ...p, [k]: v }));
+
+  const save = async () => {
+    setSaving(true);
+    setMsg(null);
+    try {
+      const res = await fetch('/api/admin/rewards-config', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ spin: cfg }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message ?? data?.code ?? 'Save failed');
+      setMsg({ ok: true, text: 'Lucky Spin settings saved.' });
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof Error ? e.message : 'Save failed' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) return <Card padding="lg" className="mb-6"><p className="text-sm text-brand-inkMute">Loading spin settings...</p></Card>;
+
+  return (
+    <Card padding="lg" className="mb-6">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <h2 className="flex items-center gap-2 text-base font-extrabold text-brand-ink">
+            <Disc3 className="h-4 w-4" /> Lucky Spin
+          </h2>
+          <p className="text-sm text-brand-inkMute">
+            Global spin economy and rules. The live tiered wheels set their own cost and free spins in{' '}
+            <a href="/admin/spin-tiers" className="font-semibold text-brand-ink underline">Spin Tiers</a>; these values are the fallback for the untiered wheel.
+          </p>
+        </div>
+        <label className="flex items-center gap-2 text-xs font-semibold text-brand-inkSoft">
+          <Switch checked={cfg.enabled} onChange={() => set('enabled', !cfg.enabled)} />
+          {cfg.enabled ? 'Enabled' : 'Disabled'}
+        </label>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2">
+        <FormField label="Title EN">
+          <Input value={cfg.titleEn} onChange={(e) => set('titleEn', e.target.value)} />
+        </FormField>
+        <FormField label="Title BN">
+          <Input value={cfg.titleBn} onChange={(e) => set('titleBn', e.target.value)} />
+        </FormField>
+      </div>
+
+      <div className="mt-3 grid gap-3 md:grid-cols-3">
+        <FormField label="Cost per spin (coins)">
+          <Input type="number" min="0" value={String(cfg.costPerSpinCoins)} onChange={(e) => set('costPerSpinCoins', Math.max(0, Number(e.target.value) || 0))} />
+        </FormField>
+        <FormField label="Default turnover multiplier" hint="Applied to cash/bonus wins that do not set their own.">
+          <Input type="number" min="0" step="0.1" value={String(cfg.defaultTurnoverX)} onChange={(e) => set('defaultTurnoverX', Math.max(0, Number(e.target.value) || 0))} />
+        </FormField>
+        <FormField label="Free spins per day" hint="Off, a fixed daily count, or unlimited.">
+          <div className="space-y-2">
+            <Select
+              value={freeSpinMode(cfg.freeSpinsPerDay)}
+              onChange={(e) => set('freeSpinsPerDay', freeSpinValue(e.target.value as FreeSpinMode, cfg.freeSpinsPerDay))}
+            >
+              <option value="off">Off (no free spins)</option>
+              <option value="fixed">Fixed number per day</option>
+              <option value="unlimited">Unlimited</option>
+            </Select>
+            {freeSpinMode(cfg.freeSpinsPerDay) === 'fixed' ? (
+              <Input
+                type="number"
+                min="1"
+                aria-label="Free spins per day (fixed daily count)"
+                value={cfg.freeSpinsPerDay > 0 ? cfg.freeSpinsPerDay : 1}
+                onChange={(e) => set('freeSpinsPerDay', Math.max(1, Number(e.target.value) || 1))}
+              />
+            ) : null}
+          </div>
+        </FormField>
+      </div>
+
+      {isUnlimitedFreeSpins(cfg.freeSpinsPerDay) ? (
+        <p className="mt-3 rounded-lg border border-amber-400/40 bg-amber-500/10 p-3 text-[11px] leading-relaxed text-brand-inkSoft">
+          <span className="font-semibold text-brand-ink">Warning: </span>
+          unlimited free spins let players spin the untiered wheel without limit at no coin cost. Only use this on a wheel whose segments pay Coins (non-withdrawable). Cash or Bonus segments on an unlimited wheel can be farmed for real balance.
+        </p>
+      ) : null}
+
+      <div className="mt-3 grid gap-3 md:grid-cols-2">
+        <FormField label="Rules EN">
+          <Textarea rows={2} value={cfg.rulesEn} onChange={(e) => set('rulesEn', e.target.value)} />
+        </FormField>
+        <FormField label="Rules BN">
+          <Textarea rows={2} value={cfg.rulesBn} onChange={(e) => set('rulesBn', e.target.value)} />
+        </FormField>
+      </div>
+
+      <p className="mt-3 text-[11px] text-brand-inkMute">
+        Current daily free spins: <span className="font-semibold text-brand-ink">{formatFreeSpins(cfg.freeSpinsPerDay, false)}</span>
+      </p>
+
+      {msg ? <p className={`mt-3 text-sm ${msg.ok ? 'text-signal-ok' : 'text-signal-danger'}`}>{msg.text}</p> : null}
+      <div className="mt-4 flex justify-end">
+        <Button onClick={() => void save()} loading={saving}>Save spin settings</Button>
       </div>
     </Card>
   );

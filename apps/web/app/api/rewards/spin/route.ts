@@ -19,6 +19,7 @@ import { db } from '@/lib/db/client';
 import { withAuth, ensureUser, recordActivity } from '@/lib/auth/guard';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 import { loadSpinConfig } from '@/lib/rewards/config';
+import { isUnlimitedFreeSpins, UNLIMITED_FREE_SPINS } from '@/lib/rewards/free-spins';
 import { rewardDayKey, LEGACY_SPIN_TIER_KEY } from '@/lib/rewards/day';
 import { rateLimit } from '@/lib/auth/rate-limit';
 import { pickSpinSegment } from '@/lib/spin/engine';
@@ -75,7 +76,10 @@ export async function POST(req: NextRequest) {
     });
     const freeUsed = freeLog?.used ?? 0;
     const freeCap = tier ? tier.freeSpinsPerDay : (config.freeSpinsPerDay ?? 0);
-    const dailyFreeAvailable = Math.max(0, freeCap - freeUsed);
+    // A negative cap is the "unlimited" sentinel: the player always has a
+    // daily free spin available and the exhaustion check below is skipped.
+    const freeUnlimited = isUnlimitedFreeSpins(freeCap);
+    const dailyFreeAvailable = freeUnlimited ? 1 : Math.max(0, freeCap - freeUsed);
 
     // Granted free spins from the unified bonus engine (deposit-bonus
     // rules etc) are stored as FreeSpinGrant rows keyed to a wheel
@@ -256,12 +260,15 @@ export async function POST(req: NextRequest) {
           create: { userId, tierKey: spinTierKey, day: spinDay, used: 1 },
           update: { used: { increment: 1 } },
         });
-        const claimed = await tx.dailyFreeSpinLog.findUnique({
-          where: { userId_tierKey_day: { userId, tierKey: spinTierKey, day: spinDay } },
-          select: { used: true },
-        });
-        if (!claimed || claimed.used > freeCap) {
-          throw new Error('FREE_DAILY_EXHAUSTED');
+        // Unlimited wheels still log usage (for stats) but never exhaust.
+        if (!freeUnlimited) {
+          const claimed = await tx.dailyFreeSpinLog.findUnique({
+            where: { userId_tierKey_day: { userId, tierKey: spinTierKey, day: spinDay } },
+            select: { used: true },
+          });
+          if (!claimed || claimed.used > freeCap) {
+            throw new Error('FREE_DAILY_EXHAUSTED');
+          }
         }
       }
 
@@ -535,12 +542,15 @@ export async function POST(req: NextRequest) {
       bonusGrantId: result.bonusGrantId ?? null,
       // Total free spins still available on this tier after this spin:
       // the remaining daily allowance plus any granted spins left. We
-      // subtract whichever bucket paid for this spin.
-      freeSpinsRemaining: Math.max(
-        0,
-        (dailyFreeAvailable - (source === 'free_daily' ? 1 : 0)) +
-          (grantedAvailable - (source === 'free_grant' ? 1 : 0)),
-      ),
+      // subtract whichever bucket paid for this spin. Unlimited wheels
+      // report the sentinel so the client renders "Unlimited".
+      freeSpinsRemaining: freeUnlimited
+        ? UNLIMITED_FREE_SPINS
+        : Math.max(
+            0,
+            (dailyFreeAvailable - (source === 'free_daily' ? 1 : 0)) +
+              (grantedAvailable - (source === 'free_grant' ? 1 : 0)),
+          ),
     });
   });
 }

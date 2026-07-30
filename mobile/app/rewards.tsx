@@ -53,6 +53,9 @@ import {
   type SpinResultPayload,
   type SpinTier,
   type CheckInConfig,
+  formatFreeSpins,
+  isUnlimitedFreeSpins,
+  UNLIMITED_FREE_SPINS,
 } from '@/lib/api/rewards';
 import { absoluteMediaUrl } from '@/lib/api/home';
 import { ApiError } from '@/lib/api/client';
@@ -277,13 +280,22 @@ export default function RewardsScreen() {
   // allowance) plus this tier's granted spins.
   const tierAllowance = selectedTier?.freeSpinsPerDay ?? me.spin.config.freeSpinsPerDay;
   const grantedFreeForTier = tierKey ? me.spin.grantedFreeSpinsByTier[tierKey] ?? 0 : 0;
-  const freeSpins = Math.max(0, Math.min(me.spin.dailyFreeSpinsRemaining, tierAllowance) + grantedFreeForTier);
+  // A negative allowance is the "unlimited" sentinel. Short-circuit before the
+  // min() so an unlimited wheel is never clamped down to a real number, and so
+  // the coin gate below never disables an unlimited wheel.
+  const freeUnlimited =
+    isUnlimitedFreeSpins(tierAllowance) ||
+    (!selectedTier && isUnlimitedFreeSpins(me.spin.dailyFreeSpinsRemaining));
+  const freeSpins = freeUnlimited
+    ? UNLIMITED_FREE_SPINS
+    : Math.max(0, Math.min(me.spin.dailyFreeSpinsRemaining, tierAllowance) + grantedFreeForTier);
+  const hasFreeSpins = freeUnlimited || freeSpins > 0;
   const spinDisabled =
     !me.spin.config.enabled ||
     spin.isPending ||
     spinning ||
     wheelSegments.length === 0 ||
-    (freeSpins <= 0 && me.coins < spinCost);
+    (!hasFreeSpins && me.coins < spinCost);
   const rewardsAvailable = storeQuery.data?.items.filter((i) => me.coins >= i.cost).length ?? 0;
   const wheelSize = Math.min(width - 72, 320);
 
@@ -316,8 +328,8 @@ export default function RewardsScreen() {
               </Text>
               <Text className="text-[11px] font-semibold" style={{ color: '#5A3A00' }}>
                 {bn
-                  ? `${freeSpins} ফ্রি স্পিন বাকি · ${rewardsAvailable} রিওয়ার্ড উপলব্ধ`
-                  : `${freeSpins} free spins left · ${rewardsAvailable} rewards available`}
+                  ? `${formatFreeSpins(freeSpins, bn)} ফ্রি স্পিন বাকি · ${rewardsAvailable} রিওয়ার্ড উপলব্ধ`
+                  : `${formatFreeSpins(freeSpins, bn)} free spins left · ${rewardsAvailable} rewards available`}
               </Text>
             </View>
           </View>
@@ -378,12 +390,12 @@ export default function RewardsScreen() {
             />
 
             <View className="w-full flex-row items-center justify-center gap-2">
-              {freeSpins > 0 ? <Badge label={bn ? 'ফ্রি' : 'FREE'} variant="new" /> : null}
+              {hasFreeSpins ? <Badge label={bn ? 'ফ্রি' : 'FREE'} variant="new" /> : null}
               <Text className="text-xs font-semibold text-ink-soft">
-                {freeSpins > 0
+                {hasFreeSpins
                   ? bn
-                    ? `${freeSpins}টি ফ্রি স্পিন বাকি`
-                    : `${freeSpins} free spins left`
+                    ? `${formatFreeSpins(freeSpins, bn)} ফ্রি স্পিন বাকি`
+                    : `${formatFreeSpins(freeSpins, bn)} free spins left`
                   : bn
                     ? `প্রতি স্পিন ${spinCost} কয়েন · আপনার ${me.coins.toLocaleString()}`
                     : `${spinCost} coins per spin · you have ${me.coins.toLocaleString()}`}
@@ -396,10 +408,10 @@ export default function RewardsScreen() {
                   ? bn
                     ? 'ঘুরছে...'
                     : 'Spinning...'
-                  : freeSpins > 0
+                  : hasFreeSpins
                     ? bn
-                      ? `ফ্রি স্পিন করুন (${freeSpins})`
-                      : `Spin free (${freeSpins} left)`
+                      ? `ফ্রি স্পিন করুন (${formatFreeSpins(freeSpins, bn)})`
+                      : `Spin free (${formatFreeSpins(freeSpins, bn)})`
                     : bn
                       ? `${spinCost} কয়েনে স্পিন`
                       : `Spin for ${spinCost} coins`

@@ -38,7 +38,8 @@ const patchSchema = z.object({
     titleEn: z.string().max(120).optional(),
     titleBn: z.string().max(120).optional(),
     costPerSpinCoins: z.coerce.number().int().min(0).max(1_000_000).optional(),
-    freeSpinsPerDay: z.coerce.number().int().min(0).max(100).optional(),
+    // -1 = unlimited free spins per day; 0 = off; positive = fixed cap.
+    freeSpinsPerDay: z.coerce.number().int().min(-1).max(100).optional(),
     defaultTurnoverX: z.coerce.number().min(0).max(50).optional(),
     rulesEn: z.string().max(2000).optional(),
     rulesBn: z.string().max(2000).optional(),

@@ -19,6 +19,7 @@ import { cn } from '@/lib/utils/cn';
 import { triggerWalletRefresh } from '@/components/site/WalletStrip';
 import { type SpinWheelSegment } from '@/components/site/SpinWheel';
 import { SpinHowToGetCoins, SpinTermsAccordion, type SpinTierDef } from '@/components/site/SpinSections';
+import { formatFreeSpins, isUnlimitedFreeSpins, UNLIMITED_FREE_SPINS } from '@/lib/rewards/free-spins';
 import {
   SpinStage,
   SpinTierCardRow,
@@ -258,8 +259,13 @@ export default function RewardsPage() {
       for (const t of tiers) {
         // Seed each tier once with its daily allowance plus any granted
         // (deposit-bonus) free spins for that tier. After the first spin
-        // the POST response's freeSpinsRemaining keeps this in sync.
-        if (next[t.key] == null) next[t.key] = t.freeSpinsPerDay + (granted[t.key] ?? 0);
+        // the POST response's freeSpinsRemaining keeps this in sync. An
+        // unlimited tier keeps the sentinel so the UI shows "Unlimited".
+        if (next[t.key] == null) {
+          next[t.key] = isUnlimitedFreeSpins(t.freeSpinsPerDay)
+            ? UNLIMITED_FREE_SPINS
+            : t.freeSpinsPerDay + (granted[t.key] ?? 0);
+        }
       }
       return next;
     });
@@ -440,8 +446,8 @@ export default function RewardsPage() {
             </p>
             <p className="mt-1 text-[11px] text-amber-200/70">
               {bn
-                ? `${me?.spin.freeSpinsRemaining ?? 0} টি ফ্রি স্পিন বাকি . ${items.length} টি রিওয়ার্ড উপলব্ধ`
-                : `${me?.spin.freeSpinsRemaining ?? 0} free spins left . ${items.length} reward(s) available`}
+                ? `${formatFreeSpins(me?.spin.freeSpinsRemaining, bn)} টি ফ্রি স্পিন বাকি . ${items.length} টি রিওয়ার্ড উপলব্ধ`
+                : `${formatFreeSpins(me?.spin.freeSpinsRemaining, bn)} free spins left . ${items.length} reward(s) available`}
             </p>
           </div>
         </div>

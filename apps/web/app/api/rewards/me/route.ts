@@ -12,6 +12,7 @@ import { db } from '@/lib/db/client';
 import { withAuth, ensureUser } from '@/lib/auth/guard';
 import { jsonOk } from '@/lib/auth/errors';
 import { loadCheckInConfig, loadSpinConfig } from '@/lib/rewards/config';
+import { isUnlimitedFreeSpins, UNLIMITED_FREE_SPINS } from '@/lib/rewards/free-spins';
 import { rewardDayKey, LEGACY_SPIN_TIER_KEY } from '@/lib/rewards/day';
 
 export async function GET() {
@@ -47,7 +48,10 @@ export async function GET() {
 
     const checkInConfig = await loadCheckInConfig();
     const spinConfig = await loadSpinConfig();
-    const freeSpinsToday = Math.max(0, (spinConfig.freeSpinsPerDay ?? 0) - (legacyFreeLog?.used ?? 0));
+    const freeUnlimited = isUnlimitedFreeSpins(spinConfig.freeSpinsPerDay ?? 0);
+    const freeSpinsToday = freeUnlimited
+      ? UNLIMITED_FREE_SPINS
+      : Math.max(0, (spinConfig.freeSpinsPerDay ?? 0) - (legacyFreeLog?.used ?? 0));
 
     // Whether the check-in deposit gate is blocking this player right now:
     // they finished a full cycle on their last check-in and have not made a
@@ -90,8 +94,9 @@ export async function GET() {
       spin: {
         config: spinConfig,
         // Daily allowance plus granted spins so the headline count the
-        // player sees includes their deposit-bonus free spins.
-        freeSpinsRemaining: freeSpinsToday + grantedFreeSpinsTotal,
+        // player sees includes their deposit-bonus free spins. Unlimited
+        // wheels report the sentinel unchanged so the UI shows "Unlimited".
+        freeSpinsRemaining: freeUnlimited ? UNLIMITED_FREE_SPINS : freeSpinsToday + grantedFreeSpinsTotal,
         dailyFreeSpinsRemaining: freeSpinsToday,
         grantedFreeSpinsByTier,
         grantedFreeSpinsTotal,

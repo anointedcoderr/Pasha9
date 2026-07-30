@@ -20,6 +20,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Trophy, Sparkles, X } from 'lucide-react';
 import { useLang } from '@/lib/i18n/context';
 import { useSound } from '@/lib/sounds/client';
+import { formatFreeSpins } from '@/lib/rewards/free-spins';
 import { cn } from '@/lib/utils/cn';
 import { HeroBackdrop } from '@/components/premium/HeroBackdrop';
 import { TierCrest } from '@/components/premium/TierCrest';
@@ -74,7 +75,7 @@ export function SpinStage({ coins, freeSpinsRemaining, costPerSpin, tierLabel, t
           />
           <BrassPlaque
             label={bn ? 'ফ্রি স্পিন' : 'Free spins'}
-            value={<span className="pa-display">{freeSpinsRemaining}</span>}
+            value={<span className="pa-display">{formatFreeSpins(freeSpinsRemaining, bn)}</span>}
             accent="emerald"
           />
           <BrassPlaque
@@ -211,10 +212,10 @@ export function SpinTierCardRow({ tiers, selectedKey, onSelect, coinBalance, fre
 
             <div className="relative mt-3 flex flex-wrap items-center gap-1.5 text-[10px]">
               <span className="rounded-full border border-amber-300/40 bg-amber-300/10 px-2 py-0.5 font-bold uppercase tracking-wider text-amber-200">
-                {bn ? `প্রতিদিন ${t.freeSpinsPerDay} ফ্রি` : `${t.freeSpinsPerDay} free / day`}
+                {bn ? `প্রতিদিন ${formatFreeSpins(t.freeSpinsPerDay, bn)} ফ্রি` : `${formatFreeSpins(t.freeSpinsPerDay, bn)} free / day`}
               </span>
               <span className="rounded-full border border-emerald-300/40 bg-emerald-300/10 px-2 py-0.5 font-bold uppercase tracking-wider text-emerald-200">
-                {bn ? `অবশিষ্ট ${free}` : `${free} left`}
+                {bn ? `অবশিষ্ট ${formatFreeSpins(free, bn)}` : `${formatFreeSpins(free, bn)} left`}
               </span>
               {insufficient ? (
                 <span className="rounded-full border border-rose-300/40 bg-rose-300/10 px-2 py-0.5 font-bold uppercase tracking-wider text-rose-200">

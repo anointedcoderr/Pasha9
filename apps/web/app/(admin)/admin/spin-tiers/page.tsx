@@ -18,8 +18,10 @@ import { PageHeader } from '@/components/site/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { FormField, Input, Textarea } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
 import { Modal } from '@/components/ui/Modal';
 import { Switch } from '@/components/ui/Switch';
+import { formatFreeSpins, freeSpinMode, freeSpinValue, isUnlimitedFreeSpins, type FreeSpinMode } from '@/lib/rewards/free-spins';
 import { Chip } from '@/components/ui/Chip';
 import { EmptyState } from '@/components/ui/EmptyState';
 import Link from 'next/link';
@@ -233,7 +235,7 @@ export default function AdminSpinTiersPage() {
                 {row.nameBn ? <p className="text-sm text-ink-mid">{row.nameBn}</p> : null}
                 {row.descriptionEn ? <p className="text-xs text-ink-lo">{row.descriptionEn}</p> : null}
                 <p className="text-[11px] text-ink-lo">
-                  {row.costPerSpin} coins per spin . {row.freeSpinsPerDay} free spins per day . {row.segmentCount} segment(s) . {row.resultCount} historical spin(s)
+                  {row.costPerSpin} coins per spin . {formatFreeSpins(row.freeSpinsPerDay, false)} free spins per day . {row.segmentCount} segment(s) . {row.resultCount} historical spin(s)
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -297,8 +299,32 @@ export default function AdminSpinTiersPage() {
               <FormField label="Cost per spin (coins)" required>
                 <Input type="number" min="0" value={editor.costPerSpin} onChange={(e) => setEditor({ ...editor, costPerSpin: Number(e.target.value) })} />
               </FormField>
-              <FormField label="Free spins per day">
-                <Input type="number" min="0" value={editor.freeSpinsPerDay} onChange={(e) => setEditor({ ...editor, freeSpinsPerDay: Number(e.target.value) })} />
+              <FormField label="Free spins per day" hint="Off = players pay coins for every spin. Fixed = a daily allowance. Unlimited = no daily cap.">
+                <div className="space-y-2">
+                  <Select
+                    value={freeSpinMode(editor.freeSpinsPerDay)}
+                    onChange={(e) => setEditor({ ...editor, freeSpinsPerDay: freeSpinValue(e.target.value as FreeSpinMode, editor.freeSpinsPerDay) })}
+                  >
+                    <option value="off">Off (no free spins)</option>
+                    <option value="fixed">Fixed number per day</option>
+                    <option value="unlimited">Unlimited</option>
+                  </Select>
+                  {freeSpinMode(editor.freeSpinsPerDay) === 'fixed' ? (
+                    <Input
+                      type="number"
+                      min="1"
+                      aria-label="Free spins per day (fixed daily count)"
+                      value={editor.freeSpinsPerDay > 0 ? editor.freeSpinsPerDay : 1}
+                      onChange={(e) => setEditor({ ...editor, freeSpinsPerDay: Math.max(1, Number(e.target.value) || 1) })}
+                    />
+                  ) : null}
+                  {isUnlimitedFreeSpins(editor.freeSpinsPerDay) ? (
+                    <p className="rounded-lg border border-amber-400/40 bg-amber-500/10 p-2 text-[11px] leading-relaxed text-brand-inkSoft">
+                      <span className="font-semibold text-brand-ink">Warning: </span>
+                      players can spin this wheel without limit at no coin cost. Only use Unlimited on wheels whose segments pay Coins (non-withdrawable). Cash or Bonus segments on an unlimited wheel can be farmed for real balance.
+                    </p>
+                  ) : null}
+                </div>
               </FormField>
               <FormField label="Accent colour">
                 <Input value={editor.color} onChange={(e) => setEditor({ ...editor, color: e.target.value })} placeholder="#FFCC00" />

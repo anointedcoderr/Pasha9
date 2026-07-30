@@ -477,7 +477,7 @@ export default function AdminSpinSegmentsPage() {
               <FormField label="Weight" hint="Higher = more likely. Sum across all active segments is the divisor.">
                 <Input type="number" min={1} value={String(editor.weight)} onChange={(e) => setEditor({ ...editor, weight: Number(e.target.value) || 1 })} />
               </FormField>
-              <FormField label="Turnover multiplier" hint="Used only for payoutType=bonus. 3 means 3x wager required to release.">
+              <FormField label="Turnover multiplier" hint="Applies to BDT cash and Bonus wins: 3 means the win is locked until the player wagers 3x the amount. Ignored for Coins (never withdrawable) and Free Bet (fixed at 1x). To make a cash win withdrawal-locked, use payout type = BDT cash and set this above 0.">
                 <Input type="number" min={0} step="0.1" value={String(editor.turnoverX)} onChange={(e) => setEditor({ ...editor, turnoverX: Number(e.target.value) || 0 })} />
               </FormField>
               <FormField label="Position (sort order)">
