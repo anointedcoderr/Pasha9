@@ -54,11 +54,6 @@ const BDT_BALANCE_LOCK_SOURCE_TYPES: string[] = [
   'promotion_deposit',
   'promotion_claim',
   'manual',
-  // Spin wheel cash + free-bet payouts land in balance with a
-  // per-segment turnover lock; the withdrawal gate must see them
-  // so the player cannot withdraw the win before turning it over.
-  'spin_result_cash',
-  'spin_result_freebet',
   // Betting Pass bonus/coins/freebet reward kinds (sourceType=
   // 'betting_pass') and the cashback campaign + promo code paths
   // create UserBonus rows with a positive turnoverRequired but
@@ -81,6 +76,12 @@ const BDT_BALANCE_LOCK_SOURCE_TYPES: string[] = [
   'tournament_prize',
 ];
 const REFERRAL_LOCK_SOURCE_TYPES = ['referral_first_deposit', 'referral_commission'];
+// Spin wheel cash + free-bet payouts land in Wallet.balance with a
+// per-segment turnover lock. Kept in their OWN bucket (not the deposit /
+// betting-pass list) so the withdrawal breakdown shows a dedicated "Spin
+// Reward Turnover" line, instead of silently folding the spin turnover
+// into the Betting Pass numbers where the operator cannot see it.
+const SPIN_LOCK_SOURCE_TYPES = ['spin_result_cash', 'spin_result_freebet'];
 
 export interface DepositTurnoverStatus {
   multiplier: number;
@@ -99,6 +100,10 @@ export interface DepositTurnoverStatus {
   referralCompleted: number;
   referralRemaining: number;
 
+  spinRequired: number;
+  spinCompleted: number;
+  spinRemaining: number;
+
   // ----- Combined totals (what the gate enforces) -----
   requiredTurnover: number;
   completedTurnover: number;
@@ -112,6 +117,7 @@ export interface DepositTurnoverStatus {
   // disabled (multiplier=0).
   bdtBalanceLocked: number;
   referralBalanceLocked: number;
+  spinBalanceLocked: number;
 }
 
 export async function computeBdtBalanceLocked(userId: string): Promise<number> {
@@ -130,6 +136,18 @@ export async function computeReferralBalanceLocked(userId: string): Promise<numb
   try {
     const agg = await db.userBonus.aggregate({
       where: { userId, status: 'active', sourceType: { in: REFERRAL_LOCK_SOURCE_TYPES } },
+      _sum: { amount: true },
+    });
+    return Math.max(0, Number(agg._sum?.amount ?? 0));
+  } catch {
+    return 0;
+  }
+}
+
+export async function computeSpinBalanceLocked(userId: string): Promise<number> {
+  try {
+    const agg = await db.userBonus.aggregate({
+      where: { userId, status: 'active', sourceType: { in: SPIN_LOCK_SOURCE_TYPES } },
       _sum: { amount: true },
     });
     return Math.max(0, Number(agg._sum?.amount ?? 0));
@@ -189,7 +207,7 @@ export async function computeDepositTurnover(userId: string): Promise<DepositTur
   const depositSince = lastBust ? { gt: lastBust } : undefined;
   const betSince = lastBust ? { gt: lastBust } : undefined;
 
-  const [depositAgg, betAgg, bpAgg, referralAgg, bdtBalanceLocked, referralBalanceLocked] = await Promise.all([
+  const [depositAgg, betAgg, bpAgg, referralAgg, spinAgg, bdtBalanceLocked, referralBalanceLocked, spinBalanceLocked] = await Promise.all([
     db.deposit.aggregate({
       where: {
         userId,
@@ -214,8 +232,13 @@ export async function computeDepositTurnover(userId: string): Promise<DepositTur
       where: { userId, status: 'active', sourceType: { in: REFERRAL_LOCK_SOURCE_TYPES } },
       _sum: { turnoverRequired: true, turnoverProgress: true },
     }),
+    db.userBonus.aggregate({
+      where: { userId, status: 'active', sourceType: { in: SPIN_LOCK_SOURCE_TYPES } },
+      _sum: { turnoverRequired: true, turnoverProgress: true },
+    }),
     computeBdtBalanceLocked(userId),
     computeReferralBalanceLocked(userId),
+    computeSpinBalanceLocked(userId),
   ]);
 
   const approvedDepositTotal = Number(depositAgg._sum?.amount ?? 0);
@@ -231,7 +254,11 @@ export async function computeDepositTurnover(userId: string): Promise<DepositTur
   const referralCompleted = Math.max(0, Math.min(referralRequired, Number(referralAgg._sum?.turnoverProgress ?? 0)));
   const referralRemaining = Math.max(0, referralRequired - referralCompleted);
 
-  const requiredTurnover = depositRequired + bettingPassRequired + referralRequired;
+  const spinRequired = Math.max(0, Number(spinAgg._sum?.turnoverRequired ?? 0));
+  const spinCompleted = Math.max(0, Math.min(spinRequired, Number(spinAgg._sum?.turnoverProgress ?? 0)));
+  const spinRemaining = Math.max(0, spinRequired - spinCompleted);
+
+  const requiredTurnover = depositRequired + bettingPassRequired + referralRequired + spinRequired;
   // Cap each gate's contribution to its own required value when summing
   // the aggregate "Completed" headline. The raw depositCompleted is the
   // lifetime wager total, which can easily exceed depositRequired - if
@@ -239,19 +266,19 @@ export async function computeDepositTurnover(userId: string): Promise<DepositTur
   // with required=1,500 (visually nonsense) while a downstream gate
   // still had 500 outstanding.
   const completedTurnover =
-    Math.min(depositRequired, depositCompleted) + bettingPassCompleted + referralCompleted;
+    Math.min(depositRequired, depositCompleted) + bettingPassCompleted + referralCompleted + spinCompleted;
   // The aggregate remaining must be the SUM of unmet sub-gates, not the
   // shortfall on the combined totals. When the deposit gate is overcompleted
   // the old "requiredTurnover - completedTurnover" math could go negative on
   // the betting pass gate and clamp to 0, producing the contradictory "you
   // need 0 more turnover" copy while the betting pass sub-block still
   // showed 500 remaining.
-  const remainingTurnover = depositRemaining + bettingPassRemaining + referralRemaining;
+  const remainingTurnover = depositRemaining + bettingPassRemaining + referralRemaining + spinRemaining;
   // Gate is met only when BOTH gates are individually met. We could
   // also check remainingTurnover <= 0 but the per-source check is
   // more honest when the deposit gate completed > deposit required
   // (the player over-wagered for deposits but still owes BP wager).
-  const isMet = depositRemaining <= 0 && bettingPassRemaining <= 0 && referralRemaining <= 0;
+  const isMet = depositRemaining <= 0 && bettingPassRemaining <= 0 && referralRemaining <= 0 && spinRemaining <= 0;
 
   return {
     multiplier,
@@ -265,11 +292,15 @@ export async function computeDepositTurnover(userId: string): Promise<DepositTur
     referralRequired,
     referralCompleted,
     referralRemaining,
+    spinRequired,
+    spinCompleted,
+    spinRemaining,
     requiredTurnover,
     completedTurnover,
     remainingTurnover,
     isMet,
     bdtBalanceLocked,
     referralBalanceLocked,
+    spinBalanceLocked,
   };
 }

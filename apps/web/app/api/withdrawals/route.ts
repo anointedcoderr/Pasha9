@@ -106,17 +106,18 @@ export async function POST(req: NextRequest) {
     // is subtracted from the available balance so the player cannot
     // withdraw the BDT Balance reward until the wager is complete.
     const turnover = await computeDepositTurnover(session.sub);
+    const lockedByRewards = turnover.bdtBalanceLocked + turnover.referralBalanceLocked + turnover.spinBalanceLocked;
     const available = wallet
-      ? Number(wallet.balance) - Number(wallet.lockedBalance) - turnover.bdtBalanceLocked - turnover.referralBalanceLocked
+      ? Number(wallet.balance) - Number(wallet.lockedBalance) - lockedByRewards
       : 0;
     if (available < parsed.data.amount) {
       return jsonError(
         400,
         'INSUFFICIENT_FUNDS',
-        turnover.bdtBalanceLocked > 0 || turnover.referralBalanceLocked > 0
-          ? `Withdrawable balance is lower than the requested amount. ${(turnover.bdtBalanceLocked + turnover.referralBalanceLocked).toFixed(2)} BDT is locked by active reward turnover.`
+        lockedByRewards > 0
+          ? `Withdrawable balance is lower than the requested amount. ${lockedByRewards.toFixed(2)} BDT is locked by active reward turnover.`
           : 'Withdrawable balance is lower than the requested amount.',
-        { bdtBalanceLocked: turnover.bdtBalanceLocked, referralBalanceLocked: turnover.referralBalanceLocked },
+        { bdtBalanceLocked: turnover.bdtBalanceLocked, referralBalanceLocked: turnover.referralBalanceLocked, spinBalanceLocked: turnover.spinBalanceLocked },
       );
     }
 
@@ -133,6 +134,9 @@ export async function POST(req: NextRequest) {
       }
       if (turnover.referralRemaining > 0) {
         parts.push(`Complete ${turnover.referralRemaining.toFixed(2)} BDT more wagering for your referral reward`);
+      }
+      if (turnover.spinRemaining > 0) {
+        parts.push(`Complete ${turnover.spinRemaining.toFixed(2)} BDT more wagering for your spin reward`);
       }
       const msg = parts.length > 0
         ? `${parts.join(' and ')} before submitting a withdrawal.`
@@ -153,11 +157,15 @@ export async function POST(req: NextRequest) {
           referralRequired: turnover.referralRequired,
           referralCompleted: turnover.referralCompleted,
           referralRemaining: turnover.referralRemaining,
+          spinRequired: turnover.spinRequired,
+          spinCompleted: turnover.spinCompleted,
+          spinRemaining: turnover.spinRemaining,
           requiredTurnover: turnover.requiredTurnover,
           completedTurnover: turnover.completedTurnover,
           remainingTurnover: turnover.remainingTurnover,
           bdtBalanceLocked: turnover.bdtBalanceLocked,
           referralBalanceLocked: turnover.referralBalanceLocked,
+          spinBalanceLocked: turnover.spinBalanceLocked,
         },
       );
     }

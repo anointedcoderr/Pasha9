@@ -121,6 +121,16 @@ const DIRECT_BALANCE_LOCK_SOURCES = new Set([
   // touching the wallet a second time; the withdrawal gate subtracts
   // the still-locked prize from withdrawable funds until wagered.
   'tournament_prize',
+  // Spin wheel cash + free-bet payouts also credit Wallet.balance
+  // directly (the spin route increments Wallet.balance and attaches a
+  // UserBonus turnover lock). Without these entries, when the grant's
+  // turnover completes, releaseBonus would run the else-branch and add
+  // the amount to Wallet.balance a SECOND time (double-credit) while
+  // driving lockedBalance negative. Marking them direct makes release /
+  // clawback a no-op for money already in balance, exactly like the
+  // tournament_prize and cashback_campaign paths above.
+  'spin_result_cash',
+  'spin_result_freebet',
 ]);
 
 async function creditBonus(tx: Tx, userId: string, amount: Prisma.Decimal, sourceType: string | null = null): Promise<void> {

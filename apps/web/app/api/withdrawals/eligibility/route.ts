@@ -36,6 +36,9 @@ export async function GET() {
       referralRequired: s.referralRequired,
       referralCompleted: s.referralCompleted,
       referralRemaining: s.referralRemaining,
+      spinRequired: s.spinRequired,
+      spinCompleted: s.spinCompleted,
+      spinRemaining: s.spinRemaining,
 
       // Combined totals
       requiredTurnover: s.requiredTurnover,
@@ -44,6 +47,7 @@ export async function GET() {
       isMet: s.isMet,
       bdtBalanceLocked: s.bdtBalanceLocked,
       referralBalanceLocked: s.referralBalanceLocked,
+      spinBalanceLocked: s.spinBalanceLocked,
     });
   });
 }

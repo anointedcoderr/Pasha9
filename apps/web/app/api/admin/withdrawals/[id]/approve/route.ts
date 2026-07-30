@@ -179,7 +179,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const wallet = await db.wallet.findUnique({ where: { userId: withdrawal.userId } });
     if (!wallet) return jsonError(409, 'WALLET_MISSING', 'User has no wallet.');
     const turnover = await computeDepositTurnover(withdrawal.userId);
-    const available = Number(wallet.balance) - Number(wallet.lockedBalance) - turnover.bdtBalanceLocked - turnover.referralBalanceLocked;
+    const lockedByRewards = turnover.bdtBalanceLocked + turnover.referralBalanceLocked + turnover.spinBalanceLocked;
+    const available = Number(wallet.balance) - Number(wallet.lockedBalance) - lockedByRewards;
     if (available < Number(amount)) {
       return jsonError(409, 'INSUFFICIENT_FUNDS', 'User withdrawable balance is lower than the withdrawal amount.');
     }
@@ -188,6 +189,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         depositRemaining: turnover.depositRemaining,
         bettingPassRemaining: turnover.bettingPassRemaining,
         referralRemaining: turnover.referralRemaining,
+        spinRemaining: turnover.spinRemaining,
       });
     }
 
@@ -200,8 +202,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       // pre-check but using the row we just read inside the tx.
       const liveWallet = await tx.wallet.findUnique({ where: { userId: withdrawal.userId } });
       if (!liveWallet) throw new Error('WALLET_MISSING_RACE');
-      const liveAvailable = Number(liveWallet.balance) - Number(liveWallet.lockedBalance)
-        - turnover.bdtBalanceLocked - turnover.referralBalanceLocked;
+      const liveAvailable = Number(liveWallet.balance) - Number(liveWallet.lockedBalance) - lockedByRewards;
       if (liveAvailable < Number(amount)) {
         throw new Error('INSUFFICIENT_FUNDS_RACE');
       }

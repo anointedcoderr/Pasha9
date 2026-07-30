@@ -62,8 +62,12 @@ interface TurnoverState {
   referralRequired: number;
   referralCompleted: number;
   referralRemaining: number;
+  spinRequired: number;
+  spinCompleted: number;
+  spinRemaining: number;
   bdtBalanceLocked: number;
   referralBalanceLocked: number;
+  spinBalanceLocked: number;
 }
 
 const DEFAULT_LIMITS: GlobalLimits = { min: 500, max: 200000, policy: '' };
@@ -83,8 +87,12 @@ const DEFAULT_TURNOVER: TurnoverState = {
   referralRequired: 0,
   referralCompleted: 0,
   referralRemaining: 0,
+  spinRequired: 0,
+  spinCompleted: 0,
+  spinRemaining: 0,
   bdtBalanceLocked: 0,
   referralBalanceLocked: 0,
+  spinBalanceLocked: 0,
 };
 
 export default function WithdrawPage() {
@@ -190,8 +198,12 @@ export default function WithdrawPage() {
             referralRequired: Number(data.referralRequired ?? 0),
             referralCompleted: Number(data.referralCompleted ?? 0),
             referralRemaining: Number(data.referralRemaining ?? 0),
+            spinRequired: Number(data.spinRequired ?? 0),
+            spinCompleted: Number(data.spinCompleted ?? 0),
+            spinRemaining: Number(data.spinRemaining ?? 0),
             bdtBalanceLocked: Number(data.bdtBalanceLocked ?? 0),
             referralBalanceLocked: Number(data.referralBalanceLocked ?? 0),
+            spinBalanceLocked: Number(data.spinBalanceLocked ?? 0),
           });
         })
         .catch(() => { /* keep defaults */ });
@@ -354,8 +366,12 @@ export default function WithdrawPage() {
                 referralRequired: Number(data.referralRequired ?? 0),
                 referralCompleted: Number(data.referralCompleted ?? 0),
                 referralRemaining: Number(data.referralRemaining ?? 0),
+                spinRequired: Number(data.spinRequired ?? 0),
+                spinCompleted: Number(data.spinCompleted ?? 0),
+                spinRemaining: Number(data.spinRemaining ?? 0),
                 bdtBalanceLocked: Number(data.bdtBalanceLocked ?? 0),
                 referralBalanceLocked: Number(data.referralBalanceLocked ?? 0),
+                spinBalanceLocked: Number(data.spinBalanceLocked ?? 0),
               });
             })
             .catch(() => { /* keep current */ });
@@ -517,6 +533,19 @@ export default function WithdrawPage() {
                     {lang === 'bn'
                       ? `প্রয়োজন ৳ ${turnover.referralRequired.toLocaleString(undefined, { maximumFractionDigits: 2 })} . সম্পূর্ণ ৳ ${turnover.referralCompleted.toLocaleString(undefined, { maximumFractionDigits: 2 })} . বাকি ৳ ${turnover.referralRemaining.toLocaleString(undefined, { maximumFractionDigits: 2 })}.`
                       : `Required ৳ ${turnover.referralRequired.toLocaleString(undefined, { maximumFractionDigits: 2 })} . Completed ৳ ${turnover.referralCompleted.toLocaleString(undefined, { maximumFractionDigits: 2 })} . Remaining ৳ ${turnover.referralRemaining.toLocaleString(undefined, { maximumFractionDigits: 2 })}.`}
+                  </p>
+                </div>
+              ) : null}
+
+              {turnover.spinRequired > 0 ? (
+                <div className="mt-2 rounded-md border border-rose-200/60 bg-white/50 p-2">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-rose-700">
+                    {lang === 'bn' ? 'স্পিন রিওয়ার্ড টার্নওভার' : 'Spin reward turnover'}
+                  </p>
+                  <p className="mt-1 text-xs text-rose-900">
+                    {lang === 'bn'
+                      ? `প্রয়োজন ৳ ${turnover.spinRequired.toLocaleString(undefined, { maximumFractionDigits: 2 })} . সম্পূর্ণ ৳ ${turnover.spinCompleted.toLocaleString(undefined, { maximumFractionDigits: 2 })} . বাকি ৳ ${turnover.spinRemaining.toLocaleString(undefined, { maximumFractionDigits: 2 })}.`
+                      : `Required ৳ ${turnover.spinRequired.toLocaleString(undefined, { maximumFractionDigits: 2 })} . Completed ৳ ${turnover.spinCompleted.toLocaleString(undefined, { maximumFractionDigits: 2 })} . Remaining ৳ ${turnover.spinRemaining.toLocaleString(undefined, { maximumFractionDigits: 2 })}.`}
                   </p>
                 </div>
               ) : null}
