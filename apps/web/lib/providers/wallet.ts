@@ -84,15 +84,32 @@ export async function processProviderCallback(
   // ProviderTransaction for this exact (providerKey, gameRound, type),
   // short-circuit as duplicate without touching the wallet.
   const prior = await db.providerTransaction.findUnique({ where: { idempotencyKey } });
-  if (prior) {
+  // Only echo a prior row back as a duplicate when it recorded a real
+  // wallet snapshot: an accepted movement, or a reject that still captured
+  // the balance (INSUFFICIENT_FUNDS writes walletBefore/After). Those are
+  // safe replays and report a real balance.
+  if (prior && prior.walletAfter != null) {
     return {
       status: 'duplicate',
       providerTxId: prior.gameRound,
-      walletBefore: prior.walletBefore ? Number(prior.walletBefore) : 0,
-      walletAfter: prior.walletAfter ? Number(prior.walletAfter) : 0,
+      walletBefore: prior.walletBefore != null ? Number(prior.walletBefore) : 0,
+      walletAfter: Number(prior.walletAfter),
       netResult: Number(prior.netResult ?? 0),
       userId: prior.userId,
     };
+  }
+  if (prior) {
+    // The prior attempt recorded NO wallet snapshot: it was a pre-wallet
+    // reject (MEMBER_ACCOUNT_NOT_FOUND when the launch->callback member
+    // mapping was not committed yet, or USER_BLOCKED). The old code still
+    // short-circuited it as a "duplicate" and returned walletAfter 0, so
+    // the aggregator showed the player a balance of 0 even though the real
+    // wallet was untouched. Drop the stale reject (conditionally, so a
+    // concurrent retry that already promoted this round to 'accepted' is
+    // never removed) and fall through to re-evaluate the callback. If the
+    // transient cause has cleared, the retry now returns the real balance;
+    // the re-created row reuses the same unique idempotency key.
+    await db.providerTransaction.deleteMany({ where: { idempotencyKey, status: 'rejected' } });
   }
 
   const user = await resolveUser(creds.id, normalized.memberAccount);
