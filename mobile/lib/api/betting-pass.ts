@@ -44,6 +44,7 @@ export interface BettingPassTier {
   descriptionEn: string | null;
   descriptionBn: string | null;
   iconUrl: string | null;
+  showCrest: boolean;
   pointsRequired: number;
   rewardKind: RewardKind;
   rewardAmount: number;
@@ -134,6 +135,7 @@ export async function getBettingPassMe(): Promise<BettingPassMe> {
           descriptionEn: strOrNull(r.descriptionEn),
           descriptionBn: strOrNull(r.descriptionBn),
           iconUrl: strOrNull(r.iconUrl),
+          showCrest: r.showCrest !== false,
           pointsRequired: num(r.pointsRequired),
           rewardKind: str(r.rewardKind) || 'reward',
           rewardAmount: num(r.rewardAmount),

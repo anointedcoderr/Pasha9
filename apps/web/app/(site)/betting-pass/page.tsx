@@ -27,6 +27,7 @@ interface BettingPassLadderRow {
   descriptionEn: string | null;
   descriptionBn: string | null;
   iconUrl: string | null;
+  showCrest: boolean;
   pointsRequired: number;
   rewardKind: 'coins' | 'bonus' | 'freebet' | 'physical' | 'bdt_balance';
   rewardAmount: number;
@@ -296,15 +297,17 @@ export default function BettingPassPage() {
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.25),transparent_55%)]" />
               {row.iconUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={row.iconUrl} alt="" className="absolute inset-0 h-full w-full object-cover opacity-80" />
+                <img src={row.iconUrl} alt={row.showCrest === false ? (lang === 'bn' && row.nameBn ? row.nameBn : row.nameEn) : ''} className={cn('absolute inset-0 h-full w-full object-cover', row.showCrest === false ? '' : 'opacity-80')} />
               ) : null}
-              <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                {row.unlocked ? <CheckCircle2 className="h-7 w-7 text-white" /> : <Crown className="h-7 w-7 text-brand-yellow-300" />}
-                <p className="mt-2 text-[10px] font-bold uppercase tracking-wider text-white">
-                  {lang === 'bn' ? `স্তর ${row.tier}` : `Tier ${row.tier}`}
-                </p>
-                <p className="text-xl font-extrabold">{lang === 'bn' && row.nameBn ? row.nameBn : row.nameEn}</p>
-              </div>
+              {row.showCrest === false && row.iconUrl ? null : (
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                  {row.unlocked ? <CheckCircle2 className="h-7 w-7 text-white" /> : <Crown className="h-7 w-7 text-brand-yellow-300" />}
+                  <p className="mt-2 text-[10px] font-bold uppercase tracking-wider text-white">
+                    {lang === 'bn' ? `স্তর ${row.tier}` : `Tier ${row.tier}`}
+                  </p>
+                  <p className="text-xl font-extrabold">{lang === 'bn' && row.nameBn ? row.nameBn : row.nameEn}</p>
+                </div>
+              )}
             </div>
             <div className="px-5 py-4">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-brand-inkMute">

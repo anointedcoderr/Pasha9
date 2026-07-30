@@ -46,6 +46,7 @@ export async function GET() {
         descriptionEn: r.descriptionEn,
         descriptionBn: r.descriptionBn,
         iconUrl: r.iconUrl,
+        showCrest: r.showCrest,
         pointsRequired: r.pointsRequired,
         rewardKind: r.rewardKind,
         rewardAmount: Number(r.rewardAmount),

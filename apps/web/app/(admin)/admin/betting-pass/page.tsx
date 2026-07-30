@@ -37,6 +37,7 @@ interface Rule {
   descriptionEn: string | null;
   descriptionBn: string | null;
   iconUrl: string | null;
+  showCrest: boolean;
   pointsRequired: number;
   rewardKind: 'coins' | 'bonus' | 'freebet' | 'physical' | 'bdt_balance';
   rewardAmount: number;
@@ -72,6 +73,7 @@ const BLANK_RULE: Rule = {
   descriptionEn: '',
   descriptionBn: '',
   iconUrl: '',
+  showCrest: true,
   pointsRequired: 1000,
   rewardKind: 'coins',
   rewardAmount: 100,
@@ -153,6 +155,7 @@ export default function AdminBettingPassPage() {
         descriptionEn: editor.descriptionEn || null,
         descriptionBn: editor.descriptionBn || null,
         iconUrl: editor.iconUrl || null,
+        showCrest: editor.showCrest,
         pointsRequired: Number(editor.pointsRequired),
         rewardKind: editor.rewardKind,
         rewardAmount: Number(editor.rewardAmount),
@@ -334,6 +337,13 @@ export default function AdminBettingPassPage() {
               constraintHint="PNG / JPG / WEBP / SVG, square ~256px"
               onChange={(url) => setEditor({ ...editor, iconUrl: url ?? '' })}
             />
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-brand-divider bg-brand-surface p-3">
+              <div>
+                <p className="text-sm font-semibold text-brand-ink">Show tier crest over artwork</p>
+                <p className="text-[11px] text-brand-inkMute">Turn off to show your uploaded banner clean, without the Tier name and crest on top of it.</p>
+              </div>
+              <Switch checked={editor.showCrest} onChange={(v) => setEditor({ ...editor, showCrest: v })} />
+            </div>
             <div className="flex items-center justify-between rounded-lg border border-brand-divider bg-brand-surface p-3">
               <p className="text-sm font-semibold text-brand-ink">Active</p>
               <Switch checked={editor.isActive} onChange={(v) => setEditor({ ...editor, isActive: v })} />

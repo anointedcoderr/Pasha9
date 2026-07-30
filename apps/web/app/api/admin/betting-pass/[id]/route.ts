@@ -22,6 +22,7 @@ const patchSchema = z.object({
   descriptionEn: z.string().trim().max(400).optional().nullable(),
   descriptionBn: z.string().trim().max(400).optional().nullable(),
   iconUrl: z.string().trim().max(500).optional().nullable(),
+  showCrest: z.boolean().optional(),
   pointsRequired: z.number().int().min(0).max(10_000_000).optional(),
   rewardKind: z.enum(['coins', 'bonus', 'freebet', 'physical', 'bdt_balance']).optional(),
   rewardAmount: z.number().min(0).max(10_000_000).optional(),

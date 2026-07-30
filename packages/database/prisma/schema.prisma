@@ -2283,6 +2283,10 @@ model BettingPassRule {
   descriptionEn  String?
   descriptionBn  String?
   iconUrl        String?
+  // When false, the tier crest overlay (Crown/check + "Tier N" + name) is
+  // not drawn over the uploaded artwork on the betting-pass cards, so
+  // operator art shows clean. Default true keeps the current look.
+  showCrest      Boolean  @default(true)
   pointsRequired Int // lifetime points to unlock
   rewardKind     String   @default("coins") // coins|bonus|freebet|physical
   rewardAmount   Decimal  @default(0) @db.Decimal(14, 2)

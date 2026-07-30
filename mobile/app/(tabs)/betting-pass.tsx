@@ -315,16 +315,18 @@ function TierCard({
       {/* 4:3 art panel */}
       <View style={{ width: '100%', aspectRatio: 4 / 3 }} className="relative">
         <Gradient colors={unlocked ? ['#B45309', '#78350F'] : [colors.blue600, colors.blue700]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
-        {art ? <Image source={{ uri: art }} style={{ position: 'absolute', width: '100%', height: '100%', opacity: 0.8 }} contentFit="cover" transition={200} /> : null}
-        <View className="absolute inset-0 items-center justify-center">
-          <Icon name={claimed ? 'checkmark-circle' : unlocked ? 'ribbon' : 'lock-closed'} size={26} color={unlocked ? '#FFFFFF' : colors.gold300} />
-          <Text className="mt-1.5 text-[10px] font-bold uppercase tracking-wider text-white" style={{ textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 3 }}>
-            {bn ? `স্তর ${tier.tier}` : `Tier ${tier.tier}`}
-          </Text>
-          <Text className="text-lg font-black text-white" style={{ textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 3 }} numberOfLines={1}>
-            {name}
-          </Text>
-        </View>
+        {art ? <Image source={{ uri: art }} style={{ position: 'absolute', width: '100%', height: '100%', opacity: tier.showCrest ? 0.8 : 1 }} contentFit="cover" transition={200} /> : null}
+        {tier.showCrest || !art ? (
+          <View className="absolute inset-0 items-center justify-center">
+            <Icon name={claimed ? 'checkmark-circle' : unlocked ? 'ribbon' : 'lock-closed'} size={26} color={unlocked ? '#FFFFFF' : colors.gold300} />
+            <Text className="mt-1.5 text-[10px] font-bold uppercase tracking-wider text-white" style={{ textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 3 }}>
+              {bn ? `স্তর ${tier.tier}` : `Tier ${tier.tier}`}
+            </Text>
+            <Text className="text-lg font-black text-white" style={{ textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 3 }} numberOfLines={1}>
+              {name}
+            </Text>
+          </View>
+        ) : null}
         {claimed ? (
           <View className="absolute right-2.5 top-2.5">
             <Badge label={bn ? 'দাবি হয়েছে' : 'CLAIMED'} variant="new" />
