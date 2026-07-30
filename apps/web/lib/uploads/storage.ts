@@ -37,7 +37,7 @@ export type UploadCategory =
 
 const IMG = new Set(['image/png', 'image/jpeg', 'image/webp']);
 const IMG_PLUS_SVG = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml']);
-const AUDIO = new Set(['audio/mpeg', 'audio/mp4', 'audio/ogg', 'audio/wav', 'audio/webm']);
+const AUDIO = new Set(['audio/mpeg', 'audio/mp4', 'audio/x-m4a', 'audio/aac', 'audio/ogg', 'audio/wav', 'audio/x-wav', 'audio/webm']);
 const VIDEO = new Set(['video/mp4', 'video/webm']);
 
 const MIME_BY_CATEGORY: Record<UploadCategory, Set<string>> = {
@@ -81,7 +81,7 @@ const MAX_BYTES_BY_CATEGORY: Record<UploadCategory, number> = {
   payment_icons: 512 * 1024,
   provider_banners: 3 * 1024 * 1024,
   avatars: 2 * 1024 * 1024,
-  sounds: 256 * 1024,
+  sounds: 5 * 1024 * 1024,
   atelier: 4 * 1024 * 1024,
   banner_videos: 20 * 1024 * 1024,
 };
@@ -96,8 +96,11 @@ const EXT_BY_MIME: Record<string, string> = {
   'application/octet-stream': '.apk',
   'audio/mpeg': '.mp3',
   'audio/mp4': '.m4a',
+  'audio/x-m4a': '.m4a',
+  'audio/aac': '.aac',
   'audio/ogg': '.ogg',
   'audio/wav': '.wav',
+  'audio/x-wav': '.wav',
   'audio/webm': '.weba',
   'video/mp4': '.mp4',
   'video/webm': '.webm',

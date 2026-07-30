@@ -14,7 +14,6 @@
 import { useEffect, useState } from 'react';
 import { useLang } from '@/lib/i18n/context';
 import { HeroSlider } from '@/components/site/HeroSlider';
-import { AnnouncementPopup } from '@/components/site/AnnouncementPopup';
 import { FirstVisitAuthPopup } from '@/components/site/FirstVisitAuthPopup';
 import { PromoTicker } from '@/components/site/PromoTicker';
 import { JackpotStrip } from '@/components/site/JackpotStrip';
@@ -169,7 +168,6 @@ export default function HomePage() {
 
       <AppDownloadSection />
 
-      <AnnouncementPopup />
       <FirstVisitAuthPopup />
       <HomeSpinShortcut />
     </div>

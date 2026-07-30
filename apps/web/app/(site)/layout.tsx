@@ -8,6 +8,7 @@ import { FloatingContact } from '@/components/site/FloatingContact';
 import { NotificationAutoPrompt } from '@/components/site/NotificationAutoPrompt';
 import { CashbackCelebration } from '@/components/site/CashbackCelebration';
 import { RewardCelebration } from '@/components/site/RewardCelebration';
+import { AnnouncementPopup } from '@/components/site/AnnouncementPopup';
 import { TooltipProvider } from '@/components/ui/Tooltip';
 import { useT } from '@/lib/i18n/context';
 
@@ -48,6 +49,7 @@ export default function SiteLayout({ children }: { children: ReactNode }) {
         <NotificationAutoPrompt />
         <CashbackCelebration />
         <RewardCelebration />
+        <AnnouncementPopup />
       </div>
     </TooltipProvider>
   );
