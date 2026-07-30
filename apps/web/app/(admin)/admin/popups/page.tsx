@@ -240,7 +240,7 @@ export default function AdminPopupsPage() {
                   <option value="entry">Website entry (first visit)</option>
                   <option value="homepage">Homepage</option>
                   <option value="deposit_page">Deposit page</option>
-                  <option value="deposit_click">Deposit button clicked</option>
+                  <option value="deposit_click">Before deposit (button tap)</option>
                   <option value="withdrawal_page">Withdrawal page</option>
                   <option value="auth_page">Register or Login page</option>
                   <option value="all_pages">All pages</option>
@@ -256,8 +256,14 @@ export default function AdminPopupsPage() {
                 </Select>
               </FormField>
             </div>
+            {editor.target === 'deposit_click' ? (
+              <p className="rounded-lg border border-amber-400/40 bg-amber-500/10 p-2 text-[11px] leading-relaxed text-brand-inkSoft">
+                <span className="font-semibold text-brand-ink">Note: </span>
+                this shows the moment a player taps the Deposit button, before any deposit is made. Use it for a pre-deposit prompt or instructions. Do not word it like a confirmation ("Deposit successful"), because no deposit has happened yet.
+              </p>
+            ) : null}
             {editor.target === 'custom_url' ? (
-              <FormField label="Custom page path" hint="e.g. /promotions or /games. Matches this path and anything under it.">
+              <FormField label="Custom page path" hint="e.g. /promotions or /games. A full URL like https://pasha9.com/promotions also works. Matches this path and anything under it.">
                 <Input value={editor.targetUrl ?? ''} onChange={(e) => setEditor({ ...editor, targetUrl: e.target.value })} placeholder="/promotions" />
               </FormField>
             ) : null}

@@ -69,6 +69,39 @@ function markSeen(p: PopupItem) {
   }
 }
 
+// Popups dismissed during THIS page session. A module-level set (not React
+// state) so a closed popup is never re-selected on the same render tick.
+// Without this an 'always'-frequency popup re-opens itself immediately and
+// reads as "the close button does not work / needs several clicks". Cleared
+// on a full reload, where the frequency rules take over again.
+const dismissedIds = new Set<string>();
+
+// Normalize an admin-entered page path so custom-URL targeting matches the
+// router pathname. Accepts a full URL, a bare path, or missing/extra slashes.
+function normalizePath(raw: string | null | undefined): string {
+  if (!raw) return '';
+  let s = String(raw).trim();
+  if (!s) return '';
+  if (/^https?:\/\//i.test(s)) {
+    try { s = new URL(s).pathname; } catch { /* keep raw */ }
+  }
+  s = s.split('?')[0].split('#')[0].trim();
+  if (!s) return '/';
+  if (!s.startsWith('/')) s = `/${s}`;
+  s = s.replace(/\/{2,}/g, '/');
+  return s.length > 1 ? s.replace(/\/+$/, '') : s;
+}
+
+// Normalize a CTA link: external URLs / mailto / tel / anchors pass through;
+// an internal path gets a single leading slash so it never resolves relative
+// to the current route.
+function normalizeHref(raw: string | null | undefined): string {
+  const s = (raw ?? '').trim();
+  if (!s) return '';
+  if (/^(https?:)?\/\//i.test(s) || /^(mailto:|tel:|#)/i.test(s)) return s;
+  return s.startsWith('/') ? s : `/${s}`;
+}
+
 function matchesPage(p: PopupItem, pathname: string): boolean {
   switch (p.target) {
     case 'all_pages':
@@ -83,8 +116,12 @@ function matchesPage(p: PopupItem, pathname: string): boolean {
       return pathname.startsWith('/withdraw');
     case 'auth_page':
       return pathname.startsWith('/auth') || pathname.startsWith('/login') || pathname.startsWith('/register');
-    case 'custom_url':
-      return Boolean(p.targetUrl && (pathname === p.targetUrl || pathname.startsWith(p.targetUrl + '/')));
+    case 'custom_url': {
+      const target = normalizePath(p.targetUrl);
+      if (!target) return false;
+      const path = normalizePath(pathname) || '/';
+      return path === target || path.startsWith(`${target}/`);
+    }
     case 'deposit_click':
       return false; // action-triggered only
     default:
@@ -108,7 +145,7 @@ export function AnnouncementPopup() {
   // Page-targeted popups: show the first eligible one for the current path.
   useEffect(() => {
     if (active) return;
-    const candidate = popups.find((p) => p.target !== 'deposit_click' && matchesPage(p, pathname) && !hasSeen(p));
+    const candidate = popups.find((p) => p.target !== 'deposit_click' && matchesPage(p, pathname) && !hasSeen(p) && !dismissedIds.has(p.id));
     if (candidate) setActive(candidate);
   }, [popups, pathname, active]);
 
@@ -117,7 +154,7 @@ export function AnnouncementPopup() {
     const onAction = (e: Event) => {
       const action = (e as CustomEvent).detail?.action as string | undefined;
       if (!action) return;
-      setActive((prev) => prev ?? popups.find((p) => p.target === action && !hasSeen(p)) ?? null);
+      setActive((prev) => prev ?? popups.find((p) => p.target === action && !hasSeen(p) && !dismissedIds.has(p.id)) ?? null);
     };
     window.addEventListener(POPUP_ACTION_EVENT, onAction);
     return () => window.removeEventListener(POPUP_ACTION_EVENT, onAction);
@@ -132,7 +169,7 @@ export function AnnouncementPopup() {
         'a[href="/deposit"], a[href^="/deposit?"], a[href^="/deposit#"], [data-deposit-trigger]',
       );
       if (!el) return;
-      setActive((prev) => prev ?? popups.find((p) => p.target === 'deposit_click' && !hasSeen(p)) ?? null);
+      setActive((prev) => prev ?? popups.find((p) => p.target === 'deposit_click' && !hasSeen(p) && !dismissedIds.has(p.id)) ?? null);
     };
     document.addEventListener('click', onDocClick, true);
     return () => document.removeEventListener('click', onDocClick, true);
@@ -140,7 +177,10 @@ export function AnnouncementPopup() {
 
   const close = useCallback(() => {
     setActive((cur) => {
-      if (cur) markSeen(cur);
+      if (cur) {
+        markSeen(cur);
+        dismissedIds.add(cur.id);
+      }
       return null;
     });
   }, []);
@@ -183,7 +223,7 @@ export function AnnouncementPopup() {
               </button>
               {active.ctaLabel && active.ctaHref ? (
                 <Link
-                  href={active.ctaHref}
+                  href={normalizeHref(active.ctaHref)}
                   onClick={close}
                   className="btn-yellow inline-flex h-10 items-center justify-center rounded-lg px-5 text-sm"
                 >
