@@ -20,11 +20,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Trophy, Sparkles, X } from 'lucide-react';
 import { useLang } from '@/lib/i18n/context';
 import { useSound } from '@/lib/sounds/client';
-import { formatFreeSpins } from '@/lib/rewards/free-spins';
+import { formatFreeSpins, isUnlimitedFreeSpins, UNLIMITED_FREE_SPINS } from '@/lib/rewards/free-spins';
 import { cn } from '@/lib/utils/cn';
 import { HeroBackdrop } from '@/components/premium/HeroBackdrop';
 import { TierCrest } from '@/components/premium/TierCrest';
-import { CountUp } from '@/components/premium/CountUp';
 import { SpinWheel, type SpinWheelSegment } from '@/components/site/SpinWheel';
 import { stageVariants, popInVariants, medallionVariants, ribbonUnfurlVariants } from '@/lib/motion/premium';
 
@@ -71,7 +70,7 @@ export function SpinStage({ coins, freeSpinsRemaining, costPerSpin, tierLabel, t
         <div className="mt-6 flex flex-wrap items-stretch justify-center gap-2">
           <BrassPlaque
             label={bn ? 'কয়েন' : 'Coins'}
-            value={<CountUp to={coins} className="pa-display" />}
+            value={<span className="pa-display">{coins.toLocaleString()}</span>}
           />
           <BrassPlaque
             label={bn ? 'ফ্রি স্পিন' : 'Free spins'}
@@ -162,7 +161,10 @@ export function SpinTierCardRow({ tiers, selectedKey, onSelect, coinBalance, fre
       {tiers.map((t, i) => {
         const active = t.key === selectedKey;
         const insufficient = coinBalance < t.costPerSpin;
-        const free = freeRemainingByTier[t.key] ?? 0;
+        // Default to the tier's own allowance (not 0) so the first paint
+        // before the server remaining seeds in never flashes "0 left" and
+        // then jumps, which reads as the card shaking.
+        const free = freeRemainingByTier[t.key] ?? (isUnlimitedFreeSpins(t.freeSpinsPerDay) ? UNLIMITED_FREE_SPINS : t.freeSpinsPerDay);
         const crest = crestFor(i);
         const name = bn && t.nameBn ? t.nameBn : t.nameEn;
         const description = (bn && t.descriptionBn) ? t.descriptionBn : (t.descriptionEn ?? '');
@@ -210,11 +212,11 @@ export function SpinTierCardRow({ tiers, selectedKey, onSelect, coinBalance, fre
               </p>
             ) : null}
 
-            <div className="relative mt-3 flex flex-wrap items-center gap-1.5 text-[10px]">
-              <span className="rounded-full border border-amber-300/40 bg-amber-300/10 px-2 py-0.5 font-bold uppercase tracking-wider text-amber-200">
+            <div className="relative mt-3 flex min-h-[1.5rem] flex-wrap items-center gap-1.5 text-[10px]">
+              <span className="whitespace-nowrap rounded-full border border-amber-300/40 bg-amber-300/10 px-2 py-0.5 font-bold uppercase tracking-wider text-amber-200">
                 {bn ? `প্রতিদিন ${formatFreeSpins(t.freeSpinsPerDay, bn)} ফ্রি` : `${formatFreeSpins(t.freeSpinsPerDay, bn)} free / day`}
               </span>
-              <span className="rounded-full border border-emerald-300/40 bg-emerald-300/10 px-2 py-0.5 font-bold uppercase tracking-wider text-emerald-200">
+              <span className="whitespace-nowrap rounded-full border border-emerald-300/40 bg-emerald-300/10 px-2 py-0.5 font-bold uppercase tracking-wider text-emerald-200">
                 {bn ? `অবশিষ্ট ${formatFreeSpins(free, bn)}` : `${formatFreeSpins(free, bn)} left`}
               </span>
               {insufficient ? (
