@@ -1,21 +1,20 @@
 // Built by Anointed Coder.
 //
 // Win celebration for WinGo (#7 redesign). A branded congratulations popup for
-// the round the player just won: a large heading, the winning result (the
-// coloured number ball + colour and Big/Small chips), the exact credited amount
-// counting up, the period number, an auto-close countdown, a close button and
-// smooth open/close. Real result + amount come straight from the settled round
-// via /api/games/wingo/my-bets. Pasha9 colours, not a third-party palette.
+// the round the player just won: a winged rocket medallion on a ribbon, a bold
+// heading, the winning lottery result (colour + number + Big/Small pills), the
+// exact credited amount counting up on a torn-receipt strip, the period number
+// and a short auto-close countdown. Real result + amount come straight from the
+// settled round via /api/games/wingo/my-bets.
 
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
-import { X } from 'lucide-react';
+import { X, Rocket } from 'lucide-react';
 import { useLang } from '@/lib/i18n/context';
 import { formatBDT } from '@/lib/utils/format';
-import { WingoBall } from './WingoBall';
-import { colorOf, sizeOf, colorLabel, sizeLabel, colorChipSkin, sizePillSkin } from './ui';
+import { colorOf, sizeOf, colorLabel, sizeLabel, colorDotClass } from './ui';
 
 export interface WingoWin {
   periodNumber: string;
@@ -30,7 +29,14 @@ interface Props {
   onClose: () => void;
 }
 
-const AUTO_CLOSE_SECONDS = 10;
+const AUTO_CLOSE_SECONDS = 3;
+
+// Scalloped (torn-receipt) top and bottom edge, applied as a CSS mask so the
+// white strip reads as a printed ticket without an image asset.
+const RECEIPT_SCALLOP =
+  'radial-gradient(6px at 50% 0, #0000 98%, #000) repeat-x 50% 0 / 16px 8px,' +
+  'radial-gradient(6px at 50% 100%, #0000 98%, #000) repeat-x 50% 100% / 16px 8px,' +
+  'linear-gradient(#000 0 0) no-repeat 50% 50% / 100% calc(100% - 16px)';
 
 export function WingoWinCelebration({ open, win, onClose }: Props) {
   const { lang } = useLang();
@@ -85,89 +91,125 @@ export function WingoWinCelebration({ open, win, onClose }: Props) {
 
   const cid = colorOf(win.result);
   const sid = sizeOf(win.result);
-  const cchip = colorChipSkin(cid);
-  const schip = sizePillSkin(sid);
 
   return (
     <Dialog.Root open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md" />
+        <Dialog.Overlay className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm" />
         <Dialog.Content
           aria-describedby={undefined}
-          className="wingo-pop fixed left-1/2 top-1/2 z-[101] w-[calc(100%-1.5rem)] max-w-[420px] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-3xl border border-amber-400/40 shadow-[0_40px_100px_-30px_rgba(245,180,0,0.85)] outline-none"
-          style={{ background: 'linear-gradient(180deg,#5a3a1d 0%,#2a1a10 100%)' }}
+          className="fixed left-1/2 top-1/2 z-[101] w-[calc(100%-1.5rem)] max-w-[380px] -translate-x-1/2 -translate-y-1/2 outline-none"
+          style={{ animation: 'wingoPopIn .28s cubic-bezier(.2,.9,.2,1)' }}
         >
+          <style>{'@keyframes wingoPopIn{from{opacity:0;transform:translate(-50%,-46%) scale(.92)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}'}</style>
           <Dialog.Title className="sr-only">{bn ? 'অভিনন্দন' : 'Congratulations'}</Dialog.Title>
 
-          {/* Falling gold sparks, decorative. */}
-          <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
-            {[12, 28, 44, 60, 76, 88].map((left, i) => (
+          {/* Orange congratulations card with the medallion overlapping its top. */}
+          <div
+            className="relative rounded-[28px] px-6 pb-6 pt-[68px] text-center shadow-[0_40px_90px_-28px_rgba(240,90,40,0.8)]"
+            style={{ background: 'linear-gradient(180deg,#ff9a52 0%,#f56a3a 58%,#ef5b4f 100%)' }}
+          >
+            {/* Winged rocket medallion on a ribbon. */}
+            <div aria-hidden className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2">
+              <div className="relative h-[104px] w-[230px]">
+                <svg viewBox="0 0 230 120" className="absolute inset-0 h-full w-full" fill="none">
+                  {/* Ribbon tails behind the medallion. */}
+                  <path d="M96 62 L116 62 L116 104 L106 95 L96 104 Z" fill="#d94f10" />
+                  <path d="M134 62 L114 62 L114 104 L124 95 L134 104 Z" fill="#d94f10" />
+                  <rect x="94" y="54" width="42" height="20" rx="4" fill="#ef6a1e" />
+                  {/* Wings: layered white feathers, right side then mirrored left. */}
+                  {[
+                    { r: -4, rx: 32, ry: 10, o: 1 },
+                    { r: -18, rx: 27, ry: 9, o: 0.96 },
+                    { r: -32, rx: 22, ry: 8, o: 0.92 },
+                    { r: -46, rx: 17, ry: 7, o: 0.88 },
+                  ].map((f, i) => (
+                    <g key={`r${i}`}>
+                      <ellipse cx="170" cy="60" rx={f.rx} ry={f.ry} fill="#ffffff" opacity={f.o} transform={`rotate(${f.r} 148 61)`} />
+                      <ellipse cx="170" cy="60" rx={f.rx} ry={f.ry} fill="#ffffff" opacity={f.o} transform={`translate(230 0) scale(-1 1) rotate(${f.r} 148 61)`} />
+                    </g>
+                  ))}
+                </svg>
+                <div
+                  className="absolute left-1/2 top-[16px] flex h-[66px] w-[66px] -translate-x-1/2 items-center justify-center rounded-full"
+                  style={{
+                    background: 'radial-gradient(circle at 40% 34%, #ffe1a1 0%, #ffab3d 52%, #f2790f 100%)',
+                    boxShadow:
+                      '0 8px 20px -6px rgba(191,90,10,0.85), inset 0 0 0 3px rgba(255,255,255,0.9), inset 0 -6px 12px -4px rgba(150,60,0,0.5)',
+                  }}
+                >
+                  <Rocket className="h-7 w-7 text-white" strokeWidth={2.4} />
+                </div>
+              </div>
+            </div>
+
+            {/* Headline */}
+            <h2 className="text-2xl font-black tracking-tight text-white [text-shadow:0_2px_10px_rgba(150,40,10,0.4)] sm:text-3xl">
+              {bn ? 'অভিনন্দন' : 'Congratulations'}
+            </h2>
+
+            {/* Lottery result: colour + number + size pills */}
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+              <span className="text-sm font-semibold text-white/90">
+                {bn ? 'লটারি ফলাফল' : 'Lottery results'}
+              </span>
               <span
-                key={left}
-                className="wingo-spark absolute top-0 h-2 w-2 rounded-full bg-amber-300"
-                style={{ left: `${left}%`, animationDelay: `${i * 0.15}s` }}
-              />
-            ))}
+                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]"
+                style={{ background: 'rgba(198,58,48,0.92)' }}
+              >
+                <span className={`h-2 w-2 rounded-full ${colorDotClass(cid)}`} />
+                {colorLabel(cid, lang)}
+              </span>
+              <span
+                className="inline-flex items-center rounded-full px-3 py-1 text-xs font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]"
+                style={{ background: 'rgba(198,58,48,0.92)' }}
+              >
+                {win.result}
+              </span>
+              <span
+                className="inline-flex items-center rounded-full px-3 py-1 text-xs font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]"
+                style={{ background: 'rgba(198,58,48,0.92)' }}
+              >
+                {sizeLabel(sid, lang)}
+              </span>
+            </div>
+
+            {/* Torn-receipt bonus strip, amount counting up */}
+            <div
+              className="mx-auto mt-5 w-full max-w-[300px] bg-white px-5 py-4"
+              style={{ WebkitMask: RECEIPT_SCALLOP, mask: RECEIPT_SCALLOP }}
+            >
+              <p className="text-xs font-extrabold uppercase tracking-wider" style={{ color: '#c8341f' }}>
+                {bn ? 'বোনাস' : 'Bonus'}
+              </p>
+              <p className="mt-0.5 text-3xl font-black tabular-nums" style={{ color: '#d8452f' }}>
+                {formatBDT(shown)}
+              </p>
+              <p className="mt-1 text-[11px] text-neutral-500">
+                {bn ? 'পিরিয়ড' : 'Period'}: {win.periodNumber}
+                {win.lineCount > 1 ? ` · ${win.lineCount} ${bn ? 'লাইন' : 'lines'}` : ''}
+              </p>
+            </div>
+
+            {/* Auto-close indicator */}
+            <div className="mt-4 flex items-center justify-center gap-2 text-[12px] font-semibold text-white">
+              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/60 text-[10px] font-bold tabular-nums">
+                {secs}
+              </span>
+              {bn ? `${secs} সেকেন্ডে অটো ক্লোজ` : `${secs} second${secs === 1 ? '' : 's'} auto close`}
+            </div>
           </div>
 
-          <div className="relative px-6 pb-6 pt-9 text-center">
+          {/* Close button below the card */}
+          <div className="mt-4 flex justify-center">
             <button
               type="button"
               onClick={onClose}
               aria-label={bn ? 'বন্ধ করুন' : 'Close'}
-              className="absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-full border border-amber-400/30 bg-black/30 text-amber-200 hover:bg-black/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/60"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/40 bg-white/15 text-white backdrop-blur-sm hover:bg-white/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
             >
-              <X className="h-4 w-4" />
+              <X className="h-5 w-5" />
             </button>
-
-            {/* Headline */}
-            <h2 className="text-2xl font-black uppercase tracking-[0.12em] text-amber-200 [text-shadow:0_2px_14px_rgba(245,180,0,0.55)] sm:text-3xl">
-              {bn ? 'অভিনন্দন!' : 'Congratulations!'}
-            </h2>
-
-            {/* Winning result: ball + colour + size */}
-            <div className="mt-5 flex items-center justify-center gap-3">
-              <WingoBall n={win.result} size={64} />
-              <div className="flex flex-col items-start gap-1.5">
-                <span
-                  className="rounded-full px-2.5 py-1 text-[11px] font-bold"
-                  style={{ background: cchip.grad, color: cchip.ink, boxShadow: `inset 0 0 0 1px ${cchip.rim}` }}
-                >
-                  {colorLabel(cid, lang)}
-                </span>
-                <span
-                  className="rounded-full px-2.5 py-1 text-[11px] font-bold"
-                  style={{ background: schip.grad, color: schip.ink, boxShadow: `inset 0 0 0 1px ${schip.rim}` }}
-                >
-                  {sizeLabel(sid, lang)}
-                </span>
-              </div>
-            </div>
-
-            {/* Amount, counting up */}
-            <p className="mt-6 text-[10px] font-bold uppercase tracking-[0.28em] text-amber-200/70">
-              {bn ? 'আপনি জিতেছেন' : 'You won'}
-            </p>
-            <p className="mt-1 text-4xl font-black tabular-nums text-amber-200 drop-shadow-[0_2px_10px_rgba(245,180,0,0.4)]">
-              {formatBDT(shown)}
-            </p>
-
-            <p className="mt-2 text-xs text-amber-100/75">
-              {bn ? 'পিরিয়ড' : 'Period'} {win.periodNumber}
-              {win.lineCount > 1 ? ` · ${win.lineCount} ${bn ? 'লাইন' : 'lines'}` : ''}
-            </p>
-
-            <button
-              type="button"
-              onClick={onClose}
-              className="mt-6 inline-flex h-11 w-full items-center justify-center rounded-xl bg-gradient-to-r from-amber-400 to-amber-600 text-sm font-extrabold uppercase tracking-wider text-[#3a1f00] shadow-[0_8px_24px_-6px_rgba(245,180,0,0.5)] hover:brightness-105 active:brightness-95"
-            >
-              {bn ? 'দারুণ, চালিয়ে যান' : 'Awesome - Continue'}
-            </button>
-
-            <p className="mt-3 text-[11px] text-amber-100/50">
-              {bn ? `${secs} সেকেন্ডে বন্ধ হবে` : `Closing in ${secs}s`}
-            </p>
           </div>
         </Dialog.Content>
       </Dialog.Portal>

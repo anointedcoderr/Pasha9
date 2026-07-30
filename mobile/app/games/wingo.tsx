@@ -17,6 +17,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
+import Svg, { Path, Rect, Ellipse } from 'react-native-svg';
 import { Icon } from '@/components/ui/Icon';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
@@ -514,9 +515,49 @@ export default function WingoScreen() {
 
 // ---------- Win celebration (#7) ----------
 
+// Layered white feathers for one wing, mirrored to build both sides. Numeric
+// rotation + origin props are used (not transform strings) so react-native-svg
+// renders them consistently across platforms.
+const WINGO_WING = [
+  { rx: 32, ry: 10, angle: 4, o: 1 },
+  { rx: 27, ry: 9, angle: 18, o: 0.96 },
+  { rx: 22, ry: 8, angle: 32, o: 0.92 },
+  { rx: 17, ry: 7, angle: 46, o: 0.88 },
+];
+
+function WingoMedallion() {
+  return (
+    <View style={{ width: 220, height: 115 }}>
+      <Svg width={220} height={115} viewBox="0 0 230 120">
+        {/* Ribbon tails behind the medallion. */}
+        <Path d="M96 62 L116 62 L116 104 L106 95 L96 104 Z" fill="#d94f10" />
+        <Path d="M134 62 L114 62 L114 104 L124 95 L134 104 Z" fill="#d94f10" />
+        <Rect x={94} y={54} width={42} height={20} rx={4} fill="#ef6a1e" />
+        {/* Wings: right side then mirrored left side. */}
+        {WINGO_WING.map((f, i) => (
+          <Ellipse key={`r${i}`} cx={170} cy={60} rx={f.rx} ry={f.ry} fill="#ffffff" opacity={f.o} rotation={-f.angle} originX={148} originY={61} />
+        ))}
+        {WINGO_WING.map((f, i) => (
+          <Ellipse key={`l${i}`} cx={60} cy={60} rx={f.rx} ry={f.ry} fill="#ffffff" opacity={f.o} rotation={f.angle} originX={82} originY={61} />
+        ))}
+      </Svg>
+      {/* Rocket badge over the wings. */}
+      <View
+        className="absolute overflow-hidden"
+        style={{ left: 78, top: 14, width: 64, height: 64, borderRadius: 32, borderWidth: 3, borderColor: 'rgba(255,255,255,0.9)' }}
+      >
+        <Gradient colors={['#ffe1a1', '#ffab3d', '#f2790f']} start={{ x: 0.3, y: 0.2 }} end={{ x: 0.85, y: 1 }} radius={32} />
+        <View className="flex-1 items-center justify-center">
+          <Icon name="rocket" size={28} color="#ffffff" />
+        </View>
+      </View>
+    </View>
+  );
+}
+
 function WinCelebration({ win, onClose }: { win: WinCeleb | null; onClose: () => void }) {
   const [shown, setShown] = useState(0);
-  const [secs, setSecs] = useState(10);
+  const [secs, setSecs] = useState(3);
 
   useEffect(() => {
     if (!win) {
@@ -537,7 +578,7 @@ function WinCelebration({ win, onClose }: { win: WinCeleb | null; onClose: () =>
 
   useEffect(() => {
     if (!win) return;
-    setSecs(10);
+    setSecs(3);
     const id = setInterval(() => setSecs((s) => Math.max(0, s - 1)), 1000);
     return () => clearInterval(id);
   }, [win]);
@@ -550,44 +591,73 @@ function WinCelebration({ win, onClose }: { win: WinCeleb | null; onClose: () =>
   const sizeName = isBig ? 'Big' : 'Small';
   const colorName =
     win.result === 0 ? 'Red Violet' : win.result === 5 ? 'Green Violet' : win.result % 2 === 0 ? 'Red' : 'Green';
+  const dotColor =
+    win.result === 0 || win.result === 5 ? '#c026d3' : win.result % 2 === 0 ? '#ef4444' : '#22c55e';
+  const pill = 'rounded-full px-3 py-1';
+  const pillBg = { backgroundColor: 'rgba(198,58,48,0.92)' } as const;
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <View className="flex-1 items-center justify-center bg-black/70 px-6">
-        <View className="w-full max-w-sm overflow-hidden rounded-3xl border border-gold-500/40">
-          <Gradient colors={['#5a3a1d', '#2a1a10']} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} radius={24} />
-          <View className="relative items-center p-6">
-            <Pressable onPress={onClose} hitSlop={8} accessibilityRole="button" accessibilityLabel="Close" className="absolute right-3 top-3">
-              <Icon name="close" size={22} color={colors.gold300} />
-            </Pressable>
-            <Text className="text-2xl font-black uppercase" style={{ color: colors.gold300, letterSpacing: 1 }}>
-              Congratulations!
-            </Text>
-            <View className="mt-4 flex-row items-center gap-3">
-              <WingoBall n={win.result} size={60} />
-              <View className="gap-1.5">
-                <View className="rounded-full px-2.5 py-1" style={{ backgroundColor: 'rgba(255,255,255,0.12)' }}>
-                  <Text className="text-[11px] font-bold text-white">{colorName}</Text>
+        <View className="w-full max-w-sm">
+          {/* Orange congratulations card. */}
+          <View className="relative rounded-3xl">
+            <Gradient colors={['#ff9a52', '#f56a3a', '#ef5b4f']} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} radius={24} />
+            <View className="items-center px-6 pb-6 pt-14">
+              <Text className="text-2xl font-black text-white">Congratulations</Text>
+
+              {/* Lottery result: colour + number + size pills. */}
+              <View className="mt-4 flex-row flex-wrap items-center justify-center gap-2">
+                <Text className="text-sm font-semibold text-white/90">Lottery results</Text>
+                <View className={`${pill} flex-row items-center gap-1.5`} style={pillBg}>
+                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: dotColor }} />
+                  <Text className="text-xs font-bold text-white">{colorName}</Text>
                 </View>
-                <View className="rounded-full px-2.5 py-1" style={{ backgroundColor: isBig ? 'rgba(245,180,0,0.92)' : 'rgba(47,143,224,0.92)' }}>
-                  <Text className="text-[11px] font-bold" style={{ color: isBig ? '#3a2800' : '#FFFFFF' }}>{sizeName}</Text>
+                <View className={pill} style={pillBg}>
+                  <Text className="text-xs font-bold text-white">{win.result}</Text>
+                </View>
+                <View className={pill} style={pillBg}>
+                  <Text className="text-xs font-bold text-white">{sizeName}</Text>
                 </View>
               </View>
+
+              {/* Bonus receipt strip, amount counting up. */}
+              <View className="mt-5 w-full rounded-2xl bg-white px-5 py-4" style={{ maxWidth: 300 }}>
+                <Text className="text-xs font-extrabold uppercase" style={{ color: '#c8341f', letterSpacing: 1 }}>Bonus</Text>
+                <Text className="mt-0.5 text-3xl font-black" style={{ color: '#d8452f' }}>{formatBDT(shown)}</Text>
+                <Text className="mt-1 text-[11px]" style={{ color: '#737373' }}>
+                  Period: {win.periodNumber}
+                  {win.lineCount > 1 ? ` · ${win.lineCount} lines` : ''}
+                </Text>
+              </View>
+
+              {/* Auto-close indicator. */}
+              <View className="mt-4 flex-row items-center justify-center gap-2">
+                <View className="items-center justify-center" style={{ width: 20, height: 20, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.6)' }}>
+                  <Text className="text-[10px] font-bold text-white">{secs}</Text>
+                </View>
+                <Text className="text-[12px] font-semibold text-white">{secs} second{secs === 1 ? '' : 's'} auto close</Text>
+              </View>
             </View>
-            <Text className="mt-5 text-[10px] font-bold uppercase tracking-widest" style={{ color: 'rgba(255,224,138,0.7)' }}>
-              You won
-            </Text>
-            <Text className="mt-1 text-4xl font-black" style={{ color: colors.gold300 }}>
-              {formatBDT(shown)}
-            </Text>
-            <Text className="mt-2 text-xs" style={{ color: 'rgba(255,224,138,0.75)' }}>
-              Period {win.periodNumber}
-              {win.lineCount > 1 ? ` · ${win.lineCount} lines` : ''}
-            </Text>
-            <Pressable onPress={onClose} className="mt-6 h-11 w-full items-center justify-center rounded-xl" style={{ backgroundColor: colors.gold500 }}>
-              <Text className="text-sm font-black uppercase" style={{ color: '#3a1f00' }}>Awesome</Text>
+          </View>
+
+          {/* Winged rocket medallion overlapping the card top. */}
+          <View pointerEvents="none" className="absolute left-0 right-0 items-center" style={{ top: -52 }}>
+            <WingoMedallion />
+          </View>
+
+          {/* Close button below the card. */}
+          <View className="mt-4 items-center">
+            <Pressable
+              onPress={onClose}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Close"
+              className="h-10 w-10 items-center justify-center rounded-full"
+              style={{ borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)', backgroundColor: 'rgba(255,255,255,0.15)' }}
+            >
+              <Icon name="close" size={22} color="#ffffff" />
             </Pressable>
-            <Text className="mt-3 text-[11px]" style={{ color: 'rgba(255,224,138,0.5)' }}>Closing in {secs}s</Text>
           </View>
         </View>
       </View>
