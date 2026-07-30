@@ -87,6 +87,9 @@ interface RewardsMe {
     // can fold them in.
     dailyFreeSpinsRemaining?: number;
     grantedFreeSpinsByTier?: Record<string, number>;
+    // True remaining free spins per named wheel (daily allowance minus used
+    // today, plus granted), so the counter is correct on load.
+    freeRemainingByTier?: Record<string, number>;
     grantedFreeSpinsTotal?: number;
     lastSpinAt: string | null;
   };
@@ -257,14 +260,18 @@ export default function RewardsPage() {
     setFreeRemainingByTier((prev) => {
       const next = { ...prev };
       for (const t of tiers) {
-        // Seed each tier once with its daily allowance plus any granted
-        // (deposit-bonus) free spins for that tier. After the first spin
-        // the POST response's freeSpinsRemaining keeps this in sync. An
-        // unlimited tier keeps the sentinel so the UI shows "Unlimited".
+        // Seed each tier from the server's true remaining count (daily
+        // allowance minus what was used today, plus granted) so the counter
+        // is correct immediately on load / refresh, not just after the first
+        // spin. Fall back to the full allowance only if the server did not
+        // send a value for this tier. An unlimited tier keeps the sentinel.
         if (next[t.key] == null) {
+          const fromServer = me.spin.freeRemainingByTier?.[t.key];
           next[t.key] = isUnlimitedFreeSpins(t.freeSpinsPerDay)
             ? UNLIMITED_FREE_SPINS
-            : t.freeSpinsPerDay + (granted[t.key] ?? 0);
+            : typeof fromServer === 'number'
+              ? fromServer
+              : t.freeSpinsPerDay + (granted[t.key] ?? 0);
         }
       }
       return next;

@@ -274,21 +274,26 @@ export default function RewardsScreen() {
 
   const spinCost = selectedTier?.costPerSpin ?? me.spin.config.costPerSpinCoins;
 
-  // Free-spin availability for THE SELECTED tier. me.spin.freeSpinsRemaining is a
-  // cross-tier aggregate, so we derive the per-tier value the way the spin route
-  // does: this tier's daily allowance (capped by the remaining global daily
-  // allowance) plus this tier's granted spins.
+  // Free-spin availability for THE SELECTED tier. Prefer the server's true
+  // per-tier remaining (allowance minus used today, plus granted) so the count
+  // is correct on load and after a refetch, not just after the first spin. Fall
+  // back to the legacy cross-tier derivation only if the backend did not send
+  // the per-tier map.
   const tierAllowance = selectedTier?.freeSpinsPerDay ?? me.spin.config.freeSpinsPerDay;
   const grantedFreeForTier = tierKey ? me.spin.grantedFreeSpinsByTier[tierKey] ?? 0 : 0;
+  const serverTierRemaining = tierKey ? me.spin.freeRemainingByTier?.[tierKey] : undefined;
   // A negative allowance is the "unlimited" sentinel. Short-circuit before the
   // min() so an unlimited wheel is never clamped down to a real number, and so
   // the coin gate below never disables an unlimited wheel.
   const freeUnlimited =
     isUnlimitedFreeSpins(tierAllowance) ||
+    isUnlimitedFreeSpins(serverTierRemaining) ||
     (!selectedTier && isUnlimitedFreeSpins(me.spin.dailyFreeSpinsRemaining));
   const freeSpins = freeUnlimited
     ? UNLIMITED_FREE_SPINS
-    : Math.max(0, Math.min(me.spin.dailyFreeSpinsRemaining, tierAllowance) + grantedFreeForTier);
+    : typeof serverTierRemaining === 'number'
+      ? Math.max(0, serverTierRemaining)
+      : Math.max(0, Math.min(me.spin.dailyFreeSpinsRemaining, tierAllowance) + grantedFreeForTier);
   const hasFreeSpins = freeUnlimited || freeSpins > 0;
   const spinDisabled =
     !me.spin.config.enabled ||

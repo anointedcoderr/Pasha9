@@ -22,7 +22,7 @@ export async function GET() {
 
     const now = new Date();
     const today = rewardDayKey(now);
-    const [wallet, lastClaim, lastSpin, todayCheckIns, legacyFreeLog, grants] = await Promise.all([
+    const [wallet, lastClaim, lastSpin, todayCheckIns, legacyFreeLog, grants, spinTiers, allFreeLogsToday] = await Promise.all([
       db.wallet.findUnique({ where: { userId }, select: { bonusBalance: true } }),
       db.dailyCheckInLog.findFirst({ where: { userId }, orderBy: { createdAt: 'desc' } }),
       db.spinResult.findFirst({ where: { userId }, orderBy: { createdAt: 'desc' } }),
@@ -44,6 +44,13 @@ export async function GET() {
         },
         select: { tierKey: true, spinsGranted: true, spinsUsed: true },
       }),
+      // Active named wheels and this user's free-spin usage for every tier
+      // today, so we can report the true per-tier remaining count on load
+      // (not just after the first spin). Without this the Spin page seeds
+      // the counter from the full daily allowance and briefly shows the
+      // wrong number after a refresh / app reopen.
+      db.spinWheelTier.findMany({ where: { isActive: true }, select: { key: true, freeSpinsPerDay: true } }),
+      db.dailyFreeSpinLog.findMany({ where: { userId, day: today }, select: { tierKey: true, used: true } }),
     ]);
 
     const checkInConfig = await loadCheckInConfig();
@@ -83,6 +90,23 @@ export async function GET() {
       grantedFreeSpinsTotal += left;
     }
 
+    // True remaining free spins for each named wheel, resolved the same way
+    // the spin route does: unlimited stays the sentinel, otherwise it is the
+    // daily allowance minus what was used today plus any granted spins. The
+    // Spin page seeds its counter from this so the number is correct on load,
+    // before the first spin.
+    const usedByTier: Record<string, number> = {};
+    for (const l of allFreeLogsToday) usedByTier[l.tierKey] = l.used;
+    const freeRemainingByTier: Record<string, number> = {};
+    for (const t of spinTiers) {
+      if (isUnlimitedFreeSpins(t.freeSpinsPerDay)) {
+        freeRemainingByTier[t.key] = UNLIMITED_FREE_SPINS;
+      } else {
+        const dailyLeft = Math.max(0, t.freeSpinsPerDay - (usedByTier[t.key] ?? 0));
+        freeRemainingByTier[t.key] = dailyLeft + (grantedFreeSpinsByTier[t.key] ?? 0);
+      }
+    }
+
     return jsonOk({
       coins: wallet ? Math.floor(Number(wallet.bonusBalance)) : 0,
       checkIn: {
@@ -99,6 +123,7 @@ export async function GET() {
         freeSpinsRemaining: freeUnlimited ? UNLIMITED_FREE_SPINS : freeSpinsToday + grantedFreeSpinsTotal,
         dailyFreeSpinsRemaining: freeSpinsToday,
         grantedFreeSpinsByTier,
+        freeRemainingByTier,
         grantedFreeSpinsTotal,
         lastSpinAt: lastSpin?.createdAt ?? null,
       },

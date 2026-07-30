@@ -75,6 +75,9 @@ export interface RewardsMe {
     freeSpinsRemaining: number;
     dailyFreeSpinsRemaining: number;
     grantedFreeSpinsByTier: Record<string, number>;
+    // True remaining free spins per named wheel (daily allowance minus used
+    // today, plus granted). Present on newer backends; may be absent.
+    freeRemainingByTier?: Record<string, number>;
     grantedFreeSpinsTotal: number;
     lastSpinAt: string | null;
   };
