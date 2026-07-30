@@ -25,7 +25,7 @@ import { cn } from '@/lib/utils/cn';
 import { HeroBackdrop } from '@/components/premium/HeroBackdrop';
 import { TierCrest } from '@/components/premium/TierCrest';
 import { SpinWheel, type SpinWheelSegment } from '@/components/site/SpinWheel';
-import { stageVariants, popInVariants, medallionVariants, ribbonUnfurlVariants } from '@/lib/motion/premium';
+import { medallionVariants, ribbonUnfurlVariants } from '@/lib/motion/premium';
 
 // ---------- SpinStage ----------
 
@@ -44,9 +44,7 @@ export function SpinStage({ coins, freeSpinsRemaining, costPerSpin, tierLabel, t
 
   return (
     <motion.section
-      variants={stageVariants}
-      initial="hidden"
-      animate="show"
+      initial={false}
       className="pasha-premium relative overflow-hidden rounded-3xl border border-amber-400/30 shadow-[var(--pa-glow-gold)]"
     >
       <HeroBackdrop slot="spin_hero_backdrop" scheme="mahogany" />
@@ -173,9 +171,7 @@ export function SpinTierCardRow({ tiers, selectedKey, onSelect, coinBalance, fre
           <motion.button
             key={t.id}
             type="button"
-            variants={popInVariants}
-            initial="hidden"
-            animate="show"
+            initial={false}
             onClick={() => { ui.play(); onSelect(t.key); }}
             aria-pressed={active}
             className={cn(
