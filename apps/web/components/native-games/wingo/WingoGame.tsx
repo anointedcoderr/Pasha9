@@ -212,9 +212,17 @@ export function WingoGame() {
         const rows = (data?.bets ?? []) as WingoMyBet[];
         setMyBets(rows);
         setNextBefore(data?.nextBefore ?? null);
-        const wins = rows.filter((b) => b.periodNumber === top.periodNumber && b.status === 'WON');
+        const periodBets = rows.filter((b) => b.periodNumber === top.periodNumber);
+        const wins = periodBets.filter((b) => b.status === 'WON');
         const amount = wins.reduce((s, b) => s + Number(b.payoutAmount), 0);
-        if (amount > 0) pendingWinRef.current = { periodNumber: top.periodNumber, amount, lineCount: wins.length, result: top.result };
+        // The viewer bet on this period (hadBet), so show a result popup after
+        // the reveal either way: a win with the credited amount, or a loss.
+        // A round with only refunded/void lines shows nothing.
+        if (amount > 0) {
+          pendingWinRef.current = { periodNumber: top.periodNumber, amount, lineCount: wins.length, result: top.result, outcome: 'win' };
+        } else if (periodBets.some((b) => b.status === 'LOST')) {
+          pendingWinRef.current = { periodNumber: top.periodNumber, amount: 0, lineCount: 0, result: top.result, outcome: 'lose' };
+        }
         refreshBalance();
         if (typeof window !== 'undefined') window.dispatchEvent(new Event('pasha9:wallet-refresh'));
       } catch {

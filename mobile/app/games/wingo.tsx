@@ -69,7 +69,7 @@ interface Notice {
   text: string;
 }
 
-type WinCeleb = { periodNumber: string; amount: number; result: number; lineCount: number };
+type WinCeleb = { periodNumber: string; amount: number; result: number; lineCount: number; outcome: 'win' | 'lose' };
 
 function betLabel(betType: WingoBetType, selection: string): string {
   if (betType === 'color') return selection.charAt(0).toUpperCase() + selection.slice(1);
@@ -132,9 +132,16 @@ export default function WingoScreen() {
     myBetsQuery
       .refetch()
       .then((res) => {
-        const wins = (res.data?.bets ?? []).filter((b) => b.periodNumber === top.periodNumber && b.status === 'WON');
+        const periodBets = (res.data?.bets ?? []).filter((b) => b.periodNumber === top.periodNumber);
+        const wins = periodBets.filter((b) => b.status === 'WON');
         const amount = wins.reduce((s, b) => s + (b.payoutAmount || 0), 0);
-        if (amount > 0) setWinCeleb({ periodNumber: top.periodNumber, amount, result: top.result, lineCount: wins.length });
+        // Show the result popup after every round the player bet on: a win with
+        // the credited amount, or a loss. Refunded/void-only rounds show nothing.
+        if (amount > 0) {
+          setWinCeleb({ periodNumber: top.periodNumber, amount, result: top.result, lineCount: wins.length, outcome: 'win' });
+        } else if (periodBets.some((b) => b.status === 'LOST')) {
+          setWinCeleb({ periodNumber: top.periodNumber, amount: 0, result: top.result, lineCount: 0, outcome: 'lose' });
+        }
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -525,14 +532,17 @@ const WINGO_WING = [
   { rx: 17, ry: 7, angle: 46, o: 0.88 },
 ];
 
-function WingoMedallion() {
+function WingoMedallion({ isWin }: { isWin: boolean }) {
+  const ribbon = isWin ? '#d94f10' : '#7c8aa4';
+  const ribbonBand = isWin ? '#ef6a1e' : '#98a6be';
+  const badge = isWin ? ['#ffe1a1', '#ffab3d', '#f2790f'] : ['#eef2f8', '#b9c6da', '#8fa0bb'];
   return (
     <View style={{ width: 220, height: 115 }}>
       <Svg width={220} height={115} viewBox="0 0 230 120">
         {/* Ribbon tails behind the medallion. */}
-        <Path d="M96 62 L116 62 L116 104 L106 95 L96 104 Z" fill="#d94f10" />
-        <Path d="M134 62 L114 62 L114 104 L124 95 L134 104 Z" fill="#d94f10" />
-        <Rect x={94} y={54} width={42} height={20} rx={4} fill="#ef6a1e" />
+        <Path d="M96 62 L116 62 L116 104 L106 95 L96 104 Z" fill={ribbon} />
+        <Path d="M134 62 L114 62 L114 104 L124 95 L134 104 Z" fill={ribbon} />
+        <Rect x={94} y={54} width={42} height={20} rx={4} fill={ribbonBand} />
         {/* Wings: right side then mirrored left side. */}
         {WINGO_WING.map((f, i) => (
           <Ellipse key={`r${i}`} cx={170} cy={60} rx={f.rx} ry={f.ry} fill="#ffffff" opacity={f.o} rotation={-f.angle} originX={148} originY={61} />
@@ -546,7 +556,7 @@ function WingoMedallion() {
         className="absolute overflow-hidden"
         style={{ left: 78, top: 14, width: 64, height: 64, borderRadius: 32, borderWidth: 3, borderColor: 'rgba(255,255,255,0.9)' }}
       >
-        <Gradient colors={['#ffe1a1', '#ffab3d', '#f2790f']} start={{ x: 0.3, y: 0.2 }} end={{ x: 0.85, y: 1 }} radius={32} />
+        <Gradient colors={badge} start={{ x: 0.3, y: 0.2 }} end={{ x: 0.85, y: 1 }} radius={32} />
         <View className="flex-1 items-center justify-center">
           <Icon name="rocket" size={28} color="#ffffff" />
         </View>
@@ -596,19 +606,31 @@ function WinCelebration({ win, onClose }: { win: WinCeleb | null; onClose: () =>
   const pill = 'rounded-full px-3 py-1';
   const pillBg = { backgroundColor: 'rgba(198,58,48,0.92)' } as const;
 
+  // Win = warm orange/gold; Lose = cool blue/silver with slate ink so text
+  // stays legible on the lighter card.
+  const isWin = win.outcome !== 'lose';
+  const cardColors = isWin ? ['#ff9a52', '#f56a3a', '#ef5b4f'] : ['#cdd6e6', '#aab8d0', '#98a7c1'];
+  const inkHeading = isWin ? '#ffffff' : '#334155';
+  const inkLabel = isWin ? 'rgba(255,255,255,0.9)' : '#475569';
+  const inkAuto = isWin ? '#ffffff' : '#475569';
+  const autoBorder = isWin ? 'rgba(255,255,255,0.6)' : 'rgba(100,116,139,0.7)';
+  const closeBorder = isWin ? 'rgba(255,255,255,0.4)' : 'rgba(100,116,139,0.5)';
+  const closeBg = isWin ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.5)';
+  const closeIcon = isWin ? '#ffffff' : '#475569';
+
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <View className="flex-1 items-center justify-center bg-black/70 px-6">
         <View className="w-full max-w-sm">
-          {/* Orange congratulations card. */}
+          {/* Result card (orange on a win, blue/silver on a loss). */}
           <View className="relative rounded-3xl">
-            <Gradient colors={['#ff9a52', '#f56a3a', '#ef5b4f']} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} radius={24} />
+            <Gradient colors={cardColors} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} radius={24} />
             <View className="items-center px-6 pb-6 pt-14">
-              <Text className="text-2xl font-black text-white">Congratulations</Text>
+              <Text className="text-2xl font-black" style={{ color: inkHeading }}>{isWin ? 'Congratulations' : 'Sorry'}</Text>
 
               {/* Lottery result: colour + number + size pills. */}
               <View className="mt-4 flex-row flex-wrap items-center justify-center gap-2">
-                <Text className="text-sm font-semibold text-white/90">Lottery results</Text>
+                <Text className="text-sm font-semibold" style={{ color: inkLabel }}>Lottery results</Text>
                 <View className={`${pill} flex-row items-center gap-1.5`} style={pillBg}>
                   <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: dotColor }} />
                   <Text className="text-xs font-bold text-white">{colorName}</Text>
@@ -621,29 +643,35 @@ function WinCelebration({ win, onClose }: { win: WinCeleb | null; onClose: () =>
                 </View>
               </View>
 
-              {/* Bonus receipt strip, amount counting up. */}
+              {/* Receipt strip: amount counting up on a win, "Lose" on a loss. */}
               <View className="mt-5 w-full rounded-2xl bg-white px-5 py-4" style={{ maxWidth: 300 }}>
-                <Text className="text-xs font-extrabold uppercase" style={{ color: '#c8341f', letterSpacing: 1 }}>Bonus</Text>
-                <Text className="mt-0.5 text-3xl font-black" style={{ color: '#d8452f' }}>{formatBDT(shown)}</Text>
+                {isWin ? (
+                  <>
+                    <Text className="text-xs font-extrabold uppercase" style={{ color: '#c8341f', letterSpacing: 1 }}>Bonus</Text>
+                    <Text className="mt-0.5 text-3xl font-black" style={{ color: '#d8452f' }}>{formatBDT(shown)}</Text>
+                  </>
+                ) : (
+                  <Text className="text-3xl font-black" style={{ color: '#5b6b86' }}>Lose</Text>
+                )}
                 <Text className="mt-1 text-[11px]" style={{ color: '#737373' }}>
                   Period: {win.periodNumber}
-                  {win.lineCount > 1 ? ` · ${win.lineCount} lines` : ''}
+                  {isWin && win.lineCount > 1 ? ` · ${win.lineCount} lines` : ''}
                 </Text>
               </View>
 
               {/* Auto-close indicator. */}
               <View className="mt-4 flex-row items-center justify-center gap-2">
-                <View className="items-center justify-center" style={{ width: 20, height: 20, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.6)' }}>
-                  <Text className="text-[10px] font-bold text-white">{secs}</Text>
+                <View className="items-center justify-center" style={{ width: 20, height: 20, borderRadius: 10, borderWidth: 1, borderColor: autoBorder }}>
+                  <Text className="text-[10px] font-bold" style={{ color: inkAuto }}>{secs}</Text>
                 </View>
-                <Text className="text-[12px] font-semibold text-white">{secs} second{secs === 1 ? '' : 's'} auto close</Text>
+                <Text className="text-[12px] font-semibold" style={{ color: inkAuto }}>{secs} second{secs === 1 ? '' : 's'} auto close</Text>
               </View>
             </View>
           </View>
 
           {/* Winged rocket medallion overlapping the card top. */}
           <View pointerEvents="none" className="absolute left-0 right-0 items-center" style={{ top: -52 }}>
-            <WingoMedallion />
+            <WingoMedallion isWin={isWin} />
           </View>
 
           {/* Close button below the card. */}
@@ -654,9 +682,9 @@ function WinCelebration({ win, onClose }: { win: WinCeleb | null; onClose: () =>
               accessibilityRole="button"
               accessibilityLabel="Close"
               className="h-10 w-10 items-center justify-center rounded-full"
-              style={{ borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)', backgroundColor: 'rgba(255,255,255,0.15)' }}
+              style={{ borderWidth: 1, borderColor: closeBorder, backgroundColor: closeBg }}
             >
-              <Icon name="close" size={22} color="#ffffff" />
+              <Icon name="close" size={22} color={closeIcon} />
             </Pressable>
           </View>
         </View>
