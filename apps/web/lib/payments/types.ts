@@ -5,7 +5,7 @@
 // themselves with the registry so the webhook route + admin UI can
 // discover them without hardcoding provider keys.
 
-export type ProviderKey = 'manual' | 'test' | 'bkash' | 'nagad' | 'rocket' | 'chaopaopay' | 'zinipay';
+export type ProviderKey = 'manual' | 'test' | 'bkash' | 'nagad' | 'rocket' | 'chaopaopay' | 'zinipay' | 'starpay';
 
 export type ProviderStatus =
   | 'live'              // configured + ready to verify webhooks

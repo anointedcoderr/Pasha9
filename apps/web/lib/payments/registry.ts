@@ -12,6 +12,7 @@ import { nagadAdapter, nagadSettings } from './nagad';
 import { rocketAdapter, rocketSettings } from './rocket';
 import { chaopaopayAdapter, chaopaopaySettings } from './chaopaopay';
 import { zinipayAdapter, zinipaySettings } from './zinipay';
+import { starpayAdapter, starpaySettings } from './starpay';
 import type { ProviderAdapter, ProviderKey, ProviderSettingsSchema } from './types';
 
 interface Entry {
@@ -55,6 +56,11 @@ const REGISTRY: Record<ProviderKey, Entry> = {
     adapter: zinipayAdapter,
     settings: zinipaySettings,
     description: 'ZinIPay hosted-payment-page deposit gateway (player picks bKash/Nagad/Rocket on the gateway screen). No HMAC published, so the webhook handler re-calls /v1/payment/verify before crediting any deposit. No payout endpoint - withdrawals continue via ChaopaoPay or manual.',
+  },
+  starpay: {
+    adapter: starpayAdapter,
+    settings: starpaySettings,
+    description: 'StarPay (stp1.starpay1.com) BD deposit gateway (bKash/Nagad/Rocket via hosted page/QR). MD5-signed both ways, so the signed callback is verified locally before crediting. Callback is at /api/payments/starpay/callback and acknowledged with plain-text SUCCESS. Disabled by default; payouts pending the provider payout spec.',
   },
 };
 
