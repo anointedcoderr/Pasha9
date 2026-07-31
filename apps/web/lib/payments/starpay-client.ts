@@ -18,8 +18,9 @@
 // others use it as supplied, so the case is a configurable toggle that
 // MUST be confirmed against a sandbox order before go-live.
 //
-// The merchant secret is NEVER hardcoded here. It is read from the
-// encrypted-at-rest SystemSetting row set only in admin.
+// The merchant secret is NEVER hardcoded here. It is read from a
+// SystemSetting row set only in admin, and is never returned to the
+// browser or written to logs.
 
 import { createHash } from 'crypto';
 import { db } from '@/lib/db/client';

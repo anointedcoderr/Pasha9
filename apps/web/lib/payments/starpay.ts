@@ -40,7 +40,7 @@ export const starpayAdapter: ProviderAdapter = {
         configured: false,
         status: 'requires_credentials',
         notes: [
-          'Missing merchant ID or secret. Set them under /admin/payments (secret is stored encrypted).',
+          'Missing merchant ID or secret. Set them under /admin/payments (the secret is stored server-side and never sent to the browser).',
           'Callbacks will be logged as signature_invalid until the secret is set.',
         ],
       };
@@ -115,7 +115,7 @@ export const starpaySettings: ProviderSettingsSchema = {
     { key: 'payment_starpay_enabled', label: 'Enable StarPay', kind: 'toggle', hint: 'Leave OFF until the secret is set and a sandbox order confirms signing + channels.' },
     { key: 'payment_starpay_base_url', label: 'API base URL', kind: 'text', hint: 'Defaults to https://stp1api.starpay1.com.' },
     { key: 'payment_starpay_mch_id', label: 'Merchant ID', kind: 'text', hint: 'From StarPay (e.g. 25).' },
-    { key: 'payment_starpay_secret', label: 'Merchant secret', kind: 'secret', hint: 'Stored encrypted. Get it from StarPay through a secure channel; never paste it in chat.' },
+    { key: 'payment_starpay_secret', label: 'Merchant secret', kind: 'secret', hint: 'Stored server-side and never shown in the browser. Get it from StarPay through a secure channel; never paste it in chat.' },
     { key: 'payment_starpay_uppercase_secret', label: 'Uppercase secret before hashing', kind: 'toggle', hint: 'Provider samples disagree. Leave OFF first; if the signature is rejected in the sandbox, turn ON.' },
     { key: 'payment_starpay_create_path', label: 'Create order path', kind: 'text', hint: 'Defaults to /v1.0/api/order/create.' },
     { key: 'payment_starpay_query_path', label: 'Query order path', kind: 'text', hint: 'Defaults to /v1.0/api/order/query.' },
