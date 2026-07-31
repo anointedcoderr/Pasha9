@@ -77,6 +77,29 @@ export async function processProviderCallback(
     };
   }
 
+  // Balance inquiry (getBalance): no money moves and there is no round to
+  // dedupe on. Resolve the player and return their CURRENT balance so the
+  // provider - e.g. Spribe Aviator, which polls getBalance on load and
+  // shows whatever credit_amount we return - displays the real number
+  // instead of 0. No ProviderTransaction row is written, so a balance poll
+  // can never seize a real bet's idempotency slot either.
+  if (normalized.type === 'balance') {
+    const user = await resolveUser(creds.id, normalized.memberAccount);
+    if (!user) {
+      return {
+        status: 'rejected', errorCode: 'MEMBER_ACCOUNT_NOT_FOUND',
+        providerTxId: normalized.gameRound, walletBefore: 0, walletAfter: 0, netResult: 0, userId: null,
+      };
+    }
+    const wallet = await db.wallet.findUnique({ where: { userId: user.id }, select: { balance: true } });
+    const bal = wallet ? Number(wallet.balance) : 0;
+    return {
+      status: 'accepted',
+      providerTxId: normalized.gameRound || 'balance',
+      walletBefore: bal, walletAfter: bal, netResult: 0, userId: user.id,
+    };
+  }
+
   // Type-aware idempotency key.
   const idempotencyKey = `${creds.providerKey}:${normalized.gameRound}:${normalized.type}`;
 

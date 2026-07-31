@@ -59,12 +59,18 @@ export interface HealthCheckResult {
 //   win     . provider sent bet_amount == 0 and win_amount > 0
 //   settle  . provider sent BOTH bet_amount > 0 AND win_amount > 0
 //   rollback. provider explicitly reverses a prior round
+//   balance . provider sent NO money movement (bet_amount == 0 AND
+//             win_amount == 0): a getBalance / balance-sync inquiry.
+//             Spribe games (Aviator) poll this on load and continuously;
+//             it must return the player's current balance, NOT be
+//             rejected, and it must not require a game_round or move the
+//             wallet.
 //
 // The wallet pipeline uses this type to build a per-event
 // idempotency key so a separate BET callback and a separate WIN
 // callback for the same game_round do NOT collide.
 export interface NormalizedCallback {
-  type: 'bet' | 'win' | 'settle' | 'rollback';
+  type: 'bet' | 'win' | 'settle' | 'rollback' | 'balance';
   memberAccount: string;
   gameUid: string | null;
   gameRound: string;
@@ -85,7 +91,7 @@ export interface NormalizedCallback {
     parsedGameUid?: string;
     parsedBetAmount?: number;
     parsedWinAmount?: number;
-    derivedType?: 'bet' | 'win' | 'settle' | 'rollback';
+    derivedType?: 'bet' | 'win' | 'settle' | 'rollback' | 'balance';
   };
 }
 

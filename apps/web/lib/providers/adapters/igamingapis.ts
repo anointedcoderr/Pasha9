@@ -504,7 +504,13 @@ export const igamingapisAdapter: ProviderAdapter = {
         `account field missing. Seen keys: ${seenKeys.join(',') || '(none)'}`,
       );
     }
-    if (!gameRound) {
+    // A callback with no money movement (bet_amount == 0 AND win_amount == 0)
+    // is a balance inquiry, NOT a bet round. Spribe games (Aviator) poll a
+    // getBalance on load and continuously; the aggregator relays it with no
+    // game_round and zero amounts. It must return the player's current
+    // balance, so it does NOT require a game_round - only a real bet/win does.
+    const isBalanceInquiry = betAmount === 0 && winAmount === 0;
+    if (!isBalanceInquiry && !gameRound) {
       throw new ProviderAdapterError(
         'CALLBACK_INVALID',
         `round id field missing. Seen keys: ${seenKeys.join(',') || '(none)'}`,
@@ -539,8 +545,9 @@ export const igamingapisAdapter: ProviderAdapter = {
     // followed by a separate WIN callback for the same game_round
     // collides and the WIN is dropped as duplicate - the exact bug
     // that caused a real player win to be lost).
-    let derivedType: 'bet' | 'win' | 'settle';
-    if (betAmount > 0 && winAmount > 0) derivedType = 'settle';
+    let derivedType: 'bet' | 'win' | 'settle' | 'balance';
+    if (isBalanceInquiry) derivedType = 'balance';
+    else if (betAmount > 0 && winAmount > 0) derivedType = 'settle';
     else if (winAmount > 0) derivedType = 'win';
     else derivedType = 'bet';
 
@@ -548,7 +555,10 @@ export const igamingapisAdapter: ProviderAdapter = {
       type: derivedType,
       memberAccount,
       gameUid: gameUid || null,
-      gameRound,
+      // A balance inquiry may carry no round; keep an empty string so the
+      // wallet pipeline (which short-circuits type 'balance' before any
+      // idempotency work) still has a stable field.
+      gameRound: gameRound || '',
       betAmount,
       winAmount,
       providerTxId: gameRound,
@@ -574,7 +584,10 @@ export const igamingapisAdapter: ProviderAdapter = {
         body: { code: 1, msg: input.errorCode ?? 'CALLBACK_REJECTED', timestamp: Date.now() },
       };
     }
-    const credit = input.responseMode === 'net_loss_amount'
+    // A balance inquiry (no money movement) must always report the current
+    // balance, never a net-loss of 0 - otherwise a getBalance poll under
+    // net_loss_amount mode would return 0 and blank the in-game balance.
+    const credit = input.responseMode === 'net_loss_amount' && (input.betAmount > 0 || input.winAmount > 0)
       ? Math.max(0, input.betAmount - input.winAmount)
       : input.newBalance;
     return {
