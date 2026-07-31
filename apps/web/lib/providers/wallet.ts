@@ -87,13 +87,21 @@ export async function processProviderCallback(
   // Only echo a prior row back as a duplicate when it recorded a real
   // wallet snapshot: an accepted movement, or a reject that still captured
   // the balance (INSUFFICIENT_FUNDS writes walletBefore/After). Those are
-  // safe replays and report a real balance.
+  // safe replays and report a real balance. We report the player's CURRENT
+  // wallet balance (re-read live), NOT the stored snapshot from first-process
+  // time, so a provider re-sending an already-acked callback after the wallet
+  // has moved on cannot make the in-game balance jump backward to a stale value.
   if (prior && prior.walletAfter != null) {
+    let liveAfter = Number(prior.walletAfter);
+    if (prior.userId) {
+      const w = await db.wallet.findUnique({ where: { userId: prior.userId }, select: { balance: true } });
+      if (w) liveAfter = Number(w.balance);
+    }
     return {
       status: 'duplicate',
       providerTxId: prior.gameRound,
       walletBefore: prior.walletBefore != null ? Number(prior.walletBefore) : 0,
-      walletAfter: Number(prior.walletAfter),
+      walletAfter: liveAfter,
       netResult: Number(prior.netResult ?? 0),
       userId: prior.userId,
     };

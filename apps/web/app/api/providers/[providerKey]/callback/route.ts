@@ -24,10 +24,19 @@ import { maskPayload } from '@/lib/providers/mask';
 import { ProviderAdapterError } from '@/lib/providers/types';
 
 function getClientIp(req: NextRequest): string {
-  const xfwd = req.headers.get('x-forwarded-for');
-  if (xfwd) return xfwd.split(',')[0].trim();
+  // Behind Cloudflare + nginx the caller's real IP is in CF-Connecting-IP
+  // (set by Cloudflare, not client-spoofable) and mirrored to X-Real-IP by
+  // nginx. Prefer those over the left-most X-Forwarded-For entry, which a
+  // client can inject and which can otherwise be a Cloudflare edge IP - either
+  // would make the IP whitelist compare the wrong address and reject genuine
+  // provider callbacks, showing up as a game balance that updates only "in
+  // some cases".
+  const cf = req.headers.get('cf-connecting-ip');
+  if (cf) return cf.trim();
   const xreal = req.headers.get('x-real-ip');
   if (xreal) return xreal.trim();
+  const xfwd = req.headers.get('x-forwarded-for');
+  if (xfwd) return xfwd.split(',')[0].trim();
   return '';
 }
 
