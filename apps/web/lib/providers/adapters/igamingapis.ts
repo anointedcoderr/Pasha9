@@ -593,26 +593,40 @@ export const igamingapisAdapter: ProviderAdapter = {
     // The updated wallet balance, in major BDT units - the same units the
     // launch payload uses, which the games display correctly on open.
     const balance = Number(Math.max(0, input.newBalance).toFixed(2));
+    const creditAmount = Number(credit.toFixed(2));
     return {
       status: 200,
       body: {
-        // credit_amount honours the operator-picked response mode and is kept
-        // for the settlement path.
-        credit_amount: Number(credit.toFixed(2)),
+        // SUCCESS ENVELOPE. The provider's own responses use { code: 0, msg,
+        // data } for success (see how launch parses code === 0). Our success
+        // reply previously carried NO code field, so a seamless-wallet
+        // aggregator that validates the success code before trusting the
+        // balance discarded it and the game fell back to 0. Live proof: JILI
+        // SuperAce loaded the correct balance, applied a bet, then collapsed to
+        // Tk 0.000 with "insufficient balance"; Aviator showed 0.00 from load.
+        code: 0,
+        status: 1,
+        msg: 'success',
         // The in-game balance the aggregator relays to JILI + Spribe (Aviator)
-        // is read from a balance field, NOT from credit_amount: a getBalance
-        // poll that only carried credit_amount blanked the on-screen balance
-        // to 0 right after launch, across every game (confirmed live on
-        // Aviator and JILI SuperAce - both dropped to 0.00 and rejected bets
-        // with "insufficient balance"). Return the updated balance under the
-        // common seamless-wallet aliases so at least one maps straight through
-        // to the game client. A correct consumer ignores the extra fields;
-        // the exact field is being confirmed with the provider.
+        // is read from a balance field, NOT from credit_amount. Return it under
+        // the common seamless-wallet aliases, at the top level AND nested in
+        // data, so whichever the aggregator reads maps straight through. A
+        // correct consumer ignores the extras; exact field pending provider
+        // confirmation.
+        credit_amount: creditAmount,
         balance,
         credit_balance: balance,
         member_balance: balance,
         user_balance: balance,
         currency: creds.currencyCode || 'BDT',
+        data: {
+          code: 0,
+          status: 1,
+          credit_amount: creditAmount,
+          balance,
+          credit_balance: balance,
+          currency: creds.currencyCode || 'BDT',
+        },
         timestamp: Date.now(),
       },
     };

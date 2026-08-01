@@ -26,3 +26,12 @@ SELECT to_char("receivedAt", 'HH24:MI:SS')                AS t,
 FROM "ProviderCallbackLog"
 ORDER BY "receivedAt" DESC
 LIMIT 20;
+
+-- Full body of the most recent balance-inquiry (getBalance) callback. This
+-- shows the EXACT response fields we send back to the aggregator, so we can
+-- confirm which fix is live and share the precise shape with the provider.
+SELECT jsonb_pretty(response) AS latest_getbalance_response
+FROM "ProviderCallbackLog"
+WHERE response->'_diagnostics'->>'derivedType' = 'balance'
+ORDER BY "receivedAt" DESC
+LIMIT 1;
