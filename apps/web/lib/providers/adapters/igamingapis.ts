@@ -577,7 +577,7 @@ export const igamingapisAdapter: ProviderAdapter = {
     } satisfies NormalizedCallback;
   },
 
-  buildCallbackResponse(_creds, input): CallbackResponseEnvelope {
+  buildCallbackResponse(creds, input): CallbackResponseEnvelope {
     if (!input.ok) {
       return {
         status: 400,
@@ -590,10 +590,29 @@ export const igamingapisAdapter: ProviderAdapter = {
     const credit = input.responseMode === 'net_loss_amount' && (input.betAmount > 0 || input.winAmount > 0)
       ? Math.max(0, input.betAmount - input.winAmount)
       : input.newBalance;
+    // The updated wallet balance, in major BDT units - the same units the
+    // launch payload uses, which the games display correctly on open.
+    const balance = Number(Math.max(0, input.newBalance).toFixed(2));
     return {
       status: 200,
       body: {
+        // credit_amount honours the operator-picked response mode and is kept
+        // for the settlement path.
         credit_amount: Number(credit.toFixed(2)),
+        // The in-game balance the aggregator relays to JILI + Spribe (Aviator)
+        // is read from a balance field, NOT from credit_amount: a getBalance
+        // poll that only carried credit_amount blanked the on-screen balance
+        // to 0 right after launch, across every game (confirmed live on
+        // Aviator and JILI SuperAce - both dropped to 0.00 and rejected bets
+        // with "insufficient balance"). Return the updated balance under the
+        // common seamless-wallet aliases so at least one maps straight through
+        // to the game client. A correct consumer ignores the extra fields;
+        // the exact field is being confirmed with the provider.
+        balance,
+        credit_balance: balance,
+        member_balance: balance,
+        user_balance: balance,
+        currency: creds.currencyCode || 'BDT',
         timestamp: Date.now(),
       },
     };
