@@ -1,0 +1,7 @@
+# Built by Anointed Coder.
+# Server-side scripts must keep LF line endings so bash on the Linux VPS
+# never chokes on carriage returns, regardless of a contributor's git
+# core.autocrlf setting.
+*.sh  text eol=lf
+*.sql text eol=lf
+*.mjs text eol=lf
