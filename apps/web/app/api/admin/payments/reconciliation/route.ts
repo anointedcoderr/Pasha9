@@ -9,7 +9,10 @@ import { jsonOk } from '@/lib/auth/errors';
 
 export async function GET(req: NextRequest) {
   return withAuth(async () => {
-    await ensurePermission('deposits.read');
+    // Grouped under Payment Providers with payments/payouts/payment-methods,
+    // so it uses the same shared read code for a predictable "View" toggle
+    // across all four sub-pages (was deposits.read).
+    await ensurePermission('payments.read');
     const url = new URL(req.url);
     const provider = url.searchParams.get('provider')?.trim();
     const status = url.searchParams.get('status')?.trim();

@@ -24,6 +24,8 @@ import { Select } from '@/components/ui/Select';
 import { Users, ShieldCheck, Plus, Pencil, Ban, Sparkles, KeyRound, RefreshCw, ListFilter } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { PermissionPicker } from '@/components/admin/PermissionPicker';
+import { useAdminPermissions } from '@/lib/auth/use-admin-permissions';
+import { ADMIN_SECTIONS, sectionPermissions } from '@/lib/auth/admin-sections';
 
 interface RoleSnapshot {
   id: string;
@@ -68,6 +70,7 @@ function roleTone(key: string): 'gold' | 'info' | 'neutral' {
 }
 
 export default function AdminStaffPage() {
+  const { role: viewerRole } = useAdminPermissions();
   const [staff, setStaff] = useState<StaffRow[]>([]);
   const [roles, setRoles] = useState<RoleSnapshot[]>([]);
   const [permissions, setPermissions] = useState<PermissionRef[]>([]);
@@ -132,15 +135,27 @@ export default function AdminStaffPage() {
   // Abort any in-flight request when the page unmounts.
   useEffect(() => () => abortRef.current?.abort(), []);
 
-  const permsByGroup = useMemo(() => {
-    const map = new Map<string, PermissionRef[]>();
-    for (const p of permissions) {
-      const arr = map.get(p.group) ?? [];
-      arr.push(p);
-      map.set(p.group, arr);
-    }
-    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
-  }, [permissions]);
+  // Friendly, section-based summary of what each role can reach, built from
+  // the same registry the picker and the sidebar use. Replaces the raw
+  // "affiliate.write ; games.write ; ..." code dump the client could not
+  // read: a role's baseline is shown as section names ("Deposits, User
+  // Management, ...") instead of technical permission keys.
+  const roleSectionSummaries = useMemo(() => {
+    return roles.map((r) => {
+      const keys = new Set(r.permissions.map((p) => p.key));
+      const sectionLabels = ADMIN_SECTIONS
+        .filter((s) => s.actions.length > 0 && sectionPermissions(s).some((k) => keys.has(k)))
+        .map((s) => s.label);
+      // Any granted key the registry does not (yet) map to a section still
+      // needs to be shown, using its seeded plain-English label rather than
+      // the raw code, so nothing silently disappears from the summary.
+      const mappedKeys = new Set(
+        ADMIN_SECTIONS.filter((s) => sectionLabels.includes(s.label)).flatMap((s) => sectionPermissions(s)),
+      );
+      const unmapped = r.permissions.filter((p) => !mappedKeys.has(p.key)).map((p) => p.label);
+      return { role: r, sectionLabels, unmapped };
+    });
+  }, [roles]);
 
   const flashToast = (msg: string) => {
     setToast(msg);
@@ -223,40 +238,42 @@ export default function AdminStaffPage() {
         </Card>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card padding="lg">
-          <CardHeader title="Role catalog" subtitle="Seeded baseline permissions per role" />
-          <div className="space-y-3">
-            {roles.map((r) => (
-              <div key={r.key} className="rounded-xl border border-neon/10 bg-base-deep/40 p-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold text-ink-hi">{r.label} <span className="text-xs text-ink-lo">({r.key})</span></p>
-                  <Chip tone={roleTone(r.key)}>{r.permissions.length} perms</Chip>
+      <Card padding="lg" className="mb-6">
+        <CardHeader
+          title="What each role can access"
+          subtitle="Baseline access by role, shown as admin sections. A staff member's actual access is this baseline plus anything granted below."
+        />
+        <div className="grid gap-3 md:grid-cols-3">
+          {roleSectionSummaries.map(({ role: r, sectionLabels, unmapped }) => (
+            <div key={r.key} className="rounded-xl border border-neon/10 bg-base-deep/40 p-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold text-ink-hi">{r.label}</p>
+                <Chip tone={roleTone(r.key)}>{sectionLabels.length + unmapped.length === 0 ? 'no access' : `${sectionLabels.length + unmapped.length} sections`}</Chip>
+              </div>
+              {r.key === 'super_admin' ? (
+                <p className="mt-2 text-xs text-ink-mid">Full access to every section, always.</p>
+              ) : sectionLabels.length === 0 && unmapped.length === 0 ? (
+                <p className="mt-2 text-xs text-ink-lo">No sections granted by default.</p>
+              ) : (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {sectionLabels.map((label) => (
+                    <span key={label} className="rounded-full bg-brand-surface px-2 py-0.5 text-[11px] font-medium text-ink-mid">{label}</span>
+                  ))}
+                  {unmapped.map((label) => (
+                    <span key={label} className="rounded-full bg-brand-surface px-2 py-0.5 text-[11px] font-medium text-ink-mid">{label}</span>
+                  ))}
                 </div>
-                <p className="mt-1 flex flex-wrap gap-1 text-[10px] font-mono text-ink-lo">
-                  {r.permissions.map((p) => p.key).join(' ; ') || '(no permissions)'}
-                </p>
-              </div>
-            ))}
-          </div>
-        </Card>
-        <Card padding="lg">
-          <CardHeader title="Permission catalog" subtitle="Master list seeded in the DB; used by the per-staff override drawer" />
-          <div className="space-y-3">
-            {permsByGroup.map(([group, perms]) => (
-              <div key={group} className="rounded-xl border border-neon/10 bg-base-deep/40 p-3">
-                <p className="text-xs uppercase tracking-wider text-gold-300">{group}</p>
-                <p className="mt-1 font-mono text-[11px] text-ink-mid">{perms.map((p) => p.key).join(' ; ')}</p>
-              </div>
-            ))}
-          </div>
-        </Card>
-      </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </Card>
 
       <Modal open={createOpen} onOpenChange={setCreateOpen} title="Create staff account" size="lg">
         <CreateStaffForm
           roles={roles}
           permissions={permissions}
+          viewerRole={viewerRole}
           onDone={(msg) => {
             setCreateOpen(false);
             flashToast(msg);
@@ -277,6 +294,7 @@ export default function AdminStaffPage() {
             row={drawerStaff}
             roles={roles}
             permissions={permissions}
+            viewerRole={viewerRole}
             onDone={(msg) => {
               setDrawerStaff(null);
               flashToast(msg);
@@ -290,7 +308,7 @@ export default function AdminStaffPage() {
   );
 }
 
-function CreateStaffForm({ roles, permissions, onDone }: { roles: RoleSnapshot[]; permissions: PermissionRef[]; onDone: (msg: string) => void }) {
+function CreateStaffForm({ roles, permissions, viewerRole, onDone }: { roles: RoleSnapshot[]; permissions: PermissionRef[]; viewerRole: string; onDone: (msg: string) => void }) {
   const [username, setUsername] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
@@ -362,7 +380,7 @@ function CreateStaffForm({ roles, permissions, onDone }: { roles: RoleSnapshot[]
         <p className="text-sm font-semibold text-ink-hi">Access by section <span className="text-xs text-ink-lo">(beyond the role baseline)</span></p>
         <p className="mt-1 text-xs text-ink-mid">Pick the sections and actions this staff member should have. You choose clear names; the system keeps the technical codes.</p>
         <div className="mt-3">
-          <PermissionPicker permissions={permissions} selected={extras} onChange={setExtras} />
+          <PermissionPicker permissions={permissions} selected={extras} onChange={setExtras} viewerRole={viewerRole} />
         </div>
       </div>
 
@@ -380,12 +398,14 @@ function EditStaffPanel({
   row,
   roles,
   permissions,
+  viewerRole,
   onDone,
   onClose,
 }: {
   row: StaffRow;
   roles: RoleSnapshot[];
   permissions: PermissionRef[];
+  viewerRole: string;
   onDone: (msg: string) => void;
   onClose: () => void;
 }) {
@@ -470,7 +490,7 @@ function EditStaffPanel({
         <p className="text-sm font-semibold text-ink-hi">Access by section <span className="text-xs text-ink-lo">(beyond the role baseline)</span></p>
         <p className="mt-1 text-xs text-ink-mid">Effective access = role baseline plus anything ticked here. Changes apply immediately and revoke active sessions.</p>
         <div className="mt-3">
-          <PermissionPicker permissions={permissions} selected={extras} onChange={setExtras} />
+          <PermissionPicker permissions={permissions} selected={extras} onChange={setExtras} viewerRole={viewerRole} />
         </div>
       </div>
 

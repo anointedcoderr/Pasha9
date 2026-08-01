@@ -10,7 +10,8 @@ import { invalidateIpBlockCache } from '@/lib/security/ip-block';
 
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
   return withAuth(async () => {
-    const session = await ensurePermission('staff.manage');
+    // Was staff.manage; see ip-blocks/route.ts POST for the same reasoning.
+    const session = await ensurePermission('security.write');
     const existing = await db.ipBlockRule.findUnique({ where: { id: params.id } });
     if (!existing) return jsonError(404, 'NOT_FOUND');
     await db.ipBlockRule.delete({ where: { id: params.id } });

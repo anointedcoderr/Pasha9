@@ -10,7 +10,9 @@ import { jsonOk } from '@/lib/auth/errors';
 
 export async function GET(req: NextRequest) {
   return withAuth(async () => {
-    await ensurePermission('activity.read');
+    // Was activity.read (shared with the unrelated Activity Log section).
+    // security.read is the dedicated view code for Security Center.
+    await ensurePermission('security.read');
     const url = req.nextUrl;
     const take = Math.min(200, Math.max(1, Number(url.searchParams.get('take') ?? 100)));
     const surface = url.searchParams.get('surface')?.trim();

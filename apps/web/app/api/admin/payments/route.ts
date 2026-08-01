@@ -20,7 +20,11 @@ function maskSecret(value: string | null | undefined): string | null {
 
 export async function GET() {
   return withAuth(async () => {
-    await ensurePermission('settings.write');
+    // View-only: was settings.write, which 'admin' role does not hold by
+    // design (only Super Admin gets settings.write). payments.read is the
+    // dedicated read code for this section; saving credentials below still
+    // requires settings.write.
+    await ensurePermission('payments.read');
 
     const summaries = await listProviderSummaries();
 

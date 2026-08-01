@@ -11,7 +11,8 @@ import { getCohorts, type CohortGranularity } from '@/lib/reports/cohorts';
 
 export async function GET(req: NextRequest) {
   return withAuth(async () => {
-    await ensurePermission('activity.read');
+    // Was activity.read; see reports/timeseries/route.ts.
+    await ensurePermission('reports.read');
     const url = req.nextUrl;
     const granularity = (url.searchParams.get('granularity') ?? 'week') as CohortGranularity;
     if (!['day', 'week', 'month'].includes(granularity)) {

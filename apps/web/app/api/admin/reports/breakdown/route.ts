@@ -14,7 +14,8 @@ const ALLOWED: BreakdownKind[] = ['deposit_by_method', 'withdrawal_by_method', '
 
 export async function GET(req: NextRequest) {
   return withAuth(async () => {
-    await ensurePermission('activity.read');
+    // Was activity.read; see reports/timeseries/route.ts.
+    await ensurePermission('reports.read');
     const url = req.nextUrl;
     const kind = (url.searchParams.get('kind') ?? 'deposit_by_method') as BreakdownKind;
     if (!ALLOWED.includes(kind)) {

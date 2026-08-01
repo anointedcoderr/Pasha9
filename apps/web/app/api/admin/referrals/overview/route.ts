@@ -19,7 +19,11 @@ import { loadReferralSettings } from '@/lib/affiliate/balance';
 
 export async function GET() {
   return withAuth(async () => {
-    await ensurePermission('affiliate.read');
+    // Was affiliate.read. referrals.read is the dedicated code (already in
+    // the default 'staff' role baseline, so this also fixes a real gap:
+    // staff was meant to see Referrals by default but affiliate.read is not
+    // in their baseline).
+    await ensurePermission('referrals.read');
 
     const settings = await loadReferralSettings();
     const cutoff = new Date(Date.now() - settings.holdDays * 86_400_000);

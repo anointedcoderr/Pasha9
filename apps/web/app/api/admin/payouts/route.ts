@@ -15,7 +15,10 @@ function maskSecret(value: string | null | undefined): string | null {
 
 export async function GET() {
   return withAuth(async () => {
-    await ensurePermission('settings.write');
+    // View-only: was settings.write; see payments/route.ts for the same
+    // reasoning. payments.read is the shared read code for the whole Payment
+    // Providers section (payments, payouts, payment methods, reconciliation).
+    await ensurePermission('payments.read');
 
     const summaries = await listPayoutSummaries();
 

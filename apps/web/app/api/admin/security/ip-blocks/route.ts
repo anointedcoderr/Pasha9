@@ -17,7 +17,8 @@ const createSchema = z.object({
 
 export async function GET() {
   return withAuth(async () => {
-    await ensurePermission('activity.read');
+    // Was activity.read; see login-attempts/route.ts.
+    await ensurePermission('security.read');
     const rows = await db.ipBlockRule.findMany({ orderBy: { createdAt: 'desc' } });
     return jsonOk({ rules: rows });
   });
@@ -25,7 +26,10 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   return withAuth(async () => {
-    const session = await ensurePermission('staff.manage');
+    // Was staff.manage - IP blocking is a Security Center action, not staff
+    // account management, and 'admin' role deliberately lacks staff.manage.
+    // security.write is what "Manage IP blocks & 2FA" actually grants.
+    const session = await ensurePermission('security.write');
     const body = await req.json().catch(() => ({}));
     const parsed = createSchema.safeParse(body);
     if (!parsed.success) return jsonError(400, 'VALIDATION', undefined, { issues: parsed.error.issues });

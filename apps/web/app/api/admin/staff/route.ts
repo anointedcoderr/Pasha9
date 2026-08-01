@@ -119,9 +119,16 @@ export async function POST(req: NextRequest) {
     // Validate any per-staff permission grants before we create.
     const extraIds = Array.from(new Set(data.extraPermissionIds));
     if (extraIds.length > 0) {
-      const found = await db.permission.findMany({ where: { id: { in: extraIds } }, select: { id: true } });
+      const found = await db.permission.findMany({ where: { id: { in: extraIds } }, select: { id: true, key: true } });
       if (found.length !== extraIds.length) {
         return jsonError(400, 'PERMISSION_NOT_FOUND', 'One or more permission ids do not exist.');
+      }
+      // Lock down: only super_admin can hand out staff.manage itself. Without
+      // this, any staff.manage holder (e.g. the 'admin' role, or a staff
+      // member explicitly granted it) could grant staff.manage to someone
+      // else, escalating their own reach beyond what a Super Admin approved.
+      if (found.some((p) => p.key === 'staff.manage') && session.role !== 'super_admin') {
+        return jsonError(403, 'ROLE_NOT_ALLOWED', 'Only super_admin can grant Staff & Sub-admin management access.');
       }
     }
 

@@ -17,7 +17,10 @@ import { getTimeseries, ALL_METRICS, METRIC_LABELS, type Metric, type Granularit
 
 export async function GET(req: NextRequest) {
   return withAuth(async () => {
-    await ensurePermission('activity.read');
+    // Was activity.read (shared with the unrelated Activity Log section);
+    // reports.read is the dedicated code so the two are independently
+    // grantable.
+    await ensurePermission('reports.read');
     const url = req.nextUrl;
     const metric = (url.searchParams.get('metric') ?? 'deposits') as Metric;
     if (!ALL_METRICS.includes(metric)) {

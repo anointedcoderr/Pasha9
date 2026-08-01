@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { PageHeader } from '@/components/site/PageHeader';
 import { StatTile } from '@/components/ui/StatTile';
 import { Card, CardHeader } from '@/components/ui/Card';
@@ -10,6 +11,7 @@ import { Chip } from '@/components/ui/Chip';
 import { Button } from '@/components/ui/Button';
 import { formatBDT, formatDateTime, relativeTime } from '@/lib/utils/format';
 import { useLang } from '@/lib/i18n/context';
+import { useAnnounce } from '@/components/ui/LiveRegion';
 import {
   LayoutDashboard,
   Users,
@@ -24,6 +26,8 @@ import {
   Megaphone,
   ShieldCheck,
   Settings,
+  ShieldAlert,
+  X,
 } from 'lucide-react';
 import { ROUTES } from '@/lib/constants/routes';
 import { cn } from '@/lib/utils/cn';
@@ -55,10 +59,27 @@ interface Overview {
 
 export default function AdminOverview() {
   const { lang } = useLang();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const announce = useAnnounce();
+  const [forbiddenNotice, setForbiddenNotice] = useState(false);
   const [data, setData] = useState<Overview | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // A staff member was redirected here after trying to open a page they do
+  // not have permission for (typed URL, bookmark, or a stale link).
+  // Middleware performs the actual block; this banner just explains why
+  // they landed on the dashboard instead. The query param is stripped
+  // immediately so a refresh or re-share of the URL does not re-show it.
+  useEffect(() => {
+    if (searchParams?.get('forbidden') === '1') {
+      setForbiddenNotice(true);
+      announce('You do not have access to that section. Ask a Super Admin to grant it.', { tone: 'assertive' });
+      router.replace('/admin');
+    }
+  }, [searchParams, router, announce]);
 
   const load = useCallback(async () => {
     setError(null);
@@ -90,6 +111,26 @@ export default function AdminOverview() {
           </Button>
         }
       />
+
+      {forbiddenNotice ? (
+        <Card padding="md" className="mb-4 border border-amber-300/60 bg-amber-50">
+          <div className="flex items-start gap-3">
+            <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" aria-hidden="true" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-amber-900">You do not have access to that section.</p>
+              <p className="mt-0.5 text-xs text-amber-800">Ask a Super Admin to grant it from the Staff page if you need it.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setForbiddenNotice(false)}
+              aria-label="Dismiss"
+              className="shrink-0 rounded-md p-1 text-amber-700 hover:bg-amber-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-700"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </Card>
+      ) : null}
 
       {error ? (
         <Card padding="md" className="mb-4"><p className="text-sm text-signal-danger">{error}</p></Card>

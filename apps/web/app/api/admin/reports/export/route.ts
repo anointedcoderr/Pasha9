@@ -21,7 +21,8 @@ const ALLOWED = ['deposits', 'withdrawals', 'users', 'commissions', 'bonus_grant
 
 export async function GET(req: NextRequest) {
   return withAuth(async () => {
-    await ensurePermission('activity.read');
+    // Was activity.read; see reports/timeseries/route.ts.
+    await ensurePermission('reports.read');
     const url = req.nextUrl;
     const type = url.searchParams.get('type') ?? 'deposits';
     if (!(ALLOWED as readonly string[]).includes(type)) {

@@ -18,7 +18,11 @@ type Status = (typeof STATUS_VALUES)[number];
 
 export async function GET(req: NextRequest) {
   return withAuth(async () => {
-    await ensurePermission('support.write');
+    // Was support.write - merely viewing the ticket queue required the same
+    // permission as replying/resolving. support.read separates "can see
+    // tickets" from "can act on them"; the [id] route below correctly keeps
+    // support.write for the reply/resolve action.
+    await ensurePermission('support.read');
 
     const url = new URL(req.url);
     const statusFilter = url.searchParams.get('status');

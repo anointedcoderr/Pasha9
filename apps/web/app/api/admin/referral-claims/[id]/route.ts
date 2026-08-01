@@ -18,7 +18,10 @@ const schema = z.object({
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   return withAuth(async () => {
-    await ensurePermission('users.read');
+    // Security fix: this approves/rejects a referral commission payout, but
+    // previously only required users.read - a VIEW-level permission, not an
+    // approval one. referrals.write ("Approve & adjust") is the correct gate.
+    await ensurePermission('referrals.write');
     const session = await getCurrentSession();
     if (!session) return jsonError(401, 'UNAUTHENTICATED');
 

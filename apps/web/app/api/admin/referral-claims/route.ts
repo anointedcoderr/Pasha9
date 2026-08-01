@@ -20,7 +20,9 @@ const ALLOWED_STATUSES = new Set(['pending', 'paid', 'rejected']);
 
 export async function GET(req: NextRequest) {
   return withAuth(async () => {
-    await ensurePermission('users.read');
+    // Was users.read; referrals.read is the section's dedicated view code
+    // (matches the default 'staff' baseline, which already holds it).
+    await ensurePermission('referrals.read');
 
     const url = new URL(req.url);
     const q = (url.searchParams.get('q') ?? '').trim();

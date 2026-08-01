@@ -33,7 +33,9 @@ const createSchema = z.object({
 
 export async function GET() {
   return withAuth(async () => {
-    await ensurePermission('settings.write');
+    // View-only: was settings.write; see payments/route.ts. Create/update/
+    // delete below correctly stay on settings.write.
+    await ensurePermission('payments.read');
     const rows = await db.paymentMethod.findMany({ orderBy: [{ position: 'asc' }, { name: 'asc' }] });
     return jsonOk({ methods: rows.map(serialize) });
   });

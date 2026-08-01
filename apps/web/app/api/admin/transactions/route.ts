@@ -19,7 +19,11 @@ const ALLOWED_TYPES = new Set(['deposit', 'withdraw', 'bonus', 'referral', 'bet'
 
 export async function GET(req: NextRequest) {
   return withAuth(async () => {
-    await ensurePermission('users.read');
+    // Was users.read (a mismatch with the sidebar/menu gate, which has always
+    // required transactions.read - the default 'staff' role baseline already
+    // includes transactions.read for exactly this page). Aligned so a staff
+    // member granted the "Transaction Log" section can actually load it.
+    await ensurePermission('transactions.read');
     const url = new URL(req.url);
     const typeParam = url.searchParams.get('type');
     const q = (url.searchParams.get('q') ?? '').trim();
