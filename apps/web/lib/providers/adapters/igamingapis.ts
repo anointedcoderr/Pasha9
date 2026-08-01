@@ -578,21 +578,44 @@ export const igamingapisAdapter: ProviderAdapter = {
   },
 
   buildCallbackResponse(creds, input): CallbackResponseEnvelope {
+    const currency = creds.currencyCode || 'BDT';
+    // The player's real balance, in major BDT units (the same units the launch
+    // payload uses, which the games display correctly on open). Computed for
+    // EVERY response - success AND rejection - so no callback can ever blank
+    // the in-game balance to 0.
+    const balance = Number(Math.max(0, input.newBalance).toFixed(2));
+
     if (!input.ok) {
+      // A rejected callback (e.g. INSUFFICIENT_FUNDS on a bet) must STILL carry
+      // the real balance. Previously a rejection returned { code: 1, msg } with
+      // no balance field, so a single rejected bet blanked the game to Tk 0.00
+      // and then it refused every further bet with "insufficient balance", even
+      // though the wallet was fine. HTTP 200 so the aggregator parses the body
+      // and reads the balance; code:1 / status:0 signal that THIS transaction
+      // failed (the game must not treat the bet as accepted).
       return {
-        status: 400,
-        body: { code: 1, msg: input.errorCode ?? 'CALLBACK_REJECTED', timestamp: Date.now() },
+        status: 200,
+        body: {
+          code: 1,
+          status: 0,
+          msg: input.errorCode ?? 'CALLBACK_REJECTED',
+          balance,
+          credit_balance: balance,
+          member_balance: balance,
+          user_balance: balance,
+          currency,
+          data: { code: 1, status: 0, balance, credit_balance: balance, currency },
+          timestamp: Date.now(),
+        },
       };
     }
+
     // A balance inquiry (no money movement) must always report the current
     // balance, never a net-loss of 0 - otherwise a getBalance poll under
     // net_loss_amount mode would return 0 and blank the in-game balance.
     const credit = input.responseMode === 'net_loss_amount' && (input.betAmount > 0 || input.winAmount > 0)
       ? Math.max(0, input.betAmount - input.winAmount)
       : input.newBalance;
-    // The updated wallet balance, in major BDT units - the same units the
-    // launch payload uses, which the games display correctly on open.
-    const balance = Number(Math.max(0, input.newBalance).toFixed(2));
     const creditAmount = Number(credit.toFixed(2));
     return {
       status: 200,
@@ -618,14 +641,14 @@ export const igamingapisAdapter: ProviderAdapter = {
         credit_balance: balance,
         member_balance: balance,
         user_balance: balance,
-        currency: creds.currencyCode || 'BDT',
+        currency,
         data: {
           code: 0,
           status: 1,
           credit_amount: creditAmount,
           balance,
           credit_balance: balance,
-          currency: creds.currencyCode || 'BDT',
+          currency,
         },
         timestamp: Date.now(),
       },
