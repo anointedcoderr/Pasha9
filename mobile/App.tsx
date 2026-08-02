@@ -25,10 +25,18 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
+import * as SplashScreen from 'expo-splash-screen';
 import WebView, { type WebViewMessageEvent, type WebViewNavigation } from 'react-native-webview';
 import type { ShouldStartLoadRequest, WebViewErrorEvent, WebViewHttpErrorEvent } from 'react-native-webview/lib/WebViewTypes';
 import { SITE_URL } from '@/lib/config';
 import { ensureAndroidChannel, getExpoPushToken } from '@/lib/push/register';
+
+// Hold the native splash (dark bg + logo, from app.json's expo-splash-screen
+// plugin config) up past its normal auto-hide point. It is only released
+// once our own JS loading overlay below is mounted and painted, so the
+// handoff is dark-to-dark with no white flash in between - the native
+// splash and the JS overlay share the same background colour on purpose.
+void SplashScreen.preventAutoHideAsync();
 
 const SPLASH_BG = '#06120c';
 const ACCENT = '#FFCC00';
@@ -80,6 +88,14 @@ export default function App() {
   const pendingUrlRef = useRef<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
+
+  // Our own dark loading overlay is on screen from the very first paint
+  // (loading starts true), so it is safe to release the native splash the
+  // moment React has mounted - the two share the same background colour,
+  // so the swap is invisible.
+  useEffect(() => {
+    void SplashScreen.hideAsync();
+  }, []);
 
   // Android hardware back: step back through page history first, only let
   // the OS handle it (exit) once there is nowhere left to go back to.

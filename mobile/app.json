@@ -7,11 +7,6 @@
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "icon": "./assets/icon.png",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#06120c"
-    },
     "newArchEnabled": true,
     "assetBundlePatterns": [
       "**/*"
@@ -30,7 +25,15 @@
       "edgeToEdgeEnabled": true
     },
     "plugins": [
-      "expo-notifications"
+      "expo-notifications",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#06120c"
+        }
+      ]
     ],
     "extra": {
       "apiBaseUrl": "https://pasha9.com",
