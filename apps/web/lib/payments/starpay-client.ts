@@ -39,6 +39,22 @@ export interface StarPaySettings {
   channelNagad: string;
   channelRocket: string;
   brandIcon: string | null;
+  // Per-method player-facing tile config. The deposit page shows bKash,
+  // Nagad and Rocket as three separate branded tiles (StarPay itself is
+  // only the backend gateway and is never shown to the player) - each tile
+  // is independently enabled, labeled, iconed and ordered.
+  bkashTileEnabled: boolean;
+  nagadTileEnabled: boolean;
+  rocketTileEnabled: boolean;
+  bkashLabel: string;
+  nagadLabel: string;
+  rocketLabel: string;
+  bkashIcon: string | null;
+  nagadIcon: string | null;
+  rocketIcon: string | null;
+  bkashOrder: number;
+  nagadOrder: number;
+  rocketOrder: number;
 }
 
 const SETTINGS_KEYS = [
@@ -54,6 +70,18 @@ const SETTINGS_KEYS = [
   'payment_starpay_channel_nagad',
   'payment_starpay_channel_rocket',
   'payment_starpay_icon',
+  'payment_starpay_bkash_tile_enabled',
+  'payment_starpay_nagad_tile_enabled',
+  'payment_starpay_rocket_tile_enabled',
+  'payment_starpay_bkash_label',
+  'payment_starpay_nagad_label',
+  'payment_starpay_rocket_label',
+  'payment_starpay_bkash_icon',
+  'payment_starpay_nagad_icon',
+  'payment_starpay_rocket_icon',
+  'payment_starpay_bkash_order',
+  'payment_starpay_nagad_order',
+  'payment_starpay_rocket_order',
 ] as const;
 
 export async function readStarPaySettings(): Promise<StarPaySettings> {
@@ -73,6 +101,20 @@ export async function readStarPaySettings(): Promise<StarPaySettings> {
     channelNagad: m.get('payment_starpay_channel_nagad') ?? '5302',
     channelRocket: m.get('payment_starpay_channel_rocket') ?? '5303',
     brandIcon: m.get('payment_starpay_icon') ?? null,
+    // Tiles default ON so the three brand tiles appear immediately once the
+    // gateway itself is enabled and configured, with no extra admin step.
+    bkashTileEnabled: (m.get('payment_starpay_bkash_tile_enabled') ?? '1') === '1',
+    nagadTileEnabled: (m.get('payment_starpay_nagad_tile_enabled') ?? '1') === '1',
+    rocketTileEnabled: (m.get('payment_starpay_rocket_tile_enabled') ?? '1') === '1',
+    bkashLabel: m.get('payment_starpay_bkash_label') ?? 'bKash',
+    nagadLabel: m.get('payment_starpay_nagad_label') ?? 'Nagad',
+    rocketLabel: m.get('payment_starpay_rocket_label') ?? 'Rocket',
+    bkashIcon: m.get('payment_starpay_bkash_icon') ?? null,
+    nagadIcon: m.get('payment_starpay_nagad_icon') ?? null,
+    rocketIcon: m.get('payment_starpay_rocket_icon') ?? null,
+    bkashOrder: Number(m.get('payment_starpay_bkash_order') ?? '1') || 1,
+    nagadOrder: Number(m.get('payment_starpay_nagad_order') ?? '2') || 2,
+    rocketOrder: Number(m.get('payment_starpay_rocket_order') ?? '3') || 3,
   };
 }
 
@@ -84,6 +126,24 @@ export function starpayDepositChannel(cfg: StarPaySettings, method: string): str
     case 'rocket': return cfg.channelRocket;
     default: return cfg.channelCombined;
   }
+}
+
+export interface StarPayMethodTile {
+  key: 'bkash' | 'nagad' | 'rocket';
+  label: string;
+  icon: string | null;
+  enabled: boolean;
+  order: number;
+}
+
+/** The three player-facing deposit tiles, sorted by the operator's display order. */
+export function starpayDepositTiles(cfg: StarPaySettings): StarPayMethodTile[] {
+  const tiles: StarPayMethodTile[] = [
+    { key: 'bkash', label: cfg.bkashLabel, icon: cfg.bkashIcon, enabled: cfg.bkashTileEnabled, order: cfg.bkashOrder },
+    { key: 'nagad', label: cfg.nagadLabel, icon: cfg.nagadIcon, enabled: cfg.nagadTileEnabled, order: cfg.nagadOrder },
+    { key: 'rocket', label: cfg.rocketLabel, icon: cfg.rocketIcon, enabled: cfg.rocketTileEnabled, order: cfg.rocketOrder },
+  ];
+  return tiles.sort((a, b) => a.order - b.order);
 }
 
 function normPath(p: string): string {

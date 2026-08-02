@@ -49,6 +49,16 @@ interface PublicMethod {
   badgeEnabled: boolean;
 }
 
+// One StarPay-backed player-facing tile. StarPay itself is never shown to
+// the player - the operator configures bKash/Nagad/Rocket as three
+// independent tiles (enable, label, icon, order) in /admin/payments, each
+// routing to its own StarPay channel behind the scenes.
+interface StarpayTile {
+  key: 'bkash' | 'nagad' | 'rocket';
+  label: string;
+  icon: string | null;
+}
+
 interface NoticeRow {
   id: string;
   titleEn: string;
@@ -121,7 +131,7 @@ export default function DepositPage() {
   const [expressIcons, setExpressIcons] = useState<{ bkash: string | null; nagad: string | null }>({ bkash: null, nagad: null });
   const [expressBusy, setExpressBusy] = useState<null | 'bkash' | 'nagad'>(null);
   const [expressError, setExpressError] = useState<string | null>(null);
-  const [gatewayChoice, setGatewayChoice] = useState<null | 'bkash' | 'nagad' | 'zinipay' | 'starpay'>(null);
+  const [gatewayChoice, setGatewayChoice] = useState<null | 'bkash' | 'nagad' | 'zinipay' | 'starpay_bkash' | 'starpay_nagad' | 'starpay_rocket'>(null);
   // ZinIPay hosted-gateway probe. A tile only renders when the operator
   // has enabled + keyed ZinIPay in /admin/payments. The player picks the
   // wallet (bKash / Nagad / Rocket) on the ZinIPay page itself, so there
@@ -130,14 +140,14 @@ export default function DepositPage() {
   const [zinipayChecked, setZinipayChecked] = useState(false);
   const [zinipayIcon, setZinipayIcon] = useState<string | null>(null);
   const [zinipayBusy, setZinipayBusy] = useState(false);
-  // StarPay hosted-gateway probe. Same model as ZinIPay: a tile only
-  // renders when the operator has enabled + keyed StarPay in
-  // /admin/payments, and the player picks bKash / Nagad / Rocket on the
-  // StarPay hosted page (we use the combined-collection channel).
-  const [starpayAvailable, setStarpayAvailable] = useState(false);
+  // StarPay-backed tiles. Unlike ZinIPay (one combined tile, wallet picked
+  // on the hosted page), StarPay renders as up to three separate branded
+  // tiles - bKash / Nagad / Rocket - each independently enabled by the
+  // operator and each routed to its own StarPay channel on our side. The
+  // player never sees "StarPay" anywhere.
+  const [starpayMethods, setStarpayMethods] = useState<StarpayTile[]>([]);
   const [starpayChecked, setStarpayChecked] = useState(false);
-  const [starpayIcon, setStarpayIcon] = useState<string | null>(null);
-  const [starpayBusy, setStarpayBusy] = useState(false);
+  const [starpayBusy, setStarpayBusy] = useState<null | 'bkash' | 'nagad' | 'rocket'>(null);
   const [notices, setNotices] = useState<NoticeRow[]>([]);
   const [noticeOpen, setNoticeOpen] = useState(false);
   const [preview, setPreview] = useState<PreviewState>({ bonusPercentage: 0, bonusAmount: 0, totalCredit: 0 });
@@ -216,13 +226,25 @@ export default function DepositPage() {
       .finally(() => { if (alive) setZinipayChecked(true); });
 
     // StarPay availability probe (independent of the other gateways).
+    // Returns only the tiles that are actually enabled right now, already
+    // sorted by the operator's display order.
     fetch('/api/payments/starpay/availability', { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
         if (!alive) return;
-        if (j?.available) {
-          setStarpayAvailable(true);
-          setStarpayIcon(typeof j.icon === 'string' && j.icon.trim() ? j.icon : null);
+        if (Array.isArray(j?.methods)) {
+          const valid = (j.methods as unknown[]).reduce<StarpayTile[]>((acc, raw) => {
+            if (!raw || typeof raw !== 'object') return acc;
+            const r = raw as Record<string, unknown>;
+            if (r.key !== 'bkash' && r.key !== 'nagad' && r.key !== 'rocket') return acc;
+            acc.push({
+              key: r.key,
+              label: typeof r.label === 'string' && r.label.trim() ? r.label : r.key,
+              icon: typeof r.icon === 'string' && r.icon.trim() ? r.icon : null,
+            });
+            return acc;
+          }, []);
+          setStarpayMethods(valid);
         }
       })
       .catch(() => { /* probe is best-effort */ })
@@ -557,10 +579,12 @@ export default function DepositPage() {
     }
   }, [auth.kind, watchedAmount, promotionIntent, router, lang]);
 
-  // StarPay hosted-gateway click handler. Posts to the StarPay
-  // create-deposit route (combined channel) and hands the player off to
-  // the hosted page returned in paymentUrl.
-  const onStarpayPay = useCallback(async () => {
+  // StarPay-backed tile click handler. Posts to the StarPay create-deposit
+  // route with the SPECIFIC method the player tapped (bkash / nagad /
+  // rocket), which routes to that method's own channel id, and hands the
+  // player off to the returned hosted payUrl. StarPay's name never
+  // appears in the UI copy - the player only ever sees the brand tile.
+  const onStarpayPay = useCallback(async (method: 'bkash' | 'nagad' | 'rocket') => {
     setExpressError(null);
     setServerError(null);
     setServerDetail(null);
@@ -570,7 +594,7 @@ export default function DepositPage() {
       setExpressError(lang === 'bn' ? 'নূন্যতম ডিপোজিট ১০০ টাকা।' : 'Minimum deposit is 100 BDT.');
       return;
     }
-    setStarpayBusy(true);
+    setStarpayBusy(method);
     try {
       const res = await fetch('/api/payments/starpay/create-deposit', {
         method: 'POST',
@@ -578,7 +602,7 @@ export default function DepositPage() {
         credentials: 'include',
         body: JSON.stringify({
           amount,
-          method: 'combined',
+          method,
           promotionId: promotionIntent?.promotionId ?? undefined,
           promoCode: promotionIntent?.promoCode ?? undefined,
         }),
@@ -595,7 +619,7 @@ export default function DepositPage() {
     } catch {
       setExpressError(lang === 'bn' ? 'নেটওয়ার্ক ত্রুটি। আবার চেষ্টা করুন।' : 'Network error. Please try again.');
     } finally {
-      setStarpayBusy(false);
+      setStarpayBusy(null);
     }
   }, [auth.kind, watchedAmount, promotionIntent, router, lang]);
 
@@ -723,7 +747,7 @@ export default function DepositPage() {
               />
               {!methodsLoaded || !expressChecked || !zinipayChecked || !starpayChecked ? (
                 <p className="text-sm text-ink-mid">{lang === 'bn' ? 'লোড হচ্ছে...' : 'Loading...'}</p>
-              ) : methods.length === 0 && !expressAvailable && !zinipayAvailable && !starpayAvailable ? (
+              ) : methods.length === 0 && !expressAvailable && !zinipayAvailable && starpayMethods.length === 0 ? (
                 // Designed empty state (mirrors the withdraw page): shown
                 // when the operator has not configured a single deposit
                 // channel yet, so the player knows what to do next
@@ -857,38 +881,54 @@ export default function DepositPage() {
                       </button>
                     ) : null}
 
-                    {/* StarPay hosted gateway tile. Same model as
-                        ZinIPay - the player picks the wallet on the
-                        StarPay page, so there is no per-method branch
-                        on our side. */}
-                    {starpayAvailable ? (
-                      <button
-                        type="button"
-                        onClick={() => { setGatewayChoice('starpay'); setValue('method', '', { shouldValidate: false }); setExpressError(null); }}
-                        className={cn(
-                          'group relative flex aspect-square flex-col items-center justify-center gap-1.5 overflow-hidden rounded-xl border-2 bg-white p-2 text-center transition active:translate-y-px',
-                          gatewayChoice === 'starpay' ? 'border-violet-500 shadow-[0_0_0_3px_rgba(139,92,246,0.18)]' : 'border-transparent hover:border-violet-300/60',
-                        )}
-                      >
-                        <span className="absolute right-1 top-1 inline-flex items-center rounded-full bg-violet-500/15 px-1.5 py-0.5 text-[8px] font-extrabold uppercase tracking-wider text-violet-700">
-                          {lang === 'bn' ? 'অটো' : 'AUTO'}
-                        </span>
-                        {starpayIcon ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={starpayIcon}
-                            alt="StarPay"
-                            className="h-11 w-11 rounded-xl object-contain"
-                            onError={() => setStarpayIcon(null)}
-                          />
-                        ) : (
-                          <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-violet-600 text-base font-extrabold text-white shadow-sm">
-                            S
+                    {/* StarPay-backed tiles - rendered as genuine bKash /
+                        Nagad / Rocket brand tiles (StarPay is only the
+                        backend gateway and is never named in the UI).
+                        Each tile is independently enabled, labeled,
+                        iconed and ordered by the operator. Brand colours
+                        match the equivalent ChaopaoPay tiles above so a
+                        player sees one consistent bKash/Nagad look
+                        regardless of which gateway is behind it. */}
+                    {starpayMethods.map((sm) => {
+                      const choice = `starpay_${sm.key}` as const;
+                      const selected = gatewayChoice === choice;
+                      const badgeBgClass = sm.key === 'bkash' ? 'bg-[#e2136e]' : sm.key === 'nagad' ? 'bg-[#ec1c24]' : 'bg-violet-600';
+                      const badgeLetter = sm.key === 'bkash' ? 'bK' : sm.key === 'nagad' ? 'N' : 'R';
+                      const ringClass = sm.key === 'bkash'
+                        ? (selected ? 'border-pink-500 shadow-[0_0_0_3px_rgba(226,19,110,0.18)]' : 'border-transparent hover:border-pink-300/60')
+                        : sm.key === 'nagad'
+                          ? (selected ? 'border-red-500 shadow-[0_0_0_3px_rgba(236,28,36,0.18)]' : 'border-transparent hover:border-red-300/60')
+                          : (selected ? 'border-violet-500 shadow-[0_0_0_3px_rgba(124,58,237,0.18)]' : 'border-transparent hover:border-violet-300/60');
+                      return (
+                        <button
+                          key={choice}
+                          type="button"
+                          onClick={() => { setGatewayChoice(choice); setValue('method', '', { shouldValidate: false }); setExpressError(null); }}
+                          className={cn(
+                            'group relative flex aspect-square flex-col items-center justify-center gap-1.5 overflow-hidden rounded-xl border-2 bg-white p-2 text-center transition active:translate-y-px',
+                            ringClass,
+                          )}
+                        >
+                          <span className="absolute right-1 top-1 inline-flex items-center rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[8px] font-extrabold uppercase tracking-wider text-emerald-700">
+                            {lang === 'bn' ? 'অটো' : 'AUTO'}
                           </span>
-                        )}
-                        <span className="text-[11px] font-bold text-ink-hi">StarPay</span>
-                      </button>
-                    ) : null}
+                          {sm.icon ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={sm.icon}
+                              alt={sm.label}
+                              className="h-11 w-11 rounded-xl object-contain"
+                              onError={() => setStarpayMethods((list) => list.map((x) => (x.key === sm.key ? { ...x, icon: null } : x)))}
+                            />
+                          ) : (
+                            <span className={cn('flex h-11 w-11 items-center justify-center rounded-xl text-base font-extrabold text-white shadow-sm', badgeBgClass)}>
+                              {badgeLetter}
+                            </span>
+                          )}
+                          <span className="text-[11px] font-bold text-ink-hi">{sm.label}</span>
+                        </button>
+                      );
+                    })}
 
                     {/* Manual method tiles - skip brand duplicates of
                         bKash and Nagad when the gateway is enabled so
@@ -959,15 +999,17 @@ export default function DepositPage() {
                           : 'Tap the "Pay with ZinIPay" button below to open the secure hosted page, then choose bKash, Nagad or Rocket there. Wallet credits within seconds of a successful payment.'}
                       </p>
                     </div>
-                  ) : gatewayChoice === 'starpay' ? (
-                    <div className="mt-4 rounded-xl border border-violet-300/60 bg-violet-50 p-3 text-sm text-violet-900">
+                  ) : gatewayChoice === 'starpay_bkash' || gatewayChoice === 'starpay_nagad' || gatewayChoice === 'starpay_rocket' ? (
+                    <div className="mt-4 rounded-xl border border-emerald-300/60 bg-emerald-50 p-3 text-sm text-emerald-900">
                       <p className="font-semibold">
-                        {lang === 'bn' ? 'স্টারপে হোস্টেড পেমেন্ট পৃষ্ঠা' : 'StarPay hosted payment page'}
+                        {lang === 'bn'
+                          ? `${gatewayChoice === 'starpay_bkash' ? 'বিকাশ' : gatewayChoice === 'starpay_nagad' ? 'নগদ' : 'রকেট'} পেমেন্ট অটো-ক্রেডিট হবে`
+                          : `${gatewayChoice === 'starpay_bkash' ? 'bKash' : gatewayChoice === 'starpay_nagad' ? 'Nagad' : 'Rocket'} payment auto-credits`}
                       </p>
                       <p className="mt-1 text-xs">
                         {lang === 'bn'
-                          ? 'নিচের "স্টারপেতে পে করুন" বোতাম চাপলে স্টারপে পৃষ্ঠায় চলে যাবেন। সেখানে বিকাশ / নগদ / রকেট বেছে নিয়ে পেমেন্ট করুন। সফল হলে কয়েক সেকেন্ডে ওয়ালেট ক্রেডিট হবে।'
-                          : 'Tap the "Pay with StarPay" button below to open the secure hosted page, then choose bKash, Nagad or Rocket there. Wallet credits within seconds of a successful payment.'}
+                          ? 'নিচের বোতাম চাপলে নিরাপদ পেমেন্ট পৃষ্ঠায় চলে যাবেন। পেমেন্ট সফল হলে কয়েক সেকেন্ডের মধ্যে ওয়ালেট ক্রেডিট হবে।'
+                          : 'Tap the button below to open the secure payment page. Wallet credits within seconds of a successful payment.'}
                       </p>
                     </div>
                   ) : gatewayChoice ? (
@@ -1108,20 +1150,21 @@ export default function DepositPage() {
                       ? `BDT ${(Number(watchedAmount) || 0).toLocaleString()} জিনিপেতে পে করুন`
                       : `Pay BDT ${(Number(watchedAmount) || 0).toLocaleString()} with ZinIPay`)}
               </button>
-            ) : gatewayChoice === 'starpay' ? (
+            ) : gatewayChoice === 'starpay_bkash' || gatewayChoice === 'starpay_nagad' || gatewayChoice === 'starpay_rocket' ? (
               <button
                 type="button"
-                onClick={onStarpayPay}
-                disabled={!canSubmit || starpayBusy || (Number(watchedAmount) || 0) < 100}
+                onClick={() => onStarpayPay(gatewayChoice === 'starpay_bkash' ? 'bkash' : gatewayChoice === 'starpay_nagad' ? 'nagad' : 'rocket')}
+                disabled={!canSubmit || !!starpayBusy || (Number(watchedAmount) || 0) < 100}
                 className={cn(
-                  'inline-flex h-12 w-full items-center justify-center rounded-xl bg-violet-600 px-5 text-base font-extrabold text-white shadow transition active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50 md:w-auto',
+                  'inline-flex h-12 w-full items-center justify-center rounded-xl px-5 text-base font-extrabold text-white shadow transition active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50 md:w-auto',
+                  gatewayChoice === 'starpay_bkash' ? 'bg-[#e2136e]' : gatewayChoice === 'starpay_nagad' ? 'bg-[#ec1c24]' : 'bg-violet-600',
                 )}
               >
                 {starpayBusy
                   ? (lang === 'bn' ? 'লোড...' : 'Opening...')
                   : (lang === 'bn'
-                      ? `BDT ${(Number(watchedAmount) || 0).toLocaleString()} স্টারপেতে পে করুন`
-                      : `Pay BDT ${(Number(watchedAmount) || 0).toLocaleString()} with StarPay`)}
+                      ? `BDT ${(Number(watchedAmount) || 0).toLocaleString()} ${gatewayChoice === 'starpay_bkash' ? 'বিকাশে' : gatewayChoice === 'starpay_nagad' ? 'নগদে' : 'রকেটে'} পে করুন`
+                      : `Pay BDT ${(Number(watchedAmount) || 0).toLocaleString()} with ${gatewayChoice === 'starpay_bkash' ? 'bKash' : gatewayChoice === 'starpay_nagad' ? 'Nagad' : 'Rocket'}`)}
               </button>
             ) : gatewayChoice ? (
               <button

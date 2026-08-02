@@ -112,17 +112,30 @@ export const starpayAdapter: ProviderAdapter = {
 
 export const starpaySettings: ProviderSettingsSchema = {
   fields: [
-    { key: 'payment_starpay_enabled', label: 'Enable StarPay', kind: 'toggle', hint: 'Leave OFF until the secret is set and a sandbox order confirms signing + channels.' },
+    { key: 'payment_starpay_enabled', label: 'Enable StarPay', kind: 'toggle', hint: 'Master switch for the whole gateway. Leave OFF until the secret is set and a sandbox order confirms signing + channels. StarPay itself is never shown to players - only the bKash / Nagad / Rocket tiles below are.' },
     { key: 'payment_starpay_base_url', label: 'API base URL', kind: 'text', hint: 'Defaults to https://stp1api.starpay1.com.' },
     { key: 'payment_starpay_mch_id', label: 'Merchant ID', kind: 'text', hint: 'From StarPay (e.g. 25).' },
     { key: 'payment_starpay_secret', label: 'Merchant secret', kind: 'secret', hint: 'Stored server-side and never shown in the browser. Get it from StarPay through a secure channel; never paste it in chat.' },
     { key: 'payment_starpay_uppercase_secret', label: 'Uppercase secret before hashing', kind: 'toggle', hint: 'Provider samples disagree. Leave OFF first; if the signature is rejected in the sandbox, turn ON.' },
     { key: 'payment_starpay_create_path', label: 'Create order path', kind: 'text', hint: 'Defaults to /v1.0/api/order/create.' },
     { key: 'payment_starpay_query_path', label: 'Query order path', kind: 'text', hint: 'Defaults to /v1.0/api/order/query.' },
-    { key: 'payment_starpay_channel_combined', label: 'Channel: combined deposit', kind: 'text', hint: 'productId for Bangladesh combined collection (default 5307).' },
-    { key: 'payment_starpay_channel_bkash', label: 'Channel: bKash deposit', kind: 'text', hint: 'productId for bKash QR (default 5301).' },
-    { key: 'payment_starpay_channel_nagad', label: 'Channel: Nagad deposit', kind: 'text', hint: 'productId for Nagad QR (default 5302).' },
-    { key: 'payment_starpay_channel_rocket', label: 'Channel: Rocket deposit', kind: 'text', hint: 'productId for Rocket QR (default 5303).' },
-    { key: 'payment_starpay_icon', label: 'Brand tile icon', kind: 'image', hint: 'Square PNG/JPG/WebP/SVG shown on the deposit tile grid.' },
+
+    { key: 'payment_starpay_bkash_tile_enabled', label: 'bKash tile: show on deposit page', kind: 'toggle', hint: 'Turn off to hide the bKash tile without touching Nagad or Rocket.' },
+    { key: 'payment_starpay_bkash_label', label: 'bKash tile: display name', kind: 'text', hint: 'Defaults to "bKash".' },
+    { key: 'payment_starpay_channel_bkash', label: 'bKash tile: channel ID', kind: 'text', hint: 'productId for bKash QR (default 5301).' },
+    { key: 'payment_starpay_bkash_icon', label: 'bKash tile: icon', kind: 'image', hint: 'Square PNG/JPG/WebP/SVG. Falls back to a plain badge if not set.' },
+    { key: 'payment_starpay_bkash_order', label: 'bKash tile: display order', kind: 'text', hint: 'Lower numbers show first. Defaults to 1.' },
+
+    { key: 'payment_starpay_nagad_tile_enabled', label: 'Nagad tile: show on deposit page', kind: 'toggle', hint: 'Turn off to hide the Nagad tile without touching bKash or Rocket.' },
+    { key: 'payment_starpay_nagad_label', label: 'Nagad tile: display name', kind: 'text', hint: 'Defaults to "Nagad".' },
+    { key: 'payment_starpay_channel_nagad', label: 'Nagad tile: channel ID', kind: 'text', hint: 'productId for Nagad QR (default 5302).' },
+    { key: 'payment_starpay_nagad_icon', label: 'Nagad tile: icon', kind: 'image', hint: 'Square PNG/JPG/WebP/SVG. Falls back to a plain badge if not set.' },
+    { key: 'payment_starpay_nagad_order', label: 'Nagad tile: display order', kind: 'text', hint: 'Lower numbers show first. Defaults to 2.' },
+
+    { key: 'payment_starpay_rocket_tile_enabled', label: 'Rocket tile: show on deposit page', kind: 'toggle', hint: 'Turn off to hide the Rocket tile without touching bKash or Nagad.' },
+    { key: 'payment_starpay_rocket_label', label: 'Rocket tile: display name', kind: 'text', hint: 'Defaults to "Rocket".' },
+    { key: 'payment_starpay_channel_rocket', label: 'Rocket tile: channel ID', kind: 'text', hint: 'productId for Rocket QR (default 5303).' },
+    { key: 'payment_starpay_rocket_icon', label: 'Rocket tile: icon', kind: 'image', hint: 'Square PNG/JPG/WebP/SVG. Falls back to a plain badge if not set.' },
+    { key: 'payment_starpay_rocket_order', label: 'Rocket tile: display order', kind: 'text', hint: 'Lower numbers show first. Defaults to 3.' },
   ],
 };
