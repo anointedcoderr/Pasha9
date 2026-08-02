@@ -27,32 +27,13 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#06120c"
       },
-      "edgeToEdgeEnabled": true,
-      "permissions": [
-        "android.permission.RECORD_AUDIO"
-      ]
-    },
-    "web": {
-      "bundler": "metro",
-      "output": "static",
-      "favicon": "./assets/favicon.png"
+      "edgeToEdgeEnabled": true
     },
     "plugins": [
-      "expo-router",
-      "expo-secure-store",
-      [
-        "expo-image-picker",
-        {
-          "photosPermission": "Pasha9 needs access to your photos so you can attach a payment screenshot as deposit proof."
-        }
-      ],
-      "expo-web-browser",
-      "expo-notifications",
-      "expo-font"
+      "expo-notifications"
     ],
     "extra": {
       "apiBaseUrl": "https://pasha9.com",
-      "router": {},
       "eas": {
         "projectId": "13996c0f-e7a6-4168-bba8-04ef13dbd5ca"
       }

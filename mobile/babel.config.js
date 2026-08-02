@@ -1,17 +1,10 @@
 // Built by Anointed Coder.
-// Babel setup for Expo SDK 54 + NativeWind v4 + Reanimated v4.
-// - babel-preset-expo with jsxImportSource "nativewind" so className is
-//   transformed into styles on every RN element.
-// - the "nativewind/babel" preset wires the Tailwind pipeline.
-// - react-native-worklets/plugin is required by Reanimated v4 and MUST be
-//   the last plugin in the list.
+// Babel setup for Expo SDK 54. The app has no native screens (it is a
+// WebView shell around https://pasha9.com), so there is no NativeWind /
+// Tailwind pipeline to wire up here.
 module.exports = function (api) {
   api.cache(true);
   return {
-    presets: [
-      ['babel-preset-expo', { jsxImportSource: 'nativewind' }],
-      'nativewind/babel',
-    ],
-    plugins: ['react-native-worklets/plugin'],
+    presets: ['babel-preset-expo'],
   };
 };

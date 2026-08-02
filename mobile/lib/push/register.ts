@@ -1,22 +1,20 @@
 // Built by Anointed Coder.
 //
-// Native push registration for the Pasha9 player app. Everything here is
+// Native push helpers for the Pasha9 WebView shell. Everything here is
 // defensive: Expo Go, a simulator, denied permission, or a build without an
-// EAS projectId must all no-op cleanly and never throw. The public helpers:
-//   - registerDeviceToken(): fetch the Expo push token, POST it to the backend,
-//     and persist it locally. Returns the token or null.
-//   - unregisterDeviceToken(): best-effort DELETE of the stored token and wipe
-//     the local copy. Must run while the session is still authed.
-//   - mapNotificationLinkToRoute(): translate a backend WEB linkUrl into an app
-//     route so a notification tap lands on the right screen.
+// EAS projectId must all no-op cleanly and never throw.
+//
+// Getting the device's Expo push token is a native-only API (expo-notifications),
+// so it lives here. Actually REGISTERING that token with the backend happens
+// from inside the WebView's page context instead (see app/index.tsx) - the
+// page already carries the player's session cookie, so posting from there
+// needs no native auth plumbing at all. This module never talks to the
+// backend itself.
 
 import { Platform } from 'react-native';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
-import * as SecureStore from 'expo-secure-store';
 import Constants from 'expo-constants';
-import { api } from '@/lib/api/client';
-import { STORAGE_KEYS } from '@/lib/config';
 
 // A foreground push should surface as a banner with sound. SDK 54 splits the
 // old shouldShowAlert flag into shouldShowBanner + shouldShowList.
@@ -88,64 +86,4 @@ export async function getExpoPushToken(): Promise<string | null> {
   } catch {
     return null;
   }
-}
-
-/**
- * Register this device with the backend: get a token, POST it, and persist it
- * locally so we can deactivate it on sign-out. Returns the token or null.
- */
-export async function registerDeviceToken(): Promise<string | null> {
-  const token = await getExpoPushToken();
-  if (!token) return null;
-
-  try {
-    await api.post('/api/me/device-tokens', {
-      token,
-      platform: Platform.OS,
-      appVersion: Constants.expoConfig?.version ?? null,
-    });
-    await SecureStore.setItemAsync(STORAGE_KEYS.pushToken, token);
-    return token;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Best-effort deactivation of the stored push token. MUST be called while the
- * session is still authed so the DELETE carries a valid bearer. Swallows all
- * errors and always clears the local copy when one exists.
- */
-export async function unregisterDeviceToken(): Promise<void> {
-  try {
-    const token = await SecureStore.getItemAsync(STORAGE_KEYS.pushToken);
-    if (!token) return;
-    try {
-      await api.delete('/api/me/device-tokens', { body: { token } });
-    } catch {
-      // Ignore: the server also deactivates dead tokens on a failed Expo send.
-    }
-    await SecureStore.deleteItemAsync(STORAGE_KEYS.pushToken);
-  } catch {
-    // Ignore: nothing to clean up or secure-store is unavailable.
-  }
-}
-
-/**
- * Map a backend WEB linkUrl to an in-app route. Query strings are stripped
- * before matching. Unknown or empty links fall back to the notifications list.
- */
-export function mapNotificationLinkToRoute(linkUrl?: string | null): string {
-  if (!linkUrl) return '/notifications';
-  const path = linkUrl.split('?')[0].replace(/\/+$/, '');
-
-  if (path === '/dashboard/wallet') return '/wallet';
-  if (path === '/support') return '/legal/support';
-  if (path === '/rewards') return '/rewards';
-  if (path === '/promotions') return '/promotions';
-  if (path === '/referral') return '/referral';
-  if (path === '/betting-pass') return '/betting-pass';
-  if (path === '/vip') return '/vip';
-
-  return '/notifications';
 }

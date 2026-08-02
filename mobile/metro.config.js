@@ -1,9 +1,6 @@
 // Built by Anointed Coder.
-// Metro config wrapped with NativeWind so global.css (the Tailwind entry)
-// is compiled and injected into the bundle.
+// Default Expo Metro config. No NativeWind wrapper - the app has no native
+// screens to style (see babel.config.js).
 const { getDefaultConfig } = require('expo/metro-config');
-const { withNativeWind } = require('nativewind/metro');
 
-const config = getDefaultConfig(__dirname);
-
-module.exports = withNativeWind(config, { input: './global.css' });
+module.exports = getDefaultConfig(__dirname);
