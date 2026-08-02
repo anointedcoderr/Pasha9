@@ -36,7 +36,9 @@ import { ensureAndroidChannel, getExpoPushToken } from '@/lib/push/register';
 // once our own JS loading overlay below is mounted and painted, so the
 // handoff is dark-to-dark with no white flash in between - the native
 // splash and the JS overlay share the same background colour on purpose.
-void SplashScreen.preventAutoHideAsync();
+// .catch() (not just void): this runs before React mounts, so a rejected
+// promise here must never surface as an unhandled rejection this early.
+SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
 const SPLASH_BG = '#06120c';
 const ACCENT = '#FFCC00';

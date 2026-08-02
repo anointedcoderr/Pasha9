@@ -18,14 +18,25 @@ import Constants from 'expo-constants';
 
 // A foreground push should surface as a banner with sound. SDK 54 splits the
 // old shouldShowAlert flag into shouldShowBanner + shouldShowList.
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
+//
+// This runs at module-evaluation time, before App.tsx even mounts - if the
+// native notifications module were ever unavailable in a given build
+// variant, an unguarded call here would crash the entire app before any of
+// this file's own try/catch blocks could run. Guarded for exactly that
+// reason: worst case, foreground notifications fall back to the OS default
+// presentation instead of taking the app down.
+try {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+    }),
+  });
+} catch {
+  // See comment above: never let this take the app down.
+}
 
 /**
  * Ensure the Android "default" channel exists. Required for heads-up
