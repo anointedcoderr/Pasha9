@@ -138,26 +138,21 @@ async function seedRolesAndPermissions() {
     });
   }
 
-  const staffRole = await db.role.findUniqueOrThrow({ where: { key: 'staff' } });
-  const staffScope = allPerms.filter((p) =>
-    [
-      'users.read',
-      'deposits.read',
-      'deposits.review',
-      'withdrawals.read',
-      'withdrawals.review',
-      'transactions.read',
-      'referrals.read',
-      'affiliate.read',
-    ].includes(p.key),
-  );
-  for (const p of staffScope) {
-    await db.rolePermission.upsert({
-      where: { roleId_permissionId: { roleId: staffRole.id, permissionId: p.id } },
-      update: {},
-      create: { roleId: staffRole.id, permissionId: p.id },
-    });
-  }
+  // Staff role baseline is intentionally EMPTY. A staff account's access is
+  // 100% opt-in, granted per person via the Staff page's permission picker
+  // (UserPermission rows) - never a role-wide default. This used to grant 8
+  // permissions to every staff account automatically, including
+  // deposits.review and withdrawals.review (approving real money
+  // movement), which meant unchecking a section in the picker did nothing
+  // for those sections: the role baseline still granted them underneath.
+  // effective permissions = union(role.permissions, user.extraPermissions)
+  // - with an empty role baseline, that union is just the per-staff grants,
+  // which is what "only show what I explicitly gave them" actually requires.
+  //
+  // This block intentionally does nothing. Left in place (rather than
+  // deleted) so a future baseline change is a one-line diff here, not a
+  // rediscovery of where role permissions are seeded.
+  await db.role.findUniqueOrThrow({ where: { key: 'staff' } });
 }
 
 async function seedSuperAdmin() {
