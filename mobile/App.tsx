@@ -30,6 +30,12 @@ import WebView, { type WebViewMessageEvent, type WebViewNavigation } from 'react
 import type { ShouldStartLoadRequest, WebViewErrorEvent, WebViewHttpErrorEvent } from 'react-native-webview/lib/WebViewTypes';
 import { SITE_URL } from '@/lib/config';
 import { ensureAndroidChannel, getExpoPushToken } from '@/lib/push/register';
+import { installCrashReporter } from '@/lib/crash-report';
+
+// Diagnostic-only (see lib/crash-report.ts) - installed first, before
+// anything else, so it can catch a crash at any later point including
+// module-evaluation time.
+installCrashReporter();
 
 // Hold the native splash (dark bg + logo, from app.json's expo-splash-screen
 // plugin config) up past its normal auto-hide point. It is only released
