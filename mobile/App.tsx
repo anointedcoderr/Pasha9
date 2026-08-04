@@ -1,20 +1,15 @@
 // Built by Anointed Coder.
 //
 // Pasha9 player app: a thin native shell around the live website
-// (SITE_URL). There is no native UI beyond a splash-matched loading state -
-// every screen, every deposit/withdraw flow, every game launch is the real
-// pasha9.com, so the app can never drift out of sync with the site and stays
-// small (no duplicated screens, no native API client, no UI framework).
+// (SITE_URL). There is no native UI beyond a loading state - every screen,
+// every deposit/withdraw flow, every game launch is the real pasha9.com, so
+// the app can never drift out of sync with the site and stays small (no
+// duplicated screens, no native API client, no UI framework).
 //
-// Two small native bridges into the page, both one-way:
-//   1. Auth check - re-injected after every page load. The page fetches its
-//      own /api/auth/me (same-origin, so its httpOnly session cookie rides
-//      along automatically) and posts back whether a player is signed in.
-//      Native code never touches the session cookie directly.
-//   2. Push registration - once signed-in is confirmed, native code fetches
-//      the device's Expo push token (a native-only API) and hands it BACK to
-//      the page to POST from page context, again riding the page's own
-//      cookie rather than any native auth flow.
+// Push notifications and the native splash screen are deliberately not
+// included here - both were isolated as the cause of a native crash on
+// launch during testing and are being re-added separately once each has
+// its own verified, non-crashing build.
 //
 // Android hardware back steps back through the WebView's own history before
 // falling through to the OS default (exit).
@@ -23,13 +18,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, BackHandler, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import Constants from 'expo-constants';
-import * as Notifications from 'expo-notifications';
-import * as SplashScreen from 'expo-splash-screen';
-import WebView, { type WebViewMessageEvent, type WebViewNavigation } from 'react-native-webview';
+import WebView, { type WebViewNavigation } from 'react-native-webview';
 import type { ShouldStartLoadRequest, WebViewErrorEvent, WebViewHttpErrorEvent } from 'react-native-webview/lib/WebViewTypes';
 import { SITE_URL } from '@/lib/config';
-import { ensureAndroidChannel, getExpoPushToken } from '@/lib/push/register';
 import { installCrashReporter } from '@/lib/crash-report';
 
 // Diagnostic-only (see lib/crash-report.ts) - installed first, before
@@ -37,73 +28,39 @@ import { installCrashReporter } from '@/lib/crash-report';
 // module-evaluation time.
 installCrashReporter();
 
-// Hold the native splash (dark bg + logo, from app.json's expo-splash-screen
-// plugin config) up past its normal auto-hide point. It is only released
-// once our own JS loading overlay below is mounted and painted, so the
-// handoff is dark-to-dark with no white flash in between - the native
-// splash and the JS overlay share the same background colour on purpose.
-// .catch() (not just void): this runs before React mounts, so a rejected
-// promise here must never surface as an unhandled rejection this early.
-SplashScreen.preventAutoHideAsync().catch(() => undefined);
-
-const SPLASH_BG = '#06120c';
+const BG = '#06120c';
 const ACCENT = '#FFCC00';
 
-const AUTH_CHECK_SCRIPT = `
+// The site's own viewport meta tag may allow pinch/double-tap zoom (or be
+// set after our injectedJavaScriptBeforeContentLoaded run, since a Next.js
+// page can set it client-side). Re-applied on load and watched for changes
+// so it sticks regardless of when or how the page sets its own.
+const DISABLE_ZOOM_SCRIPT = `
 (function () {
-  fetch('/api/auth/me', { credentials: 'include' })
-    .then(function (r) { return r.ok ? r.json() : null; })
-    .then(function (j) {
-      var userId = j && j.user && j.user.id ? j.user.id : null;
-      window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'auth', userId: userId }));
-    })
-    .catch(function () {
-      window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'auth', userId: null }));
-    });
+  function lockViewport() {
+    var content = 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no';
+    var meta = document.querySelector('meta[name="viewport"]');
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.name = 'viewport';
+      document.head.appendChild(meta);
+    }
+    if (meta.getAttribute('content') !== content) {
+      meta.setAttribute('content', content);
+    }
+  }
+  lockViewport();
+  document.addEventListener('DOMContentLoaded', lockViewport);
+  new MutationObserver(lockViewport).observe(document.documentElement, { childList: true, subtree: true });
 })();
 true;
 `;
-
-function buildRegisterTokenScript(token: string, appVersion: string): string {
-  const body = JSON.stringify({ token, platform: Platform.OS, appVersion });
-  return `
-(function () {
-  fetch('/api/me/device-tokens', {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'content-type': 'application/json' },
-    body: ${JSON.stringify(body)}
-  }).catch(function () {});
-})();
-true;
-`;
-}
-
-function buildNavigateScript(url: string): string {
-  return `window.location.href = ${JSON.stringify(url)}; true;`;
-}
-
-/** Resolve a backend notification linkUrl (already a real site path) to a full URL. */
-function resolveNotificationUrl(linkUrl?: string | null): string {
-  const path = typeof linkUrl === 'string' && linkUrl.startsWith('/') ? linkUrl : '/dashboard/notifications';
-  return `${SITE_URL}${path}`;
-}
 
 export default function App() {
   const webViewRef = useRef<WebView>(null);
   const canGoBackRef = useRef(false);
-  const registeredForUserRef = useRef<string | null>(null);
-  const pendingUrlRef = useRef<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
-
-  // Our own dark loading overlay is on screen from the very first paint
-  // (loading starts true), so it is safe to release the native splash the
-  // moment React has mounted - the two share the same background colour,
-  // so the swap is invisible.
-  useEffect(() => {
-    void SplashScreen.hideAsync();
-  }, []);
 
   // Android hardware back: step back through page history first, only let
   // the OS handle it (exit) once there is nowhere left to go back to.
@@ -119,46 +76,20 @@ export default function App() {
     return () => sub.remove();
   }, []);
 
-  // Push permission + channel setup happens once at launch, independent of
-  // login state. Registering the resulting token with the backend still
-  // waits for the auth-check bridge below to confirm a signed-in session.
-  useEffect(() => {
-    void ensureAndroidChannel();
-  }, []);
-
-  // A notification tap while the app is backgrounded/killed opens it; once
-  // the WebView exists, forward the tap's target page into it.
-  useEffect(() => {
-    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
-      const data = response.notification.request.content.data as { linkUrl?: string | null } | undefined;
-      const url = resolveNotificationUrl(data?.linkUrl);
-      if (webViewRef.current) {
-        webViewRef.current.injectJavaScript(buildNavigateScript(url));
-      } else {
-        pendingUrlRef.current = url;
-      }
-    });
-    return () => sub.remove();
-  }, []);
-
   const onNavigationStateChange = useCallback((nav: WebViewNavigation) => {
     canGoBackRef.current = nav.canGoBack;
   }, []);
 
-  // Re-shown on every full navigation (app launch, or a notification deep
-  // link's programmatic window.location.href change), not just the first
-  // cold load. The site's own internal client-side routing never fires
-  // these WebView-level events, so normal in-page browsing stays uninterrupted.
+  // Re-shown on every full navigation (app launch, or a client-side route
+  // change that reloads the page), not just the first cold load. The
+  // site's own internal client-side routing never fires these WebView-level
+  // events, so normal in-page browsing stays uninterrupted.
   const onLoadStart = useCallback(() => {
     setLoading(true);
   }, []);
 
   const onLoadEnd = useCallback(() => {
     setLoading(false);
-    if (pendingUrlRef.current && webViewRef.current) {
-      webViewRef.current.injectJavaScript(buildNavigateScript(pendingUrlRef.current));
-      pendingUrlRef.current = null;
-    }
   }, []);
 
   // Network failure, DNS error, or an HTTP error status on the main frame
@@ -179,29 +110,6 @@ export default function App() {
     setHasError(false);
     setLoading(true);
     webViewRef.current?.reload();
-  }, []);
-
-  // The one-way bridge: the page reports its own auth state (see
-  // AUTH_CHECK_SCRIPT), and a newly-signed-in user triggers a native push
-  // token fetch + a page-context POST to register it. Guarded so the same
-  // user is only registered once per app session.
-  const onMessage = useCallback((event: WebViewMessageEvent) => {
-    let parsed: { type?: string; userId?: string | null } | null = null;
-    try {
-      parsed = JSON.parse(event.nativeEvent.data);
-    } catch {
-      return;
-    }
-    if (parsed?.type !== 'auth') return;
-    const userId = parsed.userId ?? null;
-    if (!userId || registeredForUserRef.current === userId) return;
-    registeredForUserRef.current = userId;
-    void (async () => {
-      const token = await getExpoPushToken();
-      if (!token || !webViewRef.current) return;
-      const appVersion = Constants.expoConfig?.version ?? '1.0.0';
-      webViewRef.current.injectJavaScript(buildRegisterTokenScript(token, appVersion));
-    })();
   }, []);
 
   const onShouldStartLoadWithRequest = useCallback((request: ShouldStartLoadRequest) => {
@@ -230,9 +138,9 @@ export default function App() {
           onLoadEnd={onLoadEnd}
           onError={onError}
           onHttpError={onHttpError}
-          onMessage={onMessage}
           onShouldStartLoadWithRequest={onShouldStartLoadWithRequest}
-          injectedJavaScript={AUTH_CHECK_SCRIPT}
+          injectedJavaScript={DISABLE_ZOOM_SCRIPT}
+          domStorageEnabled
           pullToRefreshEnabled
           allowsBackForwardNavigationGestures
           setSupportMultipleWindows={false}
@@ -263,10 +171,10 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  fill: { flex: 1, backgroundColor: SPLASH_BG },
+  fill: { flex: 1, backgroundColor: BG },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: SPLASH_BG,
+    backgroundColor: BG,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 32,
