@@ -140,7 +140,6 @@ export default function App() {
           onHttpError={onHttpError}
           onShouldStartLoadWithRequest={onShouldStartLoadWithRequest}
           injectedJavaScript={DISABLE_ZOOM_SCRIPT}
-          domStorageEnabled
           pullToRefreshEnabled
           allowsBackForwardNavigationGestures
           setSupportMultipleWindows={false}
