@@ -150,11 +150,18 @@ export function Header() {
   }, []);
 
   // Listen to wallet-refresh events from deposit / withdraw pages so the
-  // header balance stays in sync without a hard reload.
+  // header balance stays in sync without a hard reload. pasha9:auth-changed
+  // fires specifically on sign-in/sign-up so the Login button swaps to the
+  // signed-in UI right away, without waiting on router.refresh() (which
+  // only re-renders server components, not this client component's state).
   useEffect(() => {
     const handler = () => loadMe();
     window.addEventListener('pasha9:wallet-refresh', handler);
-    return () => window.removeEventListener('pasha9:wallet-refresh', handler);
+    window.addEventListener('pasha9:auth-changed', handler);
+    return () => {
+      window.removeEventListener('pasha9:wallet-refresh', handler);
+      window.removeEventListener('pasha9:auth-changed', handler);
+    };
   }, []);
 
   // Notification unread badge. Poll every 60s while signed in; the

@@ -14,6 +14,17 @@ import { loginSchema, signupSchema, type LoginInput, type SignupInput } from '@/
 import { useT, useLang } from '@/lib/i18n/context';
 import { triggerWalletRefresh } from './WalletStrip';
 
+// Distinct from pasha9:wallet-refresh (which also fires on every deposit,
+// withdrawal, reward claim, etc). Header listens for this one specifically
+// to refresh its own logged-in/logged-out UI right after a real sign-in or
+// sign-up, and the mobile app shell listens for it too, to force a full
+// WebView reload so a fresh session is guaranteed to reflect everywhere.
+const AUTH_CHANGED_EVENT = 'pasha9:auth-changed';
+
+function triggerAuthChanged() {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(AUTH_CHANGED_EVENT));
+}
+
 interface Props {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -84,6 +95,7 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
   const completeSuccess = () => {
     onSuccess();
     triggerWalletRefresh();
+    triggerAuthChanged();
     const next = params?.get('next') ?? '/dashboard';
     // Defer the route change past the modal close so Radix Dialog's
     // body-style cleanup (overflow, padding-right that
@@ -308,6 +320,7 @@ function SignupForm({ onSuccess, onSwitch }: { onSuccess: () => void; onSwitch: 
       }
       onSuccess();
       triggerWalletRefresh();
+      triggerAuthChanged();
       // Same cleanup window as the login flow: let Radix Dialog
       // finish unmounting before we soft-route to /dashboard so
       // first-tap touch responsiveness on the destination page is

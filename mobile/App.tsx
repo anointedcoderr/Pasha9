@@ -6,52 +6,40 @@
 // the app can never drift out of sync with the site and stays small (no
 // duplicated screens, no native API client, no UI framework).
 //
-// Push notifications and the native splash screen are deliberately not
-// included here - both were isolated as the cause of a native crash on
-// launch during testing and are being re-added separately once each has
-// its own verified, non-crashing build.
+// Push notifications, the native splash screen, tel/mailto/sms link
+// interception, and the pinch-zoom lock are deliberately not included
+// here - all four were still unproven candidates for the native crash
+// found during testing (two already isolated as safe, two never cleared)
+// and are being re-added separately, each with its own verified,
+// non-crashing build.
 //
 // Android hardware back steps back through the WebView's own history before
 // falling through to the OS default (exit).
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, BackHandler, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, BackHandler, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import WebView, { type WebViewNavigation } from 'react-native-webview';
-import type { ShouldStartLoadRequest, WebViewErrorEvent, WebViewHttpErrorEvent } from 'react-native-webview/lib/WebViewTypes';
+import WebView, { type WebViewMessageEvent, type WebViewNavigation } from 'react-native-webview';
+import type { WebViewErrorEvent, WebViewHttpErrorEvent } from 'react-native-webview/lib/WebViewTypes';
 import { SITE_URL } from '@/lib/config';
 import { installCrashReporter } from '@/lib/crash-report';
 
-// Diagnostic-only (see lib/crash-report.ts) - installed first, before
-// anything else, so it can catch a crash at any later point including
-// module-evaluation time.
 installCrashReporter();
 
 const BG = '#06120c';
 const ACCENT = '#FFCC00';
 
-// The site's own viewport meta tag may allow pinch/double-tap zoom (or be
-// set after our injectedJavaScriptBeforeContentLoaded run, since a Next.js
-// page can set it client-side). Re-applied on load and watched for changes
-// so it sticks regardless of when or how the page sets its own.
-const DISABLE_ZOOM_SCRIPT = `
+// The site dispatches pasha9:auth-changed (a browser CustomEvent) right
+// after a real sign-in or sign-up - see AuthModal.tsx. Forwarded to native
+// so the WebView can do a full reload, guaranteeing every part of the page
+// picks up the fresh session rather than relying on the page's own client
+// state to notice on its own.
+const AUTH_WATCH_SCRIPT = `
 (function () {
-  function lockViewport() {
-    var content = 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no';
-    var meta = document.querySelector('meta[name="viewport"]');
-    if (!meta) {
-      meta = document.createElement('meta');
-      meta.name = 'viewport';
-      document.head.appendChild(meta);
-    }
-    if (meta.getAttribute('content') !== content) {
-      meta.setAttribute('content', content);
-    }
-  }
-  lockViewport();
-  document.addEventListener('DOMContentLoaded', lockViewport);
-  new MutationObserver(lockViewport).observe(document.documentElement, { childList: true, subtree: true });
+  window.addEventListener('pasha9:auth-changed', function () {
+    window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'authChanged' }));
+  });
 })();
 true;
 `;
@@ -61,6 +49,12 @@ export default function App() {
   const canGoBackRef = useRef(false);
   const [loading, setLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
+  // WebView can fire onLoadStart again after the page has already finished
+  // loading once (a sub-resource or redirect on a complex site, not a fresh
+  // navigation) - without this guard that re-shows the full-screen spinner
+  // with no matching onLoadEnd ever arriving to dismiss it again. Reset only
+  // on an explicit retry/reload, which is a genuine fresh load.
+  const hasLoadedOnceRef = useRef(false);
 
   // Android hardware back: step back through page history first, only let
   // the OS handle it (exit) once there is nowhere left to go back to.
@@ -80,15 +74,13 @@ export default function App() {
     canGoBackRef.current = nav.canGoBack;
   }, []);
 
-  // Re-shown on every full navigation (app launch, or a client-side route
-  // change that reloads the page), not just the first cold load. The
-  // site's own internal client-side routing never fires these WebView-level
-  // events, so normal in-page browsing stays uninterrupted.
   const onLoadStart = useCallback(() => {
+    if (hasLoadedOnceRef.current) return;
     setLoading(true);
   }, []);
 
   const onLoadEnd = useCallback(() => {
+    hasLoadedOnceRef.current = true;
     setLoading(false);
   }, []);
 
@@ -107,18 +99,24 @@ export default function App() {
   }, []);
 
   const onRetry = useCallback(() => {
+    hasLoadedOnceRef.current = false;
     setHasError(false);
     setLoading(true);
     webViewRef.current?.reload();
   }, []);
 
-  const onShouldStartLoadWithRequest = useCallback((request: ShouldStartLoadRequest) => {
-    const url = request.url;
-    if (url.startsWith('tel:') || url.startsWith('mailto:') || url.startsWith('sms:')) {
-      Linking.openURL(url).catch(() => undefined);
-      return false;
+  const onMessage = useCallback((event: WebViewMessageEvent) => {
+    let parsed: { type?: string } | null = null;
+    try {
+      parsed = JSON.parse(event.nativeEvent.data);
+    } catch {
+      return;
     }
-    return true;
+    if (parsed?.type === 'authChanged') {
+      hasLoadedOnceRef.current = false;
+      setLoading(true);
+      webViewRef.current?.reload();
+    }
   }, []);
 
   return (
@@ -138,8 +136,9 @@ export default function App() {
           onLoadEnd={onLoadEnd}
           onError={onError}
           onHttpError={onHttpError}
-          onShouldStartLoadWithRequest={onShouldStartLoadWithRequest}
-          injectedJavaScript={DISABLE_ZOOM_SCRIPT}
+          onMessage={onMessage}
+          injectedJavaScript={AUTH_WATCH_SCRIPT}
+          domStorageEnabled
           pullToRefreshEnabled
           allowsBackForwardNavigationGestures
           setSupportMultipleWindows={false}

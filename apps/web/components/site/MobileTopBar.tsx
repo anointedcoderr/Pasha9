@@ -4,6 +4,12 @@
 // reserves a fixed slot on first paint to prevent a layout shift when
 // the localStorage dismissal check runs in useEffect - the header
 // used to jump downward after hydration on a fresh refresh.
+//
+// Never shown inside the native app's own WebView - prompting an
+// already-installed user to install the app makes no sense there.
+// react-native-webview injects window.ReactNativeWebView into every page
+// it loads, so its presence is a reliable in-app signal with no native
+// changes needed on our side.
 
 'use client';
 
@@ -12,6 +18,10 @@ import { X } from 'lucide-react';
 import { useT } from '@/lib/i18n/context';
 
 const DISMISS_KEY = 'pasha9_app_strip_dismissed';
+
+function isInsideNativeApp(): boolean {
+  return typeof window !== 'undefined' && 'ReactNativeWebView' in window;
+}
 
 // Visual states:
 //   'pending'   - effect has not run or the /api/content/apk probe has
@@ -33,6 +43,7 @@ export function MobileTopBar() {
 
   useEffect(() => {
     let alive = true;
+    if (isInsideNativeApp()) { setState('closed'); return; }
     const dismissed = typeof window !== 'undefined' && localStorage.getItem(DISMISS_KEY) === '1';
     if (dismissed) { setState('closed'); return; }
     fetch('/api/content/apk')
