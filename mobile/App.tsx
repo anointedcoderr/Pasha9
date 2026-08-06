@@ -6,12 +6,28 @@
 // the app can never drift out of sync with the site and stays small (no
 // duplicated screens, no native API client, no UI framework).
 //
-// Push notifications, the native splash screen, tel/mailto/sms link
-// interception, and the pinch-zoom lock are deliberately not included
-// here - all four were still unproven candidates for the native crash
-// found during testing (two already isolated as safe, two never cleared)
-// and are being re-added separately, each with its own verified,
-// non-crashing build.
+// IMPORTANT - do not add WebView props here casually. The prop set below is
+// exactly the one verified crash-free on the client's device (a Samsung on
+// Android 14). These were each shipped as an isolated build and confirmed
+// to launch. Everything NOT in that verified set was removed after several
+// builds that combined them crashed on launch every time:
+//
+//   pullToRefreshEnabled            - wraps the WebView in a native
+//                                     SwipeRefreshLayout; prime suspect for
+//                                     the launch crash under the New
+//                                     Architecture (newArchEnabled: true)
+//   setSupportMultipleWindows       - changes native window-creation
+//   allowsBackForwardNavigationGestures / decelerationRate - iOS-only, no
+//                                     value on Android, still shipped native
+//   injectedJavaScript              - the zoom-lock and auth-bridge scripts
+//   onShouldStartLoadWithRequest    - tel:/mailto:/sms: interception
+//
+// Re-add any of them ONE AT A TIME, each in its own build, tested on a real
+// device before the next. Bundling them back together is what caused five
+// days of failed builds.
+//
+// Push notifications and the native splash screen are out for the same
+// reason and come back the same way.
 //
 // Android hardware back steps back through the WebView's own history before
 // falling through to the OS default (exit).
@@ -20,7 +36,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, BackHandler, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import WebView, { type WebViewMessageEvent, type WebViewNavigation } from 'react-native-webview';
+import WebView, { type WebViewNavigation } from 'react-native-webview';
 import type { WebViewErrorEvent, WebViewHttpErrorEvent } from 'react-native-webview/lib/WebViewTypes';
 import { SITE_URL } from '@/lib/config';
 import { installCrashReporter } from '@/lib/crash-report';
@@ -29,20 +45,6 @@ installCrashReporter();
 
 const BG = '#06120c';
 const ACCENT = '#FFCC00';
-
-// The site dispatches pasha9:auth-changed (a browser CustomEvent) right
-// after a real sign-in or sign-up - see AuthModal.tsx. Forwarded to native
-// so the WebView can do a full reload, guaranteeing every part of the page
-// picks up the fresh session rather than relying on the page's own client
-// state to notice on its own.
-const AUTH_WATCH_SCRIPT = `
-(function () {
-  window.addEventListener('pasha9:auth-changed', function () {
-    window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'authChanged' }));
-  });
-})();
-true;
-`;
 
 export default function App() {
   const webViewRef = useRef<WebView>(null);
@@ -105,20 +107,6 @@ export default function App() {
     webViewRef.current?.reload();
   }, []);
 
-  const onMessage = useCallback((event: WebViewMessageEvent) => {
-    let parsed: { type?: string } | null = null;
-    try {
-      parsed = JSON.parse(event.nativeEvent.data);
-    } catch {
-      return;
-    }
-    if (parsed?.type === 'authChanged') {
-      hasLoadedOnceRef.current = false;
-      setLoading(true);
-      webViewRef.current?.reload();
-    }
-  }, []);
-
   return (
     <SafeAreaProvider>
       <StatusBar style="light" />
@@ -136,13 +124,7 @@ export default function App() {
           onLoadEnd={onLoadEnd}
           onError={onError}
           onHttpError={onHttpError}
-          onMessage={onMessage}
-          injectedJavaScript={AUTH_WATCH_SCRIPT}
           domStorageEnabled
-          pullToRefreshEnabled
-          allowsBackForwardNavigationGestures
-          setSupportMultipleWindows={false}
-          decelerationRate="normal"
         />
         {loading && !hasError ? (
           <View style={styles.loadingOverlay} pointerEvents="none">
