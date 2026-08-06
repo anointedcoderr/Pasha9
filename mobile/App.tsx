@@ -8,9 +8,10 @@
 //
 // IMPORTANT - do not add WebView props here casually. The prop set below is
 // exactly the one verified crash-free on the client's device (a Samsung on
-// Android 14). These were each shipped as an isolated build and confirmed
-// to launch. Everything NOT in that verified set was removed after several
-// builds that combined them crashed on launch every time:
+// Android 14), plus setBuiltInZoomControls={false} added as its own
+// separately-tested build. Each was shipped as an isolated build and
+// confirmed to launch. Everything NOT in that verified set was removed
+// after several builds that combined them crashed on launch every time:
 //
 //   pullToRefreshEnabled            - wraps the WebView in a native
 //                                     SwipeRefreshLayout; prime suspect for
@@ -125,6 +126,7 @@ export default function App() {
           onError={onError}
           onHttpError={onHttpError}
           domStorageEnabled
+          setBuiltInZoomControls={false}
         />
         {loading && !hasError ? (
           <View style={styles.loadingOverlay} pointerEvents="none">
