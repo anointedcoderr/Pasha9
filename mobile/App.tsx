@@ -48,7 +48,7 @@ import WebView, { type WebViewMessageEvent, type WebViewNavigation } from 'react
 import type { WebViewErrorEvent, WebViewHttpErrorEvent } from 'react-native-webview/lib/WebViewTypes';
 import { SITE_URL } from '@/lib/config';
 import { ensureAndroidChannel, getExpoPushToken } from '@/lib/push/register';
-import { installCrashReporter } from '@/lib/crash-report';
+import { installCrashReporter, reportDiagnostic } from '@/lib/crash-report';
 
 installCrashReporter();
 
@@ -57,17 +57,37 @@ const ACCENT = '#FFCC00';
 
 // Runs in page context after every load, so the session cookie rides along
 // automatically. Reports back whether a player is signed in.
+//
+// CRITICAL - this must KEEP CHECKING, not run once. injectedJavaScript fires
+// on document load only, and the site is a Next.js app: signing in swaps the
+// UI through client-side routing without a new document load. A one-shot
+// check therefore sees "logged out" at launch and never runs again, so a
+// player who installs the app and then signs in never registers a push
+// token at all - which is exactly why push appeared dead while the in-app
+// notification bell still worked. Re-checking on an interval covers sign-in,
+// sign-out, and switching accounts, and needs no cooperation from the site.
+// It also listens for the site's own pasha9:auth-changed event for an
+// instant response once that ships; the interval is the fallback that works
+// regardless. Native side de-dupes, so repeats are cheap and harmless.
 const AUTH_CHECK_SCRIPT = `
 (function () {
-  fetch('/api/auth/me', { credentials: 'include' })
-    .then(function (r) { return r.ok ? r.json() : null; })
-    .then(function (j) {
-      var userId = j && j.user && j.user.id ? j.user.id : null;
-      window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'auth', userId: userId }));
-    })
-    .catch(function () {
-      window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'auth', userId: null }));
-    });
+  if (window.__pasha9AuthWatch) return;
+  window.__pasha9AuthWatch = true;
+  var last;
+  function report() {
+    fetch('/api/auth/me', { credentials: 'include' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        var userId = j && j.user && j.user.id ? j.user.id : null;
+        if (userId === last) return;
+        last = userId;
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'auth', userId: userId }));
+      })
+      .catch(function () {});
+  }
+  report();
+  setInterval(report, 15000);
+  window.addEventListener('pasha9:auth-changed', report);
 })();
 true;
 `;
@@ -84,7 +104,13 @@ function buildRegisterTokenScript(token: string, appVersion: string): string {
     credentials: 'include',
     headers: { 'content-type': 'application/json' },
     body: ${JSON.stringify(body)}
-  }).catch(function () {});
+  })
+    .then(function (r) {
+      window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'tokenPost', status: r.status }));
+    })
+    .catch(function () {
+      window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'tokenPost', status: 0 }));
+    });
 })();
 true;
 `;
@@ -194,10 +220,15 @@ export default function App() {
   // token fetch plus a page-context POST to register it. Guarded so the same
   // user is only registered once per app session.
   const onMessage = useCallback((event: WebViewMessageEvent) => {
-    let parsed: { type?: string; userId?: string | null } | null = null;
+    let parsed: { type?: string; userId?: string | null; status?: number } | null = null;
     try {
       parsed = JSON.parse(event.nativeEvent.data);
     } catch {
+      return;
+    }
+    if (parsed?.type === 'tokenPost') {
+      // 200 = registered, 401 = session not seen by the POST, 0 = network.
+      reportDiagnostic(`push: device-tokens POST returned ${parsed.status}`);
       return;
     }
     if (parsed?.type !== 'auth') return;
@@ -206,8 +237,16 @@ export default function App() {
     registeredForUserRef.current = userId;
     void (async () => {
       const token = await getExpoPushToken();
-      if (!token || !webViewRef.current) return;
+      if (!token) {
+        // Most likely: notification permission denied, or no EAS projectId
+        // in this build. Either way no push can ever arrive, so say so
+        // rather than failing silently.
+        reportDiagnostic('push: signed in but NO token (permission denied or no projectId)');
+        return;
+      }
+      if (!webViewRef.current) return;
       const appVersion = Constants.expoConfig?.version ?? '1.0.0';
+      reportDiagnostic(`push: got token ${token.slice(0, 24)}..., posting to /api/me/device-tokens`);
       webViewRef.current.injectJavaScript(buildRegisterTokenScript(token, appVersion));
     })();
   }, []);

@@ -12,6 +12,32 @@ import { NativeModules, Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { SITE_URL } from './config';
 
+/**
+ * Diagnostic-only, temporary. Reports a one-line status to the same endpoint
+ * the crash reporter uses, so it surfaces in scripts/error-log.sh on the
+ * server. Used to trace push-token registration on a remote test device,
+ * since we have no direct access to that device or to the database.
+ * Fire-and-forget: never throws, never blocks, failure is silent.
+ */
+export function reportDiagnostic(message: string): void {
+  try {
+    fetch(`${SITE_URL}/api/mobile/crash-log`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        message: `[diag] ${message}`,
+        isFatal: false,
+        platform: Platform.OS,
+        osVersion: String(Platform.Version),
+        appVersion: Constants.expoConfig?.version ?? null,
+        device: NativeModules.PlatformConstants?.Model ?? null,
+      }),
+    }).catch(() => undefined);
+  } catch {
+    // Diagnostics must never affect the app.
+  }
+}
+
 export function installCrashReporter(): void {
   try {
     const g = global as unknown as {
