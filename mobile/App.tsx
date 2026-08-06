@@ -8,10 +8,9 @@
 //
 // IMPORTANT - do not add WebView props here casually. The prop set below is
 // exactly the one verified crash-free on the client's device (a Samsung on
-// Android 14), plus setBuiltInZoomControls={false} added as its own
-// separately-tested build. Each was shipped as an isolated build and
-// confirmed to launch. Everything NOT in that verified set was removed
-// after several builds that combined them crashed on launch every time:
+// Android 14), grown one prop per build with a device test in between.
+// These props were REMOVED during the crash hunt and must NOT come back as
+// a group - several builds that combined them crashed on launch every time:
 //
 //   pullToRefreshEnabled            - wraps the WebView in a native
 //                                     SwipeRefreshLayout; prime suspect for
@@ -20,15 +19,21 @@
 //   setSupportMultipleWindows       - changes native window-creation
 //   allowsBackForwardNavigationGestures / decelerationRate - iOS-only, no
 //                                     value on Android, still shipped native
-//   injectedJavaScript              - the zoom-lock and auth-bridge scripts
 //   onShouldStartLoadWithRequest    - tel:/mailto:/sms: interception
 //
 // Re-add any of them ONE AT A TIME, each in its own build, tested on a real
 // device before the next. Bundling them back together is what caused five
 // days of failed builds.
 //
-// Push notifications and the native splash screen are out for the same
-// reason and come back the same way.
+// Two small native bridges into the page, both one-way:
+//   1. Auth check - re-injected after every page load. The page fetches its
+//      own /api/auth/me (same-origin, so its httpOnly session cookie rides
+//      along automatically) and posts back whether a player is signed in.
+//      Native code never touches the session cookie directly.
+//   2. Push registration - once signed-in is confirmed, native code fetches
+//      the device's Expo push token (a native-only API) and hands it BACK to
+//      the page to POST from page context, again riding the page's own
+//      cookie rather than any native auth flow.
 //
 // Android hardware back steps back through the WebView's own history before
 // falling through to the OS default (exit).
@@ -37,9 +42,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, BackHandler, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import WebView, { type WebViewNavigation } from 'react-native-webview';
+import Constants from 'expo-constants';
+import * as Notifications from 'expo-notifications';
+import WebView, { type WebViewMessageEvent, type WebViewNavigation } from 'react-native-webview';
 import type { WebViewErrorEvent, WebViewHttpErrorEvent } from 'react-native-webview/lib/WebViewTypes';
 import { SITE_URL } from '@/lib/config';
+import { ensureAndroidChannel, getExpoPushToken } from '@/lib/push/register';
 import { installCrashReporter } from '@/lib/crash-report';
 
 installCrashReporter();
@@ -47,9 +55,56 @@ installCrashReporter();
 const BG = '#06120c';
 const ACCENT = '#FFCC00';
 
+// Runs in page context after every load, so the session cookie rides along
+// automatically. Reports back whether a player is signed in.
+const AUTH_CHECK_SCRIPT = `
+(function () {
+  fetch('/api/auth/me', { credentials: 'include' })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (j) {
+      var userId = j && j.user && j.user.id ? j.user.id : null;
+      window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'auth', userId: userId }));
+    })
+    .catch(function () {
+      window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'auth', userId: null }));
+    });
+})();
+true;
+`;
+
+// The token is POSTed from page context (not natively) so the player's own
+// session cookie authenticates it - see /api/me/device-tokens, which requires
+// an active player session.
+function buildRegisterTokenScript(token: string, appVersion: string): string {
+  const body = JSON.stringify({ token, platform: Platform.OS, appVersion });
+  return `
+(function () {
+  fetch('/api/me/device-tokens', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json' },
+    body: ${JSON.stringify(body)}
+  }).catch(function () {});
+})();
+true;
+`;
+}
+
+function buildNavigateScript(url: string): string {
+  return `window.location.href = ${JSON.stringify(url)}; true;`;
+}
+
+/** Resolve a backend notification linkUrl (already a real site path) to a full URL. */
+function resolveNotificationUrl(linkUrl?: string | null): string {
+  const path = typeof linkUrl === 'string' && linkUrl.startsWith('/') ? linkUrl : '/dashboard/notifications';
+  return `${SITE_URL}${path}`;
+}
+
 export default function App() {
   const webViewRef = useRef<WebView>(null);
   const canGoBackRef = useRef(false);
+  const registeredForUserRef = useRef<string | null>(null);
+  const pendingUrlRef = useRef<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   // WebView can fire onLoadStart again after the page has already finished
@@ -73,6 +128,28 @@ export default function App() {
     return () => sub.remove();
   }, []);
 
+  // Channel setup happens once at launch, independent of login state. The
+  // Android "default" channel must exist for heads-up delivery while the app
+  // is backgrounded or the screen is off.
+  useEffect(() => {
+    void ensureAndroidChannel();
+  }, []);
+
+  // A notification tap while the app is backgrounded/killed opens it; once
+  // the WebView exists, forward the tap's target page into it.
+  useEffect(() => {
+    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+      const data = response.notification.request.content.data as { linkUrl?: string | null } | undefined;
+      const url = resolveNotificationUrl(data?.linkUrl);
+      if (webViewRef.current) {
+        webViewRef.current.injectJavaScript(buildNavigateScript(url));
+      } else {
+        pendingUrlRef.current = url;
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
   const onNavigationStateChange = useCallback((nav: WebViewNavigation) => {
     canGoBackRef.current = nav.canGoBack;
   }, []);
@@ -85,6 +162,10 @@ export default function App() {
   const onLoadEnd = useCallback(() => {
     hasLoadedOnceRef.current = true;
     setLoading(false);
+    if (pendingUrlRef.current && webViewRef.current) {
+      webViewRef.current.injectJavaScript(buildNavigateScript(pendingUrlRef.current));
+      pendingUrlRef.current = null;
+    }
   }, []);
 
   // Network failure, DNS error, or an HTTP error status on the main frame
@@ -108,6 +189,29 @@ export default function App() {
     webViewRef.current?.reload();
   }, []);
 
+  // The one-way bridge: the page reports its own auth state (see
+  // AUTH_CHECK_SCRIPT), and a newly-signed-in user triggers a native push
+  // token fetch plus a page-context POST to register it. Guarded so the same
+  // user is only registered once per app session.
+  const onMessage = useCallback((event: WebViewMessageEvent) => {
+    let parsed: { type?: string; userId?: string | null } | null = null;
+    try {
+      parsed = JSON.parse(event.nativeEvent.data);
+    } catch {
+      return;
+    }
+    if (parsed?.type !== 'auth') return;
+    const userId = parsed.userId ?? null;
+    if (!userId || registeredForUserRef.current === userId) return;
+    registeredForUserRef.current = userId;
+    void (async () => {
+      const token = await getExpoPushToken();
+      if (!token || !webViewRef.current) return;
+      const appVersion = Constants.expoConfig?.version ?? '1.0.0';
+      webViewRef.current.injectJavaScript(buildRegisterTokenScript(token, appVersion));
+    })();
+  }, []);
+
   return (
     <SafeAreaProvider>
       <StatusBar style="light" />
@@ -125,6 +229,8 @@ export default function App() {
           onLoadEnd={onLoadEnd}
           onError={onError}
           onHttpError={onHttpError}
+          onMessage={onMessage}
+          injectedJavaScript={AUTH_CHECK_SCRIPT}
           domStorageEnabled
           setBuiltInZoomControls={false}
         />

@@ -17,13 +17,16 @@
     },
     "android": {
       "package": "com.pasha9.player",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#06120c"
       },
       "edgeToEdgeEnabled": true
     },
-    "plugins": [],
+    "plugins": [
+      "expo-notifications"
+    ],
     "extra": {
       "apiBaseUrl": "https://pasha9.com",
       "eas": {
