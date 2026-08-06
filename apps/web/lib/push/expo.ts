@@ -46,6 +46,45 @@ interface ExpoTicket {
   details?: { error?: string } | null;
 }
 
+/**
+ * POST one batch to the Expo push service.
+ *
+ * Returns the tickets when Expo accepts the request, or apiError when it
+ * rejects the request as a whole. That distinction matters: a rejected
+ * request returns NO tickets, so without capturing the reason here every
+ * token in the batch ends up recorded as a meaningless 'unknown_error'
+ * with the real cause discarded - which is exactly what hid a whole-batch
+ * rejection during testing. The error body is logged, not swallowed.
+ */
+async function postToExpo(
+  messages: unknown[],
+  headers: Record<string, string>,
+): Promise<{ tickets: ExpoTicket[]; apiError: string | null }> {
+  const res = await fetch(EXPO_PUSH_URL, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(messages),
+  });
+  const raw = await res.text().catch(() => '');
+  let json: { data?: ExpoTicket[]; errors?: { code?: string; message?: string }[] } | null = null;
+  try {
+    json = raw ? JSON.parse(raw) : null;
+  } catch {
+    json = null;
+  }
+
+  if (Array.isArray(json?.data)) {
+    return { tickets: json!.data, apiError: null };
+  }
+
+  const apiError =
+    json?.errors?.[0]?.code ??
+    json?.errors?.[0]?.message ??
+    `http_${res.status}`;
+  console.error(`[expo] push request rejected: status=${res.status} body=${raw.slice(0, 400)}`);
+  return { tickets: [], apiError };
+}
+
 export async function dispatchExpoPushToUsers(
   userIds: string[],
   payload: ExpoPushPayload,
@@ -99,13 +138,37 @@ export async function dispatchExpoPushToUsers(
 
       let tickets: ExpoTicket[] = [];
       try {
-        const res = await fetch(EXPO_PUSH_URL, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(messages),
-        });
-        const json = (await res.json().catch(() => null)) as { data?: ExpoTicket[] } | null;
-        tickets = Array.isArray(json?.data) ? json!.data : [];
+        const batch = await postToExpo(messages, headers);
+        tickets = batch.tickets;
+
+        // Request-level rejection: Expo refused the whole batch and returned
+        // no tickets, so every token in it looks like a nameless failure.
+        // The usual cause is a batch mixing tokens issued by DIFFERENT Expo
+        // projects (PUSH_TOO_MANY_EXPERIENCE_IDS) - one stale token left over
+        // from an older build is enough to block the notification for every
+        // other player in the same batch. Retry one message at a time so the
+        // valid tokens still get through and each bad token records its own
+        // real reason instead of a shared 'unknown_error'.
+        if (batch.apiError && messages.length > 1) {
+          console.error(
+            `[expo] batch rejected (${batch.apiError}); retrying ${messages.length} tokens individually`,
+          );
+          const singles = await Promise.all(
+            messages.map((m) => postToExpo([m], headers)),
+          );
+          tickets = singles.map(
+            (s) =>
+              s.tickets[0] ?? {
+                status: 'error',
+                message: s.apiError ?? 'no_ticket_returned',
+                details: null,
+              },
+          );
+        } else if (batch.apiError) {
+          tickets = [
+            { status: 'error', message: batch.apiError, details: null },
+          ];
+        }
       } catch {
         // Network / transport failure for the whole chunk: count every
         // token as failed and best-effort stamp the failure. Never throw.
