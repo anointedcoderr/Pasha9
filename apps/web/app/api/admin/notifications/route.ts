@@ -12,6 +12,7 @@ import { db } from '@/lib/db/client';
 import { withAuth, ensurePermission, recordActivity } from '@/lib/auth/guard';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 import { dispatchPushToUsers } from '@/lib/push/dispatch';
+import { dispatchExpoPushToUsers } from '@/lib/push/expo';
 
 const AUDIENCE = ['all', 'active', 'depositors', 'selected'] as const;
 
@@ -142,20 +143,51 @@ export async function POST(req: NextRequest) {
       return created;
     });
 
-    // Phase 2: attempt the web push. Best-effort; in-app rows already
-    // exist and are query-visible to the recipients even if push is
-    // not configured. Failures never block the in-app delivery.
-    const pushResult = await dispatchPushToUsers(userIds, {
-      title: data.titleEn,
-      body: data.bodyEn ?? null,
-      imageUrl: data.imageUrl ?? null,
-      linkUrl: data.linkUrl ?? null,
-      notificationId: notification.id,
-      soundUrl: data.soundUrl ?? null,
-    }).catch((err) => {
-      console.error('[notifications] push dispatch failed', err);
-      return { attempted: 0, sent: 0, failed: 0, status: 'failed' as const, details: 'dispatch_threw' };
-    });
+    // Phase 2: attempt push on BOTH player channels. Best-effort; in-app
+    // rows already exist and are query-visible to the recipients even if
+    // push is not configured. Failures never block the in-app delivery.
+    //
+    // Two separate channels, and both are required: web VAPID reaches
+    // browsers, Expo reaches the native mobile app. This route used to
+    // dispatch web only, so an operator broadcast reached Chrome but never
+    // the installed app - the player's phone had a registered Expo token
+    // that nothing ever sent to. notifyUser() (deposits, withdrawals, and
+    // the rest) always dispatched both; only this manual/broadcast path
+    // was missing the mobile half.
+    //
+    // Run in parallel so adding the second channel costs no extra latency
+    // on a large broadcast.
+    const [pushResult, expoResult] = await Promise.all([
+      dispatchPushToUsers(userIds, {
+        title: data.titleEn,
+        body: data.bodyEn ?? null,
+        imageUrl: data.imageUrl ?? null,
+        linkUrl: data.linkUrl ?? null,
+        notificationId: notification.id,
+        soundUrl: data.soundUrl ?? null,
+      }).catch((err) => {
+        console.error('[notifications] push dispatch failed', err);
+        return { attempted: 0, sent: 0, failed: 0, status: 'failed' as const, details: 'dispatch_threw' };
+      }),
+      dispatchExpoPushToUsers(userIds, {
+        title: data.titleEn,
+        body: data.bodyEn ?? null,
+        linkUrl: data.linkUrl ?? null,
+        kind: 'system',
+        priority: data.priority === 'high' ? 'high' : 'normal',
+        notificationId: notification.id,
+      }).catch((err) => {
+        console.error('[notifications] expo push dispatch failed', err);
+        return { attempted: 0, sent: 0, failed: 0, status: 'failed' };
+      }),
+    ]);
+
+    // Logged explicitly: without this there is no way to tell a broadcast
+    // that reached zero phones from one that reached every phone, which is
+    // exactly the blind spot that hid the missing mobile channel.
+    console.log(
+      `[notifications] expo push: attempted=${expoResult.attempted} sent=${expoResult.sent} failed=${expoResult.failed} status=${expoResult.status}`,
+    );
 
     // Phase 3: stamp deliveredAt now that we know whether the push
     // landed. Policy:
@@ -175,7 +207,12 @@ export async function POST(req: NextRequest) {
     //     The in-app row still exists so the user will see it on
     //     their next /me/notifications fetch, but the operator now
     //     has a clear signal that the push channel failed.
-    const pushSucceeded = pushResult.attempted === 0 || pushResult.sent > 0;
+    // Either channel landing counts as delivered - a player on mobile only
+    // is just as reached as one on web only.
+    const pushSucceeded =
+      (pushResult.attempted === 0 && expoResult.attempted === 0) ||
+      pushResult.sent > 0 ||
+      expoResult.sent > 0;
     if (pushSucceeded) {
       try {
         await db.notificationRecipient.updateMany({
@@ -200,6 +237,10 @@ export async function POST(req: NextRequest) {
         pushAttempted: pushResult.attempted,
         pushSent: pushResult.sent,
         pushFailed: pushResult.failed,
+        expoStatus: expoResult.status,
+        expoAttempted: expoResult.attempted,
+        expoSent: expoResult.sent,
+        expoFailed: expoResult.failed,
       } as Prisma.JsonObject,
     });
 
@@ -208,6 +249,7 @@ export async function POST(req: NextRequest) {
       notificationId: notification.id,
       recipientCount: userIds.length,
       push: pushResult,
+      expoPush: expoResult,
     });
   });
 }
