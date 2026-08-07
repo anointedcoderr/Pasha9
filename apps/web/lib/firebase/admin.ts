@@ -22,6 +22,9 @@ import {
 import { getAuth, type Auth } from 'firebase-admin/auth';
 import { getMessaging, type Messaging } from 'firebase-admin/messaging';
 
+const DEFAULT_APP_NAME = '[DEFAULT]';
+const PLAYER_APP_NAME = 'player-push';
+
 let cachedApp: App | null = null;
 let cachedAuth: Auth | null = null;
 let cachedMessaging: Messaging | null = null;
@@ -47,7 +50,11 @@ function getAdminApp(): App {
   if (!isFirebaseConfigured()) {
     throw new Error('FIREBASE_ADMIN_NOT_CONFIGURED');
   }
-  const existing = getApps()[0];
+  // Look the default app up BY NAME, not by getApps()[0]. There is now a
+  // second, separately-credentialed app (player push, below), and index 0
+  // is whichever happened to initialize first - which would silently hand
+  // this project's Phone Auth and admin push the wrong credentials.
+  const existing = getApps().find((a) => a.name === DEFAULT_APP_NAME);
   cachedApp = existing ?? initializeApp({
     credential: cert({
       projectId: process.env.FIREBASE_PROJECT_ID,
@@ -56,6 +63,63 @@ function getAdminApp(): App {
     }),
   });
   return cachedApp;
+}
+
+// ---------------------------------------------------------------------------
+// Player mobile push - a SECOND Firebase project.
+//
+// The mobile app is built against its own Firebase project (the one in
+// mobile/google-services.json), which is NOT the project used for Phone Auth
+// and admin push. FCM will only deliver to devices registered under the same
+// project as the sending credentials: sending to the app's tokens with the
+// auth project's service account fails every message with
+// messaging/mismatched-credential, which is exactly what production showed.
+//
+// Kept as separate env vars rather than replacing the originals, because the
+// original project is what admin push and Phone Auth legitimately use. If
+// these are unset, player FCM reports provider_setup_required and delivery
+// falls back to Expo, so an unconfigured server degrades rather than breaks.
+// ---------------------------------------------------------------------------
+
+let cachedPlayerApp: App | null = null;
+let cachedPlayerMessaging: Messaging | null = null;
+
+function readPlayerPrivateKey(): string {
+  return (process.env.FIREBASE_PLAYER_PRIVATE_KEY ?? '').replace(/\\n/g, '\n');
+}
+
+export function isPlayerFcmConfigured(): boolean {
+  return Boolean(
+    process.env.FIREBASE_PLAYER_PROJECT_ID &&
+    process.env.FIREBASE_PLAYER_CLIENT_EMAIL &&
+    process.env.FIREBASE_PLAYER_PRIVATE_KEY,
+  );
+}
+
+function getPlayerApp(): App {
+  if (cachedPlayerApp) return cachedPlayerApp;
+  if (!isPlayerFcmConfigured()) {
+    throw new Error('FIREBASE_PLAYER_NOT_CONFIGURED');
+  }
+  const existing = getApps().find((a) => a.name === PLAYER_APP_NAME);
+  cachedPlayerApp = existing ?? initializeApp(
+    {
+      credential: cert({
+        projectId: process.env.FIREBASE_PLAYER_PROJECT_ID,
+        clientEmail: process.env.FIREBASE_PLAYER_CLIENT_EMAIL,
+        privateKey: readPlayerPrivateKey(),
+      }),
+    },
+    PLAYER_APP_NAME,
+  );
+  return cachedPlayerApp;
+}
+
+/** FCM handle for the mobile app's own Firebase project. See block above. */
+export function getPlayerFcmMessaging(): Messaging {
+  if (cachedPlayerMessaging) return cachedPlayerMessaging;
+  cachedPlayerMessaging = getMessaging(getPlayerApp());
+  return cachedPlayerMessaging;
 }
 
 export function getFirebaseAdminAuth(): Auth {

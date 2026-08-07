@@ -24,7 +24,7 @@
 // A push failure must not fail the deposit or withdrawal that raised it.
 
 import { db } from '@/lib/db/client';
-import { isFirebaseConfigured, getFirebaseAdminMessaging } from '@/lib/firebase/admin';
+import { isPlayerFcmConfigured, getPlayerFcmMessaging } from '@/lib/firebase/admin';
 import {
   type FcmDispatchResult,
   classifyFcmSendError,
@@ -58,13 +58,15 @@ export async function dispatchPlayerFcmToUsers(
     if (userIds.length === 0) {
       return { attempted: 0, sent: 0, failed: 0, status: 'skipped_no_subscriptions' };
     }
-    if (!isFirebaseConfigured()) {
+    // Must be the MOBILE APP's Firebase project, not the auth/admin one.
+    // FCM refuses cross-project sends with messaging/mismatched-credential.
+    if (!isPlayerFcmConfigured()) {
       return {
         attempted: 0,
         sent: 0,
         failed: 0,
         status: 'provider_setup_required',
-        details: 'firebase_admin_not_configured',
+        details: 'firebase_player_not_configured',
       };
     }
 
@@ -78,7 +80,7 @@ export async function dispatchPlayerFcmToUsers(
       return { attempted: 0, sent: 0, failed: 0, status: 'skipped_no_subscriptions' };
     }
 
-    const messaging = getFirebaseAdminMessaging();
+    const messaging = getPlayerFcmMessaging();
     const now = new Date();
 
     // data rides alongside the notification block so a tap can still be
