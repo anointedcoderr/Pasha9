@@ -81,12 +81,16 @@ interface Props {
   open: boolean;
   onClose: () => void;
   isLoggedIn: boolean;
+  // False until /api/auth/me has answered. Same guard as StickyBottomNav:
+  // without it a signed-in player who opens the drawer during the probe is
+  // offered Login/Register. Defaults true so existing callers are unchanged.
+  authLoaded?: boolean;
   onRequestLogin: () => void;
   onRequestSignup: () => void;
   onLogout: () => void;
 }
 
-export function MobileDrawer({ open, onClose, isLoggedIn, onRequestLogin, onRequestSignup, onLogout }: Props) {
+export function MobileDrawer({ open, onClose, isLoggedIn, authLoaded = true, onRequestLogin, onRequestSignup, onLogout }: Props) {
   const t = useT();
   const { lang, setLang } = useLang();
   const flags = useSectionFlags();
@@ -352,7 +356,7 @@ export function MobileDrawer({ open, onClose, isLoggedIn, onRequestLogin, onRequ
           </Section>
         </nav>
 
-        {!isLoggedIn ? (
+        {!isLoggedIn && authLoaded ? (
           <div className="border-t border-brand-divider p-3">
             <div className="grid grid-cols-2 gap-2">
               <button

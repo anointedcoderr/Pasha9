@@ -20,13 +20,28 @@ import { MarkerNew } from './markers';
 
 interface Props {
   isLoggedIn: boolean;
+  // False until the /api/auth/me probe has answered. Without this the bar
+  // renders isLoggedIn=false during the probe, so a signed-in player is
+  // shown Register/Login for as long as the request takes - and tapping it
+  // opens the signup sheet, which is what was reported. The Header already
+  // guards its own right-hand column this way; the bar was passed a bare
+  // !!me and had no equivalent. Every full page load re-runs the probe, so
+  // this is not just a first-visit flash: it happened on each navigation
+  // that reloaded the document, which is why it looked persistent.
+  // Defaults true so any existing caller keeps its current behaviour.
+  authLoaded?: boolean;
   onOpenMenu: () => void;
   onRequestLogin: () => void;
   onRequestSignup: () => void;
   balance?: number | null;
 }
 
-export function StickyBottomNav({ isLoggedIn, onRequestLogin, onRequestSignup }: Props) {
+export function StickyBottomNav({
+  isLoggedIn,
+  authLoaded = true,
+  onRequestLogin,
+  onRequestSignup,
+}: Props) {
   const t = useT();
   const { lang } = useLang();
   const newLabel = lang === 'bn' ? 'নতুন' : 'NEW';
@@ -72,7 +87,27 @@ export function StickyBottomNav({ isLoggedIn, onRequestLogin, onRequestSignup }:
         <span className="bnav-fab-label">{t('nav.home')}</span>
       </Link>
 
-      {isLoggedIn ? (
+      {!authLoaded ? (
+        // Auth state still unknown. Occupies the same two slots as either
+        // real state so the bar does not reflow when the probe resolves,
+        // and shows nothing tappable - guessing wrong here is what put a
+        // signed-in player into the signup sheet.
+        <>
+          {/* Plain spans, not .bnav-icon-wrap: that class carries the yellow
+              button gradient at a higher specificity than a utility class,
+              so reusing it would render a pulsing yellow square that reads
+              as a real, tappable item. Sizes mirror it (32px icon, 64px
+              row) so the footprint is identical. */}
+          <span aria-hidden className="bnav-btn">
+            <span className="h-8 w-8 animate-pulse rounded-[10px] bg-brand-surface/70" />
+            <span className="h-3 w-10 animate-pulse rounded bg-brand-surface/70" />
+          </span>
+          <span aria-hidden className="bnav-btn">
+            <span className="h-8 w-8 animate-pulse rounded-[10px] bg-brand-surface/70" />
+            <span className="h-3 w-10 animate-pulse rounded bg-brand-surface/70" />
+          </span>
+        </>
+      ) : isLoggedIn ? (
         <>
           <Link
             href="/betting-pass"

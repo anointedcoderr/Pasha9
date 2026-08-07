@@ -341,6 +341,7 @@ export function Header() {
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         isLoggedIn={!!me}
+        authLoaded={authLoaded}
         onRequestLogin={openLogin}
         onRequestSignup={openSignup}
         onLogout={logout}
@@ -348,6 +349,7 @@ export function Header() {
 
       <StickyBottomNav
         isLoggedIn={!!me}
+        authLoaded={authLoaded}
         onOpenMenu={() => setDrawerOpen(true)}
         onRequestLogin={openLogin}
         onRequestSignup={openSignup}
