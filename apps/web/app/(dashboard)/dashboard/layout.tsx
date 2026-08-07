@@ -4,6 +4,7 @@ import { useEffect, type ReactNode } from 'react';
 import { Header } from '@/components/site/Header';
 import { Footer } from '@/components/site/Footer';
 import { FloatingContact } from '@/components/site/FloatingContact';
+import { AnnouncementPopup } from '@/components/site/AnnouncementPopup';
 import { DashboardNav } from '@/components/dashboard/DashboardNav';
 import { TooltipProvider } from '@/components/ui/Tooltip';
 import { useT } from '@/lib/i18n/context';
@@ -33,6 +34,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         </div>
         <Footer />
         <FloatingContact />
+        {/* Popups were mounted only in the (site) layout, so nothing could
+            ever appear on a /dashboard/* page - Referral Center included,
+            which is where the bottom nav's Referral link goes. A custom-URL
+            popup pointed at one of these pages simply never rendered. */}
+        <AnnouncementPopup />
       </div>
     </TooltipProvider>
   );
