@@ -3,6 +3,7 @@
 
 import { db } from '@/lib/db/client';
 import { getOrRefreshSessionClaims, getSessionClaims } from './session';
+import { viewCodesGrantingRead } from './admin-sections';
 import type { AccessClaims } from './jwt';
 
 const STAFF_ROLES = new Set(['super_admin', 'admin', 'staff']);
@@ -83,6 +84,15 @@ export async function requirePermission(permission: string): Promise<AccessClaim
   // per-user permission overrides from UserPermission.
   const keys = await loadEffectivePermissions(s.sub);
   if (keys.includes(permission)) return s;
+
+  // A section's View has to carry the read access its own pages need.
+  // Without this, granting "User Management: View" showed the menu row and
+  // then returned FORBIDDEN with an empty table, because the list API
+  // authorises on users.read - a code the permission screen cannot grant at
+  // all. Same for every other section. See SECTION_READ_PERMISSIONS for the
+  // mapping and its documented limitation.
+  const impliedBy = viewCodesGrantingRead(permission);
+  if (impliedBy.length > 0 && impliedBy.some((code) => keys.includes(code))) return s;
 
   throw new AuthError('FORBIDDEN');
 }

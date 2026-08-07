@@ -218,3 +218,59 @@ export function allRegistryPermissions(): string[] {
   for (const s of ADMIN_SECTIONS) for (const c of sectionPermissions(s)) set.add(c);
   return Array.from(set);
 }
+
+// ---------------------------------------------------------------------------
+// Read permissions implied by a section's View.
+//
+// The admin data APIs authorise with their own long-standing read codes
+// (users.read, deposits.read, ...). NONE of those codes appear as grantable
+// actions in the registry above, so the Super Admin panel could never issue
+// them: a staff member ticked "User Management: View", saw the menu row
+// appear, opened the page and got FORBIDDEN with an empty table. That was
+// true for EVERY section, not just User Management - the menu.<key>.view
+// codes minted in Phase 5 gate visibility only, and nothing granted the read.
+//
+// Granting a section's View therefore also grants the read code(s) that
+// section's own pages call. Visibility and data access now move together,
+// which is what the permission screen already implies to the operator.
+//
+// KNOWN LIMITATION, deliberately not hidden: several of these codes are
+// shared by sibling sections' APIs (users.read alone is required by 21
+// routes across native-games, providers, recovery, vip and wingo). So
+// granting one section's View can also permit READING a sibling section's
+// API directly. Page access is still correctly blocked - the sidebar filter
+// and URL guard both key off menu.<key>.view - so this is reachable only by
+// calling the API by hand, never by navigating the panel. Closing that gap
+// properly means minting a per-section read code and updating those ~60
+// routes to check it, which is real work and is NOT done here.
+export const SECTION_READ_PERMISSIONS: Record<string, string[]> = {
+  users: ['users.read'],
+  balance: ['users.read'],
+  deposits: ['deposits.read'],
+  withdrawals: ['withdrawals.read'],
+  transactions: ['transactions.read'],
+  payments: ['payments.read'],
+  referrals: ['referrals.read'],
+  bonuses: ['bonuses.read'],
+  affiliate: ['affiliate.read'],
+  reports: ['reports.read'],
+  security: ['security.read'],
+  support: ['support.read'],
+  settings: ['settings.read'],
+  activity: ['activity.read'],
+};
+
+/**
+ * View permission codes that, when held, should also grant `permission`.
+ * Empty when nothing implies it, so the caller falls through to a normal
+ * FORBIDDEN.
+ */
+export function viewCodesGrantingRead(permission: string): string[] {
+  const out: string[] = [];
+  for (const section of ADMIN_SECTIONS) {
+    if (!SECTION_READ_PERMISSIONS[section.key]?.includes(permission)) continue;
+    const viewCode = sectionViewPermission(section);
+    if (viewCode) out.push(viewCode);
+  }
+  return out;
+}
