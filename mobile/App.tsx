@@ -47,7 +47,7 @@ import * as Notifications from 'expo-notifications';
 import WebView, { type WebViewMessageEvent, type WebViewNavigation } from 'react-native-webview';
 import type { WebViewErrorEvent, WebViewHttpErrorEvent } from 'react-native-webview/lib/WebViewTypes';
 import { SITE_URL } from '@/lib/config';
-import { ensureAndroidChannel, getExpoPushToken } from '@/lib/push/register';
+import { ensureAndroidChannel, getExpoPushToken, getNativeFcmToken } from '@/lib/push/register';
 import { installCrashReporter, reportDiagnostic } from '@/lib/crash-report';
 
 installCrashReporter();
@@ -95,8 +95,17 @@ true;
 // The token is POSTed from page context (not natively) so the player's own
 // session cookie authenticates it - see /api/me/device-tokens, which requires
 // an active player session.
-function buildRegisterTokenScript(token: string, appVersion: string): string {
-  const body = JSON.stringify({ token, platform: Platform.OS, appVersion });
+function buildRegisterTokenScript(
+  token: string,
+  appVersion: string,
+  fcmToken: string | null,
+): string {
+  const body = JSON.stringify({
+    token,
+    platform: Platform.OS,
+    appVersion,
+    ...(fcmToken ? { fcmToken } : {}),
+  });
   return `
 (function () {
   fetch('/api/me/device-tokens', {
@@ -246,8 +255,14 @@ export default function App() {
       }
       if (!webViewRef.current) return;
       const appVersion = Constants.expoConfig?.version ?? '1.0.0';
-      reportDiagnostic(`push: got token ${token.slice(0, 24)}..., posting to /api/me/device-tokens`);
-      webViewRef.current.injectJavaScript(buildRegisterTokenScript(token, appVersion));
+      // Reported alongside the Expo token. Its presence is what switches this
+      // device to notification-message delivery on the server, which Android
+      // shows without waking the app and so survives OEM battery managers.
+      const fcmToken = await getNativeFcmToken();
+      reportDiagnostic(
+        `push: got token ${token.slice(0, 24)}..., fcm=${fcmToken ? 'yes' : 'no'}, posting to /api/me/device-tokens`,
+      );
+      webViewRef.current.injectJavaScript(buildRegisterTokenScript(token, appVersion, fcmToken));
     })();
   }, []);
 

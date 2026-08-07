@@ -13,6 +13,7 @@ import { withAuth, ensurePermission, recordActivity } from '@/lib/auth/guard';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 import { dispatchPushToUsers } from '@/lib/push/dispatch';
 import { dispatchExpoPushToUsers } from '@/lib/push/expo';
+import { dispatchPlayerFcmToUsers } from '@/lib/push/player-fcm';
 
 const AUDIENCE = ['all', 'active', 'depositors', 'selected'] as const;
 
@@ -157,7 +158,7 @@ export async function POST(req: NextRequest) {
     //
     // Run in parallel so adding the second channel costs no extra latency
     // on a large broadcast.
-    const [pushResult, expoResult] = await Promise.all([
+    const [pushResult, expoResult, fcmResult] = await Promise.all([
       dispatchPushToUsers(userIds, {
         title: data.titleEn,
         body: data.bodyEn ?? null,
@@ -180,13 +181,30 @@ export async function POST(req: NextRequest) {
         console.error('[notifications] expo push dispatch failed', err);
         return { attempted: 0, sent: 0, failed: 0, status: 'failed' };
       }),
+      // Devices that reported a native FCM token. Sent as a notification
+      // message so Android displays it without waking the app, which is what
+      // makes delivery survive Samsung/Xiaomi/Oppo/Vivo battery managers.
+      // Never overlaps the Expo batch above - the two dispatchers partition
+      // devices by fcmToken, so nobody is notified twice.
+      dispatchPlayerFcmToUsers(userIds, {
+        title: data.titleEn,
+        body: data.bodyEn ?? null,
+        linkUrl: data.linkUrl ?? null,
+        kind: 'system',
+        priority: data.priority === 'high' ? 'high' : 'normal',
+        notificationId: notification.id,
+      }).catch((err) => {
+        console.error('[notifications] player fcm dispatch failed', err);
+        return { attempted: 0, sent: 0, failed: 0, status: 'failed' };
+      }),
     ]);
 
     // Logged explicitly: without this there is no way to tell a broadcast
     // that reached zero phones from one that reached every phone, which is
     // exactly the blind spot that hid the missing mobile channel.
     console.log(
-      `[notifications] expo push: attempted=${expoResult.attempted} sent=${expoResult.sent} failed=${expoResult.failed} status=${expoResult.status}`,
+      `[notifications] expo push: attempted=${expoResult.attempted} sent=${expoResult.sent} failed=${expoResult.failed} status=${expoResult.status}` +
+        ` | fcm push: attempted=${fcmResult.attempted} sent=${fcmResult.sent} failed=${fcmResult.failed} status=${fcmResult.status}`,
     );
 
     // Phase 3: stamp deliveredAt now that we know whether the push
@@ -210,9 +228,10 @@ export async function POST(req: NextRequest) {
     // Either channel landing counts as delivered - a player on mobile only
     // is just as reached as one on web only.
     const pushSucceeded =
-      (pushResult.attempted === 0 && expoResult.attempted === 0) ||
+      (pushResult.attempted === 0 && expoResult.attempted === 0 && fcmResult.attempted === 0) ||
       pushResult.sent > 0 ||
-      expoResult.sent > 0;
+      expoResult.sent > 0 ||
+      fcmResult.sent > 0;
     if (pushSucceeded) {
       try {
         await db.notificationRecipient.updateMany({
@@ -241,6 +260,10 @@ export async function POST(req: NextRequest) {
         expoAttempted: expoResult.attempted,
         expoSent: expoResult.sent,
         expoFailed: expoResult.failed,
+        fcmStatus: fcmResult.status,
+        fcmAttempted: fcmResult.attempted,
+        fcmSent: fcmResult.sent,
+        fcmFailed: fcmResult.failed,
       } as Prisma.JsonObject,
     });
 
@@ -250,6 +273,7 @@ export async function POST(req: NextRequest) {
       recipientCount: userIds.length,
       push: pushResult,
       expoPush: expoResult,
+      fcmPush: fcmResult,
     });
   });
 }

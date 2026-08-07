@@ -29,6 +29,12 @@ const registerSchema = z.object({
       (t) => t.startsWith('ExponentPushToken[') || t.startsWith('ExpoPushToken['),
       'invalid Expo push token',
     ),
+  // Native FCM registration token, sent by app builds new enough to report
+  // it. Its presence switches this device to notification-message delivery
+  // (lib/push/player-fcm.ts), which Android displays without waking the app
+  // and therefore survives OEM battery managers. Optional so older builds
+  // keep registering and fall back to Expo.
+  fcmToken: z.string().min(1).max(400).optional(),
   platform: z.enum(['ios', 'android', 'web']).optional(),
   appVersion: z.string().max(50).optional(),
 });
@@ -53,6 +59,7 @@ export async function POST(req: NextRequest) {
       create: {
         userId: session.sub,
         token: data.token,
+        fcmToken: data.fcmToken ?? null,
         platform: data.platform ?? null,
         appVersion: data.appVersion ?? null,
         isActive: true,
@@ -60,6 +67,9 @@ export async function POST(req: NextRequest) {
       },
       update: {
         userId: session.sub,
+        // Only overwrite when the app actually reported one, so a build that
+        // cannot supply it never wipes a good token off an existing device.
+        ...(data.fcmToken ? { fcmToken: data.fcmToken } : {}),
         platform: data.platform ?? null,
         appVersion: data.appVersion ?? null,
         isActive: true,

@@ -73,6 +73,30 @@ function resolveProjectId(): string | undefined {
  * Returns null on a simulator, without a projectId, when permission is
  * denied, or on any error, so callers never have to guard.
  */
+/**
+ * Fetch this device's NATIVE FCM registration token.
+ *
+ * Reported to the backend alongside the Expo token so the server can send a
+ * notification message straight through FCM. That matters because Expo push
+ * delivers Android a data message, which requires the app to wake up and
+ * build the notification itself - and Samsung, Xiaomi, Oppo and Vivo freeze
+ * background apps, so a frozen app never wakes and the notification is lost.
+ * A notification message is drawn by Android itself with no app code running.
+ *
+ * Returns null on a simulator, on iOS (where this is an APNs token, not FCM),
+ * or on any error, so callers never have to guard.
+ */
+export async function getNativeFcmToken(): Promise<string | null> {
+  try {
+    if (!Device.isDevice) return null;
+    if (Platform.OS !== 'android') return null;
+    const token = await Notifications.getDevicePushTokenAsync();
+    return typeof token?.data === 'string' && token.data.length > 0 ? token.data : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function getExpoPushToken(): Promise<string | null> {
   try {
     if (!Device.isDevice) return null;

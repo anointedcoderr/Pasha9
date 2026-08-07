@@ -2642,6 +2642,19 @@ model PlayerPushDevice {
   id            String    @id @default(cuid())
   userId        String
   token         String    @unique
+  // Native FCM registration token, reported by the app alongside the Expo
+  // token. Present only for app versions new enough to send it.
+  //
+  // Why both: Expo push delivers Android a DATA message, which carries no
+  // visible content, so the app itself must wake up and build the
+  // notification. Samsung/Xiaomi/Oppo/Vivo freeze background apps, so a
+  // frozen app never wakes and the notification is silently lost. Sending a
+  // NOTIFICATION message straight to FCM instead lets Android's system tray
+  // draw it with no app code running at all, which survives those battery
+  // policies. Devices with this token are sent via FCM; devices without it
+  // (older app builds) fall back to Expo, so nobody loses notifications
+  // during the rollout and nobody receives them twice.
+  fcmToken      String?
   platform      String?
   appVersion    String?
   isActive      Boolean   @default(true)
@@ -2654,6 +2667,7 @@ model PlayerPushDevice {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, isActive])
+  @@index([fcmToken])
 }
 
 model NotificationRecipient {

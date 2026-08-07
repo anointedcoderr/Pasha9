@@ -19,6 +19,7 @@
 import { db } from '@/lib/db/client';
 import { dispatchFcmToUsers } from '@/lib/push/fcm';
 import { dispatchExpoPushToUsers } from '@/lib/push/expo';
+import { dispatchPlayerFcmToUsers } from '@/lib/push/player-fcm';
 import { dispatchPushToUsers } from '@/lib/push/dispatch';
 import { buildAdminTelegramMessage, sendTelegramAlert } from '@/lib/telegram/notify';
 
@@ -112,19 +113,31 @@ export async function notifyUser(opts: NotifyOpts): Promise<string | null> {
       },
     });
 
-    // Best-effort player mobile push (Expo). Not awaited so it never
-    // adds latency to the money flow that triggered this notification;
-    // this runs on the persistent PM2 node process so the floating
-    // promise completes. Errors are swallowed because the in-app bell
-    // row above is the guaranteed channel.
-    void dispatchExpoPushToUsers([opts.userId], {
+    // Best-effort player mobile push. Not awaited so it never adds latency
+    // to the money flow that triggered this notification; this runs on the
+    // persistent PM2 node process so the floating promise completes. Errors
+    // are swallowed because the in-app bell row above is the guaranteed
+    // channel.
+    //
+    // Two dispatchers, never overlapping: devices that reported a native FCM
+    // token get a notification message Android draws without waking the app
+    // (survives OEM battery managers), everything else falls back to Expo.
+    // The partition lives in each dispatcher's own query, so no device is
+    // sent to twice.
+    const mobilePayload = {
       title: opts.titleEn,
       body: opts.bodyEn ?? null,
       linkUrl: opts.linkUrl ?? null,
       kind: opts.kind,
-      priority: opts.priority ?? 'normal',
+      priority: opts.priority ?? ('normal' as const),
       notificationId: n.id,
-    }).catch((err) => console.error('[notify] expo push failed', opts.kind, err));
+    };
+    void dispatchPlayerFcmToUsers([opts.userId], mobilePayload).catch((err) =>
+      console.error('[notify] player fcm push failed', opts.kind, err),
+    );
+    void dispatchExpoPushToUsers([opts.userId], mobilePayload).catch((err) =>
+      console.error('[notify] expo push failed', opts.kind, err),
+    );
 
     return n.id;
   } catch (err) {

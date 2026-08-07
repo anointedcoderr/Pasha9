@@ -94,8 +94,14 @@ export async function dispatchExpoPushToUsers(
       return { attempted: 0, sent: 0, failed: 0, status: 'skipped_no_subscriptions' };
     }
 
+    // Only devices WITHOUT a native FCM token. Anything with one is sent by
+    // lib/push/player-fcm.ts instead, which uses a notification message that
+    // Android renders without waking the app - the Expo route sends a data
+    // message, which OEM battery managers silently drop for frozen apps.
+    // Partitioning here (rather than sending both) is what stops a device
+    // receiving the same notification twice.
     const devices = await db.playerPushDevice.findMany({
-      where: { userId: { in: userIds }, isActive: true },
+      where: { userId: { in: userIds }, isActive: true, fcmToken: null },
       select: { id: true, token: true },
     });
 
