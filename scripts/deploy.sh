@@ -69,6 +69,35 @@ echo "    new features even after a successful pull)."
 rm -rf apps/web/.next apps/web/.turbo .turbo
 pnpm --filter "$WEB_FILTER" build
 
+echo "==> load app env into this shell before restarting PM2"
+# pm2 keeps the environment the process was ORIGINALLY started with.
+# --update-env refreshes it from the CURRENT SHELL, not from the env file,
+# so a variable newly added to .env never reaches the running app: pm2
+# simply re-applies its old copy. That is silent - the app starts fine and
+# behaves as if the setting was never added, which cost a full debugging
+# round when FIREBASE_PLAYER_* was added and the server kept reporting the
+# provider as unconfigured despite the values being present in the file.
+#
+# Exported without sourcing the file: sourcing would let a stray $ or
+# backtick inside a secret be expanded by the shell. Values wrapped in
+# single or double quotes are unwrapped, comments and blanks skipped.
+for envf in .env .env.production apps/web/.env apps/web/.env.production; do
+  [ -f "$envf" ] || continue
+  echo "==> loading env from $envf"
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in ''|'#'*) continue ;; esac
+    case "$line" in *=*) ;; *) continue ;; esac
+    key=${line%%=*}
+    val=${line#*=}
+    case "$key" in *[!A-Za-z0-9_]*) continue ;; esac
+    case "$val" in
+      \"*\") val=${val#\"}; val=${val%\"} ;;
+      \'*\') val=${val#\'}; val=${val%\'} ;;
+    esac
+    export "$key=$val"
+  done < "$envf"
+done
+
 echo "==> restart PM2 process"
 pm2 restart pasha9-web --update-env
 pm2 save
