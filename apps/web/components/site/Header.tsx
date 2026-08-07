@@ -48,6 +48,41 @@ interface Me {
   wallet?: { balance: number | string; bonusBalance?: number | string };
 }
 
+// Last known signed-in state, so a page navigation can paint the correct
+// header immediately instead of waiting on /api/auth/me.
+//
+// Without this the whole auth-dependent area is unknown on every full page
+// load and has to render a placeholder for as long as the request takes -
+// roughly a second on a mobile connection, on every navigation. That reads
+// as the app flickering and feeling slow.
+//
+// This is a rendering hint only, never a source of truth: the probe still
+// runs on every load and corrects it. A stale entry (session expired
+// server-side) shows the signed-in header for that one request before being
+// cleared, which is why nothing here is trusted for access - the server
+// authorises every request on its own.
+const AUTH_CACHE_KEY = 'pasha9:last_auth';
+
+function readCachedMe(): Me | null {
+  try {
+    const raw = window.localStorage.getItem(AUTH_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Me | null;
+    return parsed && typeof parsed.id === 'string' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedMe(me: Me | null): void {
+  try {
+    if (me) window.localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(me));
+    else window.localStorage.removeItem(AUTH_CACHE_KEY);
+  } catch {
+    // Private mode / quota. The probe still works, we just lose the hint.
+  }
+}
+
 export function Header() {
   const t = useT();
   const router = useRouter();
@@ -123,10 +158,16 @@ export function Header() {
       .then(async (r) => {
         if (r.ok) {
           const data = await r.json().catch(() => null);
-          if (data?.user) setMe(data.user as Me);
-          else setMe(null);
+          if (data?.user) {
+            setMe(data.user as Me);
+            writeCachedMe(data.user as Me);
+          } else {
+            setMe(null);
+            writeCachedMe(null);
+          }
         } else if (r.status === 401) {
           setMe(null);
+          writeCachedMe(null);
         }
         // Anything else (5xx, network blip) preserves the last known me.
       })
@@ -135,14 +176,33 @@ export function Header() {
 
   useEffect(() => {
     let alive = true;
+
+    // Paint the last known state first so navigation does not flash a
+    // placeholder (or, worse, a Login button) while the probe is in flight.
+    // Read here rather than in useState so the server-rendered markup and
+    // the first client render still agree - no hydration mismatch.
+    const cached = readCachedMe();
+    if (cached) {
+      setMe(cached);
+      setAuthLoaded(true);
+    }
+
     fetch('/api/auth/me', { cache: 'no-store', credentials: 'include' })
       .then(async (r) => {
         if (!alive) return;
         if (r.ok) {
           const data = await r.json().catch(() => null);
-          if (data?.user) setMe(data.user as Me);
+          if (data?.user) {
+            setMe(data.user as Me);
+            writeCachedMe(data.user as Me);
+          }
+        } else if (r.status === 401) {
+          // Genuinely signed out: drop the hint so the next load starts
+          // correctly rather than flashing a signed-in header.
+          setMe(null);
+          writeCachedMe(null);
         }
-        // 401 leaves me=null (initial); 5xx/network preserves it too.
+        // 5xx / network: keep whatever we have rather than logging the UI out.
         setAuthLoaded(true);
       })
       .catch(() => { if (alive) setAuthLoaded(true); });
@@ -199,6 +259,9 @@ export function Header() {
     // Forget the once-only WinGo rules acceptance so the next player on
     // this device is asked to agree again.
     try { window.localStorage.removeItem('pasha9:wingo_rules_accepted'); } catch { /* ignore */ }
+    // Must clear, or the next page load would paint a signed-in header from
+    // the stale hint before the probe corrects it.
+    writeCachedMe(null);
     setMe(null);
     triggerWalletRefresh();
     router.refresh();
