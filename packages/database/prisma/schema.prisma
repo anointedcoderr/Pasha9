@@ -201,6 +201,8 @@ model User {
   sessions              Session[]
   passwordResetTokens   PasswordResetToken[]
   activityLogs          ActivityLog[]            @relation("ActorLogs")
+  walletLedger          WalletLedger[]           @relation("WalletLedgerUser")
+  walletLedgerActions   WalletLedger[]           @relation("WalletLedgerActor")
   affiliateApplication  AffiliateApplication?
   // VIP Club. vipTierId is set by an admin via /admin/vip when they
   // approve an application or promote a user manually. Null = standard
@@ -345,6 +347,85 @@ model OtpCode {
 }
 
 // ---------- Wallet, transactions, deposits, withdrawals ----------
+
+// Permanent, append-only record of every movement of a player's money.
+//
+// Exists because "my balance changed and I cannot see why" was impossible to
+// answer: Transaction records what happened, but never what the balance was
+// before and after, so a missing entry was invisible. A ledger row is written
+// in the SAME database transaction as the balance update (see
+// lib/wallet/ledger.ts), so a balance can never move without a record - if
+// the ledger write fails, the money does not move either.
+//
+// Append-only by contract: a wrong entry is never edited or deleted, it is
+// corrected by writing a reversal that references it. That is what makes this
+// usable as evidence in a dispute with a player or an aggregator.
+//
+// The three balance pockets are all snapshotted because bonuses move money
+// between them (locked -> spendable) without changing the total, and those
+// movements are exactly the ones players report as unexplained.
+model WalletLedger {
+  id     String @id @default(cuid())
+  userId String
+
+  // Free-form rather than an enum: the money sources list already spans 20+
+  // kinds and the client expects future features to appear here without a
+  // schema migration. Values are namespaced, e.g. 'provider.bet',
+  // 'provider.win', 'deposit', 'withdrawal', 'bonus.grant', 'bonus.release',
+  // 'bonus.clawback', 'admin.credit', 'admin.debit', 'reversal'.
+  type      String
+  // 'credit' | 'debit'. Redundant with the sign of amount, stored explicitly
+  // so the admin UI can filter without arithmetic.
+  direction String
+  // Signed: positive credits the player, negative debits. Never zero except
+  // for pocket-to-pocket moves (bonus release), which record the moved sum in
+  // meta so totals are not double counted.
+  amount    Decimal @db.Decimal(14, 2)
+
+  balanceBefore Decimal @db.Decimal(14, 2)
+  balanceAfter  Decimal @db.Decimal(14, 2)
+  bonusBefore   Decimal @default(0) @db.Decimal(14, 2)
+  bonusAfter    Decimal @default(0) @db.Decimal(14, 2)
+  lockedBefore  Decimal @default(0) @db.Decimal(14, 2)
+  lockedAfter   Decimal @default(0) @db.Decimal(14, 2)
+
+  status String @default("completed")
+
+  // Evidence trail. Every field optional because no single source supplies
+  // all of them, but each is indexed or searchable so an investigation can
+  // start from whatever the player or provider quotes.
+  transactionId         String?
+  providerTransactionId String?
+  providerName          String?
+  gameUid               String?
+  gameName              String?
+  betId                 String?
+  roundId               String?
+  referenceId           String?
+  bonusSource           String?
+  description           String?
+
+  // Set only for manual operator actions, so "who moved this money" is
+  // answerable without cross-referencing the activity log.
+  actorId   String?
+  actorRole String?
+
+  // Points at the entry this one corrects. Never used to mutate the original.
+  reversesId String?
+
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  user  User          @relation("WalletLedgerUser", fields: [userId], references: [id], onDelete: Cascade)
+  actor User?         @relation("WalletLedgerActor", fields: [actorId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([type])
+  @@index([roundId])
+  @@index([referenceId])
+  @@index([transactionId])
+  @@index([createdAt])
+}
 
 model Wallet {
   id            String   @id @default(cuid())
