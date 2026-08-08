@@ -21,6 +21,7 @@
 import { Prisma } from '@prisma/client';
 import type { BonusRule, BonusType, ContentStatus } from '@prisma/client';
 import { db } from '@/lib/db/client';
+import { applyWalletMovement, LEDGER_TYPE } from '@/lib/wallet/ledger';
 
 type Tx = Prisma.TransactionClient;
 
@@ -133,26 +134,31 @@ const DIRECT_BALANCE_LOCK_SOURCES = new Set([
   'spin_result_freebet',
 ]);
 
-async function creditBonus(tx: Tx, userId: string, amount: Prisma.Decimal, sourceType: string | null = null): Promise<void> {
+async function creditBonus(
+  tx: Tx,
+  userId: string,
+  amount: Prisma.Decimal,
+  sourceType: string | null = null,
+  grantId: string | null = null,
+): Promise<void> {
   const direct = sourceType !== null && DIRECT_BALANCE_LOCK_SOURCES.has(sourceType);
-  const wallet = await tx.wallet.findUnique({ where: { userId } });
-  if (wallet) {
-    await tx.wallet.update({
-      where: { userId },
-      data: direct
-        ? { balance: { increment: amount } }
-        : {
-            bonusBalance: { increment: amount },
-            lockedBalance: { increment: amount },
-          },
-    });
-  } else {
-    await tx.wallet.create({
-      data: direct
-        ? { userId, balance: amount, bonusBalance: 0, lockedBalance: 0 }
-        : { userId, bonusBalance: amount, lockedBalance: amount },
-    });
-  }
+  // Direct sources land in spendable balance; everything else lands in the
+  // bonus + locked pockets. Either way it goes through the wallet service so
+  // the grant is recorded with the balances either side, and the service
+  // creates the wallet when the player has none (replacing the hand-rolled
+  // create branch this used to carry).
+  await applyWalletMovement({
+    tx,
+    userId,
+    amount: direct ? amount : 0,
+    bonusDelta: direct ? 0 : amount,
+    lockedDelta: direct ? 0 : amount,
+    type: LEDGER_TYPE.bonusGrant,
+    description: `Bonus credited${sourceType ? ` (${sourceType})` : ''}`,
+    bonusSource: sourceType,
+    referenceId: grantId,
+    meta: { direct, grantId } as Prisma.JsonObject,
+  });
 }
 
 async function releaseBonus(
@@ -165,12 +171,25 @@ async function releaseBonus(
   if (sourceType && DIRECT_BALANCE_LOCK_SOURCES.has(sourceType)) {
     return;
   }
-  await tx.wallet.update({
-    where: { userId },
-    data: {
-      lockedBalance: { decrement: amount },
-      balance: { increment: amount },
-    },
+  // Pocket-to-pocket: locked money becomes spendable, so spendable balance
+  // rises while the locked pocket falls by the same sum.
+  //
+  // This is the ONLY point where the money enters spendable balance, so it is
+  // also the only entry that carries a signed amount. The matching grant was
+  // recorded with amount 0 (it moved bonus + locked, not balance), which is
+  // what keeps the two from counting the same money twice when the amount
+  // column is totalled. Direct-balance sources return above precisely because
+  // for them the grant already did carry the signed amount.
+  await applyWalletMovement({
+    tx,
+    userId,
+    amount: amount,
+    lockedDelta: amount.neg(),
+    type: LEDGER_TYPE.bonusRelease,
+    description: `Bonus unlocked: ${amount.toString()} BDT moved to available balance`,
+    bonusSource: sourceType,
+    referenceId: grantId,
+    meta: { unlockedAmount: amount.toString(), grantId } as Prisma.JsonObject,
   });
 
   // Spendable balance just went UP with nothing in the player's history to
@@ -197,20 +216,29 @@ async function releaseBonus(
   });
 }
 
-async function clawbackBonus(tx: Tx, userId: string, amount: Prisma.Decimal, sourceType: string | null = null): Promise<void> {
-  if (sourceType && DIRECT_BALANCE_LOCK_SOURCES.has(sourceType)) {
-    await tx.wallet.update({
-      where: { userId },
-      data: { balance: { decrement: amount } },
-    });
-    return;
-  }
-  await tx.wallet.update({
-    where: { userId },
-    data: {
-      bonusBalance: { decrement: amount },
-      lockedBalance: { decrement: amount },
-    },
+async function clawbackBonus(
+  tx: Tx,
+  userId: string,
+  amount: Prisma.Decimal,
+  sourceType: string | null = null,
+  grantId: string | null = null,
+): Promise<void> {
+  const direct = sourceType !== null && DIRECT_BALANCE_LOCK_SOURCES.has(sourceType);
+  // A direct-source clawback takes money out of SPENDABLE balance, which the
+  // player experiences as "money disappeared". Recording it here with the
+  // balances either side is what lets support answer that in seconds instead
+  // of reconstructing it by hand.
+  await applyWalletMovement({
+    tx,
+    userId,
+    amount: direct ? amount.neg() : 0,
+    bonusDelta: direct ? 0 : amount.neg(),
+    lockedDelta: direct ? 0 : amount.neg(),
+    type: LEDGER_TYPE.bonusClawback,
+    description: `Bonus reclaimed${sourceType ? ` (${sourceType})` : ''}`,
+    bonusSource: sourceType,
+    referenceId: grantId,
+    meta: { direct, grantId } as Prisma.JsonObject,
   });
 }
 
@@ -257,7 +285,7 @@ export async function grantBonusInTx(tx: Tx, opts: GrantOpts): Promise<{ grantId
   // deposit-bonus family (deposit / promotion_deposit / promotion_claim
   // / manual) into Wallet.balance directly per the client product
   // direction (visible bonus on the homepage balance pill).
-  await creditBonus(tx, opts.userId, amount, opts.sourceType ?? null);
+  await creditBonus(tx, opts.userId, amount, opts.sourceType ?? null, grant.id);
 
   await tx.transaction.create({
     data: {
@@ -912,7 +940,7 @@ export async function cancelGrant(grantId: string, actorNote?: string): Promise<
         note: actorNote ?? g.note ?? null,
       },
     });
-    await clawbackBonus(tx, g.userId, new Prisma.Decimal(g.amount), g.sourceType ?? null);
+    await clawbackBonus(tx, g.userId, new Prisma.Decimal(g.amount), g.sourceType ?? null, g.id);
     await tx.transaction.create({
       data: {
         userId: g.userId,
@@ -945,7 +973,7 @@ export async function sweepExpiredGrants(): Promise<{ expired: number }> {
           where: { id: g.id },
           data: { status: 'expired' },
         });
-        await clawbackBonus(tx, g.userId, new Prisma.Decimal(g.amount), g.sourceType ?? null);
+        await clawbackBonus(tx, g.userId, new Prisma.Decimal(g.amount), g.sourceType ?? null, g.id);
         await tx.transaction.create({
           data: {
             userId: g.userId,
