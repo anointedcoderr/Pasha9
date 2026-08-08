@@ -93,7 +93,14 @@ export function BalanceAdjustModal({ open, onOpenChange, user, initialType, onCo
           </Select>
         </FormField>
         <FormField label="Amount" required error={errors.amount?.message}>
-          <Input type="number" step="50" min="0" {...register('amount')} invalid={!!errors.amount} />
+          {/* step="50" made the browser reject any amount that was not a
+              multiple of 50, so crediting or debiting 1, 5, 20 or a user's
+              exact balance (391) failed with "Enter a valid value" before the
+              request was ever sent. Nothing on the server ever required it:
+              both balanceAdjustSchema and the API accept any non-zero amount,
+              and debiting down to exactly 0 is allowed. step allows paisa
+              precision so an exact full-balance debit always matches. */}
+          <Input type="number" step="0.01" min="0.01" {...register('amount')} invalid={!!errors.amount} />
         </FormField>
         <FormField label="Reason" required error={errors.reason?.message} hint="At least 6 characters. Visible in the audit log.">
           <Textarea rows={3} placeholder="Example: Refund of failed deposit TRX-12345" {...register('reason')} invalid={!!errors.reason} />
