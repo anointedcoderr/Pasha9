@@ -42,6 +42,7 @@
 
 import { Prisma, TxType } from '@prisma/client';
 import { db } from '@/lib/db/client';
+import { applyWalletMovement, LEDGER_TYPE } from '@/lib/wallet/ledger';
 
 export interface CashbackRunInput {
   campaignId: string;
@@ -319,10 +320,15 @@ export async function runCashbackCampaign(input: CashbackRunInput): Promise<Cash
         //    of sourceType='cashback_campaign' from the withdrawable
         //    balance so the cashback cannot leave the platform before
         //    the turnover requirement is met.
-        await tx.wallet.upsert({
-          where: { userId },
-          update: { balance: { increment: cashback } },
-          create: { userId, balance: cashback, bonusBalance: 0, lockedBalance: 0, currency: 'BDT' },
+        await applyWalletMovement({
+          tx,
+          userId,
+          amount: cashback,
+          type: LEDGER_TYPE.cashback,
+          description: `Cashback ${campaign.nameEn} . ${periodKey}`,
+          bonusSource: 'cashback_campaign',
+          referenceId: created.id,
+          meta: { campaignId: campaign.id, periodKey } as Prisma.JsonObject,
         });
 
         // 3. UserBonus row carries the turnover lock. turnoverRequired

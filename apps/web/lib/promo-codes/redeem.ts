@@ -9,6 +9,7 @@
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db/client';
 import { grantBonusInTx } from '@/lib/bonuses/engine';
+import { applyWalletMovement, LEDGER_TYPE } from '@/lib/wallet/ledger';
 import type { PromoCode } from '@prisma/client';
 
 export type RedeemResult =
@@ -155,8 +156,6 @@ export async function redeemPromoCode(input: {
       } else {
         // Direct wallet credit paths. Build a Transaction row so the
         // audit ledger has a single source of truth.
-        const txData = walletUpdateFor(reward, amount);
-        await tx.wallet.update({ where: { userId: input.userId }, data: txData });
         const walletTx = await tx.transaction.create({
           data: {
             userId: input.userId,
@@ -174,6 +173,29 @@ export async function redeemPromoCode(input: {
           },
         });
         walletTxId = walletTx.id;
+
+        // Which pocket the reward lands in depends on the reward type: only
+        // main_balance is spendable, the other two are held. Routing the
+        // amount to the matching field keeps that distinction visible in the
+        // ledger instead of every promo looking like a cash credit.
+        await applyWalletMovement({
+          tx,
+          userId: input.userId,
+          amount: reward === 'main_balance' ? amount : 0,
+          bonusDelta: reward === 'bonus_balance' ? amount : 0,
+          lockedDelta: reward === 'locked_balance' ? amount : 0,
+          type: LEDGER_TYPE.promoCode,
+          description: `Promo code ${promo.code}`,
+          transactionId: walletTx.id,
+          referenceId: redemption.id,
+          bonusSource: 'promo_code',
+          meta: {
+            promoCodeId: promo.id,
+            promoCode: promo.code,
+            rewardType: reward,
+            redemptionId: redemption.id,
+          } as Prisma.JsonObject,
+        });
 
         // main_balance credits land in Wallet.balance directly. When the
         // promo carries a turnover requirement, attach an active
@@ -246,12 +268,6 @@ export async function redeemPromoCode(input: {
   }
 }
 
-function walletUpdateFor(rewardType: string, amount: Prisma.Decimal) {
-  if (rewardType === 'main_balance') return { balance: { increment: amount } };
-  if (rewardType === 'bonus_balance') return { bonusBalance: { increment: amount } };
-  if (rewardType === 'locked_balance') return { lockedBalance: { increment: amount } };
-  throw new Error(`unexpected reward type ${rewardType}`);
-}
 
 export function promoCodeSummary(promo: PromoCode): string {
   const parts: string[] = [];

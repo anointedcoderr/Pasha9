@@ -23,6 +23,7 @@
 
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db/client';
+import { applyWalletMovement, LEDGER_TYPE } from '@/lib/wallet/ledger';
 
 export const MIN_LOTTO_TRANSFER = 100;
 
@@ -49,14 +50,6 @@ export async function transferLottoToMain(userId: string, amount: number): Promi
     const ask = new Prisma.Decimal(amount);
     if (ask.gt(have)) throw new Error('INSUFFICIENT_LOTTO_BALANCE');
 
-    await tx.wallet.update({
-      where: { userId },
-      data: {
-        lottoBalance: { decrement: ask },
-        balance: { increment: ask },
-      },
-    });
-
     const txRow = await tx.transaction.create({
       data: {
         userId,
@@ -66,6 +59,20 @@ export async function transferLottoToMain(userId: string, amount: number): Promi
         description: 'Lotto wallet transfer to main balance',
         meta: { source: 'lotto_transfer' } as Prisma.JsonObject,
       },
+    });
+
+    // lottoBalance is a fourth pocket the ledger does not snapshot, so the
+    // decrement stays here; the service records the spendable-balance side,
+    // which is the part a player sees change.
+    await tx.wallet.update({ where: { userId }, data: { lottoBalance: { decrement: ask } } });
+    await applyWalletMovement({
+      tx,
+      userId,
+      amount: ask,
+      type: LEDGER_TYPE.lotto,
+      description: 'Lotto wallet transfer to main balance',
+      transactionId: txRow.id,
+      meta: { source: 'lotto_transfer', lottoDebited: ask.toString() } as Prisma.JsonObject,
     });
 
     const updated = await tx.wallet.findUnique({ where: { userId }, select: { balance: true, lottoBalance: true } });
