@@ -24,6 +24,7 @@ import { Prisma } from '@prisma/client';
 import { randomBytes } from 'node:crypto';
 import type { WingoRound, WingoBet } from '@prisma/client';
 import { db } from '@/lib/db/client';
+import { applyWalletMovement, LEDGER_TYPE } from '@/lib/wallet/ledger';
 import { computeRoundWindow, ensureRound, WINGO_ERRORS } from './engine';
 import { WINGO_GAME_CODE, WINGO_MAX_QUANTITY, isWingoMode, type WingoMode } from './config';
 import { isValidSelection } from './paytable';
@@ -192,10 +193,17 @@ export async function placeBets(input: PlaceBetsInput): Promise<PlaceBetsResult>
       if (!wallet) throw new Error(WINGO_ERRORS.WALLET_NOT_FOUND);
       if (new Prisma.Decimal(wallet.balance).lt(totalStake)) throw new Error(WINGO_ERRORS.INSUFFICIENT_FUNDS);
 
-      // 1. Single wallet debit for the whole slip.
-      await tx.wallet.update({
-        where: { userId: input.userId },
-        data: { balance: { decrement: totalStake } },
+      // 1. Single wallet debit for the whole slip - one movement covering
+      //    every selection, matching how the player experiences it.
+      await applyWalletMovement({
+        tx,
+        userId: input.userId,
+        amount: totalStake.neg(),
+        type: LEDGER_TYPE.nativeBet,
+        description: 'Pasha WinGo bet slip',
+        gameUid: WINGO_GAME_CODE,
+        gameName: 'Pasha WinGo',
+        meta: { gameCode: WINGO_GAME_CODE, scope: 'casino' } as Prisma.JsonObject,
       });
 
       // 2. Create every pending line.

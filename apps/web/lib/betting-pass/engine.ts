@@ -15,6 +15,7 @@
 
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db/client';
+import { applyWalletMovement, LEDGER_TYPE } from '@/lib/wallet/ledger';
 import { loadBettingPassConfig } from './config';
 
 export interface AccrueResult {
@@ -320,10 +321,14 @@ export async function claimBettingPassReward(userId: string, ruleId: string): Pr
         },
         select: { id: true },
       });
-      await tx.wallet.upsert({
-        where: { userId },
-        update: { balance: { increment: rewardAmount } },
-        create: { userId, balance: rewardAmount, bonusBalance: 0, lockedBalance: 0, currency: 'BDT' },
+      await applyWalletMovement({
+        tx,
+        userId,
+        amount: rewardAmount,
+        type: LEDGER_TYPE.bettingPass,
+        description: 'Betting Pass reward',
+        bonusSource: 'betting_pass_bdt',
+        meta: { rewardAmount: rewardAmount.toString() } as Prisma.JsonObject,
       });
       const grant = await tx.userBonus.create({
         data: {

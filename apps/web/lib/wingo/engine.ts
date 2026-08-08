@@ -30,6 +30,7 @@ import { Prisma } from '@prisma/client';
 import type { WingoRound } from '@prisma/client';
 import { createHmac, randomBytes } from 'node:crypto';
 import { db } from '@/lib/db/client';
+import { applyWalletMovement, LEDGER_TYPE } from '@/lib/wallet/ledger';
 import { encryptString, decryptString } from '@/lib/crypto/aead';
 import { generateServerSeed, hashServerSeed } from '@/lib/native-games/provably-fair';
 import {
@@ -309,9 +310,15 @@ export async function placeBet(input: PlaceBetInput): Promise<PlaceBetResult> {
     if (dec(wallet.balance).lt(betAmount)) throw new Error(WINGO_ERRORS.INSUFFICIENT_FUNDS);
 
     // 1. Debit the stake.
-    await tx.wallet.update({
-      where: { userId: input.userId },
-      data: { balance: { decrement: betAmount } },
+    await applyWalletMovement({
+      tx,
+      userId: input.userId,
+      amount: betAmount.neg(),
+      type: LEDGER_TYPE.nativeBet,
+      description: 'Pasha WinGo bet',
+      gameUid: WINGO_GAME_CODE,
+      gameName: 'Pasha WinGo',
+      meta: { gameCode: WINGO_GAME_CODE, scope: 'casino' } as Prisma.JsonObject,
     });
 
     // 2. Create the pending bet line.
@@ -477,9 +484,17 @@ async function drainPendingBets(
             // Credit the win through the same ledger path the native games
             // use: wallet increment + a 'win' Transaction stamped scope
             // 'casino' so turnover and cashback accrue identically.
-            await tx.wallet.update({
-              where: { userId: bet.userId },
-              data: { balance: { increment: payout } },
+            await applyWalletMovement({
+              tx,
+              userId: bet.userId,
+              amount: payout,
+              type: LEDGER_TYPE.nativeWin,
+              description: 'Pasha WinGo win',
+              gameUid: WINGO_GAME_CODE,
+              gameName: 'Pasha WinGo',
+              roundId,
+              referenceId: roundId,
+              meta: { mode: bet.mode, scope: 'casino' } as Prisma.JsonObject,
             });
             await tx.transaction.create({
               data: {

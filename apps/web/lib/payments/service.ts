@@ -18,6 +18,7 @@
 
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db/client';
+import { applyWalletMovement, LEDGER_TYPE } from '@/lib/wallet/ledger';
 import { accrueLotteryTickets } from '@/lib/lotto/tickets';
 import type { ProviderEvent, ProviderKey } from './types';
 
@@ -218,12 +219,18 @@ export async function ingestProviderEvent(provider: ProviderKey, event: Provider
         adminNote: `Auto-credited via ${provider} webhook.`,
       },
     });
-    const wallet = await tx.wallet.findUnique({ where: { userId: dep.userId } });
-    if (wallet) {
-      await tx.wallet.update({ where: { userId: dep.userId }, data: { balance: { increment: amount } } });
-    } else {
-      await tx.wallet.create({ data: { userId: dep.userId, balance: amount } });
-    }
+    // Gateway-driven auto-credit, so there is no staff member to record -
+    // the provider reference is the evidence instead.
+    await applyWalletMovement({
+      tx,
+      userId: dep.userId,
+      amount,
+      type: LEDGER_TYPE.deposit,
+      description: `Deposit ${dep.method} (auto-credit via ${provider})`,
+      providerName: provider,
+      referenceId: event.providerTxId,
+      meta: { depositId: dep.id, provider, providerTxId: event.providerTxId } as Prisma.JsonObject,
+    });
     await tx.transaction.create({
       data: {
         userId: dep.userId,
