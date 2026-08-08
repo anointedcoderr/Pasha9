@@ -21,6 +21,7 @@
 import { Prisma } from '@prisma/client';
 import type { GameRound, NativeGameProvider } from '@prisma/client';
 import { db } from '@/lib/db/client';
+import { applyWalletMovement, LEDGER_TYPE } from '@/lib/wallet/ledger';
 import { decryptString, encryptString } from '@/lib/crypto/aead';
 import {
   GAME_CODES,
@@ -255,9 +256,15 @@ export async function settleDiceBet(input: DiceBetInput): Promise<DiceBetResult>
     });
 
     // 1. Debit bet
-    await tx.wallet.update({
-      where: { userId: input.userId },
-      data: { balance: { decrement: bet } },
+    await applyWalletMovement({
+      tx,
+      userId: input.userId,
+      amount: bet.neg(),
+      type: LEDGER_TYPE.nativeBet,
+      description: 'Pasha Dice bet',
+      gameUid: game.gameCode,
+      gameName: 'Pasha Dice',
+      meta: { gameCode: game.gameCode, sessionId: session.id, nonce, scope: 'casino' } as Prisma.JsonObject,
     });
 
     // 2. Create round in PENDING then update so the FK guarantees
@@ -297,11 +304,7 @@ export async function settleDiceBet(input: DiceBetInput): Promise<DiceBetResult>
 
     // 3. Credit win if any
     if (outcome.win) {
-      await tx.wallet.update({
-        where: { userId: input.userId },
-        data: { balance: { increment: outcome.payout } },
-      });
-      await tx.transaction.create({
+      const winTx = await tx.transaction.create({
         data: {
           userId: input.userId,
           type: 'win',
@@ -311,6 +314,19 @@ export async function settleDiceBet(input: DiceBetInput): Promise<DiceBetResult>
           description: 'Pasha Dice win',
           meta: { gameCode: game.gameCode, roundId: round.id, sessionId: session.id, nonce, scope: 'casino' } as Prisma.JsonObject,
         },
+      });
+      await applyWalletMovement({
+        tx,
+        userId: input.userId,
+        amount: outcome.payout,
+        type: LEDGER_TYPE.nativeWin,
+        description: 'Pasha Dice win',
+        transactionId: winTx.id,
+        gameUid: game.gameCode,
+        gameName: 'Pasha Dice',
+        roundId: round.id,
+        referenceId: round.id,
+        meta: { sessionId: session.id, nonce, scope: 'casino' } as Prisma.JsonObject,
       });
     }
 
@@ -424,9 +440,14 @@ async function settleInstant<R extends InstantOutcome>(input: InstantSettleInput
     const outcome = input.produceOutcome({ serverSeed, clientSeed: session.clientSeed, nonce, game });
 
     // 1. Debit bet
-    await tx.wallet.update({
-      where: { userId: input.userId },
-      data: { balance: { decrement: input.betAmount } },
+    await applyWalletMovement({
+      tx,
+      userId: input.userId,
+      amount: dec(input.betAmount).neg(),
+      type: LEDGER_TYPE.nativeBet,
+      description: `${game.gameCode} bet`,
+      gameUid: game.gameCode,
+      meta: { gameCode: game.gameCode, sessionId: session.id, nonce, scope: 'casino' } as Prisma.JsonObject,
     });
 
     // 2. Persist GameRound + bet Transaction
@@ -460,11 +481,7 @@ async function settleInstant<R extends InstantOutcome>(input: InstantSettleInput
 
     // 3. Credit win
     if (outcome.win) {
-      await tx.wallet.update({
-        where: { userId: input.userId },
-        data: { balance: { increment: outcome.payout } },
-      });
-      await tx.transaction.create({
+      const winTx = await tx.transaction.create({
         data: {
           userId: input.userId,
           type: 'win',
@@ -474,6 +491,18 @@ async function settleInstant<R extends InstantOutcome>(input: InstantSettleInput
           description: outcome.description + ' win',
           meta: { gameCode: game.gameCode, roundId: round.id, sessionId: session.id, nonce, scope: 'casino' } as Prisma.JsonObject,
         },
+      });
+      await applyWalletMovement({
+        tx,
+        userId: input.userId,
+        amount: outcome.payout,
+        type: LEDGER_TYPE.nativeWin,
+        description: outcome.description + ' win',
+        transactionId: winTx.id,
+        gameUid: game.gameCode,
+        roundId: round.id,
+        referenceId: round.id,
+        meta: { sessionId: session.id, nonce, scope: 'casino' } as Prisma.JsonObject,
       });
     }
 
@@ -843,9 +872,15 @@ export async function startMinesRound(input: MinesStartInput): Promise<MinesStar
       mineCount: input.mineCount,
     });
 
-    await tx.wallet.update({
-      where: { userId: input.userId },
-      data: { balance: { decrement: bet } },
+    await applyWalletMovement({
+      tx,
+      userId: input.userId,
+      amount: bet.neg(),
+      type: LEDGER_TYPE.nativeBet,
+      description: 'Mines bet',
+      gameUid: game.gameCode,
+      gameName: 'Mines',
+      meta: { gameCode: game.gameCode, mineCount: input.mineCount, scope: 'casino' } as Prisma.JsonObject,
     });
 
     const gameData: MinesGameData = {
@@ -1064,9 +1099,17 @@ export async function cashoutMines(input: MinesCashoutInput): Promise<MinesCasho
     });
     const payout = dec(round.betAmount).mul(multiplier).toDecimalPlaces(2);
 
-    await tx.wallet.update({
-      where: { userId: input.userId },
-      data: { balance: { increment: payout } },
+    await applyWalletMovement({
+      tx,
+      userId: input.userId,
+      amount: payout,
+      type: LEDGER_TYPE.nativeWin,
+      description: 'Mines cashout',
+      gameUid: game.gameCode,
+      gameName: 'Mines',
+      roundId: round.id,
+      referenceId: round.id,
+      meta: { multiplier: String(multiplier), scope: 'casino' } as Prisma.JsonObject,
     });
 
     const updatedData: MinesGameData = {
@@ -1266,9 +1309,20 @@ export async function rollbackRound(opts: { roundId: string; actorId: string; no
     const delta = bet.sub(payout);
 
     if (!delta.eq(0)) {
-      await tx.wallet.update({
-        where: { userId: round.userId },
-        data: { balance: { increment: delta } },
+      // An operator-initiated reversal, so the responsible actor is recorded
+      // alongside it - this is one of the movements a player is most likely
+      // to question later.
+      await applyWalletMovement({
+        tx,
+        userId: round.userId,
+        amount: delta,
+        type: LEDGER_TYPE.providerRollback,
+        description: opts.note ?? 'Round rolled back',
+        gameUid: round.gameCode,
+        roundId: round.id,
+        referenceId: round.id,
+        actorId: opts.actorId,
+        meta: { bet: bet.toString(), payout: payout.toString() } as Prisma.JsonObject,
       });
     }
 
