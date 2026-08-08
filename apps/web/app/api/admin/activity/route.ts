@@ -15,12 +15,22 @@ export const dynamic = 'force-dynamic';
 import { NextRequest } from 'next/server';
 import type { Prisma } from '@prisma/client';
 import { db } from '@/lib/db/client';
-import { withAuth, ensurePermission } from '@/lib/auth/guard';
+import { withAuth } from '@/lib/auth/guard';
+import { requireSuperAdmin } from '@/lib/auth/rbac';
 import { jsonOk } from '@/lib/auth/errors';
 
 export async function GET(req: NextRequest) {
   return withAuth(async () => {
-    await ensurePermission('activity.read');
+    // Super Admin only, by explicit client requirement: the audit trail
+    // records what staff did, so staff must not be able to read it. It was
+    // previously grantable to any staff member through the Activity Log
+    // section, which let someone review - and quietly learn the shape of -
+    // the log that exists to hold them accountable.
+    //
+    // Neither ActivityLog nor WalletLedger has any update or delete path
+    // anywhere in the codebase, so they are already append-only; this closes
+    // the read side.
+    await requireSuperAdmin();
     const url = req.nextUrl;
     const take = Math.min(200, Math.max(1, Number(url.searchParams.get('take') ?? 100)));
 

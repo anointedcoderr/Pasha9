@@ -157,7 +157,7 @@ export const ADMIN_SECTIONS: AdminSection[] = [
   { key: 'depositPrompt', label: 'Deposit Prompt', group: 'System', routes: ['/admin/deposit-prompt'], actions: [view('menu.depositPrompt.view'), edit('settings.write')] },
   { key: 'support', label: 'Support Messages', group: 'System', routes: ['/admin/support'], actions: [view('menu.support.view'), manage('support.write', 'Reply & resolve')] },
   { key: 'settings', label: 'System Settings', group: 'System', routes: ['/admin/settings'], actions: [view('menu.settings.view'), edit('settings.write')] },
-  { key: 'activity', label: 'Activity Log', group: 'System', routes: ['/admin/activity'], actions: [view('menu.activity.view')] },
+  { key: 'activity', label: 'Activity Log', group: 'System', routes: ['/admin/activity'], actions: [view('menu.activity.view')], superAdminOnly: true },
   { key: 'handover', label: 'Handover', group: 'System', routes: ['/admin/handover'], actions: [view('menu.handover.view'), manage('staff.manage', 'Manage'), ], superAdminOnly: true },
 ];
 
@@ -208,7 +208,13 @@ export function canViewSection(section: AdminSection, role: string, perms: strin
   if (section.alwaysAllow) return true;
   const viewCode = sectionViewPermission(section) ?? section.actions[0]?.permission;
   if (!viewCode) return true;
-  if (section.superAdminOnly) return perms.includes(viewCode);
+  // superAdminOnly means exactly that. Super admins already returned true
+  // above, so reaching here with the flag set means a non-super-admin, and
+  // the answer is no regardless of what was granted. Previously both
+  // branches were identical, which made the flag decorative: Staff &
+  // Sub-admins and Handover could be handed to any staff member through the
+  // permission picker despite being marked super-admin-only.
+  if (section.superAdminOnly) return false;
   return perms.includes(viewCode);
 }
 
