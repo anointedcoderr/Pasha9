@@ -22,6 +22,7 @@ import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db/client';
 import { withAuth, ensurePermission, recordActivity } from '@/lib/auth/guard';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
+import { applyWalletMovement, LEDGER_TYPE } from '@/lib/wallet/ledger';
 
 const schema = z.object({
   amount: z.coerce.number().refine((v) => Number.isFinite(v) && v !== 0, 'Amount must be non-zero'),
@@ -50,11 +51,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
 
     const result = await db.$transaction(async (tx) => {
-      await tx.wallet.upsert({
-        where: { userId: params.id },
-        update: { balance: { increment: amount } },
-        create: { userId: params.id, balance: Math.max(0, amount), bonusBalance: 0, lockedBalance: 0, currency: 'BDT' },
-      });
       const txRow = await tx.transaction.create({
         data: {
           userId: params.id,
@@ -69,7 +65,28 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           } as Prisma.JsonObject,
         },
       });
-      return { transactionId: txRow.id, before, after };
+
+      // Routed through the central wallet service rather than updating the
+      // balance here: it applies the movement and writes the permanent ledger
+      // entry in this same transaction, so a manual operator adjustment can
+      // never move money without recording who did it, why, and the balance
+      // either side of it. That was the client's explicit requirement for
+      // manual credit/debit, and it is the one movement with no automatic
+      // source to trace it back to.
+      const ledger = await applyWalletMovement({
+        tx,
+        userId: params.id,
+        amount: new Prisma.Decimal(amount),
+        type: amount > 0 ? LEDGER_TYPE.adminCredit : LEDGER_TYPE.adminDebit,
+        description: parsed.data.reason,
+        transactionId: txRow.id,
+        referenceId: txRow.id,
+        actorId: session.sub,
+        actorRole: session.role,
+        meta: { adjustmentType: parsed.data.type } as Prisma.JsonObject,
+      });
+
+      return { transactionId: txRow.id, ledgerId: ledger.id, before, after };
     });
 
     await recordActivity({

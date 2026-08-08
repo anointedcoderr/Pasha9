@@ -28,6 +28,7 @@ import { randomBytes } from 'crypto';
 import { db } from '@/lib/db/client';
 import { withAuth, ensurePermission, recordActivity } from '@/lib/auth/guard';
 import { jsonOk, jsonError } from '@/lib/auth/errors';
+import { applyWalletMovement, LEDGER_TYPE } from '@/lib/wallet/ledger';
 import { sendSms } from '@/lib/sms/service';
 import { fireEvent } from '@/lib/tracking/dispatcher';
 import { computeDepositTurnover } from '@/lib/turnover/deposit-gate';
@@ -223,11 +224,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           adminNote: parsed.data.adminNote ?? withdrawal.adminNote,
         },
       });
-      await tx.wallet.update({
-        where: { userId: withdrawal.userId },
-        data: { balance: { decrement: amount } },
-      });
-      await tx.transaction.create({
+      const wdTxRow = await tx.transaction.create({
         data: {
           userId: withdrawal.userId,
           type: 'withdraw',
@@ -237,6 +234,24 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           description: `Withdrawal ${withdrawal.method}`,
           meta: { withdrawalId: withdrawal.id } as Prisma.JsonObject,
         },
+      });
+
+      // Debits through the central service so the ledger captures the balance
+      // either side of the payout and which staff member approved it. The
+      // client named withdrawals specifically: a player disputing "my balance
+      // was wrong after withdrawal" is answerable only if the before and after
+      // are recorded at the moment the money left.
+      await applyWalletMovement({
+        tx,
+        userId: withdrawal.userId,
+        amount: amount.neg(),
+        type: LEDGER_TYPE.withdrawal,
+        description: `Withdrawal ${withdrawal.method}`,
+        transactionId: wdTxRow.id,
+        referenceId: `WD-${withdrawal.id.slice(-8)}`,
+        actorId: session.sub,
+        actorRole: session.role,
+        meta: { withdrawalId: withdrawal.id, method: withdrawal.method } as Prisma.JsonObject,
       });
       await tx.withdrawalEvent.create({
         data: {

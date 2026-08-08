@@ -35,6 +35,7 @@ import {
 } from '@/lib/rewards/coin-grants';
 import { notifyDepositBonusAwarded } from '@/lib/notifications/notify';
 import { accrueBettingPassOnDeposit } from '@/lib/betting-pass/engine';
+import { applyWalletMovement, LEDGER_TYPE } from '@/lib/wallet/ledger';
 import { sendSms } from '@/lib/sms/service';
 import { fireEvent } from '@/lib/tracking/dispatcher';
 import { notifyDepositApproved, notifyAdminsDepositApproved } from '@/lib/notifications/notify';
@@ -87,20 +88,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         },
       });
 
-      // Credit the main wallet (create if missing).
-      const wallet = await tx.wallet.findUnique({ where: { userId: deposit.userId } });
-      if (wallet) {
-        await tx.wallet.update({
-          where: { userId: deposit.userId },
-          data: { balance: { increment: amount } },
-        });
-      } else {
-        await tx.wallet.create({
-          data: { userId: deposit.userId, balance: amount },
-        });
-      }
-
-      await tx.transaction.create({
+      const txRow = await tx.transaction.create({
         data: {
           userId: deposit.userId,
           type: 'deposit',
@@ -110,6 +98,24 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           description: `Deposit ${deposit.method}`,
           meta: { depositId: deposit.id } as Prisma.JsonObject,
         },
+      });
+
+      // Credits the wallet AND records the movement in one step (the service
+      // creates the wallet if it is missing, which the old inline branch did
+      // by hand). The client specifically asked to see the balance before and
+      // after a deposit - that is only possible if the credit goes through
+      // here, and it records the approving staff member at the same time.
+      await applyWalletMovement({
+        tx,
+        userId: deposit.userId,
+        amount,
+        type: LEDGER_TYPE.deposit,
+        description: `Deposit ${deposit.method}`,
+        transactionId: txRow.id,
+        referenceId: deposit.transactionId ?? deposit.id,
+        actorId: session.sub,
+        actorRole: session.role,
+        meta: { depositId: deposit.id, method: deposit.method } as Prisma.JsonObject,
       });
 
       return d;
