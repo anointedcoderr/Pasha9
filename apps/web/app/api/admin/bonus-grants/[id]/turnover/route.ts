@@ -10,6 +10,7 @@ import { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db/client';
+import { applyWalletMovement, LEDGER_TYPE } from '@/lib/wallet/ledger';
 import { withAuth, ensurePermission, recordActivity } from '@/lib/auth/guard';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 import { addTurnover } from '@/lib/bonuses/engine';
@@ -90,17 +91,21 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       if (release) {
         const directBalanceLock = ['betting_pass_bdt', 'referral_first_deposit', 'referral_commission'].includes(fresh.sourceType ?? '');
         if (!directBalanceLock) {
-          await tx.wallet.update({
-            where: { userId: fresh.userId },
-            data: {
-              lockedBalance: { decrement: new Prisma.Decimal(fresh.amount) },
-              balance: { increment: new Prisma.Decimal(fresh.amount) },
-            },
+          // Mirrors releaseBonus() in lib/bonuses/engine.ts: locked money
+          // becomes spendable, and the operator who unlocked it is recorded.
+          await applyWalletMovement({
+            tx,
+            userId: fresh.userId,
+            amount: new Prisma.Decimal(fresh.amount),
+            lockedDelta: new Prisma.Decimal(fresh.amount).neg(),
+            type: LEDGER_TYPE.bonusRelease,
+            description: `Bonus unlocked by admin: ${new Prisma.Decimal(fresh.amount).toString()} BDT moved to available balance`,
+            bonusSource: fresh.sourceType,
+            referenceId: fresh.id,
+            actorId: session.sub,
+            actorRole: session.role,
+            meta: { bonusGrantId: fresh.id } as Prisma.JsonObject,
           });
-          // Same reasoning as releaseBonus() in lib/bonuses/engine.ts: the
-          // player's spendable balance moves here, so it must leave a trace.
-          // Zero amount because the money was already recorded as a 'bonus'
-          // transaction when the grant was issued - this only unlocks it.
           await tx.transaction.create({
             data: {
               userId: fresh.userId,

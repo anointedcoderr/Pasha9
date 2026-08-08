@@ -22,6 +22,7 @@ import { withAuth, recordActivity } from '@/lib/auth/guard';
 import { requireSuperAdmin } from '@/lib/auth/rbac';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 import { db } from '@/lib/db/client';
+import { applyWalletMovement, LEDGER_TYPE } from '@/lib/wallet/ledger';
 
 const schema = z.object({
   reason: z.string().trim().min(3).max(500),
@@ -78,9 +79,18 @@ export async function POST(req: NextRequest, { params }: { params: { id: string;
         throw new Error('WOULD_NEGATIVE');
       }
 
-      await txdb.wallet.update({
-        where: { userId: tx.userId! },
-        data: { balance: { increment: adjustDelta } },
+      await applyWalletMovement({
+        tx: txdb,
+        userId: tx.userId!,
+        amount: adjustDelta,
+        type: LEDGER_TYPE.providerRollback,
+        description: 'Provider transaction rolled back',
+        providerTransactionId: tx.id,
+        roundId: tx.gameRound,
+        gameUid: tx.gameUid,
+        actorId: claims.sub,
+        actorRole: claims.role,
+        meta: { providerTxId: tx.id, delta: adjustDelta.toString() } as Prisma.JsonObject,
       });
 
       const adjustTx = await txdb.transaction.create({

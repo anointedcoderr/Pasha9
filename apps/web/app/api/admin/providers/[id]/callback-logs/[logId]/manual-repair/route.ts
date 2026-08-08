@@ -24,6 +24,7 @@ import { withAuth, recordActivity } from '@/lib/auth/guard';
 import { requireSuperAdmin } from '@/lib/auth/rbac';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 import { db } from '@/lib/db/client';
+import { applyWalletMovement, LEDGER_TYPE } from '@/lib/wallet/ledger';
 
 const schema = z.object({
   userQuery: z.string().trim().min(1).max(160),
@@ -84,9 +85,18 @@ export async function POST(req: NextRequest, { params }: { params: { id: string;
       const after = before.add(delta);
       if (after.lt(0)) throw new Error('WOULD_NEGATIVE');
 
-      await txdb.wallet.update({
-        where: { userId: user.id },
-        data: { balance: { increment: delta } },
+      // Operator repairing a callback by hand. Recording the actor matters
+      // more here than almost anywhere else: this is a manual correction to
+      // a player's balance outside the normal game flow.
+      await applyWalletMovement({
+        tx: txdb,
+        userId: user.id,
+        amount: delta,
+        type: LEDGER_TYPE.providerRollback,
+        description: 'Manual callback repair',
+        actorId: claims.sub,
+        actorRole: claims.role,
+        meta: { logId: params.logId, delta: delta.toString() } as Prisma.JsonObject,
       });
 
       const adjustTx = await txdb.transaction.create({

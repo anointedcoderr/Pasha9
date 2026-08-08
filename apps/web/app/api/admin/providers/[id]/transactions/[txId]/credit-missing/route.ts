@@ -24,6 +24,7 @@ import { withAuth, recordActivity } from '@/lib/auth/guard';
 import { requireSuperAdmin } from '@/lib/auth/rbac';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 import { db } from '@/lib/db/client';
+import { applyWalletMovement, LEDGER_TYPE } from '@/lib/wallet/ledger';
 
 const schema = z.object({
   amount: z.coerce.number().positive().max(1_000_000),
@@ -58,9 +59,18 @@ export async function POST(req: NextRequest, { params }: { params: { id: string;
       if (!wallet) throw new Error('WALLET_NOT_FOUND');
       const before = dec(wallet.balance);
 
-      await txdb.wallet.update({
-        where: { userId: tx.userId! },
-        data: { balance: { increment: amount } },
+      await applyWalletMovement({
+        tx: txdb,
+        userId: tx.userId!,
+        amount,
+        type: LEDGER_TYPE.providerWin,
+        description: 'Missing provider win credited manually',
+        providerTransactionId: tx.id,
+        roundId: tx.gameRound,
+        gameUid: tx.gameUid,
+        actorId: claims.sub,
+        actorRole: claims.role,
+        meta: { providerTxId: tx.id } as Prisma.JsonObject,
       });
 
       const adjustTx = await txdb.transaction.create({
