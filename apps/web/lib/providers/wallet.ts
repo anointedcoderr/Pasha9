@@ -36,6 +36,7 @@ import { addTurnover } from '@/lib/bonuses/engine';
 import type { NormalizedCallback } from './types';
 import type { ProviderCreds } from './credentials';
 import { lookupUserIdByMemberAccount } from './player-account';
+import { applyWalletMovement, LEDGER_TYPE } from '@/lib/wallet/ledger';
 
 export interface ProcessResult {
   status: 'accepted' | 'duplicate' | 'rejected';
@@ -251,7 +252,6 @@ export async function processProviderCallback(
     // 1. Apply wallet movement.
     let walletTransactionId: string | null = null;
     if (effectiveBet.gt(0)) {
-      await tx.wallet.update({ where: { userId: user.id }, data: { balance: { decrement: effectiveBet } } });
       const t = await tx.transaction.create({
         data: {
           userId: user.id,
@@ -269,9 +269,27 @@ export async function processProviderCallback(
         },
       });
       walletTransactionId = t.id;
+
+      // The highest-volume movement on the platform, and the one every
+      // "my balance dropped and I do not know why" complaint traces back to.
+      // Recording the round, game and balance either side here is what makes
+      // a player's gaming history reconstructable without querying the
+      // provider's own records.
+      await applyWalletMovement({
+        tx,
+        userId: user.id,
+        amount: effectiveBet.neg(),
+        type: LEDGER_TYPE.providerBet,
+        description: `${creds.name} bet`,
+        transactionId: t.id,
+        providerName: creds.name,
+        gameUid: normalized.gameUid ?? null,
+        roundId: normalized.gameRound,
+        referenceId: normalized.gameRound,
+        meta: { providerKey: creds.providerKey, callbackType: normalized.type } as Prisma.JsonObject,
+      });
     }
     if (win.gt(0)) {
-      await tx.wallet.update({ where: { userId: user.id }, data: { balance: { increment: win } } });
       const t = await tx.transaction.create({
         data: {
           userId: user.id,
@@ -284,6 +302,20 @@ export async function processProviderCallback(
         },
       });
       walletTransactionId = walletTransactionId ?? t.id;
+
+      await applyWalletMovement({
+        tx,
+        userId: user.id,
+        amount: win,
+        type: LEDGER_TYPE.providerWin,
+        description: `${creds.name} win`,
+        transactionId: t.id,
+        providerName: creds.name,
+        gameUid: normalized.gameUid ?? null,
+        roundId: normalized.gameRound,
+        referenceId: normalized.gameRound,
+        meta: { providerKey: creds.providerKey, callbackType: normalized.type } as Prisma.JsonObject,
+      });
     }
 
     const after = await tx.wallet.findUnique({ where: { userId: user.id }, select: { balance: true } });
