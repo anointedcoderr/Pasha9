@@ -155,7 +155,13 @@ async function creditBonus(tx: Tx, userId: string, amount: Prisma.Decimal, sourc
   }
 }
 
-async function releaseBonus(tx: Tx, userId: string, amount: Prisma.Decimal, sourceType: string | null = null): Promise<void> {
+async function releaseBonus(
+  tx: Tx,
+  userId: string,
+  amount: Prisma.Decimal,
+  sourceType: string | null = null,
+  grantId: string | null = null,
+): Promise<void> {
   if (sourceType && DIRECT_BALANCE_LOCK_SOURCES.has(sourceType)) {
     return;
   }
@@ -164,6 +170,29 @@ async function releaseBonus(tx: Tx, userId: string, amount: Prisma.Decimal, sour
     data: {
       lockedBalance: { decrement: amount },
       balance: { increment: amount },
+    },
+  });
+
+  // Spendable balance just went UP with nothing in the player's history to
+  // explain it, which is exactly the "my balance changed by itself" report.
+  // The money itself was already recorded as a 'bonus' transaction when the
+  // grant was created - this movement only unlocks it - so this row is
+  // deliberately ZERO amount: it makes the event traceable without counting
+  // the same money twice in any total.
+  await tx.transaction.create({
+    data: {
+      userId,
+      type: 'adjust',
+      status: 'completed',
+      amount: new Prisma.Decimal(0),
+      reference: grantId,
+      description: `Bonus unlocked: ${amount.toString()} BDT moved to available balance`,
+      meta: {
+        kind: 'bonus_release',
+        unlockedAmount: amount.toString(),
+        sourceType: sourceType ?? null,
+        bonusGrantId: grantId,
+      } as Prisma.JsonObject,
     },
   });
 }
@@ -249,7 +278,7 @@ export async function grantBonusInTx(tx: Tx, opts: GrantOpts): Promise<{ grantId
   });
 
   if (turnoverRequired.lte(0)) {
-    await releaseBonus(tx, opts.userId, amount, opts.sourceType ?? null);
+    await releaseBonus(tx, opts.userId, amount, opts.sourceType ?? null, grant.id);
     await tx.userBonus.update({
       where: { id: grant.id },
       data: { status: 'completed', releasedAt: new Date() },
@@ -715,7 +744,7 @@ export async function addTurnover(opts: AddTurnoverOpts): Promise<{
       });
 
       if (released) {
-        await releaseBonus(tx, opts.userId, new Prisma.Decimal(g.amount), g.sourceType ?? null);
+        await releaseBonus(tx, opts.userId, new Prisma.Decimal(g.amount), g.sourceType ?? null, g.id);
       }
 
       applied.push({

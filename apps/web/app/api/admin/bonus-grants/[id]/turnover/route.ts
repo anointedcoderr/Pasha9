@@ -97,6 +97,27 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
               balance: { increment: new Prisma.Decimal(fresh.amount) },
             },
           });
+          // Same reasoning as releaseBonus() in lib/bonuses/engine.ts: the
+          // player's spendable balance moves here, so it must leave a trace.
+          // Zero amount because the money was already recorded as a 'bonus'
+          // transaction when the grant was issued - this only unlocks it.
+          await tx.transaction.create({
+            data: {
+              userId: fresh.userId,
+              type: 'adjust',
+              status: 'completed',
+              amount: new Prisma.Decimal(0),
+              reference: fresh.id,
+              description: `Bonus unlocked by admin: ${new Prisma.Decimal(fresh.amount).toString()} BDT moved to available balance`,
+              meta: {
+                kind: 'bonus_release',
+                unlockedAmount: new Prisma.Decimal(fresh.amount).toString(),
+                sourceType: fresh.sourceType ?? null,
+                bonusGrantId: fresh.id,
+                actorId: session.sub,
+              } as Prisma.JsonObject,
+            },
+          });
         }
       }
       return { release, progressAfter: Number(progressAfter), required: Number(required) };
