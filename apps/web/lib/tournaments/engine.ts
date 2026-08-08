@@ -37,6 +37,7 @@
 
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db/client';
+import { applyWalletMovement, LEDGER_TYPE } from '@/lib/wallet/ledger';
 
 type Tx = Prisma.TransactionClient;
 
@@ -227,10 +228,14 @@ async function creditFrozenPayoutInTx(
 
   // 1. Credit REAL BDT into Wallet.balance (direct-balance source; the
   //    withdrawal gate enforces any turnover lock via the UserBonus row).
-  await tx.wallet.upsert({
-    where: { userId: payout.userId },
-    update: { balance: { increment: payout.amount } },
-    create: { userId: payout.userId, balance: payout.amount, bonusBalance: 0, lockedBalance: 0, currency: 'BDT' },
+  await applyWalletMovement({
+    tx,
+    userId: payout.userId,
+    amount: payout.amount,
+    type: LEDGER_TYPE.tournament,
+    description: 'Tournament prize',
+    bonusSource: 'tournament_prize',
+    meta: { payoutAmount: String(payout.amount) } as Prisma.JsonObject,
   });
 
   // 2. Optional turnover lock. Only when turnoverX > 0; a pure-cash

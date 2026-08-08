@@ -7,6 +7,7 @@
 
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db/client';
+import { applyWalletMovement, LEDGER_TYPE } from '@/lib/wallet/ledger';
 import {
   computeBalanceFor,
   isWithinCadenceWindow,
@@ -117,10 +118,14 @@ async function payReservedClaimInTx(
     where: { id: opts.payoutId },
     data: { status: 'paid', paidAt: opts.now },
   });
-  await tx.wallet.upsert({
-    where: { userId: opts.userId },
-    update: { balance: { increment: total } },
-    create: { userId: opts.userId, balance: total },
+  await applyWalletMovement({
+    tx,
+    userId: opts.userId,
+    amount: total,
+    type: LEDGER_TYPE.affiliate,
+    description: 'Affiliate commission settlement',
+    referenceId: opts.payoutId,
+    meta: { payoutId: opts.payoutId, claimId: opts.claimId } as Prisma.JsonObject,
   });
 
   const turnoverGrantIds = await createTurnoverGrantsInTx(

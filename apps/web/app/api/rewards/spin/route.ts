@@ -16,6 +16,7 @@ import { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db/client';
+import { applyWalletMovement, LEDGER_TYPE } from '@/lib/wallet/ledger';
 import { withAuth, ensureUser, recordActivity } from '@/lib/auth/guard';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 import { loadSpinConfig } from '@/lib/rewards/config';
@@ -373,10 +374,14 @@ export async function POST(req: NextRequest) {
       // lib/turnover/deposit-gate.ts now recognises (we added that
       // source to BDT_BALANCE_LOCK_SOURCE_TYPES in the same batch).
       if (payoutCash > 0 && spinBonusRuleId) {
-        await tx.wallet.upsert({
-          where: { userId },
-          update: { balance: { increment: payoutCash } },
-          create: { userId, balance: payoutCash, bonusBalance: 0, lockedBalance: 0, currency: 'BDT' },
+        await applyWalletMovement({
+          tx,
+          userId,
+          amount: payoutCash,
+          type: LEDGER_TYPE.spin,
+          description: 'Spin wheel cash prize',
+          bonusSource: 'spin_result_cash',
+          meta: { payoutKind: 'cash' } as Prisma.JsonObject,
         });
 
         const turnoverX = Number(chosen.turnoverX ?? 0);
@@ -416,10 +421,14 @@ export async function POST(req: NextRequest) {
       // the player can wager it but cannot withdraw it without
       // turning it over at least once.
       if (payoutFreeBet > 0 && spinBonusRuleId) {
-        await tx.wallet.upsert({
-          where: { userId },
-          update: { balance: { increment: payoutFreeBet } },
-          create: { userId, balance: payoutFreeBet, bonusBalance: 0, lockedBalance: 0, currency: 'BDT' },
+        await applyWalletMovement({
+          tx,
+          userId,
+          amount: payoutFreeBet,
+          type: LEDGER_TYPE.spin,
+          description: 'Spin wheel free bet',
+          bonusSource: 'spin_result_freebet',
+          meta: { payoutKind: 'free_bet' } as Prisma.JsonObject,
         });
 
         const turnoverRequired = payoutFreeBet * 1; // 1x for free bet

@@ -31,6 +31,7 @@
 
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db/client';
+import { applyWalletMovement, LEDGER_TYPE } from '@/lib/wallet/ledger';
 import { computeBalanceFor, loadReferralSettings } from './balance';
 import { settleMaturedReferralCommissions } from './settlement';
 
@@ -573,17 +574,15 @@ export async function markPayoutPaid(payoutId: string, reviewerId: string, opts?
     if (claim && claim.status !== 'paid') {
       const amount = new Prisma.Decimal(p.amount);
 
-      const wallet = await tx.wallet.findUnique({ where: { userId: p.affiliateId } });
-      if (wallet) {
-        await tx.wallet.update({
-          where: { userId: p.affiliateId },
-          data: { balance: { increment: amount } },
-        });
-      } else {
-        await tx.wallet.create({
-          data: { userId: p.affiliateId, balance: amount, bonusBalance: 0, lockedBalance: 0 },
-        });
-      }
+      await applyWalletMovement({
+        tx,
+        userId: p.affiliateId,
+        amount,
+        type: LEDGER_TYPE.referral,
+        description: 'Referral commission payout',
+        referenceId: payoutId,
+        meta: { payoutId } as Prisma.JsonObject,
+      });
 
       const ledger = await tx.transaction.create({
         data: {
