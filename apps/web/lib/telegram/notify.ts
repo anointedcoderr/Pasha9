@@ -26,7 +26,19 @@ export const TELEGRAM_SETTING_KEYS = [
   'telegram_alerts_enabled',
   'telegram_bot_token',
   'telegram_chat_id',
+  // Per-topic groups. Each falls back to telegram_chat_id when blank, so an
+  // operator who configures none keeps exactly the current single-group
+  // behaviour and nothing needs migrating.
+  'telegram_chat_id_deposit',
+  'telegram_chat_id_withdrawal',
 ] as const;
+
+/**
+ * Which group a message belongs in. 'general' is the catch-all and is what
+ * every existing caller gets by default, so routing is opt-in per message
+ * rather than a change every call site has to make at once.
+ */
+export type TelegramTopic = 'deposit' | 'withdrawal' | 'general';
 
 const SEND_TIMEOUT_MS = 5_000;
 const SETTINGS_CACHE_MS = 45_000;
@@ -35,6 +47,8 @@ interface TelegramSettings {
   enabled: boolean;
   botToken: string;
   chatId: string;
+  depositChatId: string;
+  withdrawalChatId: string;
 }
 
 let cache: { at: number; value: TelegramSettings } | null = null;
@@ -50,7 +64,22 @@ async function readSettingsFresh(): Promise<TelegramSettings> {
     enabled: (map.telegram_alerts_enabled ?? '').toLowerCase() === 'true',
     botToken: map.telegram_bot_token ?? '',
     chatId: map.telegram_chat_id ?? '',
+    depositChatId: map.telegram_chat_id_deposit ?? '',
+    withdrawalChatId: map.telegram_chat_id_withdrawal ?? '',
   };
+}
+
+/**
+ * Resolve the destination group for a topic, falling back to the general
+ * chat id when that topic has no group configured. The fallback is what
+ * makes this safe to ship without the operator having created the new
+ * groups yet: unconfigured topics keep going where they always did rather
+ * than silently going nowhere.
+ */
+function chatIdFor(settings: TelegramSettings, topic: TelegramTopic): string {
+  if (topic === 'deposit' && settings.depositChatId) return settings.depositChatId;
+  if (topic === 'withdrawal' && settings.withdrawalChatId) return settings.withdrawalChatId;
+  return settings.chatId;
 }
 
 async function loadSettings(): Promise<TelegramSettings> {
@@ -162,18 +191,19 @@ async function callTelegramApi(
 // the operator can verify credentials before switching alerts on.
 export async function sendTelegramAlert(
   text: string,
-  opts?: { ignoreEnabled?: boolean },
+  opts?: { ignoreEnabled?: boolean; topic?: TelegramTopic },
 ): Promise<TelegramSendResult> {
   try {
     const settings = await loadSettings();
     if (!settings.enabled && !opts?.ignoreEnabled) {
       return { ok: false, skipped: true, error: 'Telegram alerts are turned off.' };
     }
-    if (!settings.botToken || !settings.chatId) {
+    const chatId = chatIdFor(settings, opts?.topic ?? 'general');
+    if (!settings.botToken || !chatId) {
       return { ok: false, skipped: true, error: 'Bot token or chat id is not set.' };
     }
     const result = await callTelegramApi(settings.botToken, 'sendMessage', {
-      chat_id: settings.chatId,
+      chat_id: chatId,
       text,
       parse_mode: 'HTML',
       disable_web_page_preview: true,

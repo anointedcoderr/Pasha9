@@ -21,7 +21,7 @@ import { dispatchFcmToUsers } from '@/lib/push/fcm';
 import { dispatchExpoPushToUsers } from '@/lib/push/expo';
 import { dispatchPlayerFcmToUsers } from '@/lib/push/player-fcm';
 import { dispatchPushToUsers } from '@/lib/push/dispatch';
-import { buildAdminTelegramMessage, sendTelegramAlert } from '@/lib/telegram/notify';
+import { buildAdminTelegramMessage, sendTelegramAlert, type TelegramTopic } from '@/lib/telegram/notify';
 
 export type NotificationKind =
   | 'cashback'
@@ -467,12 +467,29 @@ export async function notifyAdmins(opts: NotifyAdminsOpts): Promise<string | nul
     // adapter no-ops when the admin toggle is off, has its own 5s
     // timeout, and never throws, so a Telegram outage can never touch
     // the money flow that triggered this notification.
+    // Routed to the deposit / withdrawal / general group by the kind of the
+    // event. Derived from the kind string rather than a per-call-site flag so
+    // a future deposit_* or withdrawal_* notification lands in the right
+    // group automatically instead of quietly defaulting to general. Each
+    // group falls back to the single configured chat id until the operator
+    // creates it, so this changes nothing until they do.
+    // Every kind reaching here is admin-targeted and prefixed 'admin_'
+    // (admin_deposit_approved, admin_withdrawal_pending, ...), so the prefix
+    // is stripped before matching - testing the raw kind would match nothing
+    // and quietly send everything to the general group.
+    const subject = opts.kind.replace(/^admin_/, '');
+    const topic: TelegramTopic = subject.startsWith('deposit')
+      ? 'deposit'
+      : subject.startsWith('withdrawal')
+        ? 'withdrawal'
+        : 'general';
+
     void sendTelegramAlert(buildAdminTelegramMessage({
       titleEn: opts.titleEn,
       titleBn: opts.titleBn,
       bodyEn: opts.bodyEn,
       linkUrl: opts.linkUrl,
-    })).catch((err) => console.error('[notifyAdmins] telegram dispatch failed', opts.kind, err));
+    }), { topic }).catch((err) => console.error('[notifyAdmins] telegram dispatch failed', opts.kind, err));
 
     return n.id;
   } catch (err) {
