@@ -274,6 +274,21 @@ export function UserDetailDrawer({ open, onOpenChange, detail, loading, error, o
             >
               Adjust Balance
             </Button>
+            {/* Real anchors rather than Buttons wrapped in links: nesting a
+                button inside a link gives keyboard and screen-reader users two
+                conflicting controls in one tab stop. */}
+            <a
+              href={`/admin/users/${detail.id}/wallet-audit`}
+              className="inline-flex h-10 flex-1 items-center justify-center rounded-lg border border-brand-divider px-3 text-sm font-medium text-brand-ink transition hover:bg-brand-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-yellow-500/50"
+            >
+              Wallet Audit
+            </a>
+            <a
+              href={`/admin/users/${detail.id}/turnover`}
+              className="inline-flex h-10 flex-1 items-center justify-center rounded-lg border border-brand-divider px-3 text-sm font-medium text-brand-ink transition hover:bg-brand-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-yellow-500/50"
+            >
+              Turnover
+            </a>
           </div>
           <p className="text-[11px] text-ink-lo">
             Adjust Balance writes via the existing admin balance adjustment surface. Player-requested
