@@ -57,6 +57,13 @@ export const LEDGER_TYPE = {
   adminCredit: 'admin.credit',
   adminDebit: 'admin.debit',
   reversal: 'reversal',
+  // One-time go-live entries, written by scripts/reset-balances.ts only.
+  // openingBalance RECORDS money that already existed before the ledger did,
+  // without moving it, so a player's chain starts from a truthful figure
+  // rather than from a gap. openingReset is the operator zeroing the account
+  // afterwards. Never emitted by normal application code.
+  openingBalance: 'opening.balance',
+  openingReset: 'opening.reset',
 } as const;
 
 export interface WalletMovementInput {
