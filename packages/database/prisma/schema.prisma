@@ -667,8 +667,19 @@ model TurnoverEvent {
   userId       String
   bonusGrantId String?
   amount       Decimal  @db.Decimal(14, 2)
-  kind         String // bet|win|adjust|manual
+  kind         String // bet|win|adjust|manual|admin_set|admin_increase|admin_decrease
   reference    String?
+  // Requirement either side of the change. Optional because rows written
+  // before this existed have no snapshot, and inventing one would be worse
+  // than an honest null. Populated for every manual adjustment from here on,
+  // which is what the client asked for: Turnover Before -> Change -> After.
+  turnoverBefore Decimal? @db.Decimal(14, 2)
+  turnoverAfter  Decimal? @db.Decimal(14, 2)
+  // Who changed it and why. Only set for manual operator adjustments -
+  // automatic accrual from betting has no actor.
+  actorId      String?
+  actorRole    String?
+  reason       String?
   meta         Json?
   createdAt    DateTime @default(now())
 
