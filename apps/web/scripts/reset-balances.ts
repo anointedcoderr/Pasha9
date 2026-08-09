@@ -78,6 +78,7 @@ async function main() {
   });
 
   let reset = 0;
+  let squared = 0;
   let alreadyZero = 0;
   let protectedCount = 0;
   let openingRows = 0;
@@ -91,32 +92,51 @@ async function main() {
     const balance = new Prisma.Decimal(w.balance);
     const bonus = new Prisma.Decimal(w.bonusBalance);
     const locked = new Prisma.Decimal(w.lockedBalance);
-    if (balance.isZero() && bonus.isZero() && locked.isZero()) { alreadyZero += 1; continue; }
 
-    // What the ledger currently accounts for, and where its chain ended.
+    // The gap is measured against the ledger SUM, because that is what
+    // reconciliation compares against the wallet. Measuring it against the end
+    // of the chain instead looks equivalent and is not: a player whose ledger
+    // began mid-life has a non-zero balanceBefore on their first entry, so
+    // their sum sits below their chain end by exactly that opening figure.
+    // Using the chain end there computes a gap of zero, writes no opening
+    // entry, and the reset then leaves the sum negative against a zero wallet.
     const agg = await db.walletLedger.aggregate({ where: { userId: w.userId }, _sum: { amount: true } });
     const ledgerSum = new Prisma.Decimal(agg._sum.amount ?? 0);
-    const last = await db.walletLedger.findFirst({
-      where: { userId: w.userId },
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      select: { balanceAfter: true },
-    });
-    const chainEnd = new Prisma.Decimal(last?.balanceAfter ?? 0);
-    const gap = balance.sub(chainEnd);
+    const gap = balance.sub(ledgerSum);
+
+    // An account already at zero still needs squaring off if its ledger does
+    // not sum to zero, which is the state a previous run of this script could
+    // leave behind. Skipping on pockets alone would strand it as mismatched
+    // forever, since a zero balance never qualifies for a reset again.
+    if (balance.isZero() && bonus.isZero() && locked.isZero() && gap.isZero()) { alreadyZero += 1; continue; }
+
+    const needsReset = !balance.isZero() || !bonus.isZero() || !locked.isZero();
 
     console.log(
       `  ${username.padEnd(20)} balance=${money(balance)} bonus=${money(bonus)} locked=${money(locked)}` +
-      (gap.isZero() ? '' : `  opening=${money(gap)}`),
+      (gap.isZero() ? '' : `  opening=${money(gap)}`) +
+      (needsReset ? '' : '  [squared only]'),
     );
     totalCleared = totalCleared.add(balance);
     if (!gap.isZero()) openingRows += 1;
 
-    if (!COMMIT) { reset += 1; continue; }
+    if (!COMMIT) { if (needsReset) reset += 1; else squared += 1; continue; }
+
+    // The opening entry is dated just before the player's earliest existing
+    // entry so the chain reads in order: nothing, then the money that was
+    // already there, then everything the ledger has recorded since.
+    const first = await db.walletLedger.findFirst({
+      where: { userId: w.userId },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: { createdAt: true },
+    });
+    const openingAt = first ? new Date(first.createdAt.getTime() - 1000) : new Date();
 
     try {
       await db.$transaction(async (tx) => {
-        // 1. Record what was already there. No money moves: balanceAfter is
-        //    the balance the wallet ALREADY holds, so the wallet is untouched.
+        // 1. Record money that predates the ledger. No money moves here: this
+        //    only accounts for what the wallet already holds, so the wallet is
+        //    left untouched and the sum is brought into line with it.
         if (!gap.isZero()) {
           await tx.walletLedger.create({
             data: {
@@ -124,37 +144,42 @@ async function main() {
               type: LEDGER_TYPE.openingBalance,
               direction: gap.isNegative() ? 'debit' : 'credit',
               amount: gap,
-              balanceBefore: chainEnd,
-              balanceAfter: balance,
-              bonusBefore: bonus,
-              bonusAfter: bonus,
-              lockedBefore: locked,
-              lockedAfter: locked,
+              balanceBefore: ZERO,
+              balanceAfter: gap,
+              bonusBefore: ZERO,
+              bonusAfter: ZERO,
+              lockedBefore: ZERO,
+              lockedAfter: ZERO,
               status: 'completed',
               description: 'Opening balance recorded at ledger go-live',
+              createdAt: openingAt,
               meta: { openingEntry: true, ledgerSumBefore: ledgerSum.toFixed(2) } as Prisma.InputJsonValue,
             },
           });
         }
 
-        // 2. Move the money to zero, on the sanctioned path.
-        await applyWalletMovement({
-          tx,
-          userId: w.userId,
-          amount: balance.neg(),
-          bonusDelta: bonus.neg(),
-          lockedDelta: locked.neg(),
-          type: LEDGER_TYPE.openingReset,
-          description: 'Balance reset to zero by operator before ledger testing',
-          actorRole: 'system',
-          meta: {
-            resetFrom: balance.toFixed(2),
-            bonusCleared: bonus.toFixed(2),
-            lockedCleared: locked.toFixed(2),
-          } as Prisma.JsonObject,
-        });
+        // 2. Move the money to zero, on the sanctioned path. Skipped when
+        //    there is nothing left to move, so a squared-off account is not
+        //    given a pointless zero-value entry.
+        if (needsReset) {
+          await applyWalletMovement({
+            tx,
+            userId: w.userId,
+            amount: balance.neg(),
+            bonusDelta: bonus.neg(),
+            lockedDelta: locked.neg(),
+            type: LEDGER_TYPE.openingReset,
+            description: 'Balance reset to zero by operator before ledger testing',
+            actorRole: 'system',
+            meta: {
+              resetFrom: balance.toFixed(2),
+              bonusCleared: bonus.toFixed(2),
+              lockedCleared: locked.toFixed(2),
+            } as Prisma.JsonObject,
+          });
+        }
       });
-      reset += 1;
+      if (needsReset) reset += 1; else squared += 1;
     } catch (e) {
       failures.push(`${username}: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -165,6 +190,7 @@ async function main() {
   console.log('--------------------------------------------');
   console.log(`wallets examined   : ${wallets.length}`);
   console.log(`reset to zero      : ${reset}${COMMIT ? '' : ' (would reset)'}`);
+  console.log(`squared only       : ${squared}${COMMIT ? '' : ' (would square)'}`);
   console.log(`opening rows       : ${openingRows}${COMMIT ? '' : ' (would write)'}`);
   console.log(`already zero       : ${alreadyZero}`);
   console.log(`protected          : ${protectedCount}`);
