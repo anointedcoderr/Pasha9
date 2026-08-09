@@ -26,6 +26,9 @@
 //   pnpm --filter @pasha9/web exec tsx scripts/verify-wallet-ledger.ts --audit
 //   pnpm --filter @pasha9/web exec tsx scripts/verify-wallet-ledger.ts --selftest
 
+// Side-effect import: puts DATABASE_URL in place before the client is built.
+// Must stay above the PrismaClient import to keep that ordering obvious.
+import './load-env';
 import { Prisma, PrismaClient } from '@prisma/client';
 
 const db = new PrismaClient();
