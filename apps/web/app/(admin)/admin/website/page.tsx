@@ -65,6 +65,10 @@ const JACKPOT_DEFAULTS = {
 export default function AdminWebsitePage() {
   const [siteName, setSiteName] = useState('');
   const [logoUrl, setLogoUrl] = useState('');
+  // The app's own square icon. Kept separate from the logo because the logo is
+  // a wide wordmark, which reads badly in the small square slot beside
+  // Download App.
+  const [appIconUrl, setAppIconUrl] = useState('');
   const [faviconUrl, setFaviconUrl] = useState('');
   const [jpEnabled, setJpEnabled] = useState(true);
   const [jpTitle, setJpTitle] = useState('');
@@ -95,6 +99,7 @@ export default function AdminWebsitePage() {
       const map = new Map<string, string>((data.settings as SettingRow[]).map((s) => [s.key, s.value ?? '']));
       setSiteName(map.get('site_name') ?? '');
       setLogoUrl(map.get('logo_url') ?? '');
+      setAppIconUrl(map.get('app_icon_url') ?? '');
       setFaviconUrl(map.get('favicon_url') ?? '');
       setJpEnabled((map.get('jackpot_enabled') ?? '1') !== '0');
       setJpTitle(map.get('jackpot_title') ?? '');
@@ -134,6 +139,7 @@ export default function AdminWebsitePage() {
           updates: [
             { key: 'site_name', value: siteName.trim() },
             { key: 'logo_url', value: logoUrl.trim() },
+            { key: 'app_icon_url', value: appIconUrl.trim() },
             { key: 'favicon_url', value: faviconUrl.trim() },
             { key: 'favicon_version', value: String(Date.now()) },
           ],
@@ -235,6 +241,14 @@ export default function AdminWebsitePage() {
                 value={faviconUrl}
                 onChange={setFaviconUrl}
                 hint="512 x 512 PNG for PWA / Home Screen and 32 x 32 PNG or SVG for the browser tab. Pasha 9 serves the same file at /favicon.ico, /icon, /apple-icon and inside the PWA manifest, all with an auto-bumped ?v query that defeats local browser cache on every save."
+              />
+
+              <BrandUploader
+                kind="branding"
+                label="App icon"
+                value={appIconUrl}
+                onChange={setAppIconUrl}
+                hint="Square 512 x 512 PNG. Shown beside Download App in the mobile strip and the download section. This is the app's own icon, which is usually the square mark rather than the wide wordmark logo. Falls back to the logo, then the favicon, when left empty."
               />
               <details className="rounded-lg border border-brand-divider bg-brand-surface px-3 py-2 text-[12px]">
                 <summary className="cursor-pointer font-semibold text-ink-hi">

@@ -23,7 +23,7 @@ import { jsonOk } from '@/lib/auth/errors';
 
 export async function GET() {
   const rows = await db.systemSetting.findMany({
-    where: { key: { in: ['apk_download_url', 'apk_version', 'logo_url', 'favicon_url', 'site_name'] } },
+    where: { key: { in: ['apk_download_url', 'apk_version', 'app_icon_url', 'logo_url', 'favicon_url', 'site_name'] } },
     select: { key: true, value: true, updatedAt: true },
   });
 
@@ -54,9 +54,15 @@ export async function GET() {
     version,
     // The download surfaces show a small app icon and the brand name next to
     // the label. Served from here so they use the operator's real uploaded
-    // logo instead of a hardcoded placeholder, and so they do not need a
-    // second request. Falls back to the favicon when no logo is set.
-    iconUrl: map.logo_url ?? map.favicon_url ?? null,
+    // artwork instead of a hardcoded placeholder, and so they do not need a
+    // second request.
+    //
+    // app_icon_url wins because that slot is a small SQUARE. The logo is a wide
+    // wordmark and letterboxes badly at that size, which is why the operator
+    // asked for a different image here than the one on the header. Falls back
+    // to the logo, then the favicon, so a site that never sets it still shows
+    // something real.
+    iconUrl: map.app_icon_url ?? map.logo_url ?? map.favicon_url ?? null,
     siteName: map.site_name ?? null,
   });
 }

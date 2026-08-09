@@ -97,7 +97,17 @@ export function MobileTopBar() {
         The hexagon now survives only as the fallback for a site with no logo
         set yet, or one whose logo file fails to load.
       */}
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-grad-yellow text-brand-ink">
+      {/*
+        The yellow gradient belongs to the drawn fallback mark, not to real
+        artwork. An uploaded app icon carries its own background, so painting
+        ours behind it only shows as edging when the file is not perfectly
+        square.
+      */}
+      <span
+        className={`flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg text-brand-ink ${
+          iconUrl && !iconBroken ? '' : 'bg-grad-yellow'
+        }`}
+      >
         {iconUrl && !iconBroken ? (
           <img
             src={iconUrl}
