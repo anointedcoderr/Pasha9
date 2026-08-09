@@ -158,6 +158,12 @@ export const ADMIN_SECTIONS: AdminSection[] = [
   { key: 'support', label: 'Support Messages', group: 'System', routes: ['/admin/support'], actions: [view('menu.support.view'), manage('support.write', 'Reply & resolve')] },
   { key: 'settings', label: 'System Settings', group: 'System', routes: ['/admin/settings'], actions: [view('menu.settings.view'), edit('settings.write')] },
   { key: 'activity', label: 'Activity Log', group: 'System', routes: ['/admin/activity'], actions: [view('menu.activity.view')], superAdminOnly: true },
+  // Two-way accountability search. Super Admin only: it exposes what every
+  // other staff member has done, which is exactly the thing a staff member
+  // should not be able to review or curate for themselves. Because
+  // requirePermission short-circuits for super_admin, this works on the live
+  // site without waiting for a new permission row to exist.
+  { key: 'audit', label: 'Audit & Accountability', group: 'System', routes: ['/admin/audit'], actions: [view('menu.audit.view')], superAdminOnly: true },
   { key: 'handover', label: 'Handover', group: 'System', routes: ['/admin/handover'], actions: [view('menu.handover.view'), manage('staff.manage', 'Manage'), ], superAdminOnly: true },
 ];
 

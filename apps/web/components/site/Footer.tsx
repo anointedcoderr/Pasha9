@@ -320,7 +320,20 @@ export function Footer() {
           </div>
         </div>
 
+        {/*
+          Visible brand statement. The JSON-LD already declares the alternate
+          spellings, but structured data alone is a weak signal: a search engine
+          weighs a name that appears in readable page copy far more heavily.
+          Players genuinely type both spellings, so this is an accurate
+          description of the brand rather than keyword stuffing, and it is the
+          on-page half of ranking for "Pasa9" that a redirect cannot provide.
+        */}
         <div className="mt-10 border-t border-white/10 pt-5">
+          <p className="mb-4 text-[11px] leading-relaxed text-white/60">
+            {lang === 'bn'
+              ? 'Pasha9 (Pasa9 নামেও পরিচিত, বাংলায় পাশা ৯) বাংলাদেশের একটি অনলাইন ক্যাসিনো ও স্পোর্টস বেটিং প্ল্যাটফর্ম। Pasha 9 এবং Pasa 9 একই ওয়েবসাইট, pasha9.com।'
+              : 'Pasha9, also written as Pasa9, Pasha 9 and Pasa 9, is an online casino and sports betting platform for Bangladesh. All of these names refer to the same website, pasha9.com.'}
+          </p>
           <p className="inline-flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-white/60">
             <span>
               Built by{' '}

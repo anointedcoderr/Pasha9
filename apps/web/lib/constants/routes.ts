@@ -67,6 +67,7 @@ export const ROUTES = {
     support: '/admin/support',
     settings: '/admin/settings',
     activity: '/admin/activity',
+    audit: '/admin/audit',
     handover: '/admin/handover',
     website: '/admin/website',
     staff: '/admin/staff',

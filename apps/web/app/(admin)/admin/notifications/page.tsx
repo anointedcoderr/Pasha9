@@ -72,6 +72,16 @@ interface Snapshot {
 
 const SECRET_KEY = /(token|secret|api_key|api_token|auth_token)/i;
 
+// Every setting the Telegram card owns. Listed once so the dirty check and the
+// save button can never drift apart, which is how the two per-type group ids
+// shipped with nowhere to enter them.
+const TELEGRAM_KEYS = [
+  'telegram_bot_token',
+  'telegram_chat_id',
+  'telegram_chat_id_deposit',
+  'telegram_chat_id_withdrawal',
+] as const;
+
 function statusTone(s: string): 'ok' | 'warn' | 'neutral' {
   if (s === 'live') return 'ok';
   if (s === 'requires_credentials') return 'warn';
@@ -259,7 +269,7 @@ export default function AdminNotificationsPage() {
 
   const trackingDirty = useMemo(() => Object.keys(edits).some((k) => k.startsWith('pixel_') || k.startsWith('analytics_')), [edits]);
   const smsDirty = useMemo(() => Object.keys(edits).some((k) => k.startsWith('sms_')), [edits]);
-  const telegramDirty = useMemo(() => Object.keys(edits).some((k) => k === 'telegram_bot_token' || k === 'telegram_chat_id'), [edits]);
+  const telegramDirty = useMemo(() => Object.keys(edits).some((k) => (TELEGRAM_KEYS as readonly string[]).includes(k)), [edits]);
 
   return (
     <>
@@ -403,17 +413,46 @@ export default function AdminNotificationsPage() {
                       type={showSecrets ? 'text' : 'password'}
                     />
                   </FormField>
-                  <FormField label="Group chat id" hint="Use the detect button below; you never have to type this by hand. নিচের ডিটেক্ট বাটন ব্যবহার করুন।">
+                  <FormField label="Main group chat id" hint="Use the detect button below; you never have to type this by hand. নিচের ডিটেক্ট বাটন ব্যবহার করুন।">
                     <Input
                       value={value('telegram_chat_id')}
                       onChange={(e) => setValue('telegram_chat_id', e.target.value)}
                       placeholder="-1001234567890"
                     />
                   </FormField>
+                  {/*
+                    Per-type groups. Both fall back to the main group when left
+                    blank, so leaving them empty keeps today's behaviour exactly
+                    and no alert can go missing while they are being set up.
+                  */}
+                  <FormField
+                    label="Deposit alerts group (optional)"
+                    hint="Deposit alerts go here instead of the main group. Leave blank to keep them in the main group. ডিপোজিট এলার্ট আলাদা গ্রুপে।"
+                  >
+                    <Input
+                      value={value('telegram_chat_id_deposit')}
+                      onChange={(e) => setValue('telegram_chat_id_deposit', e.target.value)}
+                      placeholder="-1001234567890"
+                    />
+                  </FormField>
+                  <FormField
+                    label="Withdrawal alerts group (optional)"
+                    hint="Withdrawal alerts go here instead of the main group. Leave blank to keep them in the main group. উইথড্র এলার্ট আলাদা গ্রুপে।"
+                  >
+                    <Input
+                      value={value('telegram_chat_id_withdrawal')}
+                      onChange={(e) => setValue('telegram_chat_id_withdrawal', e.target.value)}
+                      placeholder="-1001234567890"
+                    />
+                  </FormField>
                 </div>
+                <p className="mt-2 text-[12px] text-ink-lo">
+                  The bot must be added to each group before its id will work. Use the detect button below inside that
+                  group to read its id.
+                </p>
                 <div className="mt-3 flex justify-end">
                   <Button variant="gold" leftIcon={<Save className="h-3.5 w-3.5" />} loading={saving} disabled={!telegramDirty}
-                    onClick={() => save(Object.keys(edits).filter((k) => k === 'telegram_bot_token' || k === 'telegram_chat_id'))}>
+                    onClick={() => save(Object.keys(edits).filter((k) => (TELEGRAM_KEYS as readonly string[]).includes(k)))}>
                     Save Telegram settings
                   </Button>
                 </div>

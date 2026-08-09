@@ -30,6 +30,7 @@ import {
   Ticket,
   Globe,
   ShieldCheck,
+  ScanSearch,
   KeyRound,
   BarChart3,
   Sparkles,
@@ -183,6 +184,10 @@ const GROUPS = [
       { key: 'support', href: ROUTES.admin.support, icon: LifeBuoy },
       { key: 'settings', href: ROUTES.admin.settings, icon: Settings },
       { key: 'activity', href: ROUTES.admin.activity, icon: ClipboardList },
+      // Registering the section alone is not enough to make it findable: this
+      // list is what actually renders the menu, and a page missing from here
+      // exists only for whoever knows the URL.
+      { key: 'audit', href: ROUTES.admin.audit, icon: ScanSearch },
       { key: 'handover', href: ROUTES.admin.handover, icon: FileKey2 },
     ],
   },

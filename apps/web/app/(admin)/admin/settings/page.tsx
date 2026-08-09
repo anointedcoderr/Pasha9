@@ -44,6 +44,20 @@ const REWARD_COIN_KEYS = [
   // so operators can run a coin campaign and a BDT campaign in parallel).
   'reward_coin_referred_first_deposit',
 ] as const;
+// The nine sections whose wagering-requirement text can be hidden. Keys match
+// TurnoverDisplaySection in lib/turnover/display-flags.ts.
+const TURNOVER_DISPLAY_SECTIONS = [
+  { key: 'depositBonus', label: 'Deposit bonus', hint: 'Text like "10x Turnover" on deposit bonus offers' },
+  { key: 'reloadBonus', label: 'Reload bonus', hint: 'Wagering text on reload / top-up bonuses' },
+  { key: 'promotions', label: 'Promotions', hint: 'Wagering text on the promotions pages' },
+  { key: 'bettingPass', label: 'Betting pass', hint: 'Wagering text on betting pass rewards' },
+  { key: 'rewards', label: 'Rewards', hint: 'Wagering text on the rewards section' },
+  { key: 'cashback', label: 'Cashback', hint: 'Wagering text on cashback credits' },
+  { key: 'promoCode', label: 'Promo codes', hint: 'Wagering text shown when a promo code is redeemed' },
+  { key: 'vip', label: 'VIP', hint: 'Wagering text on VIP rewards' },
+  { key: 'other', label: 'Other', hint: 'Anywhere else a turnover requirement is shown' },
+] as const;
+
 const SITE_KEYS = ['site_name'] as const;
 // APK download: apk_download_url drives the site home Download button
 // (AppDownloadSection hides itself until this is set); apk_version is
@@ -78,6 +92,43 @@ export default function AdminSettingsPage() {
   const [apkUploadError, setApkUploadError] = useState<string | null>(null);
   // True once an APK is uploaded and until Save Settings publishes it.
   const [apkUnsaved, setApkUnsaved] = useState(false);
+  // Turnover display flags. null while loading, so the card can show a loading
+  // state rather than flashing every switch on and then correcting itself.
+  const [tdFlags, setTdFlags] = useState<Record<string, boolean> | null>(null);
+  const [tdBusy, setTdBusy] = useState<string | null>(null);
+  const [tdError, setTdError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/admin/turnover-display', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((j) => { if (alive && j?.flags) setTdFlags(j.flags); })
+      .catch(() => { if (alive) setTdError('Could not load turnover text settings.'); });
+    return () => { alive = false; };
+  }, []);
+
+  // Saves on toggle rather than waiting for Save Settings, because this card
+  // writes through its own audited endpoint. The switch is disabled while in
+  // flight and the server's returned flags win, so a rejected change snaps
+  // back instead of showing a state that was never saved.
+  const toggleTurnoverDisplay = async (section: string, enabled: boolean) => {
+    setTdBusy(section);
+    setTdError(null);
+    try {
+      const r = await fetch('/api/admin/turnover-display', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ section, enabled }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j?.message ?? j?.code ?? 'Save failed');
+      if (j?.flags) setTdFlags(j.flags);
+    } catch (e) {
+      setTdError(e instanceof Error ? e.message : 'Save failed');
+    } finally {
+      setTdBusy(null);
+    }
+  };
 
   const load = useCallback(async () => {
     setError(null);
@@ -313,6 +364,39 @@ export default function AdminSettingsPage() {
               <FormField label="Version (optional)" hint="Shown next to the download button, e.g. 1.0.0">
                 <Input value={values.apk_version ?? ''} onChange={(e) => update('apk_version', e.target.value)} placeholder="1.0.0" />
               </FormField>
+            </div>
+          )}
+        </Card>
+      </div>
+
+      {/*
+        Turnover text visibility. Its own card because it saves per switch
+        through its own audited endpoint, not through Save Settings below.
+        Mixing the two would make it ambiguous which button applies.
+      */}
+      <div className="mt-6">
+        <Card padding="lg">
+          <CardHeader
+            title="Turnover text visibility"
+            subtitle="Controls whether players SEE the wagering requirement text in each section. Display only: the requirement itself and the withdrawal check are never affected. Each change saves immediately and is recorded against your account."
+          />
+          {tdFlags === null ? <p className="text-sm text-ink-mid">Loading...</p> : (
+            <div className="space-y-1">
+              {tdError ? <p className="text-sm text-signal-danger" role="alert">{tdError}</p> : null}
+              {TURNOVER_DISPLAY_SECTIONS.map(({ key, label, hint }) => (
+                <div key={key} className="flex items-center justify-between gap-4 border-b border-neon/10 py-3 last:border-b-0">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-ink-hi">{label}</p>
+                    <p className="text-xs text-ink-lo">{hint}</p>
+                  </div>
+                  <Switch
+                    checked={tdFlags[key] ?? true}
+                    disabled={tdBusy === key}
+                    onChange={(v) => toggleTurnoverDisplay(key, v)}
+                    label={`Show turnover text for ${label}`}
+                  />
+                </div>
+              ))}
             </div>
           )}
         </Card>

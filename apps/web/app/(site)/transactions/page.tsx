@@ -12,6 +12,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { PageHeader } from '@/components/site/PageHeader';
+import { WalletAuditPanel } from '@/components/site/WalletAuditPanel';
 import { formatBDT, formatDateTime } from '@/lib/utils/format';
 import { useT, useLang } from '@/lib/i18n/context';
 import { Chip } from '@/components/ui/Chip';
@@ -53,6 +54,9 @@ function statusTone(s: LedgerRow['status']): 'ok' | 'warn' | 'danger' {
 export default function TransactionsPage() {
   const t = useT();
   const { lang } = useLang();
+  // 'history' is the existing Transaction view; 'audit' is the ledger view
+  // with the balance either side of each movement.
+  const [view, setView] = useState<'history' | 'audit'>('history');
   const [type, setType] = useState<(typeof TYPES)[number]>('all');
   const [rows, setRows] = useState<LedgerRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -102,8 +106,42 @@ export default function TransactionsPage() {
 
   return (
     <>
-      <PageHeader title={t('wallet.history')} subtitle={`${rows.length} ${lang === 'bn' ? 'এন্ট্রি' : 'entries'}`} icon={<ReceiptText className="h-5 w-5" />} />
+      <PageHeader
+        title={t('wallet.history')}
+        subtitle={view === 'history'
+          ? `${rows.length} ${lang === 'bn' ? 'এন্ট্রি' : 'entries'}`
+          : (lang === 'bn' ? 'ব্যালেন্স আগে ও পরে সহ সম্পূর্ণ রেকর্ড' : 'Full record with balance before and after')}
+        icon={<ReceiptText className="h-5 w-5" />}
+      />
 
+      {/*
+        Two views over the same money. History keeps the in-flight items such
+        as pending withdrawals; Wallet audit shows settled movements with the
+        balance either side, read from the permanent ledger.
+      */}
+      <div role="tablist" aria-label={lang === 'bn' ? 'ভিউ' : 'View'} className="mb-4 flex gap-2">
+        {(['history', 'audit'] as const).map((v) => (
+          <button
+            key={v}
+            type="button"
+            role="tab"
+            aria-selected={view === v}
+            onClick={() => setView(v)}
+            className={`inline-flex h-10 items-center rounded-lg border px-4 text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue-500/40 ${
+              view === v
+                ? 'border-brand-yellow-600 bg-brand-yellow-500 font-semibold text-brand-ink'
+                : 'border-brand-divider bg-brand-surface text-brand-inkMute hover:text-brand-ink'
+            }`}
+          >
+            {v === 'history'
+              ? (lang === 'bn' ? 'হিস্টরি' : 'History')
+              : (lang === 'bn' ? 'ওয়ালেট অডিট' : 'Wallet audit')}
+          </button>
+        ))}
+      </div>
+
+      {view === 'audit' ? <WalletAuditPanel /> : (
+      <>
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <div className="w-44">
           <Select value={type} onChange={(e) => setType(e.target.value as (typeof TYPES)[number])}>
@@ -169,6 +207,8 @@ export default function TransactionsPage() {
             </table>
           </div>
         </section>
+      )}
+      </>
       )}
     </>
   );
