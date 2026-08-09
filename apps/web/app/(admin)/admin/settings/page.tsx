@@ -76,6 +76,8 @@ export default function AdminSettingsPage() {
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [apkUploading, setApkUploading] = useState(false);
   const [apkUploadError, setApkUploadError] = useState<string | null>(null);
+  // True once an APK is uploaded and until Save Settings publishes it.
+  const [apkUnsaved, setApkUnsaved] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -109,6 +111,12 @@ export default function AdminSettingsPage() {
   // fills the download URL. The operator still presses Save Settings to
   // publish it. Files above the server cap are rejected here, in which case
   // the operator can host the file elsewhere and paste the URL instead.
+  //
+  // The two-step upload-then-save is the reason players kept downloading the
+  // previous build: the upload fills this field in local state only, so the
+  // page LOOKS updated while the site still serves the old URL. Leaving
+  // without pressing Save silently discarded the new build. The unsaved flag
+  // below makes that state impossible to miss.
   const uploadApk = async (file: File) => {
     setApkUploading(true);
     setApkUploadError(null);
@@ -120,12 +128,22 @@ export default function AdminSettingsPage() {
       const j = await r.json();
       if (!r.ok) throw new Error(j?.message ?? j?.code ?? 'Upload failed');
       update('apk_download_url', String(j.url ?? ''));
+      setApkUnsaved(true);
     } catch (e) {
       setApkUploadError(e instanceof Error ? e.message : 'Upload failed');
     } finally {
       setApkUploading(false);
     }
   };
+
+  // Closing the tab with an uploaded but unpublished APK is the exact way the
+  // new build got lost, so it is worth one browser prompt.
+  useEffect(() => {
+    if (!apkUnsaved) return;
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [apkUnsaved]);
 
   const save = async () => {
     setSaving(true);
@@ -141,6 +159,7 @@ export default function AdminSettingsPage() {
       const j = await r.json();
       if (!r.ok) throw new Error(j?.message ?? j?.code ?? 'Save failed');
       setSavedAt(Date.now());
+      setApkUnsaved(false);
       setTimeout(() => setSavedAt(null), 2500);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Save failed');
@@ -258,22 +277,36 @@ export default function AdminSettingsPage() {
             <div className="space-y-3">
               <FormField label="Android APK file" hint="Choose the .apk from your computer (up to 80 MB). It uploads immediately, then press Save Settings below to publish. For a larger file, host it and paste the URL instead.">
                 <div className="flex flex-wrap items-center gap-3">
-                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-neon/20 bg-base-deep px-4 py-2 text-sm text-ink-hi hover:border-neon/40">
+                  {/*
+                    sr-only, not hidden. display:none takes the input out of the
+                    tab order, and the label wrapping it is not focusable, so
+                    the whole upload control was unreachable by keyboard.
+                    focus-within puts the ring on the label the input sits in.
+                  */}
+                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-neon/20 bg-base-deep px-4 py-2 text-sm text-ink-hi hover:border-neon/40 focus-within:border-neon/40 focus-within:ring-2 focus-within:ring-neon/40">
                     <input
                       type="file"
                       accept=".apk,application/vnd.android.package-archive"
-                      className="hidden"
+                      className="sr-only"
                       disabled={apkUploading}
                       onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadApk(f); e.target.value = ''; }}
                     />
                     {apkUploading ? 'Uploading...' : 'Choose APK'}
                   </label>
                   {values.apk_download_url ? (
-                    <a href={values.apk_download_url} target="_blank" rel="noreferrer" className="text-sm text-neon underline">Open current file</a>
+                    <a href={values.apk_download_url} target="_blank" rel="noreferrer" className="text-sm text-neon underline">
+                      {apkUnsaved ? 'Open uploaded file' : 'Open current file'}
+                    </a>
                   ) : <span className="text-xs text-ink-lo">No file set yet</span>}
                 </div>
               </FormField>
-              {apkUploadError ? <p className="text-sm text-signal-danger">{apkUploadError}</p> : null}
+              {apkUploadError ? <p className="text-sm text-signal-danger" role="alert">{apkUploadError}</p> : null}
+              {apkUnsaved ? (
+                <p role="status" className="rounded-lg border border-signal-warn/40 bg-signal-warn/10 px-3 py-2 text-sm text-ink-hi">
+                  <strong className="font-semibold">Not published yet.</strong> The file is uploaded, but players still get
+                  the previous app until you press Save Settings below.
+                </p>
+              ) : null}
               <FormField label="Download URL" hint="Filled automatically when you upload above. You can also paste a full URL to an APK hosted elsewhere.">
                 <Input value={values.apk_download_url ?? ''} onChange={(e) => update('apk_download_url', e.target.value)} placeholder="/uploads/apk/pasha9.apk" />
               </FormField>
@@ -288,7 +321,8 @@ export default function AdminSettingsPage() {
       <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-neon/10 pt-4 text-xs text-ink-lo">
         <span>{BRAND.developer.label} . <a href={`mailto:${BRAND.developer.email}`} className="hover:text-ink-hi">{BRAND.developer.email}</a></span>
         <div className="flex items-center gap-3">
-          {savedAt ? <span className="inline-flex items-center gap-1 text-signal-success"><Check className="h-3.5 w-3.5" /> Saved</span> : null}
+          {/* signal-ok is the real token; text-signal-success was never defined, so this confirmation had no colour. */}
+          {savedAt ? <span role="status" className="inline-flex items-center gap-1 text-signal-ok"><Check className="h-3.5 w-3.5" aria-hidden="true" /> Saved</span> : null}
           <Button onClick={save} loading={saving}>Save Settings</Button>
         </div>
       </div>

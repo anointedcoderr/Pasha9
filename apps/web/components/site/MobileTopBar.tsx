@@ -40,6 +40,11 @@ export function MobileTopBar() {
   const t = useT();
   const [state, setState] = useState<State>('pending');
   const [apkUrl, setApkUrl] = useState<string | null>(null);
+  const [iconUrl, setIconUrl] = useState<string | null>(null);
+  const [siteName, setSiteName] = useState('Pasha 9');
+  // A configured logo that fails to load (deleted upload, bad path) must not
+  // leave an empty box in the strip, so a broken image falls back to the mark.
+  const [iconBroken, setIconBroken] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -52,6 +57,8 @@ export function MobileTopBar() {
         if (!alive) return;
         const url = typeof data?.url === 'string' && data.url.trim() ? (data.url as string) : null;
         setApkUrl(url);
+        if (typeof data?.iconUrl === 'string' && data.iconUrl.trim()) setIconUrl(data.iconUrl.trim());
+        if (typeof data?.siteName === 'string' && data.siteName.trim()) setSiteName(data.siteName.trim());
         setState(url ? 'open' : 'closed');
       })
       .catch(() => { if (alive) setState('closed'); });
@@ -83,15 +90,33 @@ export function MobileTopBar() {
       >
         <X className="h-4 w-4" />
       </button>
-      <span role="img" aria-label="Pasha 9" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-grad-yellow text-brand-ink">
-        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" aria-hidden="true">
-          <path d="M12 3 L20 8 L20 16 L12 21 L4 16 L4 8 Z" stroke="#0F1115" strokeWidth="1.6" />
-          <path d="M12 8 L15 12 L12 16 L9 12 Z" fill="#0F1115" />
-        </svg>
+      {/*
+        The operator's uploaded logo, not a drawn placeholder. This slot used
+        to render a generic hexagon regardless of what logo was configured,
+        which is what the client saw as the icon "not displaying correctly".
+        The hexagon now survives only as the fallback for a site with no logo
+        set yet, or one whose logo file fails to load.
+      */}
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-grad-yellow text-brand-ink">
+        {iconUrl && !iconBroken ? (
+          <img
+            src={iconUrl}
+            alt={siteName}
+            width={36}
+            height={36}
+            className="h-full w-full object-contain"
+            onError={() => setIconBroken(true)}
+          />
+        ) : (
+          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" role="img" aria-label={siteName}>
+            <path d="M12 3 L20 8 L20 16 L12 21 L4 16 L4 8 Z" stroke="#0F1115" strokeWidth="1.6" />
+            <path d="M12 8 L15 12 L12 16 L9 12 Z" fill="#0F1115" />
+          </svg>
+        )}
       </span>
       <div className="min-w-0 flex-1">
         <p className="truncate text-[12px] font-semibold text-brand-ink">{t('navx.downloadApp')}</p>
-        <p className="truncate text-[11px] text-brand-inkMute">Pasha 9</p>
+        <p className="truncate text-[11px] text-brand-inkMute">{siteName}</p>
       </div>
       <a
         href={apkUrl}
