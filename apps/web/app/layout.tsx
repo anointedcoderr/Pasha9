@@ -3,8 +3,13 @@ import { fontAdmin, fontBn, fontDisplay, fontEn } from '@/styles/fonts';
 import { Providers } from './providers';
 import { resolveLang } from '@/lib/i18n/server';
 import { TrackingScripts } from '@/components/site/TrackingScripts';
+import { StructuredData } from '@/components/seo/StructuredData';
 import { db } from '@/lib/db/client';
 import './globals.css';
+
+// Canonical origin for SEO markup. Env override lets a staging deploy emit
+// its own URLs instead of pointing every canonical at production.
+const SITE_ORIGIN = (process.env.PUBLIC_BASE_URL ?? 'https://pasha9.com').replace(/\/+$/, '');
 
 // Pulls the operator-uploaded favicon and site name out of
 // SystemSetting at request time so /admin/website edits take effect
@@ -41,6 +46,47 @@ export async function generateMetadata(): Promise<Metadata> {
     },
     description: `${siteName} brings a premium Bangla casino and betting experience. Play smarter, win bigger.`,
     applicationName: siteName,
+    // Self-referencing canonical. Without it, the same page reachable via the
+    // pasa9.com redirect, a trailing slash, or a tracking query string can be
+    // treated as several competing URLs, which splits the ranking signal
+    // between them instead of pooling it on one.
+    alternates: {
+      canonical: '/',
+      languages: { en: '/', bn: '/' },
+    },
+    // Both spellings are named because the operator owns pasa9.com and
+    // redirects it here. Keywords carry little weight on their own, but the
+    // pairing is reinforced by alternateName in the structured data.
+    keywords: [siteName, 'Pasha 9', 'Pasha9', 'Pasa9', 'Pasa 9', 'casino Bangladesh', 'online betting BD', 'bkash casino', 'nagad betting'],
+    openGraph: {
+      type: 'website',
+      siteName,
+      title: `${siteName} | Royal Bangla Casino`,
+      description: `${siteName} brings a premium Bangla casino and betting experience. Play smarter, win bigger.`,
+      url: '/',
+      locale: 'en_US',
+      alternateLocale: ['bn_BD'],
+      images: [{ url: favicon, width: 512, height: 512, alt: siteName }],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: `${siteName} | Royal Bangla Casino`,
+      description: `${siteName} brings a premium Bangla casino and betting experience.`,
+      images: [favicon],
+    },
+    robots: {
+      index: true,
+      follow: true,
+      googleBot: {
+        index: true,
+        follow: true,
+        // Lets Google show full-length snippets and large image previews
+        // instead of the conservative defaults it applies without this.
+        'max-snippet': -1,
+        'max-image-preview': 'large',
+        'max-video-preview': -1,
+      },
+    },
     authors: [{ name: 'Anointed Coder', url: 'https://t.me/anointedcoder' }],
     creator: 'Anointed Coder',
     publisher: 'Anointed Coder',
@@ -217,7 +263,18 @@ const DOM_GUARD_SCRIPT = `
 })();
 `;
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Same settings the metadata above reads, so the structured data carries the
+  // operator's real brand name and logo rather than a hardcoded one. Failure
+  // falls back to defaults: SEO markup must never be able to break the page.
+  const seoRows = await db.systemSetting
+    .findMany({ where: { key: { in: ['site_name', 'logo_url', 'favicon_url'] } } })
+    .catch(() => [] as Array<{ key: string; value: string | null }>);
+  const seo: Record<string, string> = {};
+  for (const r of seoRows) if (r.value && r.value.trim()) seo[r.key] = r.value.trim();
+  const seoSiteName = seo.site_name ?? 'Pasha 9';
+  const seoLogo = seo.logo_url ?? seo.favicon_url ?? '/favicon.svg';
+
   const initialLang = resolveLang();
   const bodyFont = initialLang === 'bn' ? 'font-bn' : 'font-en';
 
@@ -242,6 +299,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             Static metadata.icons in this file is now the source of
             truth. Operators can replace /public/favicon.svg if
             they need to rebrand. */}
+        {/* Rendered server-side so crawlers see it in the initial HTML rather
+            than after hydration, which many still do not execute. */}
+        <StructuredData
+          siteName={seoSiteName}
+          siteUrl={SITE_ORIGIN}
+          description={`${seoSiteName} brings a premium Bangla casino and betting experience.`}
+          logoUrl={seoLogo}
+        />
         <TrackingScripts />
         <Providers initialLang={initialLang}>{children}</Providers>
       </body>
