@@ -98,6 +98,7 @@ const GROUPS = [
       // deposit tier ladder sits directly under it as the simple mode;
       // the advanced rule list lives inside Bonus Management itself.
       { key: 'bonuses', href: ROUTES.admin.bonuses, icon: Gift },
+      { key: 'registrationBonus', href: ROUTES.admin.registrationBonus, icon: Sparkles },
       { key: 'depositBonusTiers', href: ROUTES.admin.depositBonusTiers, icon: Layers },
       { key: 'promotionBanners', href: ROUTES.admin.promotionBanners, icon: ImageIcon },
       { key: 'affiliate', href: ROUTES.admin.affiliate, icon: Briefcase },

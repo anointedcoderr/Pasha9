@@ -12,6 +12,7 @@ import { loadPermissionsForRole } from '@/lib/auth/rbac';
 import { rateLimit } from '@/lib/auth/rate-limit';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
 import { notifyAdminsUserRegistered } from '@/lib/notifications/notify';
+import { grantRegistrationBonus } from '@/lib/bonuses/registration';
 
 const bdPhone = /^(?:\+?880|0)?1[3-9]\d{8}$/;
 
@@ -74,6 +75,16 @@ export async function POST(req: NextRequest) {
       wallet: { create: {} },
     },
     select: { id: true, username: true, phone: true, referralCode: true, role: { select: { key: true } } },
+  });
+
+  // Registration bonus, if the operator has switched it on. Its own
+  // transaction so the wallet movement and the grant row commit together, and
+  // deliberately after the account exists: the helper swallows its own errors
+  // and returns null, so a bonus problem can never cost someone their sign-up.
+  await db.$transaction(async (tx) => {
+    await grantRegistrationBonus(tx, user.id);
+  }).catch((err) => {
+    console.error('[register] registration bonus failed', err);
   });
 
   // If a previous account was logged in on this device, revoke that

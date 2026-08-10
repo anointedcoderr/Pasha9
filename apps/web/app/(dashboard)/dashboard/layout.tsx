@@ -5,6 +5,7 @@ import { Header } from '@/components/site/Header';
 import { Footer } from '@/components/site/Footer';
 import { FloatingContact } from '@/components/site/FloatingContact';
 import { AnnouncementPopup } from '@/components/site/AnnouncementPopup';
+import { RegistrationBonusPopup } from '@/components/site/RegistrationBonusPopup';
 import { DashboardNav } from '@/components/dashboard/DashboardNav';
 import { TooltipProvider } from '@/components/ui/Tooltip';
 import { useT } from '@/lib/i18n/context';
@@ -39,6 +40,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             which is where the bottom nav's Referral link goes. A custom-URL
             popup pointed at one of these pages simply never rendered. */}
         <AnnouncementPopup />
+        <RegistrationBonusPopup />
       </div>
     </TooltipProvider>
   );

@@ -68,6 +68,7 @@ export const ROUTES = {
     settings: '/admin/settings',
     activity: '/admin/activity',
     audit: '/admin/audit',
+    registrationBonus: '/admin/registration-bonus',
     handover: '/admin/handover',
     website: '/admin/website',
     staff: '/admin/staff',

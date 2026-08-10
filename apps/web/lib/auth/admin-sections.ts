@@ -93,6 +93,11 @@ export const ADMIN_SECTIONS: AdminSection[] = [
 
   // ---- Bonus & affiliate ----
   { key: 'bonuses', label: 'Bonus Management', group: 'Bonus & Affiliate', routes: ['/admin/bonuses'], actions: [view('menu.bonuses.view'), manage('bonuses.write', 'Full access')] },
+  // Reuses the bonuses permission rather than inventing a new code, because a
+  // new permission row would not exist on the live database (schema is evolved
+  // with db push and the seed is never re-run), so nobody but a super admin
+  // could open it.
+  { key: 'registrationBonus', label: 'Registration Bonus', group: 'Bonus & Affiliate', routes: ['/admin/registration-bonus'], actions: [view('menu.bonuses.view'), manage('bonuses.write', 'Full access')] },
   { key: 'depositBonusTiers', label: 'Deposit Bonus Tiers', group: 'Bonus & Affiliate', routes: ['/admin/deposit-bonus-tiers'], actions: [view('menu.depositBonusTiers.view'), edit('bonuses.write')] },
   { key: 'promotionBanners', label: 'Promotion Banners', group: 'Bonus & Affiliate', routes: ['/admin/promotions'], actions: [view('menu.promotionBanners.view'), edit('bonuses.write')] },
   { key: 'affiliate', label: 'Affiliate', group: 'Bonus & Affiliate', routes: ['/admin/affiliate'], actions: [view('menu.affiliate.view'), manage('affiliate.write', 'Approve & manage')] },

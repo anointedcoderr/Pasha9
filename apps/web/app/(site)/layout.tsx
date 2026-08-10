@@ -9,6 +9,7 @@ import { NotificationAutoPrompt } from '@/components/site/NotificationAutoPrompt
 import { CashbackCelebration } from '@/components/site/CashbackCelebration';
 import { RewardCelebration } from '@/components/site/RewardCelebration';
 import { AnnouncementPopup } from '@/components/site/AnnouncementPopup';
+import { RegistrationBonusPopup } from '@/components/site/RegistrationBonusPopup';
 import { TooltipProvider } from '@/components/ui/Tooltip';
 import { useT } from '@/lib/i18n/context';
 
@@ -50,6 +51,7 @@ export default function SiteLayout({ children }: { children: ReactNode }) {
         <CashbackCelebration />
         <RewardCelebration />
         <AnnouncementPopup />
+        <RegistrationBonusPopup />
       </div>
     </TooltipProvider>
   );

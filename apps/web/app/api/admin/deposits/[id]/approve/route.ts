@@ -35,6 +35,7 @@ import {
 } from '@/lib/rewards/coin-grants';
 import { notifyDepositBonusAwarded } from '@/lib/notifications/notify';
 import { accrueBettingPassOnDeposit } from '@/lib/betting-pass/engine';
+import { unlockRegistrationBonusIfEligible } from '@/lib/bonuses/registration';
 import { applyWalletMovement, LEDGER_TYPE } from '@/lib/wallet/ledger';
 import { sendSms } from '@/lib/sms/service';
 import { fireEvent } from '@/lib/tracking/dispatcher';
@@ -286,6 +287,17 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       const msg = err instanceof Error ? err.message : String(err);
       console.error('[deposit-approve] betting-pass accrual failed', err);
       bettingPassDeposit.error = `engine_threw: ${msg.slice(0, 300)}`;
+    }
+
+    // A deposit is the only thing that can satisfy the registration bonus
+    // requirement, so this is the moment to check it. Does nothing unless the
+    // threshold has just been crossed, and nothing at all on a second call, so
+    // it is safe on every approval. Failures are logged, never thrown: an
+    // approval must not fail because an unlock did.
+    try {
+      await unlockRegistrationBonusIfEligible(deposit.userId);
+    } catch (err) {
+      console.error('[deposit-approve] registration bonus unlock failed', err);
     }
 
     // Headline ActivityLog row (existing M1 behaviour).
