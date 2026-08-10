@@ -10,6 +10,10 @@ import { jsonError, jsonOk } from '@/lib/auth/errors';
 
 const TARGETS = ['entry', 'homepage', 'deposit_page', 'deposit_click', 'withdrawal_page', 'auth_page', 'all_pages', 'custom_url'] as const;
 const FREQUENCIES = ['always', 'once_per_user', 'once_per_session', 'once_per_day'] as const;
+// Who sees the popup relative to being signed in. 'disabled' is kept here
+// rather than folded into status so an operator can park a popup without
+// losing its scheduling or its status.
+const AUDIENCES = ['guest', 'authed', 'both', 'disabled'] as const;
 
 const baseSchema = z.object({
   title: z.string().min(1).max(120),
@@ -22,6 +26,7 @@ const baseSchema = z.object({
   target: z.enum(TARGETS).default('entry'),
   targetUrl: z.string().max(300).optional().nullable(),
   frequency: z.enum(FREQUENCIES).default('always'),
+  audience: z.enum(AUDIENCES).default('both'),
   imageUrl: z.string().max(600).optional().nullable(),
   audioUrl: z.string().max(600).optional().nullable(),
 });

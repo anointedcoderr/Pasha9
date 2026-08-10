@@ -19,6 +19,7 @@ const updateSchema = z.object({
   target: z.enum(['entry', 'homepage', 'deposit_page', 'deposit_click', 'withdrawal_page', 'auth_page', 'all_pages', 'custom_url']).optional(),
   targetUrl: z.string().max(300).optional().nullable(),
   frequency: z.enum(['always', 'once_per_user', 'once_per_session', 'once_per_day']).optional(),
+  audience: z.enum(['guest', 'authed', 'both', 'disabled']).optional(),
   imageUrl: z.string().max(600).optional().nullable(),
   audioUrl: z.string().max(600).optional().nullable(),
 });

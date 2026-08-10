@@ -41,8 +41,22 @@ interface HistoryRow {
   actorRole: string | null;
 }
 
+interface Part { required: number; completed: number; remaining: number }
+
 interface TurnoverResponse {
+  /** The player's TOTAL outstanding requirement, identical to what they see. */
   remaining: number;
+  required: number;
+  completed: number;
+  isMet: boolean;
+  breakdown: { deposit: Part; bettingPass: Part; referral: Part; spin: Part };
+  /**
+   * Only the part carried by bonus grants. The adjustment controls move these
+   * and nothing else, so this, not the total, is what a preview must be based
+   * on. Deposit turnover is a function of what the player deposited and cannot
+   * be edited away here.
+   */
+  grantsRemaining: number;
   grants: Grant[];
   history: HistoryRow[];
 }
@@ -94,7 +108,10 @@ export default function TurnoverPage() {
     if (!data) return null;
     const n = Number(amount);
     if (!Number.isFinite(n) || amount.trim() === '') return null;
-    const before = data.remaining;
+    // Bonus-grant requirement, not the total: an adjustment cannot move
+    // deposit or betting pass turnover, so previewing against the total would
+    // promise a result the save could not deliver.
+    const before = data.grantsRemaining;
     const raw = mode === 'set' ? n : mode === 'increase' ? before + n : before - n;
     const after = Math.max(0, raw);
     return { before, after, change: after - before, clamped: raw < 0 };
@@ -146,13 +163,70 @@ export default function TurnoverPage() {
       ) : (
         <>
           <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <StatTile label="Remaining Requirement" value={formatBDT(data?.remaining ?? 0)} accent="gold" />
+            <StatTile
+              label="Remaining Requirement"
+              value={formatBDT(data?.remaining ?? 0)}
+              accent="gold"
+              hint="Exactly what the player sees"
+            />
             <StatTile label="Active Grants" value={String(data?.grants.length ?? 0)} />
             <StatTile label="Manual Adjustments" value={String(data?.history.length ?? 0)} hint="All time" />
           </div>
 
+          {/*
+            Where the total comes from. Without this an operator sees one
+            number and no way to tell which part is outstanding, which is how
+            a player blocked by deposit turnover looked like a player with no
+            requirement at all.
+          */}
           <Card padding="md" className="mb-4">
-            <h2 className="mb-3 text-sm font-semibold text-ink-hi">Adjust requirement</h2>
+            <h2 className="mb-3 text-sm font-semibold text-ink-hi">
+              Where this comes from
+              <span className="ml-2 font-normal text-ink-lo">
+                {data?.isMet ? 'Requirement met, withdrawal allowed' : 'Withdrawal blocked until met'}
+              </span>
+            </h2>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[520px] text-left text-sm">
+                <thead className="text-xs uppercase text-ink-lo">
+                  <tr className="border-b border-neon/10">
+                    <th scope="col" className="py-2 pr-3 font-medium">Source</th>
+                    <th scope="col" className="py-2 pr-3 text-right font-medium">Required</th>
+                    <th scope="col" className="py-2 pr-3 text-right font-medium">Completed</th>
+                    <th scope="col" className="py-2 pr-3 text-right font-medium">Remaining</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {([
+                    ['Deposit', data?.breakdown.deposit],
+                    ['Betting pass', data?.breakdown.bettingPass],
+                    ['Referral', data?.breakdown.referral],
+                    ['Spin', data?.breakdown.spin],
+                  ] as const).map(([label, part]) => (
+                    <tr key={label} className="border-b border-neon/5">
+                      <td className="py-2 pr-3 text-ink-hi">{label}</td>
+                      <td className="py-2 pr-3 text-right text-ink-mid">{formatBDT(part?.required ?? 0)}</td>
+                      <td className="py-2 pr-3 text-right text-ink-mid">{formatBDT(part?.completed ?? 0)}</td>
+                      <td className="py-2 pr-3 text-right font-semibold text-ink-hi">{formatBDT(part?.remaining ?? 0)}</td>
+                    </tr>
+                  ))}
+                  <tr>
+                    <td className="py-2 pr-3 text-ink-hi">Bonus grants</td>
+                    <td className="py-2 pr-3 text-right text-ink-lo">.</td>
+                    <td className="py-2 pr-3 text-right text-ink-lo">.</td>
+                    <td className="py-2 pr-3 text-right font-semibold text-ink-hi">{formatBDT(data?.grantsRemaining ?? 0)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </Card>
+
+          <Card padding="md" className="mb-4">
+            <h2 className="mb-1 text-sm font-semibold text-ink-hi">Adjust bonus grant requirement</h2>
+            <p className="mb-3 text-xs text-ink-lo">
+              Applies to the bonus grant portion only, currently {formatBDT(data?.grantsRemaining ?? 0)}. Deposit and
+              betting pass turnover follow the player&apos;s own deposits and wagering and cannot be edited here.
+            </p>
 
             <div className="flex flex-wrap items-end gap-3">
               <div>

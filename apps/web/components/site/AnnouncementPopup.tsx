@@ -129,25 +129,58 @@ function matchesPage(p: PopupItem, pathname: string): boolean {
   }
 }
 
+// Mirrors FirstVisitAuthPopup's own "have they seen it" check, deliberately
+// read-only: this decides whether to WAIT, and must never mark the prompt as
+// seen on its behalf. Key kept in step with COOKIE_KEY there.
+const FIRST_VISIT_KEY = 'pasha9_first_visit_seen';
+
+function firstVisitPromptPending(): boolean {
+  if (typeof window === 'undefined') return false;
+  // Signed-in players never get the prompt, so nothing is pending for them.
+  // The cookie is set for guests once the prompt has been shown and closed.
+  const seenCookie = document.cookie.split('; ').some((row) => row.startsWith(`${FIRST_VISIT_KEY}=`));
+  if (seenCookie) return false;
+  try {
+    if (window.sessionStorage.getItem(FIRST_VISIT_KEY) === '1') return false;
+  } catch { /* storage blocked; fall through to the cookie result */ }
+  // Not seen yet, so a guest is about to get the prompt. Callers must check
+  // signed-in state first, since this cookie is never set for members.
+  return true;
+}
+
 export function AnnouncementPopup() {
   const t = useT();
   const pathname = usePathname() ?? '/';
   const [popups, setPopups] = useState<PopupItem[]>([]);
   const [active, setActive] = useState<PopupItem | null>(null);
+  // Reported by the same endpoint that filters the list, so there is one
+  // source of truth for who the viewer is. Needed because the first-visit
+  // cookie is only ever set for guests: without this, a signed-in player would
+  // look like someone still waiting on the prompt and never see a popup again.
+  const [signedIn, setSignedIn] = useState(false);
 
   useEffect(() => {
-    fetch('/api/content/popups')
+    fetch('/api/content/popups', { credentials: 'include' })
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setPopups(Array.isArray(d?.popups) ? (d.popups as PopupItem[]) : []))
+      .then((d) => {
+        setPopups(Array.isArray(d?.popups) ? (d.popups as PopupItem[]) : []);
+        setSignedIn(Boolean(d?.signedIn));
+      })
       .catch(() => {});
   }, []);
 
   // Page-targeted popups: show the first eligible one for the current path.
   useEffect(() => {
     if (active) return;
+    // The register / login prompt owns the screen for a first-time visitor.
+    // Announcements queue behind it rather than stacking on top, which is what
+    // buried the registration screen under reward popups. Once that prompt has
+    // been seen or dismissed this returns false and announcements resume, so
+    // nothing is lost, only deferred.
+    if (!signedIn && firstVisitPromptPending()) return;
     const candidate = popups.find((p) => p.target !== 'deposit_click' && matchesPage(p, pathname) && !hasSeen(p) && !dismissedIds.has(p.id));
     if (candidate) setActive(candidate);
-  }, [popups, pathname, active]);
+  }, [popups, pathname, active, signedIn]);
 
   // Action-targeted popups (deposit_click, ...) fired from a button.
   useEffect(() => {

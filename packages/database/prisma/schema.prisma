@@ -733,6 +733,13 @@ model PopupAnnouncement {
   target    String        @default("entry")
   targetUrl String?
   frequency String        @default("always")
+  // Who may see this popup, relative to being signed in:
+  //   guest    - only before registration / login
+  //   authed   - only after registration / login
+  //   both     - either (the previous behaviour, so existing rows are unchanged)
+  //   disabled - never shown, without deleting the row or losing its content
+  // Defaults to 'both' so nothing already configured changes on deploy.
+  audience  String        @default("both")
   imageUrl  String?
   audioUrl  String?
   createdAt DateTime      @default(now())

@@ -42,6 +42,8 @@ interface PopupRow {
   target: string;
   targetUrl?: string | null;
   frequency: string;
+  /** guest | authed | both | disabled */
+  audience: string;
   imageUrl?: string | null;
   audioUrl?: string | null;
   createdAt: string;
@@ -59,6 +61,9 @@ const NEW_POPUP: PopupRow = {
   target: 'entry',
   targetUrl: '',
   frequency: 'always',
+  // Matches the column default, so a new popup behaves exactly as popups did
+  // before this setting existed until the operator narrows it.
+  audience: 'both',
   imageUrl: '',
   audioUrl: '',
   createdAt: '',
@@ -114,6 +119,7 @@ export default function AdminPopupsPage() {
       target: editor.target,
       targetUrl: editor.targetUrl || null,
       frequency: editor.frequency,
+      audience: editor.audience,
       imageUrl: editor.imageUrl || null,
       audioUrl: editor.audioUrl || null,
     };
@@ -255,7 +261,26 @@ export default function AdminPopupsPage() {
                   <option value="once_per_day">Once per day</option>
                 </Select>
               </FormField>
+              <FormField
+                label="Show to"
+                hint="Reward popups should be After login, so a first-time visitor is not interrupted before they can register."
+              >
+                <Select value={editor.audience} onChange={(e) => setEditor({ ...editor, audience: e.target.value })}>
+                  <option value="both">Everyone</option>
+                  <option value="guest">Before registration / login only</option>
+                  <option value="authed">After registration / login only</option>
+                  <option value="disabled">Disabled</option>
+                </Select>
+              </FormField>
             </div>
+            {editor.audience === 'guest' || editor.audience === 'both' ? (
+              <p className="rounded-lg border border-amber-400/40 bg-amber-500/10 p-2 text-[11px] leading-relaxed text-brand-inkSoft">
+                <span className="font-semibold text-brand-ink">Note: </span>
+                signed-out visitors will see this. The register and login prompt always takes priority and this popup
+                waits behind it, but a reward or bonus message still reads oddly to someone with no account yet. Set it
+                to After registration / login unless it is meant for new visitors.
+              </p>
+            ) : null}
             {editor.target === 'deposit_click' ? (
               <p className="rounded-lg border border-amber-400/40 bg-amber-500/10 p-2 text-[11px] leading-relaxed text-brand-inkSoft">
                 <span className="font-semibold text-brand-ink">Note: </span>

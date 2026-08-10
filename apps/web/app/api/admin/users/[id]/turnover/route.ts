@@ -28,6 +28,7 @@ import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db/client';
 import { withAuth, ensurePermission, recordActivity } from '@/lib/auth/guard';
 import { jsonError, jsonOk } from '@/lib/auth/errors';
+import { computeDepositTurnover } from '@/lib/turnover/deposit-gate';
 
 const schema = z.object({
   mode: z.enum(['increase', 'decrease', 'set']),
@@ -49,7 +50,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   return withAuth(async () => {
     await ensurePermission('users.read');
 
-    const [grants, history] = await Promise.all([
+    const [grants, history, gate] = await Promise.all([
       db.userBonus.findMany({
         where: { userId: params.id, status: 'active' },
         select: { id: true, amount: true, sourceType: true, turnoverRequired: true, turnoverProgress: true },
@@ -60,10 +61,47 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
         orderBy: { createdAt: 'desc' },
         take: 100,
       }),
+      // THE figure the player is actually held to. Deposit and betting pass
+      // turnover are not bonus grants, so counting only UserBonus rows showed
+      // an operator 0 while the player was blocked by thousands. Both sides
+      // now read this one function, so they cannot disagree again.
+      computeDepositTurnover(params.id),
     ]);
 
     return jsonOk({
-      remaining: Number(remainingFor(grants)),
+      // What the player sees on the withdrawal page, to the decimal.
+      remaining: Number(gate.remainingTurnover),
+      required: Number(gate.requiredTurnover),
+      completed: Number(gate.completedTurnover),
+      isMet: gate.isMet,
+      // Where that total comes from, so an operator can see which part is
+      // outstanding instead of guessing.
+      breakdown: {
+        deposit: {
+          required: Number(gate.depositRequired),
+          completed: Number(gate.depositCompleted),
+          remaining: Number(gate.depositRemaining),
+        },
+        bettingPass: {
+          required: Number(gate.bettingPassRequired),
+          completed: Number(gate.bettingPassCompleted),
+          remaining: Number(gate.bettingPassRemaining),
+        },
+        referral: {
+          required: Number(gate.referralRequired),
+          completed: Number(gate.referralCompleted),
+          remaining: Number(gate.referralRemaining),
+        },
+        spin: {
+          required: Number(gate.spinRequired),
+          completed: Number(gate.spinCompleted),
+          remaining: Number(gate.spinRemaining),
+        },
+      },
+      // Bonus-grant requirement only. Kept separate and clearly named because
+      // the adjustment controls below still operate on these grants, so an
+      // operator needs to know how much of the total they can actually move.
+      grantsRemaining: Number(remainingFor(grants)),
       grants: grants.map((g) => ({
         id: g.id,
         sourceType: g.sourceType,
