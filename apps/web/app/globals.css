@@ -3,18 +3,39 @@
 @tailwind utilities;
 
 /* ---------------------------------------------------------------------------
- * Forced-dark opt-out.
+ * Forced-dark defence.
  *
  * Every colour on this site is authored, not user-agent derived, so an
- * engine-generated dark transform can only corrupt it. Android's force-dark
- * (Chrome Auto Dark, and the WebViews inside camera / QR scanner apps, where
- * referral QR scans land) inverts CSS backgrounds while leaving images
- * untouched, producing the broken black-and-brown pages players screenshot.
+ * engine-generated dark transform can only corrupt it: CSS backgrounds invert
+ * to black-brown while images keep their true colours, which players
+ * screenshot as the theme "breaking" after scanning a referral QR.
+ *
+ * 'only light' was shipped first and verified live in both the meta tag and
+ * this compiled stylesheet, and Samsung Internet's forced website-dark and
+ * the scanner-app WebViews inverted the site anyway - those engines only
+ * exempt pages that CLAIM DARK SUPPORT, in which case they apply the page's
+ * own dark styles instead of transforming it. So the page now claims both
+ * schemes. There are no dark styles here: every colour is explicit, so
+ * "dark" renders identically to light, and the claim's only effect is that
+ * the inverters stand down. Chrome's Auto Dark exempts dark-capable pages
+ * the same way, so nothing that honoured the old declaration is lost.
+ *
+ * The html pin below is what makes the claim safe. A page that claims dark
+ * support gets the UA's dark canvas defaults, meaning white canvastext for
+ * any element without an authored colour - white text on our white paper.
+ * Pinning the canvas and base text colour keeps every UA default anchored to
+ * the brand palette in both schemes.
+ *
  * Declared here as well as in the root layout viewport because WebView
  * force-dark keys off the CSS root property, while Chrome reads the meta.
  * ------------------------------------------------------------------------- */
 :root {
-  color-scheme: only light;
+  color-scheme: light dark;
+}
+
+html {
+  background-color: #FFFFFF; /* brand.paper */
+  color: #0F1115; /* brand.ink */
 }
 
 /* ---------------------------------------------------------------------------

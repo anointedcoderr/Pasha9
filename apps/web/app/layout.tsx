@@ -131,15 +131,15 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   themeColor: '#06120c',
-  // The site styles itself and supports exactly one scheme. Without this
-  // declaration, Chrome's Auto Dark Theme and Android WebView force-dark
-  // (camera and QR scanner in-app browsers especially) rewrite the palette:
-  // CSS backgrounds invert to muddy brown-black while images keep their true
-  // colors, which players reported as the theme "breaking" after scanning a
-  // referral QR. 'only light' is the documented opt-out; the matching CSS
-  // declaration lives on :root in globals.css because WebView force-dark
-  // checks the CSS property rather than the meta tag.
-  colorScheme: 'only light',
+  // Forced-dark defence. 'only light' was tried first and verified live, and
+  // Samsung Internet's forced website-dark plus scanner-app WebViews inverted
+  // the site anyway: those engines only exempt pages that claim dark support,
+  // applying the page's own dark styles instead of transforming it. The site
+  // has no dark styles - every colour is authored - so claiming both schemes
+  // renders identically and simply makes the inverters stand down. The full
+  // reasoning and the html canvas pin that makes this safe live with the
+  // matching :root declaration in globals.css.
+  colorScheme: 'light dark',
 };
 
 // Reading cookies + headers in the root layout opts the tree into dynamic rendering,
