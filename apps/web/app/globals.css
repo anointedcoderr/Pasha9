@@ -3,6 +3,21 @@
 @tailwind utilities;
 
 /* ---------------------------------------------------------------------------
+ * Forced-dark opt-out.
+ *
+ * Every colour on this site is authored, not user-agent derived, so an
+ * engine-generated dark transform can only corrupt it. Android's force-dark
+ * (Chrome Auto Dark, and the WebViews inside camera / QR scanner apps, where
+ * referral QR scans land) inverts CSS backgrounds while leaving images
+ * untouched, producing the broken black-and-brown pages players screenshot.
+ * Declared here as well as in the root layout viewport because WebView
+ * force-dark keys off the CSS root property, while Chrome reads the meta.
+ * ------------------------------------------------------------------------- */
+:root {
+  color-scheme: only light;
+}
+
+/* ---------------------------------------------------------------------------
  * Touch responsiveness baseline.
  *
  * iOS Safari (and several Android WebViews) defer click dispatch by

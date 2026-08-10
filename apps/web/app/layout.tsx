@@ -131,6 +131,15 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   themeColor: '#06120c',
+  // The site styles itself and supports exactly one scheme. Without this
+  // declaration, Chrome's Auto Dark Theme and Android WebView force-dark
+  // (camera and QR scanner in-app browsers especially) rewrite the palette:
+  // CSS backgrounds invert to muddy brown-black while images keep their true
+  // colors, which players reported as the theme "breaking" after scanning a
+  // referral QR. 'only light' is the documented opt-out; the matching CSS
+  // declaration lives on :root in globals.css because WebView force-dark
+  // checks the CSS property rather than the meta tag.
+  colorScheme: 'only light',
 };
 
 // Reading cookies + headers in the root layout opts the tree into dynamic rendering,
