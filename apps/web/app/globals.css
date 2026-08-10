@@ -38,6 +38,22 @@ html {
   color: #0F1115; /* brand.ink */
 }
 
+/* Some engines (Samsung Internet versions among them) decide whether a site
+ * "has a dark theme" by looking for an actual prefers-color-scheme media
+ * query rather than the color-scheme property. This block exists to be
+ * found in that check. Its body re-asserts the brand canvas, which is also
+ * the truthful statement of this site's dark theme: identical to light,
+ * because every colour here is authored. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: light dark;
+  }
+  html {
+    background-color: #FFFFFF; /* brand.paper */
+    color: #0F1115; /* brand.ink */
+  }
+}
+
 /* ---------------------------------------------------------------------------
  * Touch responsiveness baseline.
  *

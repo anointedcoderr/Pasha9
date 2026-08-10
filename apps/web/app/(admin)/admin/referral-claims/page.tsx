@@ -14,6 +14,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { PageHeader } from '@/components/site/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { NumericInput } from '@/components/ui/NumericInput';
 import { Chip } from '@/components/ui/Chip';
 import { Modal } from '@/components/ui/Modal';
 import { FormField, Textarea } from '@/components/ui/Input';
@@ -220,23 +221,23 @@ export default function AdminReferralClaimsPage() {
           </label>
           <label className="block">
             <span className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">Fixed reward minimum deposit</span>
-            <input type="number" min={0} max={10000000} value={settings.firstDepositMinBdt} onChange={(e) => setSettings({ ...settings, firstDepositMinBdt: Number(e.target.value) })} className={inputCls} />
+            <NumericInput min={0} max={10000000} value={settings.firstDepositMinBdt} onValueChange={(n) => setSettings({ ...settings, firstDepositMinBdt: n })} />
           </label>
           <label className="block">
             <span className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">Global fixed reward</span>
-            <input type="number" min={0} max={1000000} value={settings.firstDepositRewardBdt} onChange={(e) => setSettings({ ...settings, firstDepositRewardBdt: Number(e.target.value) })} className={inputCls} />
+            <NumericInput min={0} max={1000000} value={settings.firstDepositRewardBdt} onValueChange={(n) => setSettings({ ...settings, firstDepositRewardBdt: n })} />
           </label>
           <label className="block">
             <span className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">Hold days</span>
-            <input type="number" min={0} max={180} value={settings.holdDays} onChange={(e) => setSettings({ ...settings, holdDays: Number(e.target.value) })} className={inputCls} />
+            <NumericInput min={0} max={180} value={settings.holdDays} onValueChange={(n) => setSettings({ ...settings, holdDays: n })} />
           </label>
           <label className="block">
             <span className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">Fixed reward turnover (Nx)</span>
-            <input type="number" min={0} max={50} value={settings.turnoverX} onChange={(e) => setSettings({ ...settings, turnoverX: Number(e.target.value) })} className={inputCls} />
+            <NumericInput min={0} max={50} value={settings.turnoverX} onValueChange={(n) => setSettings({ ...settings, turnoverX: n })} />
           </label>
           <label className="block">
             <span className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">Commission turnover (Nx)</span>
-            <input type="number" min={0} max={50} value={settings.commissionTurnoverX} onChange={(e) => setSettings({ ...settings, commissionTurnoverX: Number(e.target.value) })} className={inputCls} />
+            <NumericInput min={0} max={50} value={settings.commissionTurnoverX} onValueChange={(n) => setSettings({ ...settings, commissionTurnoverX: n })} />
           </label>
           <div className="flex items-end">
             <Button variant="gold" leftIcon={<Save className="h-4 w-4" />} loading={savingSettings} onClick={saveSettings} className="w-full">Save</Button>

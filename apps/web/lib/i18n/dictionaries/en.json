@@ -370,6 +370,8 @@
     "support": "Support Messages",
     "settings": "System Settings",
     "activity": "Activity Log",
+    "audit": "Audit & Accountability",
+    "registrationBonus": "Registration Bonus",
     "handover": "Source Handover",
     "totalUsers": "Total Users",
     "activeUsers": "Active Users",

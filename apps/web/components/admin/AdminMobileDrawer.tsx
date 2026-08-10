@@ -38,6 +38,7 @@ import {
   Ticket,
   Globe,
   ShieldCheck,
+  ScanSearch,
   KeyRound,
   BarChart3,
   Sparkles,
@@ -102,6 +103,7 @@ const GROUPS = [
       // Bonus Management with the deposit tier ladder directly beneath
       // it as the simple mode. Kept in lockstep with AdminSidebar.
       { key: 'bonuses', href: ROUTES.admin.bonuses, icon: Gift },
+      { key: 'registrationBonus', href: ROUTES.admin.registrationBonus, icon: Sparkles },
       { key: 'depositBonusTiers', href: ROUTES.admin.depositBonusTiers, icon: Layers },
       { key: 'promotionBanners', href: ROUTES.admin.promotionBanners, icon: ImageIcon },
       { key: 'affiliate', href: ROUTES.admin.affiliate, icon: Briefcase },
@@ -188,6 +190,11 @@ const GROUPS = [
       { key: 'support', href: ROUTES.admin.support, icon: LifeBuoy },
       { key: 'settings', href: ROUTES.admin.settings, icon: Settings },
       { key: 'activity', href: ROUTES.admin.activity, icon: ClipboardList },
+      // This drawer keeps its own copy of the nav groups and has drifted from
+      // AdminSidebar before (VIP, and now these two). The client administers
+      // from a phone, so an entry missing HERE is a feature he cannot find at
+      // all, whatever the desktop sidebar shows.
+      { key: 'audit', href: ROUTES.admin.audit, icon: ScanSearch },
       { key: 'handover', href: ROUTES.admin.handover, icon: FileKey2 },
     ],
   },

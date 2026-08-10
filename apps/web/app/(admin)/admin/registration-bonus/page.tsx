@@ -16,6 +16,7 @@ import { PageHeader } from '@/components/site/PageHeader';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { FormField, Input } from '@/components/ui/Input';
+import { NumericInput } from '@/components/ui/NumericInput';
 import { Switch } from '@/components/ui/Switch';
 import { Gift, Save, Check } from 'lucide-react';
 
@@ -62,14 +63,6 @@ export default function RegistrationBonusPage() {
 
   const set = <K extends keyof Config>(key: K, value: Config[K]) =>
     setCfg((c) => (c ? { ...c, [key]: value } : c));
-
-  // A number field mid-edit can read "1e" or "", both of which give NaN.
-  // Sending that would fail validation with a message about a field the
-  // operator thought they had filled in.
-  const num = (v: string) => {
-    const n = Number(v);
-    return Number.isFinite(n) && n >= 0 ? n : 0;
-  };
 
   const save = async () => {
     if (!cfg) return;
@@ -134,38 +127,22 @@ export default function RegistrationBonusPage() {
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <FormField label="Bonus amount (BDT)" hint="Credited at sign-up.">
-                  <Input
-                    type="number" min={0} step="0.01"
-                    value={String(cfg.amount)}
-                    onChange={(e) => set('amount', num(e.target.value))}
-                  />
+                  <NumericInput min={0} step="0.01" value={cfg.amount} onValueChange={(n) => set('amount', n)} />
                 </FormField>
 
                 <FormField label="Maximum winning limit (BDT)" hint="Most a player can keep from this bonus. 0 means no limit.">
-                  <Input
-                    type="number" min={0} step="0.01"
-                    value={String(cfg.maxWinning)}
-                    onChange={(e) => set('maxWinning', num(e.target.value))}
-                  />
+                  <NumericInput min={0} step="0.01" value={cfg.maxWinning} onValueChange={(n) => set('maxWinning', n)} />
                 </FormField>
 
                 <FormField
                   label="Required deposit (%)"
                   hint="Percent OF THE BONUS AMOUNT the player must deposit before their winnings unlock."
                 >
-                  <Input
-                    type="number" min={0} step="1"
-                    value={String(cfg.requiredDepositPercent)}
-                    onChange={(e) => set('requiredDepositPercent', num(e.target.value))}
-                  />
+                  <NumericInput min={0} step="1" value={cfg.requiredDepositPercent} onValueChange={(n) => set('requiredDepositPercent', n)} />
                 </FormField>
 
                 <FormField label="Turnover multiplier" hint="Wagering requirement is the bonus amount times this. 0 means none.">
-                  <Input
-                    type="number" min={0} step="0.1"
-                    value={String(cfg.turnoverMultiplier)}
-                    onChange={(e) => set('turnoverMultiplier', num(e.target.value))}
-                  />
+                  <NumericInput min={0} step="0.1" value={cfg.turnoverMultiplier} onValueChange={(n) => set('turnoverMultiplier', n)} />
                 </FormField>
               </div>
 

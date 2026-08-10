@@ -44,6 +44,53 @@ function qrTarget(inviteLink: string): string {
   }
 }
 
+/**
+ * Saving the image the way each platform actually allows.
+ *
+ * A plain <a download> on a data URL does nothing on iOS Safari, which is
+ * where the client pressed the button and nothing happened. So, in order:
+ * the native share sheet where files can be shared (iOS's own Save Image
+ * path, and modern Android), a Blob download where the attribute is honoured
+ * (desktop and Android browsers), and opening the image in a new tab as the
+ * last resort, where a long-press saves it.
+ */
+async function saveQr(dataUrl: string, referralCode: string, bn: boolean): Promise<void> {
+  const filename = `referral-qr-${referralCode || 'code'}.png`;
+
+  // data URL -> Blob without fetch, so this works under any CSP.
+  const base64 = dataUrl.split(',')[1] ?? '';
+  const bytes = atob(base64);
+  const buf = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i += 1) buf[i] = bytes.charCodeAt(i);
+  const blob = new Blob([buf], { type: 'image/png' });
+
+  const file = new File([blob], filename, { type: 'image/png' });
+  if (typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({
+        files: [file],
+        title: bn ? 'আমার রেফারেল QR কোড' : 'My referral QR code',
+      });
+      return;
+    } catch {
+      // Cancelled or unsupported mid-flight; fall through to the download.
+    }
+  }
+
+  const url = URL.createObjectURL(blob);
+  try {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } finally {
+    // Delayed so the click has consumed the URL before it is revoked.
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  }
+}
+
 export function ReferralQrCode({ inviteLink, referralCode }: Props) {
   const { lang } = useLang();
   const bn = lang === 'bn';
@@ -105,14 +152,14 @@ export function ReferralQrCode({ inviteLink, referralCode }: Props) {
             : 'Your referral code is filled in automatically, nothing to type.'}
         </p>
         {dataUrl ? (
-          <a
-            href={dataUrl}
-            download={`referral-qr-${referralCode || 'code'}.png`}
+          <button
+            type="button"
+            onClick={() => void saveQr(dataUrl, referralCode, bn)}
             className="mt-3 inline-flex h-10 items-center gap-2 rounded-lg border border-brand-divider bg-brand-surface px-4 text-sm font-medium text-ink-hi hover:border-brand-yellow-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue-500/40"
           >
             <Download className="h-4 w-4" aria-hidden="true" />
-            {bn ? 'QR ডাউনলোড করুন' : 'Download QR'}
-          </a>
+            {bn ? 'QR সেভ করুন' : 'Save QR'}
+          </button>
         ) : null}
       </div>
     </div>

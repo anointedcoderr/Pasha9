@@ -17,6 +17,7 @@ import { PageHeader } from '@/components/site/PageHeader';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { FormField, Input, Textarea } from '@/components/ui/Input';
+import { NumericInput } from '@/components/ui/NumericInput';
 import { Select } from '@/components/ui/Select';
 import { Switch } from '@/components/ui/Switch';
 import { Modal } from '@/components/ui/Modal';
@@ -797,25 +798,25 @@ function RuleEditor({
           </Select>
         </FormField>
         <FormField label="Percent of deposit" hint="0 - 1000. Combined with flat amount.">
-          <Input type="number" min={0} value={value.percentage} onChange={(e) => set('percentage', Number(e.target.value))} />
+          <NumericInput min={0} value={value.percentage} onValueChange={(n) => set('percentage', n)} />
         </FormField>
         <FormField label="Flat amount (BDT)">
-          <Input type="number" min={0} value={value.amount} onChange={(e) => set('amount', Number(e.target.value))} />
+          <NumericInput min={0} value={value.amount} onValueChange={(n) => set('amount', n)} />
         </FormField>
         <FormField label="Max bonus cap (BDT)" hint="0 = unlimited.">
-          <Input type="number" min={0} value={value.maxBonus} onChange={(e) => set('maxBonus', Number(e.target.value))} />
+          <NumericInput min={0} value={value.maxBonus} onValueChange={(n) => set('maxBonus', n)} />
         </FormField>
         <FormField label="Min deposit to trigger (BDT)">
-          <Input type="number" min={0} value={value.minDeposit} onChange={(e) => set('minDeposit', Number(e.target.value))} />
+          <NumericInput min={0} value={value.minDeposit} onValueChange={(n) => set('minDeposit', n)} />
         </FormField>
         <FormField label="Turnover multiplier (Nx)" hint="0 = no wagering required. Bonus releases immediately.">
-          <Input type="number" min={0} value={value.turnoverX} onChange={(e) => set('turnoverX', Number(e.target.value))} />
+          <NumericInput min={0} value={value.turnoverX} onValueChange={(n) => set('turnoverX', n)} />
         </FormField>
         <FormField label="Validity (days)" hint="0 = never expires.">
-          <Input type="number" min={0} value={value.validityDays} onChange={(e) => set('validityDays', Number(e.target.value))} />
+          <NumericInput min={0} value={value.validityDays} onValueChange={(n) => set('validityDays', n)} />
         </FormField>
         <FormField label="Priority" hint="Higher wins when multiple rules of the same trigger type are eligible.">
-          <Input type="number" min={0} value={value.priority} onChange={(e) => set('priority', Number(e.target.value))} />
+          <NumericInput min={0} value={value.priority} onValueChange={(n) => set('priority', n)} />
         </FormField>
       </div>
       <FormField label="Description (shown on /promotions)">
@@ -842,13 +843,13 @@ function RuleEditor({
             <Input value={promotion.targetUrl ?? ''} onChange={(e) => setPromotion({ targetUrl: e.target.value || null })} placeholder="/referral" />
           </FormField>
           <FormField label="Required or recommended deposit (BDT)" hint="Prefills the deposit page. Falls back to Min deposit.">
-            <Input type="number" min={0} value={promotion.requiredDepositAmount} onChange={(e) => setPromotion({ requiredDepositAmount: Number(e.target.value) })} />
+            <NumericInput min={0} value={promotion.requiredDepositAmount} onValueChange={(n) => setPromotion({ requiredDepositAmount: n })} />
           </FormField>
           <FormField label="Minimum approved deposit count">
-            <Input type="number" min={0} value={promotion.minApprovedDepositCount} onChange={(e) => setPromotion({ minApprovedDepositCount: Number(e.target.value) })} />
+            <NumericInput min={0} value={promotion.minApprovedDepositCount} onValueChange={(n) => setPromotion({ minApprovedDepositCount: n })} />
           </FormField>
           <FormField label="Minimum approved deposit total (BDT)">
-            <Input type="number" min={0} value={promotion.minApprovedDepositTotal} onChange={(e) => setPromotion({ minApprovedDepositTotal: Number(e.target.value) })} />
+            <NumericInput min={0} value={promotion.minApprovedDepositTotal} onValueChange={(n) => setPromotion({ minApprovedDepositTotal: n })} />
           </FormField>
           <label className="flex items-center gap-2 self-end pb-2 text-sm text-ink-mid">
             <Switch checked={promotion.depositRequired} onChange={(v) => setPromotion({ depositRequired: Boolean(v) })} />
@@ -867,7 +868,7 @@ function RuleEditor({
             </Select>
           </FormField>
           <FormField label="Max grants per period" hint="Max grants per period, blank or 0 = 1.">
-            <Input type="number" min={0} value={value.claimLimit} onChange={(e) => set('claimLimit', Number(e.target.value))} disabled={(value.claimPeriod || 'unlimited') === 'unlimited'} />
+            <NumericInput min={0} value={value.claimLimit} onValueChange={(n) => set('claimLimit', n)} disabled={(value.claimPeriod || 'unlimited') === 'unlimited'} />
           </FormField>
         </div>
       </div>
@@ -877,7 +878,7 @@ function RuleEditor({
         <p className="text-xs text-ink-mid">Award wheel spins alongside this bonus. Set the count above 0 and pick the wheel the spins apply to.</p>
         <div className="grid gap-3 md:grid-cols-2">
           <FormField label="Free spin count" hint="0 = no free spins.">
-            <Input type="number" min={0} value={value.freeSpinCount} onChange={(e) => set('freeSpinCount', Number(e.target.value))} />
+            <NumericInput min={0} value={value.freeSpinCount} onValueChange={(n) => set('freeSpinCount', n)} />
           </FormField>
           <FormField label="Wheel" hint="Which spin wheel the free spins belong to.">
             <Select
@@ -1006,7 +1007,7 @@ function DiagnoseForm() {
           <Input value={userId} onChange={(e) => setUserId(e.target.value)} placeholder="cuid..." />
         </FormField>
         <FormField label="Deposit amount (BDT)" required>
-          <Input type="number" min={1} value={amount} onChange={(e) => setAmount(Number(e.target.value))} />
+          <NumericInput min={1} value={amount} onValueChange={setAmount} />
         </FormField>
         <div className="md:col-span-2 flex justify-end">
           <Button type="submit" loading={busy} disabled={!userId.trim() || amount <= 0}>Run diagnose</Button>
@@ -1095,7 +1096,7 @@ function ManualGrantForm({ rules, onDone }: { rules: RuleRow[]; onDone: (msg: st
         </Select>
       </FormField>
       <FormField label="Bonus amount (BDT)" required hint="Engine locks this in lockedBalance until turnover is met.">
-        <Input type="number" min={1} value={amount} onChange={(e) => setAmount(Number(e.target.value))} />
+        <NumericInput min={1} value={amount} onValueChange={setAmount} />
       </FormField>
       <FormField label="Note (optional)">
         <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Internal context only." />
