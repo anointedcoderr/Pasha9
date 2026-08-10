@@ -21,6 +21,7 @@ const schema = z.object({
   cadence: z.enum(['weekly', 'monthly', 'manual', 'auto']).optional(),
   holdDays: z.coerce.number().int().min(0).max(180).optional(),
   turnoverX: z.coerce.number().min(0).max(50).optional(),
+  commissionTurnoverX: z.coerce.number().min(0).max(50).optional(),
   firstDepositMinBdt: z.coerce.number().min(0).max(10_000_000).optional(),
   firstDepositRewardBdt: z.coerce.number().min(0).max(1_000_000).optional(),
 });
@@ -63,6 +64,13 @@ export async function PATCH(req: NextRequest) {
         where: { key: 'referral_turnover_x' },
         update: { value: String(parsed.data.turnoverX), type: 'number' },
         create: { key: 'referral_turnover_x', value: String(parsed.data.turnoverX), type: 'number' },
+      }));
+    }
+    if (parsed.data.commissionTurnoverX !== undefined) {
+      writes.push(db.systemSetting.upsert({
+        where: { key: 'referral_commission_turnover_x' },
+        update: { value: String(parsed.data.commissionTurnoverX), type: 'number' },
+        create: { key: 'referral_commission_turnover_x', value: String(parsed.data.commissionTurnoverX), type: 'number' },
       }));
     }
     if (parsed.data.firstDepositMinBdt !== undefined) {

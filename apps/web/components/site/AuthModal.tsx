@@ -292,11 +292,27 @@ function SignupForm({ onSuccess, onSwitch }: { onSuccess: () => void; onSwitch: 
   const {
     register,
     handleSubmit,
+    setValue,
+    getValues,
     formState: { errors },
   } = useForm<SignupInput>({
     resolver: zodResolver(signupSchema),
     defaultValues: { username: '', phone: '', password: '', confirm: '', referral: referralFromUrl, agree: false },
   });
+
+  // A referral code captured on an earlier page view (QR scan, shared link)
+  // survives in localStorage - see the persistence effect in Header. Applied
+  // in an effect so it is client-only and cannot cause a hydration mismatch,
+  // and only when nothing better exists: a code in the current URL or one the
+  // visitor typed themselves always wins over the remembered one.
+  useEffect(() => {
+    if (referralFromUrl || getValues('referral')) return;
+    try {
+      const stored = window.localStorage.getItem('pasha9_ref_code');
+      if (stored) setValue('referral', stored);
+    } catch { /* storage blocked; the field stays manual */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const onSubmit = async (values: SignupInput) => {
     setApiError(null);
@@ -318,6 +334,9 @@ function SignupForm({ onSuccess, onSwitch }: { onSuccess: () => void; onSwitch: 
         setApiError(err);
         return;
       }
+      // The remembered referral code has done its job; clearing it stops it
+      // leaking into any later registration from this same browser.
+      try { window.localStorage.removeItem('pasha9_ref_code'); } catch { /* ignore */ }
       onSuccess();
       triggerWalletRefresh();
       triggerAuthChanged();

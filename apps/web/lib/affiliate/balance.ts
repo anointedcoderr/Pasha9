@@ -28,6 +28,11 @@ import { db } from '@/lib/db/client';
 const HOLD_DAYS_SETTING = 'referral_hold_days';
 const CADENCE_SETTING = 'referral_claim_cadence';
 const TURNOVER_SETTING = 'referral_turnover_x';
+// Separate multiplier for percentage-based deposit commissions (any level).
+// The client's fixed first-deposit reward and his 10%/5%/2.5% commissions are
+// different promotions with different risk, and one shared multiplier forced
+// them to move together.
+const COMMISSION_TURNOVER_SETTING = 'referral_commission_turnover_x';
 const ENABLED_SETTING = 'referral_enabled';
 const HOLD_ENABLED_SETTING = 'referral_hold_enabled';
 const FIRST_DEPOSIT_MIN_SETTING = 'referral_first_deposit_min_bdt';
@@ -40,7 +45,10 @@ export interface ReferralSettings {
   holdEnabled: boolean;
   cadence: 'weekly' | 'monthly' | 'manual' | 'auto';
   holdDays: number;
+  /** Wagering multiplier on the fixed first-deposit reward. */
   turnoverX: number;
+  /** Wagering multiplier on percentage deposit commissions, every level. */
+  commissionTurnoverX: number;
   firstDepositMinBdt: number;
   firstDepositRewardBdt: number;
 }
@@ -53,12 +61,18 @@ export interface BalanceSnapshot {
 
 export async function loadReferralSettings(client: ReferralReadClient = db): Promise<ReferralSettings> {
   const rows = await client.systemSetting.findMany({
-    where: { key: { in: [HOLD_DAYS_SETTING, CADENCE_SETTING, TURNOVER_SETTING, ENABLED_SETTING, HOLD_ENABLED_SETTING, FIRST_DEPOSIT_MIN_SETTING, FIRST_DEPOSIT_REWARD_SETTING] } },
+    where: { key: { in: [HOLD_DAYS_SETTING, CADENCE_SETTING, TURNOVER_SETTING, COMMISSION_TURNOVER_SETTING, ENABLED_SETTING, HOLD_ENABLED_SETTING, FIRST_DEPOSIT_MIN_SETTING, FIRST_DEPOSIT_REWARD_SETTING] } },
   });
   const get = (k: string) => rows.find((r) => r.key === k)?.value;
   const cadence = (get(CADENCE_SETTING) ?? 'weekly').toLowerCase();
   const holdDaysRaw = Math.max(0, Number(get(HOLD_DAYS_SETTING) ?? 7) || 0);
   const turnoverX = Math.max(0, Number(get(TURNOVER_SETTING) ?? 0) || 0);
+  // Falls back to the shared multiplier when unset, so a site that never
+  // touches the new setting keeps exactly the behaviour it has today.
+  const commissionRaw = get(COMMISSION_TURNOVER_SETTING);
+  const commissionTurnoverX = commissionRaw == null || commissionRaw.trim() === ''
+    ? turnoverX
+    : Math.max(0, Number(commissionRaw) || 0);
   const firstDepositMinBdt = Math.max(0, Number(get(FIRST_DEPOSIT_MIN_SETTING) ?? 300) || 0);
   const firstDepositRewardBdt = Math.max(0, Number(get(FIRST_DEPOSIT_REWARD_SETTING) ?? 200) || 0);
   // Default ON when the row is missing so existing installations keep
@@ -75,6 +89,7 @@ export async function loadReferralSettings(client: ReferralReadClient = db): Pro
     // projector marks commissions claimable immediately.
     holdDays: holdEnabled ? holdDaysRaw : 0,
     turnoverX,
+    commissionTurnoverX,
     firstDepositMinBdt,
     firstDepositRewardBdt,
   };

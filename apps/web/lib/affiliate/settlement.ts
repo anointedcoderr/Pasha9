@@ -56,9 +56,8 @@ async function createTurnoverGrantsInTx(
   claimId: string,
   commissions: CommissionForSettlement[],
   turnoverX: number,
+  commissionTurnoverX: number,
 ): Promise<string[]> {
-  if (turnoverX <= 0) return [];
-
   const fixedAmount = commissions
     .filter((c) => c.basis === 'first_deposit_reward')
     .reduce((sum, c) => sum.add(c.amount), new Prisma.Decimal(0));
@@ -66,25 +65,31 @@ async function createTurnoverGrantsInTx(
     .filter((c) => c.basis !== 'first_deposit_reward')
     .reduce((sum, c) => sum.add(c.amount), new Prisma.Decimal(0));
 
+  // Each kind carries its own multiplier now. The fixed first-deposit reward
+  // and percentage deposit commissions are different promotions with
+  // different abuse profiles, and a single shared multiplier forced the
+  // operator to gate both or neither. Because a claim settles the recipient's
+  // OWN commissions, the requirement is always a multiple of what that
+  // affiliate actually received, whichever level it came from.
   const groups = [
-    { sourceType: 'referral_first_deposit', amount: fixedAmount },
-    { sourceType: 'referral_commission', amount: commissionAmount },
+    { sourceType: 'referral_first_deposit', amount: fixedAmount, x: turnoverX },
+    { sourceType: 'referral_commission', amount: commissionAmount, x: commissionTurnoverX },
   ];
   const grantIds: string[] = [];
 
   for (const group of groups) {
-    if (group.amount.lte(0)) continue;
+    if (group.amount.lte(0) || group.x <= 0) continue;
     const grant = await tx.userBonus.create({
       data: {
         userId,
         bonusRuleId: null,
         amount: group.amount,
         status: 'active',
-        turnoverRequired: group.amount.mul(turnoverX),
+        turnoverRequired: group.amount.mul(group.x),
         turnoverProgress: 0,
         sourceType: group.sourceType,
         sourceId: claimId,
-        note: `Referral reward turnover ${turnoverX}x`,
+        note: `Referral reward turnover ${group.x}x`,
       },
     });
     grantIds.push(grant.id);
@@ -134,6 +139,7 @@ async function payReservedClaimInTx(
     opts.claimId,
     opts.commissions,
     opts.settings.turnoverX,
+    opts.settings.commissionTurnoverX,
   );
   const walletTx = await tx.transaction.create({
     data: {

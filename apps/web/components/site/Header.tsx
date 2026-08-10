@@ -119,6 +119,18 @@ export function Header() {
   // can never re-trigger again on a subsequent back-navigation,
   // and only opens the dialog when the user is actually a guest
   // (me is null after the probe).
+  // Remember a referral code arriving in the URL, from a shared link or a QR
+  // scan. The signup form reads the URL first and falls back to this, so the
+  // attribution survives the visitor browsing around, or coming back another
+  // day, before registering. Guests only: a signed-in player following
+  // someone's invite link must not have a stale code waiting if they ever
+  // create a second account, and their own code is meaningless to store.
+  useEffect(() => {
+    const r = params?.get('r')?.trim();
+    if (!r || me) return;
+    try { window.localStorage.setItem('pasha9_ref_code', r); } catch { /* storage blocked */ }
+  }, [params, me]);
+
   useEffect(() => {
     if (!authLoaded) return;
     const l = params?.get('login');

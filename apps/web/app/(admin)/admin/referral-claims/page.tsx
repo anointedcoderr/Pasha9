@@ -25,6 +25,8 @@ interface Settings {
   cadence: 'weekly' | 'monthly' | 'manual' | 'auto';
   holdDays: number;
   turnoverX: number;
+  /** Turnover multiplier for percentage deposit commissions, every level. */
+  commissionTurnoverX: number;
   firstDepositMinBdt: number;
   firstDepositRewardBdt: number;
 }
@@ -68,6 +70,9 @@ export default function AdminReferralClaimsPage() {
     cadence: 'weekly',
     holdDays: 7,
     turnoverX: 0,
+    // Replaced on load with the server's resolved value, which falls back to
+    // turnoverX while the operator has never set this explicitly.
+    commissionTurnoverX: 0,
     firstDepositMinBdt: 0,
     firstDepositRewardBdt: 0,
   });
@@ -120,6 +125,7 @@ export default function AdminReferralClaimsPage() {
           cadence: settings.cadence,
           holdDays: settings.holdDays,
           turnoverX: settings.turnoverX,
+          commissionTurnoverX: settings.commissionTurnoverX,
           firstDepositMinBdt: settings.firstDepositMinBdt,
           firstDepositRewardBdt: settings.firstDepositRewardBdt,
         }),
@@ -225,14 +231,18 @@ export default function AdminReferralClaimsPage() {
             <input type="number" min={0} max={180} value={settings.holdDays} onChange={(e) => setSettings({ ...settings, holdDays: Number(e.target.value) })} className={inputCls} />
           </label>
           <label className="block">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">Turnover (Nx)</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">Fixed reward turnover (Nx)</span>
             <input type="number" min={0} max={50} value={settings.turnoverX} onChange={(e) => setSettings({ ...settings, turnoverX: Number(e.target.value) })} className={inputCls} />
+          </label>
+          <label className="block">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-brand-inkMute">Commission turnover (Nx)</span>
+            <input type="number" min={0} max={50} value={settings.commissionTurnoverX} onChange={(e) => setSettings({ ...settings, commissionTurnoverX: Number(e.target.value) })} className={inputCls} />
           </label>
           <div className="flex items-end">
             <Button variant="gold" leftIcon={<Save className="h-4 w-4" />} loading={savingSettings} onClick={saveSettings} className="w-full">Save</Button>
           </div>
         </div>
-        <p className="mt-2 text-[11px] text-brand-inkMute">The fixed reward minimum applies only to the one-time direct referral reward. Percentage commissions apply to every approved deposit. Turnover above 0 creates a withdrawal lock that progresses with valid wagers.</p>
+        <p className="mt-2 text-[11px] text-brand-inkMute">The fixed reward minimum applies only to the one-time direct referral reward. Percentage commissions apply to every approved deposit. Fixed reward turnover gates the one-time reward; commission turnover gates percentage deposit commissions at every level, always as a multiple of the amount that affiliate actually received. Either at 0 means no lock for that kind. Example: 100 BDT commission at 5x must wager 500 BDT before it can be withdrawn.</p>
       </Card>
 
       <Card padding="md">

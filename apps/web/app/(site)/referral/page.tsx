@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
 import { Users, Copy, Check, LogIn, Wallet, Clock, AlertCircle, Share2, ArrowRight, RefreshCw, MessageCircle, Send, Facebook, MessageSquare, Mail } from 'lucide-react';
 import { CopyRow } from '@/components/ui/CopyRow';
+import { ReferralQrCode } from '@/components/site/ReferralQrCode';
 import { useAnnounce } from '@/components/ui/LiveRegion';
 import { useT, useLang } from '@/lib/i18n/context';
 import { formatBDT, formatDate, formatDateTime } from '@/lib/utils/format';
@@ -299,6 +300,9 @@ export default function ReferralPage() {
             <CopyRow label={t('referral.code')} value={data.user.referralCode || '-'} />
             <CopyRow label={t('referral.link')} value={data.user.inviteLink || '-'} />
           </div>
+
+          {/* Third way to share, alongside the code and the link above. */}
+          <ReferralQrCode inviteLink={data.user.inviteLink || ''} referralCode={data.user.referralCode || ''} />
 
           <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
             <Stat label={t('referral.totalInvited')} value={String(data.downline.level1Total + data.downline.level2Total + data.downline.level3Total)} />
