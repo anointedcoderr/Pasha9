@@ -19,7 +19,8 @@ import { StatTile } from '@/components/ui/StatTile';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { formatBDT, formatDateTime } from '@/lib/utils/format';
 import { useLang } from '@/lib/i18n/context';
-import { Target, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Target, RefreshCw, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { useAdminPermissions } from '@/lib/auth/use-admin-permissions';
 
 interface Grant {
   id: string;
@@ -73,6 +74,12 @@ export default function TurnoverPage() {
   const params = useParams<{ id: string }>();
   const userId = params?.id ?? '';
   const { lang } = useLang();
+  const { loaded: roleLoaded, role } = useAdminPermissions();
+  // Optimistic while loading, same reasoning as everywhere else this
+  // pattern is used tonight: the server (POST already gated to
+  // super_admin) is the real boundary, this only avoids flashing a form
+  // that will 403 on submit.
+  const canAdjust = !roleLoaded || role === 'super_admin';
 
   const [data, setData] = useState<TurnoverResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -224,6 +231,19 @@ export default function TurnoverPage() {
 
           <Card padding="md" className="mb-4">
             <h2 className="mb-1 text-sm font-semibold text-ink-hi">Adjust bonus grant requirement</h2>
+            {!canAdjust ? (
+              <>
+                <p className="mb-3 flex items-start gap-1.5 text-xs text-ink-mid">
+                  <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-lo" aria-hidden="true" />
+                  Only a Super Admin can manually adjust a turnover requirement. Currently{' '}
+                  <strong className="text-ink-hi">{formatBDT(data?.grantsRemaining ?? 0)}</strong> on the bonus grant portion.
+                </p>
+                <Button size="sm" variant="ghost" leftIcon={<RefreshCw className="h-3.5 w-3.5" />} onClick={load}>
+                  Refresh
+                </Button>
+              </>
+            ) : (
+            <>
             <p className="mb-3 text-xs text-ink-lo">
               Applies to the bonus grant portion only, currently {formatBDT(data?.grantsRemaining ?? 0)}. Deposit and
               betting pass turnover follow the player&apos;s own deposits and wagering and cannot be edited here.
@@ -310,6 +330,8 @@ export default function TurnoverPage() {
               {notice ? <p className="mt-3 text-sm text-emerald-600">{notice}</p> : null}
               {error ? <p className="mt-3 text-sm text-signal-danger">{error}</p> : null}
             </div>
+            </>
+            )}
           </Card>
 
           <Card padding="md" className="mb-4">

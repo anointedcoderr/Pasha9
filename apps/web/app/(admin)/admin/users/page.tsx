@@ -14,9 +14,12 @@ import { useLang } from '@/lib/i18n/context';
 import { Users, RefreshCw } from 'lucide-react';
 import type { ColumnDef } from '@tanstack/react-table';
 import { cn } from '@/lib/utils/cn';
+import { useAdminPermissions } from '@/lib/auth/use-admin-permissions';
 
 export default function AdminUsersPage() {
   const { lang } = useLang();
+  const { loaded: roleLoaded, role } = useAdminPermissions();
+  const isSuperAdmin = !roleLoaded || role === 'super_admin';
   const [rows, setRows] = useState<AdminUserSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -169,6 +172,7 @@ export default function AdminUsersPage() {
         loading={detailLoading}
         error={detailError}
         onAdjustBalance={(u) => { setBalanceUser(u); setBalanceOpen(true); setDrawerOpen(false); }}
+        viewerRole={role}
         onStatusChange={(nextStatus, reason) => {
           if (!detail) return;
           setDetailError(null);
@@ -215,6 +219,7 @@ export default function AdminUsersPage() {
         open={balanceOpen}
         onOpenChange={setBalanceOpen}
         user={balanceUser as unknown as Parameters<typeof BalanceAdjustModal>[0]['user']}
+        allowDebit={isSuperAdmin}
         onConfirm={async (payload) => {
           // Real wallet write. POST /api/admin/users/[id]/balance takes a
           // SIGNED amount (positive credits, negative debits), a reason,

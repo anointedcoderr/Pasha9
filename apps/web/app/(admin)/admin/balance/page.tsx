@@ -14,9 +14,10 @@ import { DataTable } from '@/components/ui/DataTable';
 import { BalanceAdjustModal } from '@/components/admin/BalanceAdjustModal';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
-import { Wallet, ArrowUpToLine, ArrowDownToLine, RefreshCw, Search } from 'lucide-react';
+import { Wallet, ArrowUpToLine, ArrowDownToLine, RefreshCw, Search, Coins } from 'lucide-react';
 import { formatBDT } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
+import { useAdminPermissions } from '@/lib/auth/use-admin-permissions';
 import type { ColumnDef } from '@tanstack/react-table';
 
 interface WalletRow {
@@ -37,6 +38,14 @@ interface ApiUser {
 }
 
 export default function AdminBalancePage() {
+  const { loaded: roleLoaded, role } = useAdminPermissions();
+  // Optimistic while role is loading: unrestricted is the least surprising
+  // default and the server enforces the real boundary regardless, so this
+  // never needs to be treated as a security gate, only a UX one.
+  const isSuperAdmin = !roleLoaded || role === 'super_admin';
+  const [points, setPoints] = useState<number | null>(null);
+  const [pointsLoaded, setPointsLoaded] = useState(false);
+
   const [open, setOpen] = useState(false);
   const [user, setUser] = useState<WalletRow | null>(null);
   const [mode, setMode] = useState<'credit' | 'debit'>('credit');
@@ -46,6 +55,21 @@ export default function AdminBalancePage() {
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+
+  const loadPoints = useCallback(async () => {
+    try {
+      const r = await fetch('/api/staff/points', { cache: 'no-store' });
+      const j = await r.json();
+      if (r.ok) setPoints(j?.unrestricted ? null : Number(j?.balance ?? 0));
+    } catch {
+      // Non-fatal: the credit button simply stays enabled and the server's
+      // own check is still the real gate if points turn out to be short.
+    } finally {
+      setPointsLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => { if (!isSuperAdmin) void loadPoints(); }, [isSuperAdmin, loadPoints]);
 
   const refresh = useCallback(async (q?: string) => {
     setRefreshing(true);
@@ -91,12 +115,29 @@ export default function AdminBalancePage() {
       id: 'actions',
       cell: ({ row }) => (
         <div className="flex justify-end gap-2">
-          <Button size="sm" variant="neon" leftIcon={<ArrowDownToLine className="h-3.5 w-3.5" />} onClick={() => { setUser(row.original); setMode('credit'); setOpen(true); }}>Credit</Button>
-          <Button size="sm" variant="ghost" leftIcon={<ArrowUpToLine className="h-3.5 w-3.5" />} onClick={() => { setUser(row.original); setMode('debit'); setOpen(true); }}>Debit</Button>
+          <Button
+            size="sm"
+            variant="neon"
+            leftIcon={<ArrowDownToLine className="h-3.5 w-3.5" />}
+            disabled={!isSuperAdmin && pointsLoaded && (points ?? 0) <= 0}
+            onClick={() => { setUser(row.original); setMode('credit'); setOpen(true); }}
+          >
+            Credit
+          </Button>
+          {/*
+            Debit only ever renders for a super_admin. Not just disabled: a
+            staff member cannot reduce a player's balance at all, by the
+            client's explicit requirement, and the server rejects it
+            regardless - this keeps the control from implying an ability
+            that does not exist for them.
+          */}
+          {isSuperAdmin ? (
+            <Button size="sm" variant="ghost" leftIcon={<ArrowUpToLine className="h-3.5 w-3.5" />} onClick={() => { setUser(row.original); setMode('debit'); setOpen(true); }}>Debit</Button>
+          ) : null}
         </div>
       ),
     },
-  ], []);
+  ], [isSuperAdmin, points, pointsLoaded]);
 
   // Called by BalanceAdjustModal on submit. The API enum is
   // adjust | bonus | referral, so the modal's credit/debit choice maps
@@ -124,18 +165,33 @@ export default function AdminBalancePage() {
     );
     setTimeout(() => setToast(null), 4500);
     await refresh(search);
+    if (!isSuperAdmin) await loadPoints();
   };
 
   return (
     <>
       <PageHeader
         title="Balance Management"
-        subtitle={loading ? 'Loading...' : `${rows.length} users . click Credit or Debit to adjust`}
+        subtitle={loading ? 'Loading...' : isSuperAdmin ? `${rows.length} users . click Credit or Debit to adjust` : `${rows.length} users . you can only credit, from your point balance below`}
         icon={<Wallet className="h-5 w-5" />}
         action={
-          <Button variant="ghost" leftIcon={<RefreshCw className={cn('h-3.5 w-3.5', refreshing && 'animate-spin')} />} onClick={() => refresh(search)}>
-            Refresh
-          </Button>
+          <div className="flex items-center gap-3">
+            {!isSuperAdmin && pointsLoaded ? (
+              <span
+                className={cn(
+                  'inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm font-semibold',
+                  (points ?? 0) > 0 ? 'border-neon/20 bg-base-panel/60 text-ink-hi' : 'border-signal-danger/40 bg-signal-danger/10 text-signal-danger',
+                )}
+                title="Your remaining staff credit points. Ask a Super Admin for more if this runs out."
+              >
+                <Coins className="h-3.5 w-3.5" aria-hidden="true" />
+                {formatBDT(points ?? 0)} points left
+              </span>
+            ) : null}
+            <Button variant="ghost" leftIcon={<RefreshCw className={cn('h-3.5 w-3.5', refreshing && 'animate-spin')} />} onClick={() => refresh(search)}>
+              Refresh
+            </Button>
+          </div>
         }
       />
 
@@ -171,6 +227,7 @@ export default function AdminBalancePage() {
           lockedBalance: user.lockedBalance,
         } as never : null}
         initialType={mode}
+        allowDebit={isSuperAdmin}
         onConfirm={onConfirm}
       />
     </>

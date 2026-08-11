@@ -56,6 +56,13 @@ export const LEDGER_TYPE = {
   tournament: 'tournament.prize',
   adminCredit: 'admin.credit',
   adminDebit: 'admin.debit',
+  // A credit made by a staff/admin account (not super_admin), spent from
+  // their StaffPointWallet. Kept distinct from admin.credit so an operator
+  // reading the ledger or Audit & Accountability can immediately tell a
+  // point-limited staff credit apart from an unrestricted super_admin one.
+  // Never used for a debit - staff cannot debit at all, see the balance
+  // route's role gate.
+  staffCredit: 'staff.credit',
   reversal: 'reversal',
   // One-time go-live entries, written by scripts/reset-balances.ts only.
   // openingBalance RECORDS money that already existed before the ledger did,

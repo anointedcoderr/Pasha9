@@ -79,9 +79,15 @@ interface Props {
   error: string | null;
   onAdjustBalance: (u: AdminUserSummary) => void;
   onStatusChange: (next: 'active' | 'blocked', reason?: string) => void;
+  // The viewer's own role, not the player's. Suspending, blocking or
+  // reinstating a player account is super_admin-only - the client's explicit
+  // requirement - and the server already rejects it for anyone else; this
+  // just keeps a staff member from seeing a switch that always fails.
+  viewerRole: string;
 }
 
-export function UserDetailDrawer({ open, onOpenChange, detail, loading, error, onAdjustBalance, onStatusChange }: Props) {
+export function UserDetailDrawer({ open, onOpenChange, detail, loading, error, onAdjustBalance, onStatusChange, viewerRole }: Props) {
+  const canSuspend = viewerRole === 'super_admin';
   const { lang } = useLang();
 
   // In-page block-reason dialog. Replaces the suppressed window.prompt().
@@ -139,21 +145,25 @@ export function UserDetailDrawer({ open, onOpenChange, detail, loading, error, o
                   <p className="text-sm font-bold capitalize text-ink-hi">{detail.status}</p>
                 </div>
               </div>
-              <Switch
-                tone={detail.status === 'blocked' ? 'danger' : 'brand'}
-                checked={detail.status === 'active'}
-                onChange={(next) => {
-                  if (next) {
-                    onStatusChange('active');
-                  } else {
-                    // Ask for the block reason in an in-page modal.
-                    // Empty value still blocks; admin can leave it blank.
-                    setBlockReason(detail.blockedReason ?? '');
-                    setBlockOpen(true);
-                  }
-                }}
-                label={detail.status === 'active' ? 'Block account' : 'Unblock account'}
-              />
+              {canSuspend ? (
+                <Switch
+                  tone={detail.status === 'blocked' ? 'danger' : 'brand'}
+                  checked={detail.status === 'active'}
+                  onChange={(next) => {
+                    if (next) {
+                      onStatusChange('active');
+                    } else {
+                      // Ask for the block reason in an in-page modal.
+                      // Empty value still blocks; admin can leave it blank.
+                      setBlockReason(detail.blockedReason ?? '');
+                      setBlockOpen(true);
+                    }
+                  }}
+                  label={detail.status === 'active' ? 'Block account' : 'Unblock account'}
+                />
+              ) : (
+                <span className="text-[11px] text-ink-lo">Super Admin only</span>
+              )}
             </div>
             {detail.status === 'blocked' && (detail.blockedReason || detail.blockedAt) ? (
               <div className="mt-3 space-y-1 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">

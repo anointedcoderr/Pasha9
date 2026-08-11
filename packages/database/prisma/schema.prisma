@@ -203,6 +203,10 @@ model User {
   activityLogs          ActivityLog[]            @relation("ActorLogs")
   walletLedger          WalletLedger[]           @relation("WalletLedgerUser")
   walletLedgerActions   WalletLedger[]           @relation("WalletLedgerActor")
+  staffPointWallet      StaffPointWallet?        @relation("StaffPointWalletOwner")
+  staffPointLedger      StaffPointLedger[]       @relation("StaffPointLedgerStaff")
+  staffPointGrants      StaffPointLedger[]       @relation("StaffPointLedgerActor")
+  staffPointCredits     StaffPointLedger[]       @relation("StaffPointLedgerTarget")
   affiliateApplication  AffiliateApplication?
   // VIP Club. vipTierId is set by an admin via /admin/vip when they
   // approve an application or promote a user manually. Null = standard
@@ -425,6 +429,64 @@ model WalletLedger {
   @@index([referenceId])
   @@index([transactionId])
   @@index([createdAt])
+}
+
+// Staff Point Wallet. A super_admin allocates each staff/admin account a
+// fixed pool of points; every player-balance credit that staff member makes
+// spends from it 1:1, and once it reaches zero they cannot credit another
+// player until a super_admin tops it up. This is the client's explicit
+// security requirement: a staff member with Balance Management access must
+// have a hard financial ceiling, not unlimited reach into player wallets.
+//
+// Deliberately its own model rather than a field on User: it is not player
+// money, has its own ledger for the same reason WalletLedger exists (a
+// number alone is not provable; a permanent append-only history is), and
+// keeping it structurally separate means a bug in this system can never
+// touch a real player's balance.
+model StaffPointWallet {
+  id        String   @id @default(cuid())
+  staffId   String   @unique
+  balance   Decimal  @default(0) @db.Decimal(14, 2)
+  updatedAt DateTime @updatedAt
+
+  staff User @relation("StaffPointWalletOwner", fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@index([staffId])
+}
+
+model StaffPointLedger {
+  id     String @id @default(cuid())
+  staffId String
+
+  // 'grant' - a super_admin allocates points to this staff member.
+  // 'spend' - this staff member credited a player, consuming points.
+  // 'adjust' - a correction, e.g. reversing a spend from a cancelled credit.
+  type   String
+  // Signed: positive for a grant, negative for a spend.
+  amount Decimal @db.Decimal(14, 2)
+
+  balanceBefore Decimal @db.Decimal(14, 2)
+  balanceAfter  Decimal @db.Decimal(14, 2)
+
+  // Who caused this entry: the super_admin granting, or the staff member
+  // themselves spending (actorId is then the same as staffId).
+  actorId   String?
+  actorRole String?
+
+  // The player a 'spend' entry credited. Null for 'grant'.
+  targetUserId String?
+
+  reason    String?
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  staff  User  @relation("StaffPointLedgerStaff", fields: [staffId], references: [id], onDelete: Cascade)
+  actor  User? @relation("StaffPointLedgerActor", fields: [actorId], references: [id])
+  target User? @relation("StaffPointLedgerTarget", fields: [targetUserId], references: [id])
+
+  @@index([staffId, createdAt])
+  @@index([targetUserId])
+  @@index([type])
 }
 
 model Wallet {

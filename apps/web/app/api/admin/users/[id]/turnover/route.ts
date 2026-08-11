@@ -128,6 +128,19 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   return withAuth(async () => {
     const session = await ensurePermission('users.balance.adjust');
 
+    // This route shares its permission code with the balance route, which
+    // means a staff member granted Balance Management could reach this
+    // endpoint too, without ever having a dedicated turnover permission of
+    // their own. That is exactly the loophole the client flagged: staff must
+    // have no way to add, reduce, clear, or zero-out a turnover requirement
+    // manually, by any path. So the role check sits on top of the
+    // permission check rather than replacing it, and is not skippable by
+    // granting a different permission - reaching this line at all already
+    // proves the caller is not a super_admin.
+    if (session.role !== 'super_admin') {
+      return jsonError(403, 'SUPER_ADMIN_ONLY', 'Only a Super Admin can manually adjust a player\'s turnover requirement.');
+    }
+
     const body = await req.json().catch(() => ({}));
     const parsed = schema.safeParse(body);
     if (!parsed.success) return jsonError(400, 'VALIDATION', undefined, { issues: parsed.error.issues });

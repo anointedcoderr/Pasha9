@@ -65,14 +65,22 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     const from = parseDate(q.get('from'));
     const to = parseDate(q.get('to'));
 
-    // Window resolution: explicit dates win, then 'all', then the 7-day default.
+    // Window resolution: explicit dates win, then 'all', then the 7-day
+    // default. periodFrom/periodTo mirror the same three branches exactly,
+    // rather than being re-derived later from from/to/all, so the window the
+    // period summary reports can never drift from the window the query
+    // actually used.
     let dateFilter: Prisma.WalletLedgerWhereInput = {};
+    let periodFrom: Date | null = from;
+    let periodTo: Date | null = to;
     if (from || to) {
       dateFilter = { createdAt: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } };
     } else if (!all) {
       const since = new Date(Date.now() - DEFAULT_WINDOW_DAYS * 86_400_000);
       dateFilter = { createdAt: { gte: since } };
+      periodFrom = since;
     }
+    if (!all && periodTo === null) periodTo = new Date();
 
     const minAmount = q.get('minAmount');
     const maxAmount = q.get('maxAmount');
@@ -106,7 +114,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     // history, not the filtered window: an operator investigating a
     // complaint needs lifetime deposits vs withdrawals to judge it, and a
     // total that silently changed with the date filter would mislead.
-    const [entries, total, byType, reconciliation] = await Promise.all([
+    const [entries, total, byType, periodByType, reconciliation] = await Promise.all([
       db.walletLedger.findMany({
         where,
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
@@ -121,6 +129,18 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         _sum: { amount: true },
         _count: { _all: true },
       }),
+      // Scoped to the date window ONLY (not type/direction/etc, which are
+      // for browsing individual entries below) - this is the "Total
+      // Deposit / Withdrawal / Bet / Win / Loss / Net Profit-Loss for the
+      // last 7/15/30 days or a custom range" the client asked for, kept
+      // separate from the lifetime summary above on purpose: an operator
+      // asking "how did this player do this week" needs a different
+      // number from "how much have they ever deposited".
+      db.walletLedger.groupBy({
+        by: ['type'],
+        where: { userId: user.id, ...dateFilter },
+        _sum: { amount: true },
+      }),
       reconcileUserWallet(user.id),
     ]);
 
@@ -129,6 +149,25 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         .filter((r) => types.includes(r.type))
         .reduce((acc, r) => acc.add(new Prisma.Decimal(r._sum.amount ?? 0)), new Prisma.Decimal(0))
         .toFixed(2);
+
+    const periodSumFor = (...types: string[]) =>
+      periodByType
+        .filter((r) => types.includes(r.type))
+        .reduce((acc, r) => acc.add(new Prisma.Decimal(r._sum.amount ?? 0)), new Prisma.Decimal(0));
+
+    // Ledger amounts are signed (bets and withdrawals are negative), so the
+    // magnitudes here are the .abs() of what is naturally a debit. Loss is
+    // the gambling-only shortfall (wagered minus returned, floored at 0);
+    // Net Profit/Loss is the player's own signed bottom line for the window,
+    // win minus bet, so a positive number reads as the window being good for
+    // the player and a negative one as bad, matching how a player would read
+    // "profit or loss" rather than an operator's house-edge framing.
+    const periodDeposit = periodSumFor('deposit');
+    const periodWithdrawal = periodSumFor('withdrawal').abs();
+    const periodBet = periodSumFor('provider.bet', 'native.bet').abs();
+    const periodWin = periodSumFor('provider.win', 'native.win');
+    const periodLoss = Prisma.Decimal.max(new Prisma.Decimal(0), periodBet.sub(periodWin));
+    const periodNet = periodWin.sub(periodBet);
 
     return jsonOk({
       user: {
@@ -151,6 +190,21 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         totalBonuses: sumFor('bonus.grant', 'bonus.release', 'cashback', 'spin.reward', 'betting_pass.reward', 'promo_code.reward', 'referral.reward', 'affiliate.commission', 'vip.reward', 'lotto.prize', 'tournament.prize'),
         totalAdminCredits: sumFor('admin.credit'),
         totalAdminDebits: sumFor('admin.debit'),
+      },
+      // Admin-only period summary (7/15/30 days or a custom from/to). Never
+      // exposed on any player-facing endpoint - the client was explicit that
+      // a player must not see a deposit-vs-winnings comparison, since seeing
+      // "deposited 10,000, won 2,000" reads as discouraging. This is a
+      // separate figure from the reconciliation/audit summary above it.
+      periodSummary: {
+        from: periodFrom,
+        to: periodTo,
+        totalDeposit: periodDeposit.toFixed(2),
+        totalWithdrawal: periodWithdrawal.toFixed(2),
+        totalBet: periodBet.toFixed(2),
+        totalWin: periodWin.toFixed(2),
+        totalLoss: periodLoss.toFixed(2),
+        netProfitLoss: periodNet.toFixed(2),
       },
       // Surfaced rather than hidden: if the recorded history does not account
       // for the wallet, the operator must know before quoting these figures

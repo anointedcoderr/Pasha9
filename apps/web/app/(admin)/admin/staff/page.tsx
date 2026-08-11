@@ -23,6 +23,7 @@ import { FormField, Input, Textarea } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Users, ShieldCheck, Plus, Pencil, Ban, Sparkles, KeyRound, RefreshCw, ListFilter } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
+import { formatBDT } from '@/lib/utils/format';
 import { PermissionPicker } from '@/components/admin/PermissionPicker';
 import { useAdminPermissions } from '@/lib/auth/use-admin-permissions';
 import { ADMIN_SECTIONS, sectionPermissions } from '@/lib/auth/admin-sections';
@@ -67,6 +68,95 @@ function roleTone(key: string): 'gold' | 'info' | 'neutral' {
   if (key === 'super_admin') return 'gold';
   if (key === 'admin') return 'info';
   return 'neutral';
+}
+
+const STAFF_TURNOVER_KEY = 'staff_balance_turnover_x';
+
+/**
+ * The one setting that decides whether a staff-originated balance credit
+ * carries an automatic turnover requirement, and by how much. Lives here
+ * rather than the general Settings page because this page is already
+ * restricted to super_admin at the section level - the client's explicit
+ * requirement that only a Super Admin can control this - and because it
+ * governs the same staff-credit flow the points panel below is about.
+ *
+ * Ships at 0 (no requirement) until set: a multiplier that started applying
+ * itself on deploy would silently change what every staff credit costs a
+ * player, the same reasoning behind every other new financial default
+ * shipped tonight.
+ */
+function StaffBalanceTurnoverSetting() {
+  const [value, setValue] = useState('');
+  const [saved, setSaved] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/admin/settings', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((j) => {
+        if (!alive) return;
+        const row = (j?.settings as Array<{ key: string; value: string }> | undefined)?.find((s) => s.key === STAFF_TURNOVER_KEY);
+        const n = Math.max(0, Number(row?.value ?? 0) || 0);
+        setValue(String(n));
+        setSaved(n);
+      })
+      .catch(() => { if (alive) setError('Could not load the setting.'); })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, []);
+
+  const save = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const n = Math.max(0, Number(value) || 0);
+      const r = await fetch('/api/admin/settings', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ updates: [{ key: STAFF_TURNOVER_KEY, value: String(n) }] }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j?.message ?? j?.code ?? 'Save failed');
+      setSaved(n);
+      setValue(String(n));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card padding="md" className="mb-4">
+      <h2 className="mb-1 text-sm font-semibold text-ink-hi">Staff credit turnover multiplier</h2>
+      <p className="mb-3 text-xs text-ink-lo">
+        Whenever a staff or admin account (not you) credits a player, a turnover requirement is created automatically at
+        this multiple of the amount credited. Example: 1,000 credited at 3x creates a 3,000 turnover requirement. 0
+        means no requirement is created. Staff cannot set, skip, or edit this.
+      </p>
+      {loading ? (
+        <p className="text-sm text-ink-mid">Loading...</p>
+      ) : (
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="w-28">
+            <FormField label="Multiplier">
+              <Input type="number" min="0" step="0.1" value={value} onChange={(e) => setValue(e.target.value)} />
+            </FormField>
+          </div>
+          <Button size="sm" variant="gold" loading={saving} disabled={Number(value) === saved} onClick={save}>Save</Button>
+          {saved !== null ? (
+            <span className="text-xs text-ink-lo">
+              Currently {saved === 0 ? 'off' : `${saved}x`}
+            </span>
+          ) : null}
+        </div>
+      )}
+      {error ? <p className="mt-2 text-sm text-signal-danger">{error}</p> : null}
+    </Card>
+  );
 }
 
 export default function AdminStaffPage() {
@@ -179,6 +269,8 @@ export default function AdminStaffPage() {
       {toast ? <Card padding="md" className="mb-4"><p className="text-sm text-signal-ok">{toast}</p></Card> : null}
       {error ? <Card padding="md" className="mb-4"><p className="text-sm text-signal-danger">{error}</p></Card> : null}
 
+      <StaffBalanceTurnoverSetting />
+
       <Card padding="md" className="mb-4">
         <div className="flex flex-wrap items-end gap-3">
           <FormField label="Search">
@@ -290,18 +382,25 @@ export default function AdminStaffPage() {
         width="560px"
       >
         {drawerStaff ? (
-          <EditStaffPanel
-            row={drawerStaff}
-            roles={roles}
-            permissions={permissions}
-            viewerRole={viewerRole}
-            onDone={(msg) => {
-              setDrawerStaff(null);
-              flashToast(msg);
-              loadStaff();
-            }}
-            onClose={() => setDrawerStaff(null)}
-          />
+          <div className="space-y-6">
+            <EditStaffPanel
+              row={drawerStaff}
+              roles={roles}
+              permissions={permissions}
+              viewerRole={viewerRole}
+              onDone={(msg) => {
+                setDrawerStaff(null);
+                flashToast(msg);
+                loadStaff();
+              }}
+              onClose={() => setDrawerStaff(null)}
+            />
+            {/* Meaningless for a super_admin row - they are unrestricted, so
+                there is nothing to allocate or spend. */}
+            {drawerStaff.role.key !== 'super_admin' ? (
+              <StaffPointsPanel staffId={drawerStaff.id} viewerRole={viewerRole} />
+            ) : null}
+          </div>
         ) : null}
       </Drawer>
     </>
@@ -518,5 +617,160 @@ function EditStaffPanel({
         Privilege-changing actions (role / status / password / permissions) revoke active sessions so the new RBAC takes effect immediately.
       </p>
     </form>
+  );
+}
+
+interface PointsHistoryRow {
+  id: string;
+  type: string;
+  amount: number;
+  before: number;
+  after: number;
+  actorUsername: string | null;
+  targetUsername: string | null;
+  reason: string | null;
+  createdAt: string;
+}
+
+/**
+ * Staff Point Wallet panel. The client's core security requirement: a staff
+ * member with Balance Management access has a hard ceiling on how much they
+ * can ever credit into player wallets, and this is where a Super Admin
+ * reviews usage and tops it up. Self-contained (own fetch, own save) so it
+ * cannot interfere with EditStaffPanel's role/permission form above it.
+ */
+function StaffPointsPanel({ staffId, viewerRole }: { staffId: string; viewerRole: string }) {
+  const isSuperAdmin = viewerRole === 'super_admin';
+  const [balance, setBalance] = useState<number | null>(null);
+  const [history, setHistory] = useState<PointsHistoryRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [grantAmount, setGrantAmount] = useState('');
+  const [grantReason, setGrantReason] = useState('');
+  const [granting, setGranting] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setError(null);
+    try {
+      const r = await fetch(`/api/admin/staff/${staffId}/points`, { cache: 'no-store' });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j?.message ?? j?.code ?? 'Failed to load');
+      setBalance(Number(j.balance ?? 0));
+      setHistory(Array.isArray(j.history) ? j.history : []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load');
+    } finally {
+      setLoading(false);
+    }
+  }, [staffId]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const grant = async () => {
+    setError(null);
+    setNotice(null);
+    setGranting(true);
+    try {
+      const r = await fetch(`/api/admin/staff/${staffId}/points`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ amount: Number(grantAmount), reason: grantReason.trim() }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j?.message ?? j?.code ?? 'Grant failed');
+      setNotice(`Granted. New balance ${formatBDT(Number(j?.balance?.after ?? 0))}.`);
+      setGrantAmount('');
+      setGrantReason('');
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Grant failed');
+    } finally {
+      setGranting(false);
+    }
+  };
+
+  return (
+    <div className="border-t border-neon/10 pt-5">
+      <h3 className="mb-1 text-sm font-semibold text-ink-hi">Staff points</h3>
+      <p className="mb-3 text-xs text-ink-lo">
+        Every balance credit this staff member makes to a player spends 1:1 from this pool. At zero, they cannot credit
+        anyone until you grant more.
+      </p>
+
+      {loading ? (
+        <p className="text-sm text-ink-mid">Loading...</p>
+      ) : (
+        <>
+          <div className="mb-3 rounded-lg border border-neon/10 bg-base-deep/40 p-3">
+            <p className="text-[11px] uppercase tracking-wider text-ink-lo">Current balance</p>
+            <p className={cn('text-lg font-bold', (balance ?? 0) > 0 ? 'text-ink-hi' : 'text-signal-danger')}>
+              {formatBDT(balance ?? 0)}
+            </p>
+          </div>
+
+          {isSuperAdmin ? (
+            <div className="mb-4 flex flex-wrap items-end gap-2">
+              <div className="w-32">
+                <FormField label="Grant amount (BDT)">
+                  <Input type="number" min="0.01" step="0.01" value={grantAmount} onChange={(e) => setGrantAmount(e.target.value)} />
+                </FormField>
+              </div>
+              <div className="min-w-[14rem] flex-1">
+                <FormField label="Reason">
+                  <Input value={grantReason} onChange={(e) => setGrantReason(e.target.value)} placeholder="e.g. monthly top-up" />
+                </FormField>
+              </div>
+              <Button
+                size="sm"
+                variant="gold"
+                loading={granting}
+                disabled={!(Number(grantAmount) > 0) || grantReason.trim().length < 3}
+                onClick={grant}
+              >
+                Grant
+              </Button>
+            </div>
+          ) : null}
+
+          <div aria-live="polite">
+            {notice ? <p className="mb-2 text-sm text-emerald-600">{notice}</p> : null}
+            {error ? <p className="mb-2 text-sm text-signal-danger">{error}</p> : null}
+          </div>
+
+          <p className="mb-1 text-xs font-semibold text-ink-hi">Recent activity</p>
+          {history.length === 0 ? (
+            <p className="text-sm text-ink-mid">No point activity yet.</p>
+          ) : (
+            <div className="max-h-64 overflow-y-auto rounded-lg border border-neon/10">
+              <table className="w-full text-left text-xs">
+                <thead className="sticky top-0 bg-base-deep text-[10px] uppercase tracking-wider text-ink-lo">
+                  <tr>
+                    <th scope="col" className="px-2 py-1.5 font-medium">When</th>
+                    <th scope="col" className="px-2 py-1.5 font-medium">Type</th>
+                    <th scope="col" className="px-2 py-1.5 font-medium">Who / player</th>
+                    <th scope="col" className="px-2 py-1.5 text-right font-medium">Change</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {history.map((h) => (
+                    <tr key={h.id} className="border-t border-neon/5">
+                      <td className="whitespace-nowrap px-2 py-1.5 text-ink-mid">{new Date(h.createdAt).toLocaleString()}</td>
+                      <td className="px-2 py-1.5 text-ink-hi">{h.type}</td>
+                      <td className="px-2 py-1.5 text-ink-mid">
+                        {h.type === 'spend' ? h.targetUsername : h.actorUsername ?? '.'}
+                      </td>
+                      <td className={cn('whitespace-nowrap px-2 py-1.5 text-right font-semibold', h.amount < 0 ? 'text-signal-danger' : 'text-signal-ok')}>
+                        {h.amount < 0 ? '' : '+'}{formatBDT(h.amount)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+    </div>
   );
 }

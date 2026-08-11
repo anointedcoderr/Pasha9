@@ -25,7 +25,7 @@ import { Chip } from '@/components/ui/Chip';
 import { Button } from '@/components/ui/Button';
 import { StatTile } from '@/components/ui/StatTile';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { formatBDT, formatDateTime } from '@/lib/utils/format';
+import { formatBDT, formatDate, formatDateTime } from '@/lib/utils/format';
 import { useLang } from '@/lib/i18n/context';
 import { Wallet, RefreshCw, Download, AlertTriangle, ShieldCheck } from 'lucide-react';
 import type { ColumnDef } from '@tanstack/react-table';
@@ -60,10 +60,22 @@ interface ChainBreak {
   gap: string;
 }
 
+interface PeriodSummary {
+  from: string | null;
+  to: string | null;
+  totalDeposit: string;
+  totalWithdrawal: string;
+  totalBet: string;
+  totalWin: string;
+  totalLoss: string;
+  netProfitLoss: string;
+}
+
 interface AuditResponse {
   user: { id: string; username: string; phone: string; registeredAt: string };
   wallet: { balance: number; bonusBalance: number; lockedBalance: number; lottoBalance: number };
   summary: Record<string, string>;
+  periodSummary: PeriodSummary;
   reconciliation: {
     ok: boolean;
     entries: number;
@@ -116,6 +128,25 @@ export default function WalletAuditPage() {
   }, [userId, from, to, showAll, skip]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Quick presets for the period summary card. Sets the SAME from/to state
+  // the raw date inputs use, so a preset and manual "custom" dates are one
+  // continuous control rather than two separate mechanisms - editing either
+  // input after clicking a preset just refines it, exactly as a Super Admin
+  // would expect.
+  const setPreset = (days: number) => {
+    const to = new Date();
+    const from = new Date(to.getTime() - days * 86_400_000);
+    setFrom(from.toISOString().slice(0, 10));
+    setTo(to.toISOString().slice(0, 10));
+    setShowAll(false);
+    setSkip(0);
+  };
+  const activePreset = useMemo(() => {
+    if (showAll || !from || !to) return null;
+    const days = Math.round((new Date(to).getTime() - new Date(from).getTime()) / 86_400_000);
+    return [7, 15, 30].includes(days) ? days : null;
+  }, [from, to, showAll]);
 
   const exportHref = useMemo(() => {
     const q = new URLSearchParams();
@@ -272,6 +303,18 @@ export default function WalletAuditPage() {
       ) : null}
 
       <Card padding="md" className="mb-4">
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium text-ink-mid">Period summary</span>
+          {[
+            { days: 7, label: 'Last 7 days' },
+            { days: 15, label: 'Last 15 days' },
+            { days: 30, label: 'Last 30 days' },
+          ].map((p) => (
+            <Button key={p.days} size="sm" variant={activePreset === p.days ? 'gold' : 'ghost'} aria-pressed={activePreset === p.days} onClick={() => setPreset(p.days)}>
+              {p.label}
+            </Button>
+          ))}
+        </div>
         <div className="flex flex-wrap items-end gap-3">
           <div>
             <label htmlFor="wa-from" className="mb-1 block text-xs font-medium text-ink-mid">From</label>
@@ -321,6 +364,39 @@ export default function WalletAuditPage() {
           </p>
         ) : null}
       </Card>
+
+      {/*
+        Admin-only automatic financial summary for the period selected above.
+        Never sent to any player-facing endpoint - see the API route comment:
+        the client was explicit that a player must not see a deposit vs
+        winnings comparison, since a large gap between the two reads as
+        discouraging. This exists so a Super Admin does not have to add up
+        transactions by hand to answer "how did this player do this week".
+      */}
+      {data?.periodSummary ? (
+        <Card padding="md" className="mb-4">
+          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="text-sm font-semibold text-ink-hi">
+              {showAll || (!from && !to)
+                ? `Full history${data.periodSummary.from ? '' : ' (from registration)'}`
+                : `${formatDate(data.periodSummary.from ?? '', lang)} – ${formatDate(data.periodSummary.to ?? '', lang)}`}
+            </h2>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            <StatTile label="Total Deposit" value={formatBDT(Number(data.periodSummary.totalDeposit))} accent="gold" />
+            <StatTile label="Total Withdrawal" value={formatBDT(Number(data.periodSummary.totalWithdrawal))} />
+            <StatTile label="Total Bet" value={formatBDT(Number(data.periodSummary.totalBet))} />
+            <StatTile label="Total Win" value={formatBDT(Number(data.periodSummary.totalWin))} />
+            <StatTile label="Total Loss" value={formatBDT(Number(data.periodSummary.totalLoss))} hint="Bet minus win" />
+            <StatTile
+              label="Net Profit/Loss"
+              value={formatBDT(Number(data.periodSummary.netProfitLoss), { sign: true })}
+              hint="Win minus bet, player's side"
+              accent={Number(data.periodSummary.netProfitLoss) >= 0 ? 'gold' : undefined}
+            />
+          </div>
+        </Card>
+      ) : null}
 
       {error ? <Card padding="md" className="mb-4"><p className="text-sm text-signal-danger">{error}</p></Card> : null}
 

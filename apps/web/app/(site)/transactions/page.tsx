@@ -85,8 +85,11 @@ export default function TransactionsPage() {
 
   useEffect(() => { load(type); }, [load, type]);
 
-  const totalIn = useMemo(() => rows.filter((r) => r.amount > 0 && r.status === 'completed').reduce((acc, r) => acc + r.amount, 0), [rows]);
-  const totalOut = useMemo(() => rows.filter((r) => r.amount < 0 && r.status === 'completed').reduce((acc, r) => acc + r.amount, 0), [rows]);
+  // No lifetime deposit-vs-withdrawal or profit/loss total anywhere on this
+  // page, by the client's explicit instruction: a player seeing "deposited
+  // 10,000, only won 2,000" reads as discouraging. That kind of summary is
+  // now admin-only, on the Wallet Audit page. This page stays a plain
+  // transaction list.
 
   if (needsLogin) {
     return (
@@ -153,10 +156,6 @@ export default function TransactionsPage() {
         <Button size="sm" variant="ghost" leftIcon={<RefreshCw className="h-3.5 w-3.5" />} onClick={() => load(type)} loading={refreshing}>
           {lang === 'bn' ? 'রিফ্রেশ' : 'Refresh'}
         </Button>
-        <div className="ml-auto flex flex-wrap items-center gap-3 text-xs text-ink-mid">
-          <span><span className="text-ink-lo">{lang === 'bn' ? 'মোট ইন' : 'Total in'}:</span> <span className="font-semibold text-signal-ok">+{formatBDT(totalIn)}</span></span>
-          <span><span className="text-ink-lo">{lang === 'bn' ? 'মোট আউট' : 'Total out'}:</span> <span className="font-semibold text-signal-danger">{formatBDT(totalOut)}</span></span>
-        </div>
       </div>
 
       {error ? (

@@ -91,6 +91,18 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const parsed = patchSchema.safeParse(body);
     if (!parsed.success) return jsonError(400, 'VALIDATION', undefined, { issues: parsed.error.issues });
 
+    // Suspending, blocking or reinstating a player is a super_admin-only
+    // power, even for a staff member holding users.update - the client's
+    // explicit requirement, because a staff account misusing User Management
+    // could otherwise disable or reactivate any player at will. Both
+    // directions of the toggle are covered: reversing someone else's block
+    // is the same power as applying one. blockedReason alone (editing the
+    // note on an existing block, not the status itself) is left open, since
+    // it changes nothing about who can access the platform.
+    if (parsed.data.status !== undefined && session.role !== 'super_admin') {
+      return jsonError(403, 'SUPER_ADMIN_ONLY', 'Only a Super Admin can suspend, block, or reinstate a player account.');
+    }
+
     // Read the prior status before writing, so the log can show what changed
     // it changed FROM, not only what it is now. A staff member reviewing why
     // a player was blocked needs to know they were active before, not just

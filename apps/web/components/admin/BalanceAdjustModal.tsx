@@ -19,6 +19,13 @@ interface Props {
   // Preselects the Type dropdown when the modal opens (the operator
   // clicked a Credit or a Debit button on the row).
   initialType?: 'credit' | 'debit';
+  // Default true. When false, the Debit option is removed from this form
+  // entirely rather than merely defaulted away from - the caller only ever
+  // opens this modal in credit mode for a non-super_admin, but the Type
+  // select was still independently switchable to Debit regardless of which
+  // outer button was clicked, so a staff member could pick Debit here even
+  // though the server always rejects it for them.
+  allowDebit?: boolean;
   // Performs the real wallet write. Must THROW on failure; the thrown
   // message renders inside the modal so the operator sees it above
   // the action buttons instead of behind the overlay. The modal stays
@@ -26,7 +33,7 @@ interface Props {
   onConfirm: (input: BalanceAdjustInput & { newBalance: number; oldBalance: number }) => void | Promise<void>;
 }
 
-export function BalanceAdjustModal({ open, onOpenChange, user, initialType, onConfirm }: Props) {
+export function BalanceAdjustModal({ open, onOpenChange, user, initialType, allowDebit = true, onConfirm }: Props) {
   const [loading, setLoading] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
 
@@ -87,11 +94,14 @@ export function BalanceAdjustModal({ open, onOpenChange, user, initialType, onCo
           <Cell label="New balance" value={formatBDT(newBalance)} tone={sign > 0 ? 'neon' : 'danger'} />
         </div>
         <FormField label="Type" required>
-          <Select {...register('type')}>
+          <Select {...register('type')} disabled={!allowDebit}>
             <option value="credit">Credit (add)</option>
-            <option value="debit">Debit (deduct)</option>
+            {allowDebit ? <option value="debit">Debit (deduct)</option> : null}
           </Select>
         </FormField>
+        {!allowDebit ? (
+          <p className="text-xs text-ink-lo">Only a Super Admin can debit a player's balance.</p>
+        ) : null}
         <FormField label="Amount" required error={errors.amount?.message}>
           {/* step="50" made the browser reject any amount that was not a
               multiple of 50, so crediting or debiting 1, 5, 20 or a user's
