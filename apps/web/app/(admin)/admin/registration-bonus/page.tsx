@@ -104,6 +104,7 @@ export default function RegistrationBonusPage() {
         icon={<Gift className="h-5 w-5" />}
         title="Registration Bonus"
         subtitle="Credit a bonus when a player registers, held until they deposit."
+        back={{ href: '/admin', label: 'Dashboard' }}
       />
 
       {cfg === null ? (

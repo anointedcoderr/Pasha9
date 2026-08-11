@@ -60,7 +60,11 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           <AdminTopbar onMenu={() => setDrawerOpen(true)} />
           <AdminPushPrompt />
           <main className="flex-1 overflow-y-auto overscroll-contain px-4 py-6 md:px-8">
-            {accessible ? children : <AdminForbidden />}
+            {accessible ? children : (
+              <AdminForbidden
+                dashboardHref={!loaded || canAccessAdminPath('/admin', role, permissions) ? '/admin' : '/admin/no-access'}
+              />
+            )}
           </main>
         </div>
       </div>
@@ -68,7 +72,16 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   );
 }
 
-function AdminForbidden() {
+/**
+ * Shown for a section the current role cannot view. dashboardHref is decided
+ * by the caller (it already loaded role/permissions) rather than hardcoded to
+ * /admin: this banner fires whenever the CURRENT page is forbidden, which
+ * says nothing about whether /admin itself is. A role that has overview
+ * access but lacks this one section should genuinely go back to the
+ * dashboard; a role that lacks BOTH would hit the exact loop the middleware
+ * fix removed - see the comment there - if this always pointed at /admin.
+ */
+function AdminForbidden({ dashboardHref }: { dashboardHref: string }) {
   return (
     <div className="mx-auto flex max-w-md flex-col items-center justify-center rounded-2xl border border-amber-200 bg-amber-50 p-8 text-center">
       <span className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-amber-700">
@@ -79,7 +92,7 @@ function AdminForbidden() {
         Your staff role does not include permission to view this module. Ask a Super Admin to grant access from the Staff page if you need it.
       </p>
       <Link
-        href="/admin"
+        href={dashboardHref}
         className="btn-yellow mt-5 inline-flex h-10 items-center rounded-lg px-4 text-xs font-bold"
       >
         Back to dashboard

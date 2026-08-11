@@ -206,6 +206,10 @@ export default function WalletAuditPage() {
         title="Wallet Audit"
         subtitle={data ? `${data.user.username} · ${data.user.phone}` : 'Loading...'}
         icon={<Wallet className="h-5 w-5" />}
+        // Reached from a row's drawer on Users, which has no URL of its own -
+        // this page's own address is the only bookmarkable/shareable one, so
+        // Users is the one destination that reliably makes sense to return to.
+        back={{ href: '/admin/users', label: 'Users' }}
       />
 
       {/* Reconciliation first: an operator must not quote figures below

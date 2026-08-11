@@ -91,6 +91,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const parsed = patchSchema.safeParse(body);
     if (!parsed.success) return jsonError(400, 'VALIDATION', undefined, { issues: parsed.error.issues });
 
+    // Read the prior status before writing, so the log can show what changed
+    // it changed FROM, not only what it is now. A staff member reviewing why
+    // a player was blocked needs to know they were active before, not just
+    // that they are blocked today.
+    const before = await db.user.findUnique({ where: { id: params.id }, select: { status: true } });
+
     // Status flip drives whether we set or clear blockedReason / blockedAt.
     const nextStatus = parsed.data.status;
     const data: {
@@ -124,8 +130,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       actorRole: session.role,
       action: nextStatus === 'blocked' ? 'USER_BLOCK' : nextStatus === 'active' ? 'USER_UNBLOCK' : 'USER_UPDATE',
       target: updated.id,
-      detail: nextStatus ?? undefined,
-      meta: nextStatus === 'blocked' ? { reason: data.blockedReason ?? undefined } : undefined,
+      detail: nextStatus ? `${before?.status ?? 'unknown'} -> ${nextStatus}` : undefined,
+      meta: nextStatus
+        ? { statusBefore: before?.status ?? null, statusAfter: nextStatus, reason: data.blockedReason ?? undefined }
+        : undefined,
     });
 
     return jsonOk({ user: updated });

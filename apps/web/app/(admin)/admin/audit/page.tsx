@@ -150,6 +150,7 @@ export default function AdminAuditPage() {
         icon={<ShieldCheck className="h-5 w-5" />}
         title="Audit & Accountability"
         subtitle="Search a player to see every staff member who changed them. Search a staff member to see every player they touched. These records cannot be edited or deleted by anyone."
+        back={{ href: '/admin', label: 'Dashboard' }}
       />
 
       <Tabs value={mode} onValueChange={(v) => setMode(v as Mode)}>

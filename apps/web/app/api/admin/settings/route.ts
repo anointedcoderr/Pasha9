@@ -51,6 +51,30 @@ export async function PATCH(req: NextRequest) {
     const parsed = patchSchema.safeParse(body);
     if (!parsed.success) return jsonError(400, 'VALIDATION', undefined, { issues: parsed.error.issues });
 
+    // Read the OLD values before writing. This route is the single save path
+    // behind Website, general Settings, Withdrawal Limits and several other
+    // admin pages, and it used to log only which keys changed, not what they
+    // changed from or to - unusable for "what did this setting used to be"
+    // after the fact, which is exactly what an audit trail is for.
+    const existing = await db.systemSetting.findMany({
+      where: { key: { in: parsed.data.updates.map((u) => u.key) } },
+      select: { key: true, value: true },
+    });
+    const before = new Map(existing.map((r) => [r.key, r.value]));
+
+    // Secrets are masked here the same way GET masks them, so a token never
+    // sits in plaintext in the activity log even though it does sit in
+    // plaintext in SystemSetting itself.
+    const changes = parsed.data.updates.map((u) => {
+      const prev = before.get(u.key) ?? null;
+      const secret = SECRET_KEY.test(u.key);
+      return {
+        key: u.key,
+        before: prev == null ? null : (secret ? maskSecret(prev) : prev),
+        after: secret ? maskSecret(u.value) : u.value,
+      };
+    });
+
     // Upsert (not update) so admin-driven keys like logo_url that the
     // initial seed may not have created can be set from the UI on day
     // one without a re-seed.
@@ -67,7 +91,8 @@ export async function PATCH(req: NextRequest) {
       actorRole: session.role,
       action: 'SETTINGS_UPDATE',
       target: 'systemSetting',
-      detail: parsed.data.updates.map((u) => u.key).join(','),
+      detail: changes.map((c) => `${c.key}: ${c.before ?? '(unset)'} -> ${c.after}`).join('; ').slice(0, 480),
+      meta: { changes },
     });
     return jsonOk({ updated: parsed.data.updates.length });
   });

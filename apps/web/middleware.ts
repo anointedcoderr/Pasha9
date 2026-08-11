@@ -38,10 +38,18 @@ export async function middleware(req: NextRequest) {
 
     const section = sectionForPath(pathname);
     if (section && !canViewSection(section, claims.role, claims.perms ?? [])) {
+      // Target is /admin/no-access, not /admin. /admin is itself a section
+      // gated by menu.overview.view - any staff role missing that one
+      // permission previously bounced right back into this same check on
+      // arrival, producing an infinite redirect ("too many redirects"). That
+      // is the exact failure the client hit straight after a correct login,
+      // because login's default landing page is /admin. /admin/no-access is
+      // deliberately unregistered in ADMIN_SECTIONS, so sectionForPath
+      // returns undefined for it and this branch cannot fire a second time
+      // no matter what the account has or has not been granted.
       const url = req.nextUrl.clone();
-      url.pathname = '/admin';
+      url.pathname = '/admin/no-access';
       url.search = '';
-      url.searchParams.set('forbidden', '1');
       return NextResponse.redirect(url);
     }
   }

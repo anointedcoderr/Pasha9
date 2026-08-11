@@ -156,6 +156,7 @@ export default function TurnoverPage() {
         title="Turnover Management"
         subtitle="Adjust a player's outstanding wagering requirement"
         icon={<Target className="h-5 w-5" />}
+        back={{ href: '/admin/users', label: 'Users' }}
       />
 
       {loading ? (
