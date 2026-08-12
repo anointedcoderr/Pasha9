@@ -17,7 +17,15 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const { loaded, role, permissions } = useAdminPermissions();
-  const accessible = !loaded ? true : canAccessAdminPath(pathname ?? '/admin', role, permissions);
+  // /admin/no-access must always be accessible, same reasoning as the
+  // identical guard in middleware.ts: canAccessAdminPath calls sectionForPath,
+  // which prefix-matches this path onto the overview section's own '/admin'
+  // route since nothing more specific claims it, so without this it would
+  // render the wrong "Access denied" card on the page that exists to explain
+  // exactly that, to a role that has genuinely been denied everything.
+  const accessible = pathname === '/admin/no-access'
+    ? true
+    : !loaded ? true : canAccessAdminPath(pathname ?? '/admin', role, permissions);
 
   // Apply the admin light theme on every admin route (including the login
   // standalone page). The CSS body.theme-admin block in globals.css recolors

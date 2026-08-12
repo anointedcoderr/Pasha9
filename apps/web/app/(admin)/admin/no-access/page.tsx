@@ -3,20 +3,22 @@
 // Where a staff member lands when they have no permission for wherever they
 // were headed, including straight after login.
 //
-// This page is deliberately NOT registered in ADMIN_SECTIONS. sectionForPath
-// returns undefined for an unmapped route, and both the middleware and
-// canAccessAdminPath already treat an unmapped path as open to any signed-in
-// staff member - see admin-permission-map.ts. So this page is unconditionally
-// reachable by anyone who is authenticated, no matter what they have or have
-// not been granted.
+// This page is NOT registered in ADMIN_SECTIONS, but that alone is not
+// enough: sectionForPath does PREFIX matching, and this path starts with the
+// overview section's own route ('/admin'), so with nothing more specific
+// registered for it, sectionForPath silently resolves it TO the overview
+// section rather than to nothing. Both middleware.ts and admin/layout.tsx
+// therefore carry an explicit `pathname === '/admin/no-access'` bypass ahead
+// of the section check - that bypass, not the omission from the registry, is
+// what actually makes this page unconditionally reachable.
 //
-// That property is the entire fix. The middleware used to send a denied
-// request back to /admin. For any staff role missing menu.overview.view -
-// easy to miss among the dozens of granular permission codes when setting up
-// a new role - /admin itself is also denied, so the redirect fired again,
-// and again, forever: "Safari can't open the page because too many redirects
-// occurred." This page can never do that, because nothing here requires a
-// permission to view.
+// The middleware used to send a denied request back to /admin. For any staff
+// role missing menu.overview.view - easy to miss among the dozens of
+// granular permission codes when setting up a new role - /admin itself is
+// also denied, so the redirect fired again, and again, forever: "too many
+// redirects occurred." Redirecting here instead only breaks that loop
+// because of the explicit bypass; without it, the exact same loop reforms
+// one hop later, on this page's own address.
 
 'use client';
 

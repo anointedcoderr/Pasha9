@@ -36,17 +36,21 @@ export async function middleware(req: NextRequest) {
       return NextResponse.redirect(url);
     }
 
+    // Must come before the section check, not rely on omission from
+    // ADMIN_SECTIONS. sectionForPath does PREFIX matching: '/admin/no-access'
+    // starts with the overview section's own route ('/admin'), and since no
+    // more specific registered route claims it, sectionForPath returns the
+    // OVERVIEW section for it, not undefined. That silently re-applies
+    // menu.overview.view to the very page meant to be reachable by everyone,
+    // so a role missing that permission got denied on /admin/no-access too,
+    // redirected to /admin/no-access again, forever - the identical loop
+    // this route exists to prevent, just relocated onto itself. This exact
+    // guard existed once already and was removed as believed-dead code; it
+    // was the fix, not dead code, which is how this got back in.
+    if (pathname === '/admin/no-access') return NextResponse.next();
+
     const section = sectionForPath(pathname);
     if (section && !canViewSection(section, claims.role, claims.perms ?? [])) {
-      // Target is /admin/no-access, not /admin. /admin is itself a section
-      // gated by menu.overview.view - any staff role missing that one
-      // permission previously bounced right back into this same check on
-      // arrival, producing an infinite redirect ("too many redirects"). That
-      // is the exact failure the client hit straight after a correct login,
-      // because login's default landing page is /admin. /admin/no-access is
-      // deliberately unregistered in ADMIN_SECTIONS, so sectionForPath
-      // returns undefined for it and this branch cannot fire a second time
-      // no matter what the account has or has not been granted.
       const url = req.nextUrl.clone();
       url.pathname = '/admin/no-access';
       url.search = '';
