@@ -74,6 +74,15 @@ const BDT_BALANCE_LOCK_SOURCE_TYPES: string[] = [
   // sourceType; a turnoverX=0 prize creates no UserBonus (pure cash) so
   // it never appears here.
   'tournament_prize',
+  // Staff balance credits (app/api/admin/users/[id]/balance/route.ts). A
+  // staff member crediting a player creates a grant of this sourceType
+  // carrying the auto-applied staff turnover multiplier. It belongs in THIS
+  // list rather than a separate bucket because the credit lands in
+  // Wallet.balance as spendable money - which is exactly what this list is
+  // for, and the reason it must also drive the balance lock: without it the
+  // player could withdraw a staff credit immediately, turnover requirement
+  // and all, because the gate never knew the grant existed.
+  'staff_balance_add',
 ];
 
 // Registration bonus (lib/bonuses/registration.ts). Deliberately its OWN

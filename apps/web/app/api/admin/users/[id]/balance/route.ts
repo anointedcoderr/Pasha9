@@ -98,13 +98,24 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       }
     }
 
-    // Turnover multiplier for staff-originated credits. Off (0) until a
-    // super_admin sets it, same as every other new financial default shipped
-    // tonight - nothing new starts applying itself silently on deploy.
+    // Turnover multiplier for staff-originated credits. Per-staff value wins
+    // when a Super Admin has set one on that staff member's point wallet;
+    // otherwise the global staff_balance_turnover_x applies. Null (never
+    // configured) is deliberately distinct from 0 (configured as "no
+    // turnover"), so an explicit 0 on one staff member is honoured rather
+    // than silently falling back to the global figure.
     let staffTurnoverX = 0;
     if (!isSuperAdmin) {
-      const row = await db.systemSetting.findUnique({ where: { key: STAFF_BALANCE_TURNOVER_KEY }, select: { value: true } });
-      staffTurnoverX = Math.max(0, Number(row?.value ?? 0) || 0);
+      const perStaff = await db.staffPointWallet.findUnique({
+        where: { staffId: session.sub },
+        select: { turnoverMultiplier: true },
+      });
+      if (perStaff?.turnoverMultiplier != null) {
+        staffTurnoverX = Math.max(0, Number(perStaff.turnoverMultiplier) || 0);
+      } else {
+        const row = await db.systemSetting.findUnique({ where: { key: STAFF_BALANCE_TURNOVER_KEY }, select: { value: true } });
+        staffTurnoverX = Math.max(0, Number(row?.value ?? 0) || 0);
+      }
     }
 
     const result = await db.$transaction(async (tx) => {

@@ -447,6 +447,14 @@ model StaffPointWallet {
   id        String   @id @default(cuid())
   staffId   String   @unique
   balance   Decimal  @default(0) @db.Decimal(14, 2)
+  // Per-staff turnover multiplier applied to every player balance credit
+  // this staff member makes. Null means "no per-staff override", in which
+  // case the global staff_balance_turnover_x setting applies - so existing
+  // staff keep working exactly as before until a Super Admin sets one.
+  // Nullable rather than defaulting to 0 on purpose: 0 is a meaningful
+  // value here (no turnover at all) and must be distinguishable from
+  // "never configured".
+  turnoverMultiplier Decimal? @db.Decimal(10, 2)
   updatedAt DateTime @updatedAt
 
   staff User @relation("StaffPointWalletOwner", fields: [staffId], references: [id], onDelete: Cascade)

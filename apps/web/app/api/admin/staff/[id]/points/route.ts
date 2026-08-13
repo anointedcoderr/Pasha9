@@ -31,8 +31,9 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     const staff = await db.user.findUnique({ where: { id: params.id }, select: { id: true, username: true, role: { select: { key: true } } } });
     if (!staff) return jsonError(404, 'NOT_FOUND', 'Staff account not found.');
 
-    const [balance, history] = await Promise.all([
+    const [balance, wallet, history] = await Promise.all([
       loadStaffPointBalance(db, params.id),
+      db.staffPointWallet.findUnique({ where: { staffId: params.id }, select: { turnoverMultiplier: true } }),
       db.staffPointLedger.findMany({
         where: { staffId: params.id },
         orderBy: { createdAt: 'desc' },
@@ -53,6 +54,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 
     return jsonOk({
       balance: Number(balance),
+      // null means "no per-staff override, the global setting applies".
+      turnoverMultiplier: wallet?.turnoverMultiplier == null ? null : Number(wallet.turnoverMultiplier),
       history: history.map((h) => ({
         id: h.id,
         type: h.type,
@@ -111,5 +114,48 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     });
 
     return jsonOk({ ok: true, balance: { before: Number(result.before), after: Number(result.after) } });
+  });
+}
+
+const multiplierSchema = z.object({
+  // Nullable on purpose: null clears the per-staff override so the global
+  // staff_balance_turnover_x applies again. 0 is a real value meaning "this
+  // staff member's credits carry no turnover", which is NOT the same thing.
+  turnoverMultiplier: z.coerce.number().min(0).max(1000).nullable(),
+});
+
+export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  return withAuth(async () => {
+    const session = await ensurePermission('staff.manage');
+    if (session.role !== 'super_admin') {
+      return jsonError(403, 'SUPER_ADMIN_ONLY', 'Only a Super Admin can set a staff turnover multiplier.');
+    }
+
+    const body = await req.json().catch(() => ({}));
+    const parsed = multiplierSchema.safeParse(body);
+    if (!parsed.success) return jsonError(400, 'VALIDATION', undefined, { issues: parsed.error.issues });
+
+    const staff = await db.user.findUnique({ where: { id: params.id }, select: { id: true, username: true } });
+    if (!staff) return jsonError(404, 'NOT_FOUND', 'Staff account not found.');
+
+    const value = parsed.data.turnoverMultiplier;
+    // Upsert so a staff member who has never been granted points can still
+    // have their multiplier configured ahead of time.
+    await db.staffPointWallet.upsert({
+      where: { staffId: params.id },
+      update: { turnoverMultiplier: value },
+      create: { staffId: params.id, balance: 0, turnoverMultiplier: value },
+    });
+
+    await recordActivity({
+      actorId: session.sub,
+      actorRole: session.role,
+      action: 'STAFF_TURNOVER_MULTIPLIER_SET',
+      target: params.id,
+      detail: `${staff.username}: ${value == null ? 'cleared (global default applies)' : `${value}x`}`,
+      meta: { staffId: params.id, staffUsername: staff.username, turnoverMultiplier: value },
+    });
+
+    return jsonOk({ ok: true, turnoverMultiplier: value });
   });
 }

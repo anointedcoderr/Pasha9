@@ -642,6 +642,12 @@ interface PointsHistoryRow {
 function StaffPointsPanel({ staffId, viewerRole }: { staffId: string; viewerRole: string }) {
   const isSuperAdmin = viewerRole === 'super_admin';
   const [balance, setBalance] = useState<number | null>(null);
+  // null = no per-staff override, the global setting applies. Kept as a
+  // string so the field can be cleared, which is how an operator removes the
+  // override (distinct from typing 0, which means "no turnover for this
+  // staff member" and is a real, saved value).
+  const [multiplier, setMultiplier] = useState<string>('');
+  const [savingMultiplier, setSavingMultiplier] = useState(false);
   const [history, setHistory] = useState<PointsHistoryRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -658,6 +664,7 @@ function StaffPointsPanel({ staffId, viewerRole }: { staffId: string; viewerRole
       if (!r.ok) throw new Error(j?.message ?? j?.code ?? 'Failed to load');
       setBalance(Number(j.balance ?? 0));
       setHistory(Array.isArray(j.history) ? j.history : []);
+      setMultiplier(j.turnoverMultiplier == null ? '' : String(j.turnoverMultiplier));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load');
     } finally {
@@ -708,6 +715,61 @@ function StaffPointsPanel({ staffId, viewerRole }: { staffId: string; viewerRole
               {formatBDT(balance ?? 0)}
             </p>
           </div>
+
+          {/*
+            Per-staff turnover multiplier. Separate from the global setting at
+            the top of this page: whatever is set here wins for THIS staff
+            member, and clearing the field falls back to the global figure.
+            An explicit 0 is a real setting (their credits carry no turnover)
+            and is deliberately different from an empty field.
+          */}
+          {isSuperAdmin ? (
+            <div className="mb-4 flex flex-wrap items-end gap-2">
+              <div className="w-40">
+                <FormField label="Turnover multiplier">
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    value={multiplier}
+                    onChange={(e) => setMultiplier(e.target.value)}
+                    placeholder="global default"
+                  />
+                </FormField>
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                loading={savingMultiplier}
+                onClick={async () => {
+                  setSavingMultiplier(true);
+                  setError(null);
+                  setNotice(null);
+                  try {
+                    const raw = multiplier.trim();
+                    const r = await fetch(`/api/admin/staff/${staffId}/points`, {
+                      method: 'PATCH',
+                      headers: { 'content-type': 'application/json' },
+                      body: JSON.stringify({ turnoverMultiplier: raw === '' ? null : Number(raw) }),
+                    });
+                    const j = await r.json();
+                    if (!r.ok) throw new Error(j?.message ?? j?.code ?? 'Save failed');
+                    setNotice(raw === '' ? 'Cleared. The global multiplier applies.' : `Set to ${Number(raw)}x for this staff member.`);
+                    await load();
+                  } catch (e) {
+                    setError(e instanceof Error ? e.message : 'Save failed');
+                  } finally {
+                    setSavingMultiplier(false);
+                  }
+                }}
+              >
+                Save multiplier
+              </Button>
+              <span className="pb-2 text-xs text-ink-lo">
+                {multiplier.trim() === '' ? 'Using the global default' : `${Number(multiplier)}x on every credit`}
+              </span>
+            </div>
+          ) : null}
 
           {isSuperAdmin ? (
             <div className="mb-4 flex flex-wrap items-end gap-2">
