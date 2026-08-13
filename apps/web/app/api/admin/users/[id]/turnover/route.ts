@@ -97,6 +97,11 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
           completed: Number(gate.spinCompleted),
           remaining: Number(gate.spinRemaining),
         },
+        registration: {
+          required: Number(gate.registrationRequired),
+          completed: Number(gate.registrationCompleted),
+          remaining: Number(gate.registrationRemaining),
+        },
       },
       // Bonus-grant requirement only. Kept separate and clearly named because
       // the adjustment controls below still operate on these grants, so an

@@ -65,6 +65,9 @@ interface TurnoverState {
   spinRequired: number;
   spinCompleted: number;
   spinRemaining: number;
+  registrationRequired: number;
+  registrationCompleted: number;
+  registrationRemaining: number;
   bdtBalanceLocked: number;
   referralBalanceLocked: number;
   spinBalanceLocked: number;
@@ -90,6 +93,9 @@ const DEFAULT_TURNOVER: TurnoverState = {
   spinRequired: 0,
   spinCompleted: 0,
   spinRemaining: 0,
+  registrationRequired: 0,
+  registrationCompleted: 0,
+  registrationRemaining: 0,
   bdtBalanceLocked: 0,
   referralBalanceLocked: 0,
   spinBalanceLocked: 0,
@@ -201,6 +207,9 @@ export default function WithdrawPage() {
             spinRequired: Number(data.spinRequired ?? 0),
             spinCompleted: Number(data.spinCompleted ?? 0),
             spinRemaining: Number(data.spinRemaining ?? 0),
+            registrationRequired: Number(data.registrationRequired ?? 0),
+            registrationCompleted: Number(data.registrationCompleted ?? 0),
+            registrationRemaining: Number(data.registrationRemaining ?? 0),
             bdtBalanceLocked: Number(data.bdtBalanceLocked ?? 0),
             referralBalanceLocked: Number(data.referralBalanceLocked ?? 0),
             spinBalanceLocked: Number(data.spinBalanceLocked ?? 0),
@@ -369,6 +378,9 @@ export default function WithdrawPage() {
                 spinRequired: Number(data.spinRequired ?? 0),
                 spinCompleted: Number(data.spinCompleted ?? 0),
                 spinRemaining: Number(data.spinRemaining ?? 0),
+                registrationRequired: Number(data.registrationRequired ?? 0),
+                registrationCompleted: Number(data.registrationCompleted ?? 0),
+                registrationRemaining: Number(data.registrationRemaining ?? 0),
                 bdtBalanceLocked: Number(data.bdtBalanceLocked ?? 0),
                 referralBalanceLocked: Number(data.referralBalanceLocked ?? 0),
                 spinBalanceLocked: Number(data.spinBalanceLocked ?? 0),
@@ -546,6 +558,24 @@ export default function WithdrawPage() {
                     {lang === 'bn'
                       ? `প্রয়োজন ৳ ${turnover.spinRequired.toLocaleString(undefined, { maximumFractionDigits: 2 })} . সম্পূর্ণ ৳ ${turnover.spinCompleted.toLocaleString(undefined, { maximumFractionDigits: 2 })} . বাকি ৳ ${turnover.spinRemaining.toLocaleString(undefined, { maximumFractionDigits: 2 })}.`
                       : `Required ৳ ${turnover.spinRequired.toLocaleString(undefined, { maximumFractionDigits: 2 })} . Completed ৳ ${turnover.spinCompleted.toLocaleString(undefined, { maximumFractionDigits: 2 })} . Remaining ৳ ${turnover.spinRemaining.toLocaleString(undefined, { maximumFractionDigits: 2 })}.`}
+                  </p>
+                </div>
+              ) : null}
+
+              {/* Registration bonus. Its absence here is precisely what made
+                  the reported bug so confusing: the requirement was silently
+                  consuming the player's wagers while no row on this page
+                  acknowledged it existed, so deposit turnover appeared frozen
+                  at 0 for no visible reason. */}
+              {turnover.registrationRequired > 0 ? (
+                <div className="mt-2 rounded-md border border-rose-200/60 bg-white/50 p-2">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-rose-700">
+                    {lang === 'bn' ? 'রেজিস্ট্রেশন বোনাস টার্নওভার' : 'Registration bonus turnover'}
+                  </p>
+                  <p className="mt-1 text-xs text-rose-900">
+                    {lang === 'bn'
+                      ? `প্রয়োজন ৳ ${turnover.registrationRequired.toLocaleString(undefined, { maximumFractionDigits: 2 })} . সম্পূর্ণ ৳ ${turnover.registrationCompleted.toLocaleString(undefined, { maximumFractionDigits: 2 })} . বাকি ৳ ${turnover.registrationRemaining.toLocaleString(undefined, { maximumFractionDigits: 2 })}.`
+                      : `Required ৳ ${turnover.registrationRequired.toLocaleString(undefined, { maximumFractionDigits: 2 })} . Completed ৳ ${turnover.registrationCompleted.toLocaleString(undefined, { maximumFractionDigits: 2 })} . Remaining ৳ ${turnover.registrationRemaining.toLocaleString(undefined, { maximumFractionDigits: 2 })}.`}
                   </p>
                 </div>
               ) : null}

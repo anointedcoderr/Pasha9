@@ -75,6 +75,27 @@ const BDT_BALANCE_LOCK_SOURCE_TYPES: string[] = [
   // it never appears here.
   'tournament_prize',
 ];
+
+// Registration bonus (lib/bonuses/registration.ts). Deliberately its OWN
+// bucket rather than an entry in the list above, because the two lists do
+// two different jobs and this sourceType needs only one of them.
+//
+// The turnover half it DOES need: addTurnover() has no sourceType filter at
+// all - it walks EVERY active grant FIFO. This gate does filter. Any
+// sourceType addTurnover consumes but the gate omits becomes a turnover
+// black hole: the grant silently absorbs the player's wagers (oldest-first,
+// so a bonus issued at signup eats them before any later deposit grant)
+// while contributing nothing to the figures the player is shown. They watch
+// deposit turnover sit at 0 no matter how much they wager. A live player hit
+// exactly this.
+//
+// The balance-lock half it must NOT have: BDT_BALANCE_LOCK_SOURCE_TYPES also
+// drives computeBdtBalanceLocked, which the withdrawal route subtracts on top
+// of wallet.lockedBalance. A registration bonus granted with lockWinnings
+// (the default) already put its money in bonusBalance + lockedBalance, so
+// counting it there too would subtract the same amount twice and understate
+// withdrawable balance.
+const REGISTRATION_LOCK_SOURCE_TYPES = ['registration_bonus'];
 const REFERRAL_LOCK_SOURCE_TYPES = ['referral_first_deposit', 'referral_commission'];
 // Spin wheel cash + free-bet payouts land in Wallet.balance with a
 // per-segment turnover lock. Kept in their OWN bucket (not the deposit /
@@ -103,6 +124,10 @@ export interface DepositTurnoverStatus {
   spinRequired: number;
   spinCompleted: number;
   spinRemaining: number;
+
+  registrationRequired: number;
+  registrationCompleted: number;
+  registrationRemaining: number;
 
   // ----- Combined totals (what the gate enforces) -----
   requiredTurnover: number;
@@ -207,7 +232,7 @@ export async function computeDepositTurnover(userId: string): Promise<DepositTur
   const depositSince = lastBust ? { gt: lastBust } : undefined;
   const betSince = lastBust ? { gt: lastBust } : undefined;
 
-  const [depositAgg, betAgg, bpAgg, referralAgg, spinAgg, bdtBalanceLocked, referralBalanceLocked, spinBalanceLocked] = await Promise.all([
+  const [depositAgg, betAgg, bpAgg, referralAgg, spinAgg, registrationAgg, bdtBalanceLocked, referralBalanceLocked, spinBalanceLocked] = await Promise.all([
     db.deposit.aggregate({
       where: {
         userId,
@@ -236,6 +261,10 @@ export async function computeDepositTurnover(userId: string): Promise<DepositTur
       where: { userId, status: 'active', sourceType: { in: SPIN_LOCK_SOURCE_TYPES } },
       _sum: { turnoverRequired: true, turnoverProgress: true },
     }),
+    db.userBonus.aggregate({
+      where: { userId, status: 'active', sourceType: { in: REGISTRATION_LOCK_SOURCE_TYPES } },
+      _sum: { turnoverRequired: true, turnoverProgress: true },
+    }),
     computeBdtBalanceLocked(userId),
     computeReferralBalanceLocked(userId),
     computeSpinBalanceLocked(userId),
@@ -258,7 +287,11 @@ export async function computeDepositTurnover(userId: string): Promise<DepositTur
   const spinCompleted = Math.max(0, Math.min(spinRequired, Number(spinAgg._sum?.turnoverProgress ?? 0)));
   const spinRemaining = Math.max(0, spinRequired - spinCompleted);
 
-  const requiredTurnover = depositRequired + bettingPassRequired + referralRequired + spinRequired;
+  const registrationRequired = Math.max(0, Number(registrationAgg._sum?.turnoverRequired ?? 0));
+  const registrationCompleted = Math.max(0, Math.min(registrationRequired, Number(registrationAgg._sum?.turnoverProgress ?? 0)));
+  const registrationRemaining = Math.max(0, registrationRequired - registrationCompleted);
+
+  const requiredTurnover = depositRequired + bettingPassRequired + referralRequired + spinRequired + registrationRequired;
   // Cap each gate's contribution to its own required value when summing
   // the aggregate "Completed" headline. The raw depositCompleted is the
   // lifetime wager total, which can easily exceed depositRequired - if
@@ -266,19 +299,19 @@ export async function computeDepositTurnover(userId: string): Promise<DepositTur
   // with required=1,500 (visually nonsense) while a downstream gate
   // still had 500 outstanding.
   const completedTurnover =
-    Math.min(depositRequired, depositCompleted) + bettingPassCompleted + referralCompleted + spinCompleted;
+    Math.min(depositRequired, depositCompleted) + bettingPassCompleted + referralCompleted + spinCompleted + registrationCompleted;
   // The aggregate remaining must be the SUM of unmet sub-gates, not the
   // shortfall on the combined totals. When the deposit gate is overcompleted
   // the old "requiredTurnover - completedTurnover" math could go negative on
   // the betting pass gate and clamp to 0, producing the contradictory "you
   // need 0 more turnover" copy while the betting pass sub-block still
   // showed 500 remaining.
-  const remainingTurnover = depositRemaining + bettingPassRemaining + referralRemaining + spinRemaining;
+  const remainingTurnover = depositRemaining + bettingPassRemaining + referralRemaining + spinRemaining + registrationRemaining;
   // Gate is met only when BOTH gates are individually met. We could
   // also check remainingTurnover <= 0 but the per-source check is
   // more honest when the deposit gate completed > deposit required
   // (the player over-wagered for deposits but still owes BP wager).
-  const isMet = depositRemaining <= 0 && bettingPassRemaining <= 0 && referralRemaining <= 0 && spinRemaining <= 0;
+  const isMet = depositRemaining <= 0 && bettingPassRemaining <= 0 && referralRemaining <= 0 && spinRemaining <= 0 && registrationRemaining <= 0;
 
   return {
     multiplier,
@@ -295,6 +328,9 @@ export async function computeDepositTurnover(userId: string): Promise<DepositTur
     spinRequired,
     spinCompleted,
     spinRemaining,
+    registrationRequired,
+    registrationCompleted,
+    registrationRemaining,
     requiredTurnover,
     completedTurnover,
     remainingTurnover,

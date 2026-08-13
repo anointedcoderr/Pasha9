@@ -50,7 +50,7 @@ interface TurnoverResponse {
   required: number;
   completed: number;
   isMet: boolean;
-  breakdown: { deposit: Part; bettingPass: Part; referral: Part; spin: Part };
+  breakdown: { deposit: Part; bettingPass: Part; referral: Part; spin: Part; registration: Part };
   /**
    * Only the part carried by bonus grants. The adjustment controls move these
    * and nothing else, so this, not the total, is what a preview must be based
@@ -210,6 +210,7 @@ export default function TurnoverPage() {
                     ['Betting pass', data?.breakdown.bettingPass],
                     ['Referral', data?.breakdown.referral],
                     ['Spin', data?.breakdown.spin],
+                    ['Registration bonus', data?.breakdown.registration],
                   ] as const).map(([label, part]) => (
                     <tr key={label} className="border-b border-neon/5">
                       <td className="py-2 pr-3 text-ink-hi">{label}</td>
