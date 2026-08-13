@@ -44,6 +44,23 @@ interface HistoryRow {
 
 interface Part { required: number; completed: number; remaining: number }
 
+interface AuditRow {
+  at: string;
+  kind: string;
+  change: number;
+  /** Which rule created the requirement, e.g. deposit / registration_bonus. */
+  source: string | null;
+  grantStatus: string | null;
+  /** The credited amount the requirement was calculated from. */
+  triggerAmount: number | null;
+  totalRequired: number | null;
+  multiplier: number | null;
+  completed: number | null;
+  remaining: number | null;
+  reason: string | null;
+  reference: string | null;
+}
+
 interface TurnoverResponse {
   /** The player's TOTAL outstanding requirement, identical to what they see. */
   remaining: number;
@@ -60,6 +77,7 @@ interface TurnoverResponse {
   grantsRemaining: number;
   grants: Grant[];
   history: HistoryRow[];
+  audit: AuditRow[];
 }
 
 type Mode = 'increase' | 'decrease' | 'set';
@@ -361,6 +379,69 @@ export default function TurnoverPage() {
                         <td className="py-2 pr-3 tabular-nums text-ink-mid">{formatBDT(g.required)}</td>
                         <td className="py-2 pr-3 tabular-nums text-ink-mid">{formatBDT(g.progress)}</td>
                         <td className="py-2 tabular-nums font-semibold text-ink-hi">{formatBDT(g.remaining)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+
+          {/*
+            Full turnover audit. Every one of these movements was always being
+            recorded; the page just never showed anything except the manual
+            adjustments below, which is why "where did this turnover come
+            from" could only be answered by querying the database directly.
+          */}
+          <Card padding="md" className="mb-4">
+            <h2 className="mb-1 text-sm font-semibold text-ink-hi">Turnover audit</h2>
+            <p className="mb-3 text-xs text-ink-lo">
+              Every turnover movement on this account and what caused it. Multiplier is shown as the requirement
+              divided by the amount that triggered it, so it is a fact from the record rather than an assumption.
+            </p>
+            {!data || data.audit.length === 0 ? (
+              <p className="text-sm text-ink-mid">No turnover activity yet.</p>
+            ) : (
+              <div className="max-h-[28rem] overflow-auto">
+                <table className="w-full min-w-[860px] text-left text-xs">
+                  <thead className="sticky top-0 bg-brand-paper text-[10px] uppercase tracking-wider text-ink-lo">
+                    <tr className="border-b border-neon/10">
+                      <th scope="col" className="py-2 pr-3 font-medium">When</th>
+                      <th scope="col" className="py-2 pr-3 font-medium">Event</th>
+                      <th scope="col" className="py-2 pr-3 font-medium">Source</th>
+                      <th scope="col" className="py-2 pr-3 text-right font-medium">Triggered by</th>
+                      <th scope="col" className="py-2 pr-3 text-right font-medium">Multiplier</th>
+                      <th scope="col" className="py-2 pr-3 text-right font-medium">Created</th>
+                      <th scope="col" className="py-2 pr-3 text-right font-medium">This entry</th>
+                      <th scope="col" className="py-2 pr-3 text-right font-medium">Remaining</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.audit.map((e, i) => (
+                      <tr key={`${e.at}-${i}`} className="border-b border-neon/5">
+                        <td className="whitespace-nowrap py-2 pr-3 text-ink-mid">{formatDateTime(e.at, lang)}</td>
+                        <td className="py-2 pr-3 text-ink-hi">{e.kind}</td>
+                        <td className="py-2 pr-3 text-ink-mid">
+                          {e.source ?? <span className="text-ink-lo">unmatched wager</span>}
+                          {e.grantStatus && e.grantStatus !== 'active' ? (
+                            <span className="ml-1 text-[10px] text-ink-lo">({e.grantStatus})</span>
+                          ) : null}
+                        </td>
+                        <td className="whitespace-nowrap py-2 pr-3 text-right text-ink-mid">
+                          {e.triggerAmount == null ? '.' : formatBDT(e.triggerAmount)}
+                        </td>
+                        <td className="whitespace-nowrap py-2 pr-3 text-right text-ink-hi">
+                          {e.multiplier == null ? '.' : `${e.multiplier}x`}
+                        </td>
+                        <td className="whitespace-nowrap py-2 pr-3 text-right text-ink-mid">
+                          {e.totalRequired == null ? '.' : formatBDT(e.totalRequired)}
+                        </td>
+                        <td className="whitespace-nowrap py-2 pr-3 text-right font-semibold text-emerald-600">
+                          {formatBDT(e.change)}
+                        </td>
+                        <td className="whitespace-nowrap py-2 pr-3 text-right text-ink-hi">
+                          {e.remaining == null ? '.' : formatBDT(e.remaining)}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

@@ -50,7 +50,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   return withAuth(async () => {
     await ensurePermission('users.read');
 
-    const [grants, history, gate] = await Promise.all([
+    const [grants, history, audit, gate] = await Promise.all([
       db.userBonus.findMany({
         where: { userId: params.id, status: 'active' },
         select: { id: true, amount: true, sourceType: true, turnoverRequired: true, turnoverProgress: true },
@@ -60,6 +60,26 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
         where: { userId: params.id, kind: { in: ['admin_set', 'admin_increase', 'admin_decrease', 'admin_adjust'] } },
         orderBy: { createdAt: 'desc' },
         take: 100,
+      }),
+      // EVERY turnover movement, not just the manual ones above. The
+      // automatic accruals were always recorded here; they were simply never
+      // displayed, because the query above filters to admin_* kinds. That is
+      // why "where did this turnover come from" was unanswerable from the
+      // admin panel and had to be dug out of the database by hand every time.
+      //
+      // The bonusGrant join is what makes each row explain itself: the grant
+      // carries the amount that triggered the requirement and the total
+      // requirement it created, so the multiplier is derivable rather than
+      // guessed, and sourceType names which rule was responsible.
+      db.turnoverEvent.findMany({
+        where: { userId: params.id },
+        orderBy: { createdAt: 'desc' },
+        take: 200,
+        include: {
+          bonusGrant: {
+            select: { sourceType: true, amount: true, turnoverRequired: true, turnoverProgress: true, status: true },
+          },
+        },
       }),
       // THE figure the player is actually held to. Deposit and betting pass
       // turnover are not bonus grants, so counting only UserBonus rows showed
@@ -125,6 +145,38 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
         actorId: h.actorId,
         actorRole: h.actorRole,
       })),
+      // Complete turnover audit: every movement, with enough context on each
+      // row to answer "why was this added" without a database query.
+      audit: audit.map((e) => {
+        const grantAmount = e.bonusGrant ? Number(e.bonusGrant.amount) : null;
+        const grantRequired = e.bonusGrant ? Number(e.bonusGrant.turnoverRequired) : null;
+        const grantProgress = e.bonusGrant ? Number(e.bonusGrant.turnoverProgress) : null;
+        return {
+          at: e.createdAt,
+          // What moved the turnover: a bet (provider_game), a manual admin
+          // adjustment, the auto bust reset, and so on.
+          kind: e.kind,
+          change: Number(e.amount),
+          // Which rule created the requirement this movement applied to.
+          // Null for wagers that found no matching grant (the leftover row
+          // addTurnover writes when a bet exceeds every outstanding grant).
+          source: e.bonusGrant?.sourceType ?? null,
+          grantStatus: e.bonusGrant?.status ?? null,
+          // The figures behind the requirement, so the multiplier is shown as
+          // a fact rather than inferred: 200 credited at 10x = 2000 required.
+          triggerAmount: grantAmount,
+          totalRequired: grantRequired,
+          multiplier: grantAmount && grantAmount > 0 && grantRequired != null
+            ? Number((grantRequired / grantAmount).toFixed(2))
+            : null,
+          completed: grantProgress,
+          remaining: grantRequired != null && grantProgress != null
+            ? Math.max(0, grantRequired - grantProgress)
+            : null,
+          reason: e.reason,
+          reference: e.reference,
+        };
+      }),
     });
   });
 }
