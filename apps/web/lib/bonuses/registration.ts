@@ -124,10 +124,24 @@ export async function loadRegistrationBonusConfig(): Promise<RegistrationBonusCo
  * failed sign-up cannot leave a bonus behind.
  *
  * Returns null when the feature is off, the amount is zero, or the player
- * already has one. Never throws: a bonus problem must not block a sign-up.
+ * already has one.
+ *
+ * DELIBERATELY THROWS on a real failure rather than swallowing it. This
+ * function does two things that must both happen or neither: it creates the
+ * UserBonus row carrying the turnover REQUIREMENT, and it moves the bonus
+ * MONEY. An earlier version wrapped the whole body in try/catch and returned
+ * null on error. Because the caller runs it inside db.$transaction and that
+ * catch meant nothing ever propagated, the transaction COMMITTED anyway - so
+ * a failure in the money movement left the requirement row behind with no
+ * bonus attached. The player ended up owing turnover for money they never
+ * received, which is the worst possible way for this to fail.
+ *
+ * The sign-up is still protected: the caller wraps this in its own .catch(),
+ * so a throw here rolls this transaction back and lets the registration
+ * itself continue. Failing loudly is what makes the rollback work.
  */
 export async function grantRegistrationBonus(tx: Tx, userId: string): Promise<{ grantId: string } | null> {
-  try {
+  {
     const cfg = await loadRegistrationBonusConfig();
     if (!cfg.enabled || cfg.amount.lte(0)) return null;
 
@@ -181,10 +195,6 @@ export async function grantRegistrationBonus(tx: Tx, userId: string): Promise<{ 
     }
 
     return { grantId: grant.id };
-  } catch (err) {
-    // A sign-up must never fail because a bonus could not be granted.
-    console.error('[registration-bonus] grant failed', err);
-    return null;
   }
 }
 

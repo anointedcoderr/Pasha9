@@ -78,9 +78,15 @@ export async function POST(req: NextRequest) {
   });
 
   // Registration bonus, if the operator has switched it on. Its own
-  // transaction so the wallet movement and the grant row commit together, and
-  // deliberately after the account exists: the helper swallows its own errors
-  // and returns null, so a bonus problem can never cost someone their sign-up.
+  // transaction so the turnover-requirement row and the bonus money commit
+  // together or not at all, and deliberately after the account exists.
+  //
+  // This .catch() is what protects the sign-up, and it is the ONLY thing that
+  // should. grantRegistrationBonus is allowed to throw on purpose: it used to
+  // swallow its own errors, which meant nothing propagated, this transaction
+  // committed regardless, and a failed money movement left the player owing
+  // turnover on a bonus they never received. Let it throw, roll the bonus
+  // back, and carry on with the registration.
   await db.$transaction(async (tx) => {
     await grantRegistrationBonus(tx, user.id);
   }).catch((err) => {
