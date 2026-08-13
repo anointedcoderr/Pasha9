@@ -58,6 +58,35 @@ export async function POST(req: NextRequest) {
     const parsed = schema.safeParse(body);
     if (!parsed.success) return jsonError(400, 'VALIDATION', undefined, { issues: parsed.error.issues });
 
+    // The schema's 100-500,000 range is a blanket safety net only. The real
+    // limit an operator sets per channel in Payment Methods (minDeposit /
+    // maxDeposit on PaymentMethod) was never actually read here - it was
+    // shown on the deposit form as a hint, but nothing server-side stopped a
+    // request that skipped or under/overshot it, which is trivially
+    // bypassable by posting to this endpoint directly. Enforced here now,
+    // against the real configured channel, not the generic fallback.
+    const channel = await db.paymentMethod.findUnique({
+      where: { name: parsed.data.method },
+      select: { minDeposit: true, maxDeposit: true, depositEnabled: true, status: true },
+    });
+    if (channel) {
+      if (!channel.depositEnabled || channel.status !== 'active') {
+        return jsonError(409, 'METHOD_UNAVAILABLE', 'This deposit method is not currently available.');
+      }
+      const min = channel.minDeposit != null ? Number(channel.minDeposit) : null;
+      const max = channel.maxDeposit != null ? Number(channel.maxDeposit) : null;
+      if (min != null && parsed.data.amount < min) {
+        return jsonError(400, 'AMOUNT_TOO_LOW', `Minimum deposit for this method is ${min}.`);
+      }
+      if (max != null && parsed.data.amount > max) {
+        return jsonError(400, 'AMOUNT_TOO_HIGH', `Maximum deposit for this method is ${max}.`);
+      }
+    }
+    // No matching row (a renamed or removed method slipping through on a
+    // stale client) falls through to the schema's generic range rather than
+    // blocking every deposit - a missing lookup should never be stricter
+    // than simply not having a per-channel override configured.
+
     let promotionRule: Awaited<ReturnType<typeof db.bonusRule.findUnique>> = null;
     if (parsed.data.promotionId) {
       promotionRule = await db.bonusRule.findUnique({ where: { id: parsed.data.promotionId } });
