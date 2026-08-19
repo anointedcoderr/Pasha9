@@ -80,6 +80,7 @@ const TELEGRAM_KEYS = [
   'telegram_chat_id',
   'telegram_chat_id_deposit',
   'telegram_chat_id_withdrawal',
+  'telegram_chat_id_registration',
 ] as const;
 
 function statusTone(s: string): 'ok' | 'warn' | 'neutral' {
@@ -442,6 +443,16 @@ export default function AdminNotificationsPage() {
                     <Input
                       value={value('telegram_chat_id_withdrawal')}
                       onChange={(e) => setValue('telegram_chat_id_withdrawal', e.target.value)}
+                      placeholder="-1001234567890"
+                    />
+                  </FormField>
+                  <FormField
+                    label="Registration alerts group (optional)"
+                    hint="New player sign-up alerts go here instead of the main group. Leave blank to keep them in the main group. নতুন রেজিস্ট্রেশন এলার্ট আলাদা গ্রুপে।"
+                  >
+                    <Input
+                      value={value('telegram_chat_id_registration')}
+                      onChange={(e) => setValue('telegram_chat_id_registration', e.target.value)}
                       placeholder="-1001234567890"
                     />
                   </FormField>

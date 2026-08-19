@@ -31,6 +31,7 @@ export const TELEGRAM_SETTING_KEYS = [
   // behaviour and nothing needs migrating.
   'telegram_chat_id_deposit',
   'telegram_chat_id_withdrawal',
+  'telegram_chat_id_registration',
 ] as const;
 
 /**
@@ -38,7 +39,7 @@ export const TELEGRAM_SETTING_KEYS = [
  * every existing caller gets by default, so routing is opt-in per message
  * rather than a change every call site has to make at once.
  */
-export type TelegramTopic = 'deposit' | 'withdrawal' | 'general';
+export type TelegramTopic = 'deposit' | 'withdrawal' | 'registration' | 'general';
 
 const SEND_TIMEOUT_MS = 5_000;
 const SETTINGS_CACHE_MS = 45_000;
@@ -49,6 +50,7 @@ interface TelegramSettings {
   chatId: string;
   depositChatId: string;
   withdrawalChatId: string;
+  registrationChatId: string;
 }
 
 let cache: { at: number; value: TelegramSettings } | null = null;
@@ -66,6 +68,7 @@ async function readSettingsFresh(): Promise<TelegramSettings> {
     chatId: map.telegram_chat_id ?? '',
     depositChatId: map.telegram_chat_id_deposit ?? '',
     withdrawalChatId: map.telegram_chat_id_withdrawal ?? '',
+    registrationChatId: map.telegram_chat_id_registration ?? '',
   };
 }
 
@@ -79,6 +82,7 @@ async function readSettingsFresh(): Promise<TelegramSettings> {
 function chatIdFor(settings: TelegramSettings, topic: TelegramTopic): string {
   if (topic === 'deposit' && settings.depositChatId) return settings.depositChatId;
   if (topic === 'withdrawal' && settings.withdrawalChatId) return settings.withdrawalChatId;
+  if (topic === 'registration' && settings.registrationChatId) return settings.registrationChatId;
   return settings.chatId;
 }
 

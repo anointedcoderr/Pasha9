@@ -480,9 +480,16 @@ export async function notifyAdmins(opts: NotifyAdminsOpts): Promise<string | nul
     const subject = opts.kind.replace(/^admin_/, '');
     const topic: TelegramTopic = subject.startsWith('deposit')
       ? 'deposit'
-      : subject.startsWith('withdrawal')
-        ? 'withdrawal'
-        : 'general';
+      // New player sign-ups. Matched explicitly rather than by prefix
+      // because the kind is 'admin_user_registered' - it starts with
+      // 'user', not 'registration', so a prefix test would miss it and
+      // send every sign-up to the general group, which is exactly what
+      // was happening.
+      : subject === 'user_registered' || subject.startsWith('registration')
+        ? 'registration'
+        : subject.startsWith('withdrawal')
+          ? 'withdrawal'
+          : 'general';
 
     void sendTelegramAlert(buildAdminTelegramMessage({
       titleEn: opts.titleEn,
